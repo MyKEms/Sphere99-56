@@ -10,9 +10,9 @@
 #endif // _MSC_VER >= 1000
 
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
-#include "../spherelib/common.h"
-#include "../spherecommon/spherecommon.h"	// put slashes this way for LINUX, WIN32 does not care.
-#include "../spheresvr/spheresvr.h"
+#include "common.h"
+#include "spherecommon.h"	// put slashes this way for LINUX, WIN32 does not care.
+#include "spheresvr.h"
 
 #include "caccount.h"	
 

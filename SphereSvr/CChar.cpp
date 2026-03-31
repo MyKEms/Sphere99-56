@@ -33,6 +33,7 @@ const CScriptMethod CChar::sm_Methods[CChar::M_QTY+1] =
 
 CSCRIPT_CLASS_IMP2(Char,CChar::sm_Props,CChar::sm_Methods,NULL,ObjBase);
 
+template<>
 void CScriptClassTemplate<CChar>::InitScriptClass()
 {
 	// Add skills and stats list to the class def.
@@ -162,8 +163,8 @@ void CChar::ClientDetach()
 	}
 
 	// remove standard client linkage
-	m_Events.v_Set( CGVariant("-e_AllPlayers"), RES_Events );
-	m_Events.v_Set( CGVariant("-spk_AllPlayers"), RES_Speech );
+	{ CGVariant vTmp1("-e_AllPlayers"); m_Events.v_Set( vTmp1, RES_Events ); }
+	{ CGVariant vTmp2("-spk_AllPlayers"); m_Events.v_Set( vTmp2, RES_Speech ); }
 
 	CSectorPtr pSector = GetTopSector();
 	pSector->ClientDetach( this );
@@ -188,8 +189,8 @@ void CChar::ClientAttach( CClient* pClient )
 	m_pPlayer->m_timeLastUsed.InitTimeCurrent();
 
 	// Attach standard event handlers for all clients.
-	m_Events.v_Set( CGVariant("+e_AllPlayers"), RES_Events );
-	m_Events.v_Set( CGVariant("+spk_AllPlayers"), RES_Speech );
+	{ CGVariant vTmp1("+e_AllPlayers"); m_Events.v_Set( vTmp1, RES_Events ); }
+	{ CGVariant vTmp2("+spk_AllPlayers"); m_Events.v_Set( vTmp2, RES_Speech ); }
 
 	m_pClient = pClient;
 	GetTopSector()->ClientAttach( this );
@@ -1780,7 +1781,7 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			vValRet.SetRef(pChar);
 
 			// What about all the stuff it's wearing ???s
-			pChar->MoveNearObj( pCharSrc ? pCharSrc : this, 1 );
+			pChar->MoveNearObj( pCharSrc ? (CChar*)pCharSrc : this, 1 );
 		}
 		break;
 	case M_NewNPC:

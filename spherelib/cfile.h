@@ -2,23 +2,18 @@
 * @file CFile.h
 */
 
-#pragma once
 #ifndef _INC_CFILE_H
 #define _INC_CFILE_H
 
 #ifndef _WIN32
-#ifdef LONG
-#undef LONG
-#endif
-#define LONG int
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #endif
 
-#include "..\SphereSvr\stdafx.h"
-#include "CString.h"
+#include "common.h"
+#include "cstring.h"
 
 #ifndef OF_WRITE
 #define OF_READ             O_RDONLY

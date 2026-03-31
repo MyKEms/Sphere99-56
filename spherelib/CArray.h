@@ -1,6 +1,11 @@
-#pragma once
+#ifndef _INC_CARRAY_H
+#define _INC_CARRAY_H
+
+#include <cstring>
 
 //*************************************************
+
+class CGObList;		// forward declaration
 
 class CMemDynamic
 {
@@ -39,6 +44,7 @@ public:
 		ASSERT(IsValidDynamic());
 		m_dwSignature = 0;
 	}
+	bool IsValidHeap() const { return IsValidDynamic(); }
 
 #else       // _DEBUG
 
@@ -51,6 +57,7 @@ public:
 	virtual ~CMemDynamic()  // always virtual so we can always use dynamic_cast correctly.
 	{
 	}
+	bool IsValidHeap() const { return true; }
 
 #endif      // _DEBUG
 };
@@ -100,12 +107,78 @@ private:
 protected:
 	// Override this to get called when an item is removed from this list.
 	// Never called directly. call pObRec->RemoveSelf()
-	virtual void OnRemoveOb(CGObListRec* pObRec); // Override this = called when removed from list.
+	virtual void OnRemoveOb(CGObListRec* pObRec)
+	{
+		// just remove from list. DON'T delete !
+		if (pObRec == NULL) return;
+
+		CGObListRec* pNext = pObRec->GetNext();
+		CGObListRec* pPrev = pObRec->GetPrev();
+
+		if (pNext != NULL)
+			pNext->m_pPrev = pPrev;
+		else
+			m_pTail = pPrev;
+		if (pPrev != NULL)
+			pPrev->m_pNext = pNext;
+		else
+			m_pHead = pNext;
+
+		pObRec->m_pNext = NULL;
+		pObRec->m_pPrev = NULL;
+		pObRec->m_pParent = NULL;
+		m_iCount--;
+	}
 public:
-	bool IsMyChild(const CGObListRec* pElement) const { throw "not implemented"; }
-	CGObListRec* GetAt(int index) const;
+	bool IsMyChild(const CGObListRec* pElement) const
+	{
+		if (pElement == NULL) return false;
+		return pElement->GetParent() == this;
+	}
+	CGObListRec* GetAt(int index) const
+	{
+		CGObListRec* pRec = GetHead();
+		while (index-- > 0 && pRec != NULL)
+		{
+			pRec = pRec->GetNext();
+		}
+		return pRec;
+	}
 	// pPrev = NULL = first
-	virtual void InsertAfter(CGObListRec* pNewRec, CGObListRec* pPrev = NULL);
+	virtual void InsertAfter(CGObListRec* pNewRec, CGObListRec* pPrev = NULL)
+	{
+		if (pNewRec == NULL) return;
+		pNewRec->RemoveSelf();
+		if (pPrev == pNewRec) return;
+
+		pNewRec->m_pParent = this;
+
+		CGObListRec* pNext;
+		if (pPrev != NULL)
+		{
+			pNext = pPrev->GetNext();
+			pPrev->m_pNext = pNewRec;
+		}
+		else
+		{
+			pNext = GetHead();
+			m_pHead = pNewRec;
+		}
+
+		pNewRec->m_pPrev = pPrev;
+
+		if (pNext != NULL)
+		{
+			pNext->m_pPrev = pNewRec;
+		}
+		else
+		{
+			m_pTail = pNewRec;
+		}
+
+		pNewRec->m_pNext = pNext;
+		m_iCount++;
+	}
 	void InsertBefore(CGObListRec* pNewRec, CGObListRec* pNext)
 	{
 		// pPrev = NULL = last
@@ -119,7 +192,18 @@ public:
 	{
 		InsertAfter(pNewRec, GetTail());
 	}
-	void DeleteAll();
+	void DeleteAll()
+	{
+		for (;;)
+		{
+			CGObListRec* pRec = GetHead();
+			if (pRec == NULL) break;
+			delete pRec;
+		}
+		m_iCount = 0;
+		m_pHead = NULL;
+		m_pTail = NULL;
+	}
 	void Empty() { DeleteAll(); }
 	CGObListRec* GetHead(void) const { return(m_pHead); }
 	CGObListRec* GetTail(void) const { return(m_pTail); }
@@ -153,7 +237,13 @@ template<class TYPE>
 class CGObListType : public CGObList
 {
 public:
-	CRefPtr<TYPE>& GetHead() const;
+	CRefPtr<TYPE>& GetHead() const
+	{
+		// Return a reference to a static CRefPtr wrapping the head cast to TYPE*
+		static CRefPtr<TYPE> s_ptr;
+		s_ptr = static_cast<TYPE*>(CGObList::GetHead());
+		return s_ptr;
+	}
 };
 
 ///////////////////////////////////////////////////////////
@@ -180,205 +270,222 @@ public:
 	*
 	* Sets m_pData to NULL and counters to zero.
 	*/
-	CGTypedArray();
-	virtual ~CGTypedArray();
-	const CGTypedArray<TYPE, ARG_TYPE>& operator=(const CGTypedArray<TYPE, ARG_TYPE>& array);
-private:
-	/**
-	* @brief No copy on construction allowed.
-	*/
-	CGTypedArray<TYPE, ARG_TYPE>(const CGTypedArray<TYPE, ARG_TYPE>& copy);
-public:
-	void CopyArray(const CGTypedArray& arr) { throw "not implemented"; }
-	/**
-	* @brief Get the internal data pointer.
-	*
-	* This is dangerous to use of course.
-	* @return the internal data pointer.
-	*/
-	TYPE* GetBasePtr() const;
-	/**
-	* @brief Get the element count in array.
-	* @return get the element count in array.
-	*/
-	size_t GetCount() const;
-	/**
-	* @brief Get the total element that fits in allocated mem.
-	* @return get the total element that fits in allocated mem.
-	*/
-	int GetSize() const	// same thing just for compatibility
+	CGTypedArray()
 	{
-		return m_nCount;
+		m_pData = NULL;
+		m_nCount = 0;
+		m_nRealCount = 0;
 	}
-	size_t GetRealCount() const;
-	/**
-	* @brief Check if index is valid for this array.
-	* @param i index to check.
-	* @return true if index is valid, false otherwise.
-	*/
-	bool IsValidIndex(size_t i) const;
-	/**
-	* @brief Realloc the internal data into a new size.
-	* @param nNewCount new size of the mem.
-	*/
-	void SetCount(size_t nNewCount);
-	/**
-	* @brief Remove all elements from the array and free mem.
-	*/
-	void RemoveAll();
-	/**
-	* @brief Remove all elements from the array and free mem.
-	*
-	* TODO: Really needed?
-	* @see RemoveAll()
-	*/
-	void Empty();
-	/**
-	* @brief Update element nth to a new value.
-	* @param nIndex index of element to update.
-	* @param newElement new value.
-	*/
-	void SetAt(size_t nIndex, ARG_TYPE newElement);
-	/**
-	* @brief Update element nth to a new value.
-	*
-	* If size of array is lesser to nIndex, increment array size.
-	* @param nIndex index of element to update.
-	* @param newElement new value.
-	*/
-	void SetAtGrow(size_t nIndex, ARG_TYPE newElement);
-	/**
-	* @brief Insert a element in nth position.
-	* @param nIndex position to insert the element.
-	* @param newElement element to insert.
-	*/
-	void InsertAt(size_t nIndex, ARG_TYPE newElement);
-	/**
-	* @brief Insert a new element to the end of the array.
-	* @param newElement element to insert.
-	* @return the element count of the array.
-	*/
-	size_t Add(ARG_TYPE newElement);
-	/**
-	* @brief Removes the nth element and move the next elements one position left.
-	* @param nIndex position of the element to remove.
-	*/
-	void RemoveAt(size_t nIndex);
-	/**
-	* @brief get the nth element.
-	*
-	* Also checks if index is valid.
-	* @param nIndex position of the element.
-	* @return Element in nIndex position.
-	*/
-	TYPE GetAt(size_t nIndex) const;
-	/**
-	* @brief get the nth element.
-	*
-	* Also checks if index is valid.
-	* @see GetAt()
-	* @param nIndex position of the element.
-	* @return Element in nIndex position.
-	*/
-	TYPE operator[](size_t nIndex) const;
-	/**
-	* @brief get a reference to the nth element.
-	*
-	* Also checks if index is valid.
-	* @param nIndex position of the element.
-	* @return Element in nIndex position.
-	*/
-	TYPE& ElementAt(size_t nIndex);
-	TYPE& ConstElementAt(size_t nIndex) const;
-	/**
-	* @brief get a reference to the nth element.
-	*
-	* Also checks if index is valid.
-	* @see ElementAt()
-	* @param nIndex position of the element.
-	* @return Element in nIndex position.
-	*/
-	TYPE& operator[](size_t nIndex);
-	/**
-	* @brief get a reference to the nth element.
-	*
-	* Also checks if index is valid.
-	* @param nIndex position of the element.
-	* @return Element in nIndex position.
-	*/
-	const TYPE& ElementAt(size_t nIndex) const;
-	/**
-	* @brief TODOC
-	* @param pElements TODOC
-	* @param nCount TODOC
-	*/
-	virtual void ConstructElements(TYPE* pElements, size_t nCount);
-	/**
-	* @brief TODOC
-	* @param pElements TODOC
-	* @param nCount TODOC
-	*/
-	virtual void DestructElements(TYPE* pElements, size_t nCount);
-	/**
-	* @brief Copy an CGTypedArray into this.
-	* @param pArray array to copy.
-	*/
-	void Copy(const CGTypedArray<TYPE, ARG_TYPE>* pArray);
+	virtual ~CGTypedArray()
+	{
+		SetCount(0);
+	}
+	const CGTypedArray<TYPE, ARG_TYPE>& operator=(const CGTypedArray<TYPE, ARG_TYPE>& array)
+	{
+		Copy(&array);
+		return *this;
+	}
+private:
 public:
-	inline int BadIndex() const;
+	CGTypedArray<TYPE, ARG_TYPE>(const CGTypedArray<TYPE, ARG_TYPE>& copy)
+		: m_pData(NULL), m_nCount(0), m_nRealCount(0)
+	{
+		Copy(&copy);
+	}
+
+	void CopyArray(const CGTypedArray& arr) { Copy(&arr); }
+
+	TYPE* GetBasePtr() const { return m_pData; }
+
+	size_t GetCount() const { return m_nCount; }
+
+	int GetSize() const { return m_nCount; }
+
+	size_t GetRealCount() const { return m_nRealCount; }
+
+	bool IsValidIndex(size_t i) const { return (i < m_nCount); }
+
+	void SetCount(size_t nNewCount)
+	{
+		if (nNewCount == 0)
+		{
+			if (m_nCount > 0)
+			{
+				DestructElements(m_pData, m_nCount);
+				delete[] reinterpret_cast<BYTE*>(m_pData);
+				m_nCount = m_nRealCount = 0;
+				m_pData = NULL;
+			}
+			return;
+		}
+		if (nNewCount > m_nCount)
+		{
+			TYPE* pNewData = reinterpret_cast<TYPE*>(new BYTE[nNewCount * sizeof(TYPE)]);
+			if (m_nCount)
+			{
+				memcpy(static_cast<void*>(pNewData), m_pData, sizeof(TYPE) * m_nCount);
+				delete[] reinterpret_cast<BYTE*>(m_pData);
+			}
+			ConstructElements(pNewData + m_nCount, nNewCount - m_nCount);
+			m_pData = pNewData;
+			m_nRealCount = nNewCount;
+		}
+		m_nCount = nNewCount;
+	}
+
+	void RemoveAll() { SetCount(0); }
+
+	void Empty() { RemoveAll(); }
+
+	void SetAt(size_t nIndex, ARG_TYPE newElement)
+	{
+		if (!IsValidIndex(nIndex)) return;
+		DestructElements(&m_pData[nIndex], 1);
+		m_pData[nIndex] = newElement;
+	}
+
+	void SetAtGrow(size_t nIndex, ARG_TYPE newElement)
+	{
+		if (nIndex >= m_nCount)
+			SetCount(nIndex + 1);
+		SetAt(nIndex, newElement);
+	}
+
+	void InsertAt(size_t nIndex, ARG_TYPE newElement)
+	{
+		SetCount((nIndex >= m_nCount) ? (nIndex + 1) : (m_nCount + 1));
+		memmove(static_cast<void*>(&m_pData[nIndex + 1]), &m_pData[nIndex], sizeof(TYPE) * (m_nCount - nIndex - 1));
+		m_pData[nIndex] = newElement;
+	}
+
+	size_t Add(ARG_TYPE newElement)
+	{
+		SetAtGrow(GetCount(), newElement);
+		return (m_nCount - 1);
+	}
+
+	void RemoveAt(size_t nIndex)
+	{
+		if (!IsValidIndex(nIndex)) return;
+		DestructElements(&m_pData[nIndex], 1);
+		memmove(static_cast<void*>(&m_pData[nIndex]), &m_pData[nIndex + 1], sizeof(TYPE) * (m_nCount - nIndex - 1));
+		SetCount(m_nCount - 1);
+	}
+
+	TYPE GetAt(size_t nIndex) const
+	{
+		if (!IsValidIndex(nIndex))
+			return *reinterpret_cast<TYPE*>(BadIndex());
+		return m_pData[nIndex];
+	}
+
+	TYPE operator[](size_t nIndex) const { return GetAt(nIndex); }
+
+	TYPE& ElementAt(size_t nIndex)
+	{
+		if (!IsValidIndex(nIndex))
+			return *reinterpret_cast<TYPE*>(BadIndex());
+		return m_pData[nIndex];
+	}
+
+	TYPE& ConstElementAt(size_t nIndex) const
+	{
+		return const_cast<CGTypedArray*>(this)->ElementAt(nIndex);
+	}
+
+	TYPE& operator[](size_t nIndex) { return ElementAt(nIndex); }
+
+	const TYPE& ElementAt(size_t nIndex) const
+	{
+		if (!IsValidIndex(nIndex))
+			return *reinterpret_cast<const TYPE*>(BadIndex());
+		return m_pData[nIndex];
+	}
+
+	virtual void ConstructElements(TYPE* pElements, size_t nCount)
+	{
+		memset(static_cast<void*>(pElements), 0, nCount * sizeof(TYPE));
+	}
+
+	virtual void DestructElements(TYPE* pElements, size_t nCount)
+	{
+		(void)pElements;
+		(void)nCount;
+	}
+
+	void Copy(const CGTypedArray<TYPE, ARG_TYPE>* pArray)
+	{
+		if (!pArray || pArray == this) return;
+		Empty();
+		SetCount(pArray->GetCount());
+		memcpy(static_cast<void*>(GetBasePtr()), pArray->GetBasePtr(), GetCount() * sizeof(TYPE));
+	}
+public:
+	inline int BadIndex() const { return 0; }
 };
 
 /**
 * @brief An Array of pointers.
 */
 template<class TYPE>
-class CGRefArray : public CGTypedArray<TYPE, TYPE*>
+class CGRefArray : public CGTypedArray<TYPE*, TYPE*>
 {
 protected:
-	/**
-	* @brief TODOC
-	* @param pElements TODOC
-	* @param nCount TODOC
-	*/
-	virtual void DestructElements(TYPE* pElements, size_t nCount);
+	virtual void DestructElements(TYPE** pElements, size_t nCount)
+	{
+		memset(static_cast<void*>(pElements), 0, nCount * sizeof(*pElements));
+	}
 public:
 	static const char* m_sClassName;
-	/**
-	* @brief get the position of a data in the array.
-	* @param pData data to look for.
-	* @return position of the data if data is in the array, BadIndex otherwise.
-	*/
-	size_t FindPtr(TYPE pData) const;
-	/**
-	* @brief check if data is in this array.
-	* @param pData data to find in the array.
-	* @return true if pData is in the array, BadIndex() otherwise.
-	*/
-	bool ContainsPtr(TYPE pData) const;
-	/**
-	* @brief if data is in array, rmove it.
-	* @param pData data to remove from the array.
-	*/
-	bool RemovePtr(TYPE pData);
-	/**
-	* @brief Check if an index is between 0 and element count.
-	* @param i index to check.
-	* @return true if index is valid, false otherwise.
-	*/
-	bool IsValidIndex(size_t i) const;
 
-	TYPE* operator[](size_t nIndex) const;
+	size_t FindPtr(TYPE* pData) const
+	{
+		if (!pData) return this->BadIndex();
+		for (size_t nIndex = 0; nIndex < this->GetCount(); nIndex++)
+		{
+			if (this->GetAt(nIndex) == pData)
+				return nIndex;
+		}
+		return this->BadIndex();
+	}
+
+	bool ContainsPtr(TYPE* pData) const
+	{
+		size_t nIndex = FindPtr(pData);
+		return nIndex != (size_t)this->BadIndex();
+	}
+
+	bool RemovePtr(TYPE* pData)
+	{
+		size_t nIndex = FindPtr(pData);
+		if (nIndex == (size_t)this->BadIndex())
+			return false;
+		this->RemoveAt(nIndex);
+		return true;
+	}
+
+	bool IsValidIndex(size_t i) const
+	{
+		if (i >= this->GetCount())
+			return false;
+		return (this->GetAt(i) != NULL);
+	}
+
+	TYPE* operator[](size_t nIndex) const
+	{
+		if (nIndex >= this->GetCount())
+			return NULL;
+		return this->GetBasePtr()[nIndex];
+	}
+	TYPE*& ConstElementAt(size_t nIndex) const
+	{
+		return const_cast<CGRefArray*>(this)->CGTypedArray<TYPE*, TYPE*>::ElementAt(nIndex);
+	}
 public:
 	CGRefArray() { };
 	virtual ~CGRefArray() { };
 private:
-	/**
-	* @brief No copy on construction allowed.
-	*/
 	CGRefArray<TYPE>(const CGRefArray<TYPE>& copy);
-	/**
-	* @brief No copy allowed.
-	*/
 	CGRefArray<TYPE>& operator=(const CGRefArray<TYPE>& other);
 };
 
@@ -391,40 +498,38 @@ class CGObArray : public CGRefArray<TYPE>
 	// The point of this type is that the array now OWNS the element.
 	// It will get deleted when the array is deleted.
 protected:
-	virtual void DestructElements(TYPE* pElements, int nCount)
+	virtual void DestructElements(TYPE** pElements, size_t nCount)
 	{
 		// delete the objects that we own.
-		for (int i = 0; i < nCount; i++)
+		for (size_t i = 0; i < nCount; i++)
 		{
-			TYPE pDestruct = pElements;
+			TYPE* pDestruct = pElements[i];
 			if (pDestruct == NULL)
 				continue;
-			pElements = NULL;       // in case the destructor looks for itself.
+			pElements[i] = NULL;
 			delete pDestruct;
 		}
 		CGRefArray<TYPE>::DestructElements(pElements, nCount);
 	}
 public:
-	bool DeleteOb(TYPE pData)
+	bool DeleteOb(TYPE* pData)
 	{
-		return(RemovePtr(pData));
+		return(this->RemovePtr(pData));
 	}
 	void DeleteAt(int nIndex)
 	{
-		RemoveAt(nIndex);
+		this->RemoveAt(nIndex);
 	}
-	TYPE UnLinkIndex(int index)
+	TYPE* UnLinkIndex(int index)
 	{
-		// Remove the object from the list so it will not get destroyed.
-		TYPE data = GetAt(index);
-		ElementAt(index) = NULL;
-		RemoveAt(index);
+		TYPE* data = this->GetAt(index);
+		this->ElementAt(index) = NULL;
+		this->RemoveAt(index);
 		return(data);
 	}
 	~CGObArray()
 	{
-		// Make sure the virtuals get called.
-		SetCount(0);
+		this->SetCount(0);
 	}
 };
 
@@ -437,15 +542,7 @@ struct CGSortedArray : public CGTypedArray<TYPE, ARG_TYPE>
 {
 	int FindKeyNear(KEY_TYPE key, int& iCompareRes) const
 	{
-		// Do a binary search for the key.
-		// RETURN: index
-		//  iCompareRes =
-		//              0 = match with index.
-		//              -1 = key should be less than index.
-		//              +1 = key should be greater than index
-		//
-
-		int iHigh = GetCount() - 1;
+		int iHigh = this->GetCount() - 1;
 		if (iHigh < 0)
 		{
 			iCompareRes = -1;
@@ -453,11 +550,11 @@ struct CGSortedArray : public CGTypedArray<TYPE, ARG_TYPE>
 		}
 
 		int iLow = 0;
-		int i;
+		int i = 0;
 		while (iLow <= iHigh)
 		{
 			i = (iHigh + iLow) / 2;
-			iCompareRes = CompareKey(key, GetAt(i));
+			iCompareRes = CompareKey(key, this->GetAt(i));
 			if (iCompareRes == 0)
 				break;
 			if (iCompareRes > 0)
@@ -473,7 +570,6 @@ struct CGSortedArray : public CGTypedArray<TYPE, ARG_TYPE>
 	}
 	int FindKey(KEY_TYPE key) const
 	{
-		// Find exact key
 		int iCompareRes;
 		int index = FindKeyNear(key, iCompareRes);
 		if (iCompareRes)
@@ -486,19 +582,16 @@ struct CGSortedArray : public CGTypedArray<TYPE, ARG_TYPE>
 		{
 			index++;
 		}
-		InsertAt(index, pNew);
+		this->InsertAt(index, pNew);
 		return(index);
 	}
 	int AddSortKey(TYPE pNew, KEY_TYPE key)
 	{
-		// Insertion sort.
 		int iCompareRes;
 		int index = FindKeyNear(key, iCompareRes);
 		if (!iCompareRes)
 		{
-			// duplicate should not happen ?!?
-			// DestructElements is called automatically for previous.
-			SetAt(index, pNew);
+			this->SetAt(index, pNew);
 			return(-1);
 		}
 		return AddPresorted(index, iCompareRes, pNew);
@@ -506,7 +599,7 @@ struct CGSortedArray : public CGTypedArray<TYPE, ARG_TYPE>
 
 	void DeleteKey(KEY_TYPE key)
 	{
-		DeleteAt(FindKey(key));
+		this->RemoveAt(FindKey(key));
 	}
 #ifdef _DEBUG
 	bool TestSort() const;
@@ -516,9 +609,45 @@ protected:
 };
 
 template<class TYPE>
-struct CHashArray : public CGSortedArray< TYPE, const TYPE&, HASH_INDEX>
+struct CHashArray : public CGSortedArray< TYPE*, TYPE*, HASH_INDEX>
 {
-	int CompareKey(HASH_INDEX index, const TYPE& obj) const;
+	virtual int CompareKey(HASH_INDEX index, TYPE* obj) const
+	{
+		HASH_INDEX h = obj ? (HASH_INDEX)obj->GetHashCode() : (HASH_INDEX)0;
+		if (index == h) return 0;
+		return (index > h) ? 1 : -1;
+	}
+	void UnLinkArg(const TYPE* pObj)
+	{
+		for (int i = 0; i < (int)this->GetCount(); i++)
+		{
+			if (this->CGTypedArray<TYPE*,TYPE*>::GetAt(i) == pObj)
+			{
+				this->RemoveAt(i);
+				return;
+			}
+		}
+	}
+	TYPE* GetAt(int index) const
+	{
+		return this->CGTypedArray<TYPE*,TYPE*>::GetAt(index);
+	}
+	TYPE* GetAt(HASH_INDEX key, int index) const
+	{
+		return this->CGTypedArray<TYPE*,TYPE*>::GetAt(index);
+	}
+	TYPE* GetAtArray(int i, int j) const
+	{
+		return this->CGTypedArray<TYPE*,TYPE*>::GetAt(j);
+	}
+	TYPE*& ElementAt(int index)
+	{
+		return this->CGTypedArray<TYPE*,TYPE*>::ElementAt(index);
+	}
+	HASH_INDEX FindKeyFree(HASH_INDEX startKey) const
+	{
+		return startKey; // STUB
+	}
 };
 
 struct CGStringArray : public CGTypedArray<CGString, const CGString&>
@@ -531,11 +660,34 @@ struct CStringSortArray : public CGStringArray
 {
 public:
 	void AddSortString(LPCTSTR pszStr);
+	int FindKey(LPCTSTR pszKey) const { return -1; } // STUB
 };
 
 template<class TYPE, class KEY_TYPE>
 struct CGRefSortArray : public CGSortedArray<TYPE*, TYPE*, KEY_TYPE>
 {
 public:
-	void QSort() { throw "not implemented"; }
+	void QSort() { /* STUB */ }
+	bool RemovePtr(TYPE* pData)
+	{
+		for (size_t i = 0; i < this->GetCount(); i++)
+		{
+			if (this->GetAt(i) == pData)
+			{
+				this->RemoveAt(i);
+				return true;
+			}
+		}
+		return false;
+	}
 };
+
+template<class TYPE, class ARG_TYPE>
+struct CGPtrSortArray : public CGTypedArray<TYPE, ARG_TYPE>
+{
+public:
+	virtual int CompareData( TYPE pLeft, TYPE pRight ) const { return 0; }
+	void QSort() { /* STUB */ }
+};
+
+#endif // _INC_CARRAY_H

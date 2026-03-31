@@ -4,7 +4,7 @@
 // A variety of resource blocks.
 //
 #include "stdafx.h"	// predef header.
-#include "../spherelib/cassoc.h"
+#include "CAssoc.h"
 
 //*******************************************
 // -CItemTypeDef - RES_TypeDef
@@ -132,7 +132,8 @@ HRESULT CSkillDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_Key: // not the same as DEFNAME but similar.
 		m_sKey = vVal.GetStr();
-		return SetResourceName( m_sKey );
+		SetResourceName( m_sKey );
+		return 0;
 	case P_PromptMsg:
 		m_sTargetPrompt = vVal.GetStr();
 		break;
@@ -174,6 +175,7 @@ const CScriptProp CProfessionDef::sm_Props[CProfessionDef::P_QTY+1] =
 
 CSCRIPT_CLASS_IMP2(ProfessionDef,CProfessionDef::sm_Props,NULL,NULL,ResourceLink);
 
+template<>
 void CScriptClassTemplate<CProfessionDef>::InitScriptClass()
 {
 	// Add skills list to the class def.
@@ -405,14 +407,14 @@ const CScriptProp CRaceClassDef::sm_Props[CRaceClassDef::P_QTY+1] =
 
 #ifdef USE_JSCRIPT
 #define CRACECLASSMETHOD(a,b,c) JSCRIPT_METHOD_IMP(CRaceClassDef,a)
-#include "craceclassmethods.tbl"
+#include "CRaceClassMethods.tbl"
 #undef CRACECLASSMETHOD
 #endif
 
 const CScriptMethod CRaceClassDef::sm_Methods[ CRaceClassDef::M_QTY+1 ] =
 {
 #define CRACECLASSMETHOD(a,b,c) CSCRIPT_METHOD_IMP(a,b,c)
-#include "craceclassmethods.tbl"
+#include "CRaceClassMethods.tbl"
 #undef CRACECLASSMETHOD
 	NULL,
 };

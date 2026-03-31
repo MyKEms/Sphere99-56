@@ -4,20 +4,22 @@
 //
 
 #if defined(GRAY_MAKER)
-#include "../graymaker/stdafx.h"
-#include "../graymaker/graymaker.h"
+#include "stdafx.h"
+#include "graymaker.h"
 #elif defined(GRAY_AGENT)
-#include "../grayagent/stdafx.h"
-#include "../grayagent/grayagent.h"
+#include "stdafx.h"
+#include "grayagent.h"
 #elif defined(GRAY_MAP)
-#include "../graymap/stdafx.h"
-#include "../graymap/graymap.h"
-
+#include "stdafx.h"
+#include "graymap.h"
 #elif defined(GRAY_SVR) || defined(GRAY_CLIENT)
 #include "graycom.h"
-
+#elif defined(SPHERE_SVR)
+#include "stdafx.h"
 #else
+#ifdef _WIN32
 #include <windows.h>
+#endif
 #include <stdio.h>
 #include "cfile.h"
 #endif
@@ -161,25 +163,25 @@ LPCTSTR CGTime::FormatGmt(LPCTSTR pszFormat) const
 
 static int ReadMonth(LPCTSTR pszVal)
 {
-    switch (toupper(pszVal))
+    switch (toupper(pszVal[0]))
     {
     case 'J':
-        if (toupper(pszVal) == 'A')
+        if (toupper(pszVal[1]) == 'A')
             return 0;  // january.
-        else if (toupper(pszVal) == 'N')
+        else if (toupper(pszVal[2]) == 'N')
             return 5; // june
         else
             return 6; // july
         break;
     case 'F': return 1; break; // february
     case 'M':
-        if (toupper(pszVal) == 'R')
+        if (toupper(pszVal[2]) == 'R')
             return 2; // march
         else
             return 4; // may
         break;
     case 'A':
-        if (toupper(pszVal) == 'P')
+        if (toupper(pszVal[1]) == 'P')
             return 3; // april
         else
             return 7; // august
@@ -196,7 +198,7 @@ bool CGTime::Read(TCHAR* pszVal)
 {
     // Read the full date format.
 
-    TCHAR* ppCmds;
+    TCHAR* ppCmds[10];
     int iQty = Str_ParseCmds(pszVal, ppCmds, COUNTOF(ppCmds), "/,: \t");
     if (!iQty)
         return(false);
@@ -207,19 +209,19 @@ bool CGTime::Read(TCHAR* pszVal)
     atm.tm_yday = 0;    /* days since January 1 -  */
     atm.tm_isdst = 0;   /* daylight savings time flag */
 
-    if (isdigit(ppCmds))
+    if (ppCmds[0] && isdigit(ppCmds[0][0]))
     {
         // new format is "1999/8/1 14:30:18"
         if (iQty < 6)
         {
             return(false);
         }
-        atm.tm_year = atoi(ppCmds) - 1900;
-        atm.tm_mon = atoi(ppCmds) - 1;
-        atm.tm_mday = atoi(ppCmds);
-        atm.tm_hour = atoi(ppCmds);
-        atm.tm_min = atoi(ppCmds);
-        atm.tm_sec = atoi(ppCmds);
+        atm.tm_year = atoi(ppCmds[0]) - 1900;
+        atm.tm_mon = atoi(ppCmds[1]) - 1;
+        atm.tm_mday = atoi(ppCmds[2]);
+        atm.tm_hour = atoi(ppCmds[3]);
+        atm.tm_min = atoi(ppCmds[4]);
+        atm.tm_sec = atoi(ppCmds[5]);
     }
     else
     {
@@ -228,35 +230,40 @@ bool CGTime::Read(TCHAR* pszVal)
             return(false);
         }
 
-        TCHAR ch = ppCmds;
+        TCHAR ch = ppCmds[1] ? ppCmds[1][0] : '\0';
         if (isdigit(ch))
         {
             // or http format is : "Tue, 03 Oct 2000 22:44:56 GMT"
-            atm.tm_mday = atoi(ppCmds);
-            atm.tm_mon = ReadMonth(ppCmds);
-            atm.tm_year = atoi(ppCmds) - 1900;
-            atm.tm_hour = atoi(ppCmds);
-            atm.tm_min = atoi(ppCmds);
-            atm.tm_sec = atoi(ppCmds);
+            atm.tm_mday = atoi(ppCmds[1]);
+            atm.tm_mon = ReadMonth(ppCmds[2]);
+            atm.tm_year = atoi(ppCmds[3]) - 1900;
+            atm.tm_hour = atoi(ppCmds[4]);
+            atm.tm_min = atoi(ppCmds[5]);
+            atm.tm_sec = atoi(ppCmds[6]);
         }
         else
         {
             // old format is "Tue Mar 30 14:30:18 1999"
-            atm.tm_mon = ReadMonth(ppCmds);
-            atm.tm_mday = atoi(ppCmds);
-            atm.tm_hour = atoi(ppCmds);
-            atm.tm_min = atoi(ppCmds);
-            atm.tm_sec = atoi(ppCmds);
-            atm.tm_year = atoi(ppCmds) - 1900;
+            atm.tm_mon = ReadMonth(ppCmds[1]);
+            atm.tm_mday = atoi(ppCmds[2]);
+            atm.tm_hour = atoi(ppCmds[3]);
+            atm.tm_min = atoi(ppCmds[4]);
+            atm.tm_sec = atoi(ppCmds[5]);
+            atm.tm_year = atoi(ppCmds[6]) - 1900;
         }
     }
 
     m_time = mktime(&atm);
 
-    if (toupper(ppCmds) == 'G')
+    int lastIdx = iQty > 0 ? iQty - 1 : 0;
+    if (ppCmds[lastIdx] && toupper(ppCmds[lastIdx][0]) == 'G')
     {
         // convert to GMT
+#ifdef _WIN32
         m_time -= _timezone;
+#else
+        m_time -= timezone;
+#endif
 #if 0 // def _DEBUG
         LPCTSTR pszDate = Format(NULL);
         pszDate = FormatGmt(NULL);

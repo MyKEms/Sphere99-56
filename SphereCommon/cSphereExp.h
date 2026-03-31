@@ -305,6 +305,9 @@ public:
 		F_QTY,
 	};
 
+	static CScriptPropArray sm_FunctionsAll;
+	static const CScriptPropX sm_Functions[F_QTY + 1];
+
 public:
 	// "ARGN" or "ARGN1" = a modifying numeric arg to the current trigger.
 	int m_iN1;

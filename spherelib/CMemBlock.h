@@ -5,7 +5,6 @@
 #ifndef _INC_CMEMBLOCK_H
 #define _INC_CMEMBLOCK_H
 #if _MSC_VER >= 1000
-#pragma once
 #endif // _MSC_VER >= 1000
 
 struct CMemBlockBase
@@ -14,8 +13,8 @@ public:
     static DWORD sm_dwAllocTotal;
 
 public:
-    CMemBlockBase() { throw "not implemented"; }
-    CMemBlockBase(size_t dwSize) { throw "not implemented"; }
+    CMemBlockBase() { m_pData = NULL; }
+    CMemBlockBase(size_t dwSize) { m_pData = NULL; if (dwSize > 0) m_pData = new BYTE[dwSize]; }
 
     void Free()
     {

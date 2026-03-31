@@ -1,6 +1,7 @@
-#pragma once
+#ifndef _INC_CPOINTBASE_H
+#define _INC_CPOINTBASE_H
 
-#include "..\SphereSvr\stdafx.h"
+#include "common.h"
 
 enum DIR_TYPE	// Walking directions. m_dir
 {
@@ -63,3 +64,5 @@ public:
 };
 
 #define MAPPLANE_ALL	255
+
+#endif // _INC_CPOINTBASE_H

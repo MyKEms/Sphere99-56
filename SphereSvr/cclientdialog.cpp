@@ -250,7 +250,7 @@ void CClientSortArray::SortByType( int iType, CChar* pCharSrc )
 
 	ASSERT(pCharSrc);
 	int iSize = g_Serv.m_Clients.GetCount();
-	SetSize( iSize );
+	this->SetCount( iSize );
 
 	CClientPtr pClient = g_Serv.GetClientHead();
 	int i;
@@ -264,7 +264,7 @@ void CClientSortArray::SortByType( int iType, CChar* pCharSrc )
 		i++;
 	}
 
-	SetSize( i );
+	this->SetCount( i );
 	if ( i <= 1 )
 		return;
 

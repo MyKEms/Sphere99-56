@@ -1928,7 +1928,7 @@ int CChar::Spell_CastStart()
 		}
 	}
 
-	CSphereExpArgs Args( this, this, (int) m_Act.m_atMagery.m_Spell, iDifficulty, pItem );
+	CSphereExpArgs Args( this, this, (int) m_Act.m_atMagery.m_Spell, iDifficulty, (CResourceObj*)(CItem*)pItem );
 	if ( OnTrigger( CCharDef::T_SpellCast, Args ) == TRIGRET_RET_VAL )
 		return( -1 );
 

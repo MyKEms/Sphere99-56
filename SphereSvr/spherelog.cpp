@@ -11,7 +11,7 @@
 //
 // see http://www.menasoft.com/sphere for more details.
 
-#include "../spheresvr/spherecom.h"
+#include "spherecom.h"
 
 #define SPHERE_TITLE		"SphereLog"
 #define SPHERE_VERSION	"0.01"
@@ -21,7 +21,7 @@ class CLogServer : public CSockets
 
 };
 
-#include "../spheresvr/cclientlog.cpp"
+#include "cclientlog.cpp"
 
 int main( int argc, char *argv[] )
 {

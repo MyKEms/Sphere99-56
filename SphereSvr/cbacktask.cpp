@@ -186,7 +186,7 @@ void CBackTask::EntryTask()
 #ifdef _WIN32
 	ExitInstance();
 #else
-	ExitThread(0);
+	return; // thread exits naturally
 #endif
 }
 

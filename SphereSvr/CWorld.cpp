@@ -843,11 +843,12 @@ void CWorld::GarbageCollection_GMPages()
 	CGMPagePtr pPage = m_GMPages.GetHead();
 	while ( pPage!= NULL )
 	{
-		CGMPagePtr pPageNext = pPage->GetNext();
+		CGMPagePtr pPageNext = static_cast<CGMPage*>(pPage->GetNext());
 		if ( ! pPage->GetAccount()) // Open script file
 		{
 			DEBUG_ERR(( "GM Page has invalid account '%s'" LOG_CR, (LPCTSTR) pPage->GetName()));
-			pPage->DeleteThis();
+			pPage->RemoveSelf();
+			delete (CGMPage*)pPage;
 		}
 		pPage = pPageNext;
 	}

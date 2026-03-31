@@ -6,9 +6,15 @@
 #include "stdafx.h"	// predef header.
 #include <signal.h>
 
+#ifndef _WIN32
+static DWORD GetTickCount() { return (DWORD)(time(NULL)*1000); }
+static int vga_getkey() { return 0; }
+static int MulDiv(int a, int b, int c) { return (int)(((long long)a * b) / c); }
+#endif
+
 #ifdef _CONSOLE
 #ifndef _WIN32
-#include <vga.h>	// reverting to libvga -- don't like curses
+// #include <vga.h>	// reverting to libvga -- not available on modern Linux
 #endif
 
 #ifdef _WIN32

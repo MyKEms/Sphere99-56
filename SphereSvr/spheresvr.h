@@ -15,12 +15,12 @@
 #endif
 // SPHERE_VERSION should be set
 
-#include "../spherecommon/spherecommon.h"	// put slashes this way for LINUX, WIN32 does not care.
-#include "../spherecommon/sphereproto.h"
-#include "../spherecommon/cmulmulti.h"
-#include "../spherecommon/cresourcebase.h"
-#include "../spherecommon/csectortemplate.h"
-#include "../sphereaccount/caccount.h"
+#include "spherecommon.h"	// put slashes this way for LINUX, WIN32 does not care.
+#include "sphereproto.h"
+#include "cmulmulti.h"
+#include "cresourcebase.h"
+#include "csectortemplate.h"
+#include "caccount.h"
 class CClient;
 class CAccount;
 class CWebPageDef;
@@ -115,11 +115,11 @@ enum CLIMODE_TYPE	// What mode is the client to server connection in ? (waiting 
 };
 
 #include "cresource.h"
-#include "cservref.h"
+#include "CServRef.h"
 #include "cobjbasedef.h"
-#include "cobjbase.h"
-#include "cworld.h"
-#include "cchat.h"
+#include "cObjBase.h"
+#include "CWorld.h"
+#include "CChat.h"
 #include "cclient.h"
 
 ///////////////////////////////////////////////
@@ -345,6 +345,7 @@ struct CClientTargModeContext
 	// Targeting mode or context of a gump dialog on client side
 	// ie. when we get a response from this context,
 	//  what were we doing?
+	CClientTargModeContext() : m_Mode(CLIMODE_NORMAL) {}
 
 	CLIMODE_TYPE m_Mode;	// Type of async operation under way.
 
@@ -912,6 +913,7 @@ class CProfilerPerfMon
 {
 public:
 	void InitTasks(LPCTSTR lpszFile, int iPropCount, const CScriptPropX* pProps) { }
+	void InitTasks(int iPropCount) { }
 	int GetTaskStatusDesc(int iProp) { return 0; }
 	int GetTaskCurrent() { return 0; }
 	void SwitchTask(int type) { }
@@ -920,6 +922,10 @@ public:
 	int GetSampleWindowLen() { return 0; }
 	bool IsProfilingActive() const { return false; }
 };
+
+#ifndef _WIN32
+typedef CProfilerPerfMon CProfiler;
+#endif
 
 enum SERVMODE_TYPE
 {
@@ -984,6 +990,7 @@ public:
 	SPHEREERR_TYPE  m_iExitFlag;	// identifies who caused the exit. <0 = error
 	bool m_fResyncPause;		// Server is temporarily halted so files can be updated.
 	DWORD m_dwParentThread;	// The thread we got Init in.
+	DWORD m_dwTickCount;	// Last system tick count.
 
 	CGSocket m_SocketMain;	// This is the incoming monitor socket.(might be multiple ports?)
 	CGSocket m_SocketGod;	// This is for god clients.
@@ -1197,7 +1204,9 @@ public:
 
 protected:
 	CGString m_sCommand;		// local console input.
+	CGString m_sConsoleText;	// current console text being typed.
 	bool m_fCommandReadyFlag;	// interlocking flag for moving between tasks.
+	bool m_fConsoleTextReadyFlag;
 };
 
 extern CServConsole g_ServConsole;

@@ -2,7 +2,7 @@
 #define __STATIC_OBJECTS_H__
 
 #include <windows.h>
-#include "../spherecommon/spheremul.h"
+#include "spheremul.h"
 
 #pragma pack(1)
 

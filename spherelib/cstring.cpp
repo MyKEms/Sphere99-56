@@ -1,5 +1,23 @@
-#include "spherelib.h"
-#include "..\SphereSvr\stdafx.h"
+#include "stdafx.h"
+#include <cstring>
+
+#ifndef minimum
+#define minimum(a,b) ((a)<(b)?(a):(b))
+#endif
+
+#ifndef STRREV
+static void _strrev(char* s) {
+	int len = strlen(s);
+	for (int i = 0; i < len / 2; i++) {
+		char tmp = s[i]; s[i] = s[len-1-i]; s[len-1-i] = tmp;
+	}
+}
+#define STRREV(s) _strrev(s)
+#endif
+
+#ifndef _WIN32
+#define strcmpi _stricmp
+#endif
 
 /**
 * @brief Default memory alloc size for CGString.
@@ -55,14 +73,14 @@ int gReallocs = 0; ///< Total reallocs caused by CGString resizing.
 // #endif
 
 
-size_t strcpylen(TCHAR* pDst, LPCTSTR pSrc)
+int strcpylen(TCHAR* pDst, LPCTSTR pSrc)
 {
 	strcpy(pDst, pSrc);
 	return(strlen(pDst));
 }
 
 
-size_t strcpylen(TCHAR* pDst, LPCTSTR pSrc, size_t iMaxSize)
+int strcpylen(TCHAR* pDst, LPCTSTR pSrc, int iMaxSize)
 {
 	// it does NOT include the iMaxSize element! (just like memcpy)
 	// so iMaxSize=sizeof() is ok !
@@ -130,8 +148,9 @@ void CGString::Copy(LPCTSTR pszStr)
 
 void CGString::FormatV(LPCTSTR pszFormat, va_list args)
 {
-	TemporaryString pszTemp;
-	_vsnprintf(static_cast<char*>(pszTemp), pszTemp.realLength(), pszFormat, args);
+	TCHAR pszTemp[CSTRING_MAX_LEN];
+	_vsnprintf(pszTemp, sizeof(pszTemp) - 1, pszFormat, args);
+	pszTemp[sizeof(pszTemp) - 1] = '\0';
 	Copy(pszTemp);
 }
 
@@ -448,12 +467,12 @@ void CGString::Init()
 // String global functions.
 
 static int		Str_iTemp = 0;
-static TCHAR	Str_szTemp;
+static TCHAR	Str_szTemp[8][CSTRING_MAX_LEN];
 
 TCHAR* Str_GetTemp(void)
 {
 	// Some scratch string space, random uses
 	if (++Str_iTemp >= 8)
 		Str_iTemp = 0;
-	return(Str_szTemp);
+	return(Str_szTemp[Str_iTemp]);
 }

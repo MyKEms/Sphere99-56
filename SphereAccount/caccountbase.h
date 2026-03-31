@@ -9,10 +9,10 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/crefobj.h"
-#include "../spherelib/cscriptobj.h"
-#include "../spherelib/carraysort.h"
-#include "../spherelib/cthread.h"
+#include "crefobj.h"
+#include "CScriptObj.h"
+#include "carraysort.h"
+#include "CThread.h"
 
 class CChar;
 class CAccount;
@@ -79,6 +79,19 @@ class CResNameSortArray : public CGRefSortArray<TYPE, LPCTSTR>
 		ASSERT( pObj );
 		return( _stricmp( pszID, pObj->GetName()));
 	}
+public:
+	bool RemoveArg( TYPE* pObj )
+	{
+		for (int i = 0; i < (int)this->GetSize(); i++)
+		{
+			if (this->GetAt(i) == pObj)
+			{
+				this->RemoveAt(i);
+				return true;
+			}
+		}
+		return false;
+	}
 };
 
 //*************************************************
@@ -99,6 +112,9 @@ public:
 		CThreadLockPtr lock( this );
 		return( CResNameSortArray<TYPE>::AddSortKey( pNew, key ));
 	}
+
+	void IncRefCount() { /* stub */ }
+	void StaticDestruct() { /* stub */ }
 
 	// FindKey, RemoveAt must use a lock outside as well ! (for index to be meaningful)
 };

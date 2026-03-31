@@ -454,7 +454,7 @@ void CItemStone::War_AnnounceWar( const CItemStone* pEnemyStone, bool fWeDeclare
 
 	for ( int i=0; i<m_Members.GetSize(); i++ )
 	{
-		CCharPtr pChar = g_World.CharFind(m_Members[i]);
+		CCharPtr pChar = g_World.CharFind(m_Members.GetChar(i));
 		if ( pChar == NULL )
 			continue;
 		if ( ! pChar->IsClient())

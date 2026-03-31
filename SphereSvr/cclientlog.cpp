@@ -227,7 +227,7 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 	}
 
 	// always list myself first here.
-	g_Serv.addToServersList( cmd.ServerList.m_serv[0], indexoffset-1 );
+	{ CUOCommandServer tmpSrv = cmd.ServerList.m_serv[0]; g_Serv.addToServersList( tmpSrv, indexoffset-1 ); cmd.ServerList.m_serv[0] = tmpSrv; }
 
 	int iQtyMax = 32; // UO_MAX_SERVERS;
 	int j = 1;
@@ -238,7 +238,7 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 			break;
 		if ( pServ->GetConnectStatus() > 1 )
 			continue;
-		pServ->addToServersList( cmd.ServerList.m_serv[j], i+indexoffset );
+		{ CUOCommandServer tmpSrv = cmd.ServerList.m_serv[j]; pServ->addToServersList( tmpSrv, i+indexoffset ); cmd.ServerList.m_serv[j] = tmpSrv; }
 		j++;
 	}
 

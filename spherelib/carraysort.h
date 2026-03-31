@@ -1,1 +1,4 @@
-#pragma once
+#ifndef _INC_CARRAYSORT_H
+#define _INC_CARRAYSORT_H
+
+#endif // _INC_CARRAYSORT_H
