@@ -440,14 +440,89 @@ inline UINT Str_ahextou(LPCTSTR pszStr) { return 0; /* STUB */ }
 
 class CScriptProp;
 class CScriptMethod;
-inline int s_FindKeyInTable(LPCTSTR pszKey, const LPCTSTR pTable[]) { return -1; /* STUB */ }
-inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptProp pTable[]) { return -1; /* STUB */ }
-inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[]) { return -1; /* STUB */ }
 
-inline int FindTable(LPCTSTR pFind, LPCTSTR const* ppTable) { return -1; /* STUB */ }
-inline int FindTableSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { return -1; /* STUB */ }
-inline int FindTableHead(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { return -1; /* STUB */ }
-inline int FindTableHead(LPCTSTR pFind, CAssocStrVal const* ppTable, int count = -1) { return -1; /* STUB */ }
-inline int FindTableHeadSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { return -1; /* STUB */ }
+// Case-insensitive key lookup in a NULL-terminated table of LPCTSTR.
+inline int s_FindKeyInTable(LPCTSTR pszKey, const LPCTSTR pTable[])
+{
+	if ( !pszKey || !pTable )
+		return -1;
+	for ( int i = 0; pTable[i]; i++ )
+	{
+		if ( !_stricmp(pszKey, pTable[i]) )
+			return i;
+	}
+	return -1;
+}
+
+// Forward declarations -- full implementations are in CScript.h after classes are defined.
+int s_FindKeyInTable(LPCTSTR pszKey, const CScriptProp pTable[]);
+int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[]);
+
+// Case-insensitive exact match in a NULL-terminated LPCTSTR table.
+inline int FindTable(LPCTSTR pFind, LPCTSTR const* ppTable)
+{
+	if ( !pFind || !ppTable )
+		return -1;
+	for ( int i = 0; ppTable[i]; i++ )
+	{
+		if ( !_stricmp(pFind, ppTable[i]) )
+			return i;
+	}
+	return -1;
+}
+
+// Case-insensitive exact match in a sorted NULL-terminated LPCTSTR table.
+inline int FindTableSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1)
+{
+	if ( !pFind || !ppTable )
+		return -1;
+	for ( int i = 0; (count < 0) ? (ppTable[i] != NULL) : (i < count); i++ )
+	{
+		if ( !ppTable[i] )
+			break;
+		if ( !_stricmp(pFind, ppTable[i]) )
+			return i;
+	}
+	return -1;
+}
+
+// Case-insensitive prefix match in a NULL-terminated LPCTSTR table.
+inline int FindTableHead(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1)
+{
+	if ( !pFind || !ppTable )
+		return -1;
+	for ( int i = 0; (count < 0) ? (ppTable[i] != NULL) : (i < count); i++ )
+	{
+		if ( !ppTable[i] )
+			break;
+		size_t len = strlen(ppTable[i]);
+		if ( !_strnicmp(pFind, ppTable[i], len) )
+			return i;
+	}
+	return -1;
+}
+
+// Case-insensitive prefix match in a CAssocStrVal table (NULL m_pszName terminates).
+inline int FindTableHead(LPCTSTR pFind, CAssocStrVal const* ppTable, int count = -1)
+{
+	if ( !pFind || !ppTable )
+		return -1;
+	for ( int i = 0; (count < 0) ? (ppTable[i].m_pszName != NULL) : (i < count); i++ )
+	{
+		if ( !ppTable[i].m_pszName )
+			break;
+		size_t len = strlen(ppTable[i].m_pszName);
+		if ( !_strnicmp(pFind, ppTable[i].m_pszName, len) )
+			return i;
+	}
+	return -1;
+}
+
+// Case-insensitive prefix match in a sorted NULL-terminated LPCTSTR table.
+inline int FindTableHeadSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1)
+{
+	// Same as FindTableHead for now (linear scan).
+	return FindTableHead(pFind, ppTable, count);
+}
 
 #endif // _INC_CSTRING_H

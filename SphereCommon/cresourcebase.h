@@ -109,7 +109,7 @@ public:
 	}
 	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
-	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; } // Execute command from script
+	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 
 	CSphereUID GetUIDIndex() const
 	{
@@ -118,6 +118,11 @@ public:
 	CSphereUID GetHashCode() const
 	{
 		return m_rid;
+	}
+
+	CSphereUID GetResourceID() const
+	{
+		return(m_rid);
 	}
 
 	// unlink all this data. (tho don't delete the def as the pointer might still be used !)
@@ -159,7 +164,7 @@ public:
 
 	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
-	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; } // Execute command from script
+	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 };
 typedef CRefPtr<CResourceLink> CResourceLinkPtr;
 
@@ -168,8 +173,11 @@ class CResourceTriggered : public CResourceLink
 public:
 	CResourceTriggered(CSphereUID rid);
 
-	TRIGRET_TYPE OnTriggerScript(CScriptExecContext& context, int iNum, LPCTSTR pszName) { throw "not implemented"; }
-	bool HasTrigger(int trig) const { return true; } // STUB
+	// Execute a trigger script from this resource.
+	// Declaration only -- implementation after CResourceLock is defined.
+	TRIGRET_TYPE OnTriggerScript(CScriptExecContext& context, int iNum, LPCTSTR pszName);
+
+	bool HasTrigger(int trig) const { return true; } // STUB - assume all triggers exist
 };
 typedef CRefPtr<CResourceTriggered> CResourceTrigPtr;
 
@@ -313,13 +321,132 @@ typedef CRefPtr<CResourceFile> CResourceFilePtr;
 
 class CResourceLock : public CScript
 {
-public:
-	CResourceLock(CScriptObj* pObj) { throw "not implemented"; }
+private:
+	CResourceLink* m_pLink;	// The resource link we opened from.
 
-	bool IsLineTrigger() { throw "not implemented"; }
-	void ParseKeyLate() { throw "not implemented"; }
-	bool FindTriggerName(LPCTSTR pszName) { throw "not implemented"; }
-	bool FindTriggerNumber(DWORD dwNumber) { throw "not implemented"; }
+public:
+	// Construct from a CResourceLink (or CResourceDef -- dynamic_cast down).
+	// Opens the underlying script file and seeks to the saved section offset.
+	CResourceLock(CScriptObj* pObj)
+		: m_pLink(NULL)
+	{
+		// Try to get a CResourceLink from the object.
+		CResourceLink* pLink = dynamic_cast<CResourceLink*>(pObj);
+		if ( !pLink )
+			return;
+		m_pLink = pLink;
+		CResourceScript* pScript = pLink->GetLinkFile();
+		if ( !pScript )
+			return;
+		// Open the same file that the resource link points to.
+		if ( !pScript->IsFileOpen() )
+			return;
+		// Copy the file path and open it.
+		SetFilePath(pScript->GetFilePath());
+		if ( !Open(pScript->GetFilePath(), OF_READ) )
+			return;
+		// Seek to the section start.
+		CScriptLineContext ctx = pLink->GetLinkContext();
+		SeekContext(ctx);
+	}
+
+	// Check if the current line is a trigger header (starts with "ON").
+	bool IsLineTrigger()
+	{
+		LPCTSTR pszKey = GetKey();
+		if ( !pszKey )
+			return false;
+		if ( _strnicmp(pszKey, "ON", 2) != 0 )
+			return false;
+		// Make sure it is "ON" and not a property like "ONCOUNT"
+		char ch = pszKey[2];
+		return (ch == '\0' || ch == '=' || ISWHITESPACE(ch));
+	}
+
+	// Re-parse the current line to separate key and args.
+	void ParseKeyLate()
+	{
+		// Just re-trigger the key parse on the current line buffer.
+		// The ReadKeyParse already splits key/arg, but some callers
+		// want to re-parse after modifying the line.
+		ReadKeyParse();
+	}
+
+	// Scan forward looking for a trigger by name.
+	// ON=<trigName>
+	bool FindTriggerName(LPCTSTR pszName)
+	{
+		if ( !pszName || !*pszName )
+			return false;
+		while ( ReadKeyParse() )
+		{
+			if ( !IsLineTrigger() )
+				continue;
+			// The arg should be the trigger name.
+			LPCTSTR pszArg = GetArgRaw();
+			if ( pszArg && !_stricmp(pszArg, pszName) )
+				return true;
+		}
+		return false;
+	}
+
+	// Scan forward looking for a trigger by number.
+	// Trigger numbers map to sm_Triggers table indices.
+	bool FindTriggerNumber(DWORD dwNumber)
+	{
+		// We iterate and check the arg as a number.
+		while ( ReadKeyParse() )
+		{
+			if ( !IsLineTrigger() )
+				continue;
+			LPCTSTR pszArg = GetArgRaw();
+			if ( pszArg )
+			{
+				// The arg might be "@TriggerName" or a number.
+				// For now just try number comparison.
+				int iNum = atoi(pszArg);
+				if ( (DWORD) iNum == dwNumber )
+					return true;
+			}
+		}
+		return false;
+	}
 };
+
+// Implementation of CResourceTriggered::OnTriggerScript.
+// Placed after CResourceLock is fully defined.
+inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& context, int iNum, LPCTSTR pszName)
+{
+	// Open the resource section for reading.
+	CResourceLock s(this);
+	if ( !s.IsFileOpen() )
+		return TRIGRET_RET_DEFAULT;
+
+	// Try to find the trigger in this section.
+	// First try by name if we have one.
+	bool fFound = false;
+	if ( pszName && *pszName )
+	{
+		fFound = s.FindTriggerName(pszName);
+	}
+
+	if ( !fFound )
+	{
+		// Rewind and try with "@" prefix stripped
+		// (triggers stored as "Create" not "@Create" in scp files).
+		CScriptLineContext ctx = GetLinkContext();
+		s.SeekContext(ctx);
+		if ( pszName && *pszName == '@' )
+		{
+			fFound = s.FindTriggerName(pszName + 1);
+		}
+	}
+
+	if ( !fFound )
+		return TRIGRET_RET_DEFAULT;
+
+	// Execute the trigger's script block.
+	return context.ExecuteScript(s, TRIGRUN_SECTION_TRUE);
+}
 
 #endif // _INC_CRESOURCEBASE_H

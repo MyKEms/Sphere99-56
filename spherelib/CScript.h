@@ -40,8 +40,37 @@ public:
 class CScriptPropArray : public CGRefArray<CScriptProp>
 {
 public:
-	void AddProps(const CScriptPropX pProps[]) { throw "not implemented"; }
-	void AddProps(CScriptPropX* pProps, int iCount) { throw "not implemented"; }
+	void AddProps(const CScriptPropX pProps[])
+	{
+		// Add all entries from a NULL-terminated static table.
+		if ( !pProps )
+			return;
+		for ( int i = 0; pProps[i].m_pszName; i++ )
+		{
+			// We store pointers into the static const table, so cast is safe.
+			this->Add(const_cast<CScriptPropX*>(&pProps[i]));
+		}
+	}
+	void AddProps(CScriptPropX* pProps, int iCount)
+	{
+		// Add iCount entries from a pointer array.
+		if ( !pProps || iCount <= 0 )
+			return;
+		for ( int i = 0; i < iCount; i++ )
+		{
+			this->Add(&pProps[i]);
+		}
+	}
+	// Overload for CScriptProp* + count (used by sm_FunctionsAll merging).
+	void AddProps(CScriptProp* pProps, int iCount)
+	{
+		if ( !pProps || iCount <= 0 )
+			return;
+		for ( int i = 0; i < iCount; i++ )
+		{
+			this->Add(&pProps[i]);
+		}
+	}
 	CScriptProp* GetData() { return GetSize() ? this->GetAt(0) : nullptr; }
 };
 
@@ -115,5 +144,31 @@ private:
 };
 
 inline void s_FixExtendedProp(LPCTSTR pszKey, LPCTSTR pszName, CGVariant& vVal) { /* STUB */ }
+
+// Implementations of s_FindKeyInTable for CScriptProp/CScriptMethod.
+// These are defined here (after the class definitions) to avoid incomplete-type errors.
+inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptProp pTable[])
+{
+	if ( !pszKey || !pTable )
+		return -1;
+	for ( int i = 0; pTable[i].m_pszName; i++ )
+	{
+		if ( !_stricmp(pszKey, pTable[i].m_pszName) )
+			return i;
+	}
+	return -1;
+}
+
+inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[])
+{
+	if ( !pszKey || !pTable )
+		return -1;
+	for ( int i = 0; pTable[i].m_pszName; i++ )
+	{
+		if ( !_stricmp(pszKey, pTable[i].m_pszName) )
+			return i;
+	}
+	return -1;
+}
 
 #endif // _INC_CSCRIPT_H
