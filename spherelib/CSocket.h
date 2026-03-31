@@ -126,81 +126,335 @@ public:
 		return(m_port);
 	}
 	void SetPort(WORD port) { m_port = port; }
-	void SetPortA(WORD port) { throw "not implemented"; }
+	void SetPortA(WORD port) { m_port = ntohs(port); }
 
-	CSocketAddress() { throw "not implemented"; }
-	CSocketAddress(in_addr dwIP, WORD uPort) { throw "not implemented"; }
-	CSocketAddress(DWORD dwIP, WORD uPort) { throw "not implemented"; }
+	// Get as sockaddr_in for POSIX calls
+	struct sockaddr_in GetAddrPort() const
+	{
+		struct sockaddr_in SockAddrIn;
+		SockAddrIn.sin_family = AF_INET;
+		SockAddrIn.sin_port = htons(m_port);
+		SockAddrIn.sin_addr.s_addr = s_addr;
+		memset(&SockAddrIn.sin_zero, 0, sizeof(SockAddrIn.sin_zero));
+		return SockAddrIn;
+	}
+	void SetAddrPort(const struct sockaddr_in& SockAddrIn)
+	{
+		s_addr = SockAddrIn.sin_addr.s_addr;
+		m_port = ntohs(SockAddrIn.sin_port);
+	}
+
+	CSocketAddress()
+	{
+		m_port = 0;
+	}
+	CSocketAddress(in_addr dwIP, WORD uPort)
+	{
+		s_addr = dwIP.s_addr;
+		m_port = uPort;
+	}
+	CSocketAddress(DWORD dwIP, WORD uPort)
+	{
+		s_addr = dwIP;
+		m_port = uPort;
+	}
+	CSocketAddress(const struct sockaddr_in& SockAddrIn)
+	{
+		SetAddrPort(SockAddrIn);
+	}
 };
 
 struct CSocketNamedAddr : public CSocketAddress
 {
-	bool IsEmptyHost() const { throw "not implemented"; }
-	void EmptyHost() { throw "not implemented"; }
-	LPCTSTR GetHostName() { throw "not implemented"; }
-	void EmptyAddr() { throw "not implemented"; }
-	void SetHostPortStr(LPCTSTR pszHost) { throw "not implemented"; }
-	bool UpdateFromHostName() { throw "not implemented"; }
+private:
+	CGString m_sHostName;
 
-	CSocketNamedAddr() { throw "not implemented"; }
-	CSocketNamedAddr(CSocketAddressIP ip, WORD uPort) { throw "not implemented"; }
+public:
+	bool IsEmptyHost() const { return m_sHostName.IsEmpty(); }
+	void EmptyHost() { m_sHostName.Empty(); }
+	LPCTSTR GetHostName() { return m_sHostName; }
+	void EmptyAddr()
+	{
+		SetAddrIP(INADDR_BROADCAST);
+		SetPort(0);
+		m_sHostName.Empty();
+	}
+	void SetHostPortStr(LPCTSTR pszHost)
+	{
+		// Parse "host:port" or "host,port" string
+		if (pszHost == NULL)
+			return;
+		TCHAR szHost[256];
+		strncpy(szHost, pszHost, sizeof(szHost) - 1);
+		szHost[sizeof(szHost) - 1] = '\0';
+		TCHAR* pszPort = strchr(szHost, ',');
+		if (pszPort == NULL)
+			pszPort = strchr(szHost, ':');
+		if (pszPort)
+		{
+			*pszPort = '\0';
+			SetPort((WORD)atoi(pszPort + 1));
+		}
+		m_sHostName = szHost;
+		SetHostStr(szHost);
+	}
+	bool UpdateFromHostName()
+	{
+		if (m_sHostName.IsEmpty())
+			return false;
+		return SetHostStr(m_sHostName);
+	}
+
+	CSocketNamedAddr() {}
+	CSocketNamedAddr(CSocketAddressIP ip, WORD uPort) : CSocketAddress(ip.GetAddrIP(), uPort) {}
 };
 
 class CGSocket
 {
+private:
+	SOCKET m_hSocket;
+
 public:
-	CSocketAddress GetPeerName() const { throw "not implemented"; }
-	void Attach(SOCKET client) { throw "not implemented"; }
-	SOCKET Detach() { throw "not implemented"; }
-	SOCKET GetSocket() const { throw "not implemented"; }
-	CSocketAddress& GetSockName() const { throw "not implemented"; }
-	bool IsOpen() const { throw "not implemented"; }
-	bool Socket() const { throw "not implemented"; }
-	bool ConnectAddr(CSocketNamedAddr& addr) const { throw "not implemented"; }
-	int Send(const void* pData, int len) const { throw "not implemented"; }
-	int Receive(void* pData, int len, int flags = 0) const { throw "not implemented"; }
-	void Close() { throw "not implemented"; }
-	int Bind(CSocketAddress& pSockAddrIn) { throw "not implemented"; }
-	int Listen() { throw "not implemented"; }
-	int IOCtl(long icmd, DWORD* pdwArgs) { throw "not implemented"; }
-	int SetSockOpt(int nOptionName, const void* optval, int optlen, int nLevel = SOL_SOCKET) const { throw "not implemented"; }
-	int GetSockOpt(int nOptionName, void* optval, int* poptlen, int nLevel = SOL_SOCKET) const { throw "not implemented"; }
-	int Accept(CGSocket& socket, CSocketAddress& addr) { throw "not implemented"; }
+	CGSocket() : m_hSocket(INVALID_SOCKET) {}
+	~CGSocket() { Close(); }
 
-	static inline int GetLastError() { throw "not implemented"; }
+	CSocketAddress GetPeerName() const
+	{
+		struct sockaddr_in SockAddrIn;
+		socklen_t len = sizeof(SockAddrIn);
+		if (getpeername(m_hSocket, (struct sockaddr*)&SockAddrIn, &len) != 0)
+			return CSocketAddress(INADDR_BROADCAST, 0);
+		return CSocketAddress(SockAddrIn);
+	}
+	void Attach(SOCKET client)
+	{
+		Close();
+		m_hSocket = client;
+	}
+	SOCKET Detach()
+	{
+		SOCKET s = m_hSocket;
+		m_hSocket = INVALID_SOCKET;
+		return s;
+	}
+	SOCKET GetSocket() const
+	{
+		return m_hSocket;
+	}
+	CSocketAddress GetSockName() const
+	{
+		struct sockaddr_in SockAddrIn;
+		socklen_t len = sizeof(SockAddrIn);
+		if (getsockname(m_hSocket, (struct sockaddr*)&SockAddrIn, &len) != 0)
+			return CSocketAddress(INADDR_BROADCAST, 0);
+		return CSocketAddress(SockAddrIn);
+	}
+	bool IsOpen() const
+	{
+		return (m_hSocket != INVALID_SOCKET);
+	}
+	bool Socket() const
+	{
+		// Create a TCP socket. Cast away const since original API declares it const.
+		CGSocket* pThis = const_cast<CGSocket*>(this);
+		pThis->m_hSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		return IsOpen();
+	}
+	bool ConnectAddr(CSocketNamedAddr& addr) const
+	{
+		struct sockaddr_in SockAddrIn = addr.GetAddrPort();
+		return (connect(m_hSocket, (struct sockaddr*)&SockAddrIn, sizeof(SockAddrIn)) == 0);
+	}
+	int Send(const void* pData, int len) const
+	{
+		return send(m_hSocket, (const char*)pData, len, 0);
+	}
+	int Receive(void* pData, int len, int flags = 0) const
+	{
+		return recv(m_hSocket, (char*)pData, len, flags);
+	}
+	void Close()
+	{
+		if (m_hSocket != INVALID_SOCKET)
+		{
+			shutdown(m_hSocket, 2);
+			closesocket(m_hSocket);
+			m_hSocket = INVALID_SOCKET;
+		}
+	}
+	int Bind(CSocketAddress& SockAddr)
+	{
+		struct sockaddr_in SockAddrIn = SockAddr.GetAddrPort();
+		if (SockAddr.IsLocalAddr())
+		{
+			SockAddrIn.sin_addr.s_addr = INADDR_ANY;
+		}
+		return (bind(m_hSocket, (struct sockaddr*)&SockAddrIn, sizeof(SockAddrIn)) == 0);
+	}
+	int Listen()
+	{
+		return (listen(m_hSocket, SOMAXCONN) == 0);
+	}
+	int IOCtl(long icmd, DWORD* pdwArgs)
+	{
+		return ioctlsocket(m_hSocket, icmd, (unsigned long*)pdwArgs);
+	}
+	int SetSockOpt(int nOptionName, const void* optval, int optlen, int nLevel = SOL_SOCKET) const
+	{
+		return setsockopt(m_hSocket, nLevel, nOptionName, (const char*)optval, optlen);
+	}
+	int GetSockOpt(int nOptionName, void* optval, int* poptlen, int nLevel = SOL_SOCKET) const
+	{
+		return getsockopt(m_hSocket, nLevel, nOptionName, (char*)optval, (socklen_t*)poptlen);
+	}
+	int Accept(CGSocket& socknew, CSocketAddress& addr)
+	{
+		struct sockaddr_in SockAddrIn;
+		socklen_t len = sizeof(SockAddrIn);
+		SOCKET hSocket = accept(m_hSocket, (struct sockaddr*)&SockAddrIn, &len);
+		if (hSocket == INVALID_SOCKET)
+			return 0;
+		socknew.Attach(hSocket);
+		addr.SetAddrPort(SockAddrIn);
+		return 1;
+	}
 
-	operator CSocketAddress() const { throw "not implemented"; }
+	static inline int GetLastError()
+	{
+#ifdef _WIN32
+		return WSAGetLastError();
+#else
+		return errno;
+#endif
+	}
+
+	operator CSocketAddress() const
+	{
+		return GetSockName();
+	}
 };
 
 class CGSocketSet
 {
+private:
+	fd_set m_fds;
+	int m_nfds;
+
 public:
-	CGSocketSet(SOCKET socket) { throw "not implemented"; }
-	int GetNFDS() { throw "not implemented"; }
-	void Set(SOCKET socket) { throw "not implemented"; }
-	bool IsSet(const SOCKET socket) const { throw "not implemented"; }
-	operator fd_set*() { throw "not implemented"; }
+	CGSocketSet(SOCKET socket)
+	{
+		FD_ZERO(&m_fds);
+		m_nfds = 0;
+		if (socket != INVALID_SOCKET)
+			Set(socket);
+	}
+	int GetNFDS()
+	{
+		return m_nfds + 1;
+	}
+	void Set(SOCKET socket)
+	{
+		if (socket == INVALID_SOCKET)
+			return;
+		FD_SET(socket, &m_fds);
+		if ((int)socket >= m_nfds)
+			m_nfds = (int)socket;
+	}
+	bool IsSet(const SOCKET socket) const
+	{
+		if (socket == INVALID_SOCKET)
+			return false;
+		return FD_ISSET(socket, &m_fds) != 0;
+	}
+	operator fd_set*()
+	{
+		return &m_fds;
+	}
 };
 
-class CLogIP
+class CLogIP : public CRefObjDef
 {
 	// Keep a log of recent ip's we have talked to.
 	// Prevent ping floods etc.
+private:
+	CSocketAddressIP m_ip;
+	CScriptObj* m_pAccount;
+	int m_iPingBlocks;
+	int m_iBadPasswords;
+
 public:
-	void SetAccount(CScriptObj* pAccount) { throw "not implemented"; }
-	CScriptObj* GetAccount() const { throw "not implemented"; }
-	bool IncPingBlock(bool bVal) { throw "not implemented"; }
-	void InitTimes() { throw "not implemented"; }
-	void IncBadPassword(LPCTSTR pszAccount) { throw "not implemented"; }
+	CLogIP() : m_pAccount(NULL), m_iPingBlocks(0), m_iBadPasswords(0) {}
+
+	CSocketAddressIP GetIP() const { return m_ip; }
+	void SetIP(const CSocketAddressIP& ip) { m_ip = ip; }
+
+	void SetAccount(CScriptObj* pAccount) { m_pAccount = pAccount; }
+	CScriptObj* GetAccount() const { return m_pAccount; }
+	bool IncPingBlock(bool bVal)
+	{
+		if (bVal)
+			m_iPingBlocks++;
+		// Block if too many pings in a short time
+		return (m_iPingBlocks > 100);
+	}
+	void InitTimes()
+	{
+		m_iPingBlocks = 0;
+		m_iBadPasswords = 0;
+	}
+	void IncBadPassword(LPCTSTR pszAccount)
+	{
+		m_iBadPasswords++;
+	}
 };
 typedef CRefPtr<CLogIP> CLogIPPtr;
 
 class CLogIPArray
 {
+private:
+	// Simple fixed-size array of recent IPs
+	enum { MAX_LOG_IPS = 256 };
+	CLogIPPtr m_ips[MAX_LOG_IPS];
+	int m_nCount;
+
 public:
-	CLogIPPtr FindLogIP(const CSocketAddress& socket, bool fCreate = false) { throw "not implemented"; }
-	bool SetLogIPBlock(LPCTSTR pszIP, LPCTSTR pszReason) { throw "not implemented"; }
-	void OnTick() { throw "not implemented"; }
+	CLogIPArray() : m_nCount(0) {}
+
+	CLogIPPtr FindLogIP(const CSocketAddress& socket, bool fCreate = false)
+	{
+		// Search existing entries
+		for (int i = 0; i < m_nCount; i++)
+		{
+			if (m_ips[i] && m_ips[i]->GetIP().IsSameIP(socket))
+				return m_ips[i];
+		}
+		if (!fCreate)
+			return NULL;
+		// Create new entry if room
+		if (m_nCount >= MAX_LOG_IPS)
+		{
+			// Recycle oldest entry
+			m_ips[0] = new CLogIP();
+			m_ips[0]->SetIP(socket);
+			m_ips[0]->InitTimes();
+			return m_ips[0];
+		}
+		CLogIPPtr pNew = new CLogIP();
+		pNew->SetIP(socket);
+		pNew->InitTimes();
+		m_ips[m_nCount++] = pNew;
+		return pNew;
+	}
+	bool SetLogIPBlock(LPCTSTR pszIP, LPCTSTR pszReason) { return false; }
+	void OnTick()
+	{
+		// Periodically decay ping block counts
+		for (int i = 0; i < m_nCount; i++)
+		{
+			if (m_ips[i])
+				m_ips[i]->InitTimes();
+		}
+	}
 };
 
 #endif

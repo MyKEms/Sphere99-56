@@ -31,26 +31,78 @@ class CCompressTree
 public:
 	bool IsLoaded() const { return false; }
 	bool Load(LPCTSTR pszFile = NULL) { return false; }
-	int Decode(BYTE* pOutput, const BYTE* pInput, int iLen) { throw "not implemented"; }
-	int Encode(BYTE* pOutput, const BYTE* pInput, int iLen) { throw "not implemented"; }
+	int Decode(BYTE* pOutput, const BYTE* pInput, int iLen)
+	{
+		// No compression tree loaded - just copy through
+		if (pOutput != pInput)
+			memcpy(pOutput, pInput, iLen);
+		return iLen;
+	}
+	int Encode(BYTE* pOutput, const BYTE* pInput, int iLen)
+	{
+		// No compression tree loaded - just copy through
+		if (pOutput != pInput)
+			memcpy(pOutput, pInput, iLen);
+		return iLen;
+	}
 };
 
 class CCompressXOR
 {
 public:
 	bool InitTable(DWORD dwKey) { return true; }
-	int CompressXOR(BYTE* pOutput, const BYTE* pInput, int iLen) { throw "not implemented"; }
-	int CompressXOR(BYTE* pOutput, int iLen) { throw "not implemented"; }
+	int CompressXOR(BYTE* pOutput, const BYTE* pInput, int iLen)
+	{
+		// Passthrough - no XOR compression for now
+		if (pOutput != pInput)
+			memcpy(pOutput, pInput, iLen);
+		return iLen;
+	}
+	int CompressXOR(BYTE* pOutput, int iLen)
+	{
+		// In-place variant - nothing to do
+		return iLen;
+	}
 };
 
 class CCryptVersion
 {
+private:
+	int m_iCryptVer;
+
 public:
-	int GetCryptVer() { throw "not implemented"; }
-	bool SetCryptVer(const char* pVer) { throw "not implemented"; }
-	bool SetCryptVerEnum(int iVer) { throw "not implemented"; }
-	CGVariant& WriteCryptVer(LPCTSTR pszVer) const { throw "not implemented"; }
-	bool IsValid() const { throw "not implemented"; }
+	CCryptVersion() : m_iCryptVer(0) {}
+	int GetCryptVer() { return m_iCryptVer; }
+	bool SetCryptVer(const char* pVer)
+	{
+		// Parse version string like "2.0.0" into 0x200000 style int
+		if (pVer == NULL)
+			return false;
+		int iMajor = 0, iMinor = 0, iPatch = 0;
+		sscanf(pVer, "%d.%d.%d", &iMajor, &iMinor, &iPatch);
+		m_iCryptVer = (iMajor << 20) | (iMinor << 12) | (iPatch << 4);
+		return true;
+	}
+	bool SetCryptVerEnum(int iVer)
+	{
+		m_iCryptVer = iVer;
+		return true;
+	}
+	TCHAR* WriteCryptVer(TCHAR* pszOut) const
+	{
+		if (pszOut)
+		{
+			int iMajor = (m_iCryptVer >> 20) & 0xFFF;
+			int iMinor = (m_iCryptVer >> 12) & 0xFF;
+			int iPatch = (m_iCryptVer >> 4) & 0xFF;
+			sprintf(pszOut, "%d.%d.%d", iMajor, iMinor, iPatch);
+		}
+		return pszOut;
+	}
+	bool IsValid() const
+	{
+		return (m_iCryptVer >= 0);
+	}
 };
 
 #pragma pack(1)
@@ -132,16 +184,24 @@ protected:
 	DWORD m_seed;	// seed ip we got from the client.
 
 public:
-	static void SetDefaultMasterVer(int iSeed1, int iSeed2, int iSeed3) { throw "not implemented"; }
+	static void SetDefaultMasterVer(int iSeed1, int iSeed2, int iSeed3)
+	{
+		// Set default master encryption keys
+		// For now this is a no-op since we use passthrough crypto
+	}
 
 public:
 	CCryptBase();
 	TCHAR* WriteClientVer(TCHAR* pStr) const;
-	int GetCryptVer() { throw "not implemented"; }
-	int GetCryptSeed() { throw "not implemented"; }
-	void SetCryptSeed(DWORD dwIP) { throw "not implemented"; }
+	int GetCryptVer() { return m_iClientVersion; }
+	int GetCryptSeed() { return m_seed; }
+	void SetCryptSeed(DWORD dwIP) { m_seed = dwIP; m_fInit = false; }
 
-	virtual void InitCrypt() { throw "not implemented"; }
+	virtual void InitCrypt()
+	{
+		// Base implementation - just mark as initialized
+		m_fInit = true;
+	}
 
 	bool SetClientVerEnum(int iVer);
 	bool SetClientVer(LPCTSTR pszVersion);
@@ -221,7 +281,7 @@ private:
 
 public:
 	void SetCryptType( DWORD dwIP, CONNECT_TYPE type );
-	bool IsInitCrypt() const { throw "not implemented"; }
+	bool IsInitCrypt() const { return IsInit(); }
 	virtual void InitCrypt();
 	void Decrypt( BYTE * pOutput, const BYTE * pInput, int iLen );
 	void Encrypt( BYTE * pOutput, const BYTE * pInput, int iLen );
@@ -229,11 +289,23 @@ public:
 
 class CCryptText
 {
+private:
+	DWORD m_dwSeed;
 public:
-	void SetCryptSeed(DWORD pSeed) { throw "not implemented"; }
-	void SetCryptMasterVer(DWORD dwSeed1, DWORD dwSeed2, DWORD dwSeed3) { throw "not implemented"; }
-	void EncryptText(LPCTSTR pszPassword, LPCTSTR pszText, int iLen) { throw "not implemented"; }
-	void DecryptText(LPCTSTR pszPassword, LPCTSTR pszText, int iLen) { throw "not implemented"; }
+	CCryptText() : m_dwSeed(0) {}
+	void SetCryptSeed(DWORD pSeed) { m_dwSeed = pSeed; }
+	void SetCryptMasterVer(DWORD dwSeed1, DWORD dwSeed2, DWORD dwSeed3)
+	{
+		// Set master ver keys for text encryption - no-op for now
+	}
+	void EncryptText(LPCTSTR pszPassword, LPCTSTR pszText, int iLen)
+	{
+		// Passthrough - no text encryption for now
+	}
+	void DecryptText(LPCTSTR pszPassword, LPCTSTR pszText, int iLen)
+	{
+		// Passthrough - no text decryption for now
+	}
 };
 
 #endif // _INC_CCRYPT_H
