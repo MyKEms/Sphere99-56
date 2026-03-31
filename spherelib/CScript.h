@@ -2,30 +2,39 @@
 #define _INC_CSCRIPT_H
 
 #define SCRIPT_MAX_SECTION_LEN 128
+#define SCRIPT_MAX_LINE_LEN 4096
 
 class CScriptMethod
 {
 public:
-	CScriptMethod() { throw "not implemented"; }
-	CScriptMethod(int i) { throw "not implemented"; }
-	CScriptMethod(LPCTSTR pszName, DWORD dwFlags, LPCTSTR pszDesc) { throw "not implemented"; }
+	LPCTSTR m_pszName;
+	DWORD m_dwFlags;
+	LPCTSTR m_pszDesc;
+	CScriptMethod() : m_pszName(NULL), m_dwFlags(0), m_pszDesc(NULL) {}
+	CScriptMethod(int i) : m_pszName(NULL), m_dwFlags(0), m_pszDesc(NULL) {}
+	CScriptMethod(LPCTSTR pszName, DWORD dwFlags, LPCTSTR pszDesc)
+		: m_pszName(pszName), m_dwFlags(dwFlags), m_pszDesc(pszDesc) {}
 };
 
 class CScriptProp
 {
 public:
-	CScriptProp() { throw "not implemented"; }
-	CScriptProp(int i) { throw "not implemented"; }
-	CScriptProp(LPCTSTR pszName, DWORD dwFlags, LPCTSTR pszDesc) { throw "not implemented"; }
 	LPCTSTR m_pszName;
+	DWORD m_dwFlags;
+	LPCTSTR m_pszDesc;
+	CScriptProp() : m_pszName(NULL), m_dwFlags(0), m_pszDesc(NULL) {}
+	CScriptProp(int i) : m_pszName(NULL), m_dwFlags(0), m_pszDesc(NULL) {}
+	CScriptProp(LPCTSTR pszName, DWORD dwFlags, LPCTSTR pszDesc)
+		: m_pszName(pszName), m_dwFlags(dwFlags), m_pszDesc(pszDesc) {}
 };
 
 class CScriptPropX : public CScriptProp
 {
 public:
-	CScriptPropX() { throw "not implemented"; }
-	CScriptPropX(int i) { throw "not implemented"; }
-	CScriptPropX(LPCTSTR pszName, DWORD dwFlags, LPCTSTR pszDesc) { throw "not implemented"; }
+	CScriptPropX() : CScriptProp() {}
+	CScriptPropX(int i) : CScriptProp(i) {}
+	CScriptPropX(LPCTSTR pszName, DWORD dwFlags, LPCTSTR pszDesc)
+		: CScriptProp(pszName, dwFlags, pszDesc) {}
 };
 
 class CScriptPropArray : public CGRefArray<CScriptProp>
@@ -46,38 +55,63 @@ public:
 
 class CScript : public CFileText
 {
+protected:
+	int m_iLineNum;			// current line number
+	bool m_fSectionHead;	// we just read a [section] line
+	long m_lSectionData;	// file offset of current section data (after header)
+
+	TCHAR m_szLine[SCRIPT_MAX_LINE_LEN];	// line buffer
+	TCHAR m_szSection[SCRIPT_MAX_SECTION_LEN]; // current section name
+
+	TCHAR* m_pszKey;		// current key (points into m_szLine)
+	TCHAR* m_pszArg;		// current arg/value (points into m_szLine)
+
 public:
-	virtual bool ReadTextLine(bool fRemoveBlanks) { throw "not implemented"; } // looking for a section or reading strangly formated section. 
-	TCHAR* GetLineBuffer() { throw "not implemented"; }
+	CScript();
+	virtual ~CScript() {}
 
-	bool IsKeyHead(LPCTSTR lpszKey, int iLen) { throw "not implemented"; }
-	bool IsKey(LPCTSTR lpszKey) { throw "not implemented"; }
-	bool IsSectionType(LPCTSTR lpszSectionType) { throw "not implemented"; }
-	LPCTSTR GetKey() { throw "not implemented"; }
+	// Line buffer access
+	TCHAR* GetLineBuffer() { return m_szLine; }
+	TCHAR* GetSection() { return m_szSection; }
 
-	TCHAR* GetSection() { throw "not implemented"; }
-	CScriptLineContext& GetContext() const { throw "not implemented"; }
-	void SeekContext(CScriptLineContext& context) { throw "not implemented"; }
+	// Key/value access (valid after ReadKeyParse)
+	LPCTSTR GetKey() const { return m_pszKey ? m_pszKey : ""; }
+	LPCTSTR GetArgStr();
+	LPCTSTR GetArgRaw() { return m_pszArg ? m_pszArg : ""; }
+	TCHAR* GetArgMod() { return m_pszArg; }
+	CGVariant& GetArgVar();
+	int GetArgInt();
 
-	LPCTSTR GetArgStr() { throw "not implemented"; }
-	LPCTSTR GetArgRaw() { throw "not implemented"; }
-	TCHAR* GetArgMod() { throw "not implemented"; }
-	CGVariant& GetArgVar() { throw "not implemented"; }
-	int GetArgInt() { throw "not implemented"; }
-	
-	bool FindTextHeader(LPCTSTR pszName) { throw "not implemented"; } // Find a section in the current script
-	bool FindNextSection() { throw "not implemented"; }
-	virtual bool FindSection(LPCTSTR pszName, UINT uModeFlags) { throw "not implemented"; }
-	bool FindKey(LPCTSTR pszName) { throw "not implemented"; } // Find a key in the current section
-	bool ReadKeyParse() { throw "not implemented"; }
-	virtual bool ReadLine(bool fRemoveBlanks = true) { throw "not implemented"; }
+	// Key comparison
+	bool IsKeyHead(LPCTSTR lpszKey, int iLen);
+	bool IsKey(LPCTSTR lpszKey);
+	bool IsSectionType(LPCTSTR lpszSectionType);
 
-	void WriteSection(LPCTSTR pszSection, ...) { throw "not implemented"; }
-	void WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal) { throw "not implemented"; }
-	void WriteKeyInt(LPCTSTR pszKey, int iValue) { throw "not implemented"; }
-	void WriteKeyDWORD(LPCTSTR pszKey, DWORD iValue) { throw "not implemented"; }
-	bool WriteProfileStringSec(LPCTSTR pszSection, LPCTSTR pszKey, LPCTSTR pszVal) { throw "not implemented"; }
-	bool WriteProfileStringOffset(long lSectionOffset, LPCTSTR pszKey, LPCTSTR pszVal) { throw "not implemented"; }
+	// Context save/restore
+	CScriptLineContext GetContext() const;
+	void SeekContext(CScriptLineContext& context);
+
+	// Reading
+	virtual bool ReadTextLine(bool fRemoveBlanks);
+	virtual bool ReadLine(bool fRemoveBlanks = true);
+	bool ReadKeyParse();
+	bool FindTextHeader(LPCTSTR pszName);
+	bool FindNextSection();
+	virtual bool FindSection(LPCTSTR pszName, UINT uModeFlags);
+	bool FindKey(LPCTSTR pszName);
+
+	// Writing
+	void WriteSection(LPCTSTR pszSection, ...);
+	void WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal);
+	void WriteKeyInt(LPCTSTR pszKey, int iValue);
+	void WriteKeyDWORD(LPCTSTR pszKey, DWORD iValue);
+	bool WriteProfileStringSec(LPCTSTR pszSection, LPCTSTR pszKey, LPCTSTR pszVal);
+	bool WriteProfileStringOffset(long lSectionOffset, LPCTSTR pszKey, LPCTSTR pszVal);
+
+private:
+	// Parse helpers
+	size_t ParseKeyEnd();
+	void ParseKey();
 };
 
 inline void s_FixExtendedProp(LPCTSTR pszKey, LPCTSTR pszName, CGVariant& vVal) { /* STUB */ }

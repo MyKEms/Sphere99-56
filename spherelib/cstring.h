@@ -371,8 +371,57 @@ extern TCHAR* Str_GetTemp();
 inline int Str_GetBare(TCHAR* pszOut, LPCTSTR pszInp, int iMaxSize, LPCTSTR pszStrip = NULL) { return 0; /* STUB */ }
 inline TCHAR* Str_TrimWhitespace(TCHAR* pStr) { return pStr; /* STUB */ }
 inline TCHAR* Str_GetNonWhitespace(LPCTSTR pStr) { return (TCHAR*)pStr; /* STUB */ }
-inline bool Str_Parse(TCHAR* pArg1, TCHAR* pArg2) { return false; /* STUB */ }
-inline int Str_GetEndWhitespace(LPCTSTR pStr, int iLen) { return iLen; /* STUB */ }
+inline bool Str_Parse(TCHAR* pLine, TCHAR** ppArg, LPCTSTR pSep = NULL)
+{
+	// Split line at separator into key + arg
+	// Default separators: '=', space, tab, comma
+	TCHAR* p = pLine;
+	while (*p)
+	{
+		if (*p == '=')
+		{
+			*p = '\0';
+			*ppArg = p + 1;
+			GETNONWHITESPACE(*ppArg);
+			return true;
+		}
+		if (pSep)
+		{
+			for (LPCTSTR s = pSep; *s; s++)
+			{
+				if (*p == *s)
+				{
+					*p = '\0';
+					*ppArg = p + 1;
+					GETNONWHITESPACE(*ppArg);
+					return true;
+				}
+			}
+		}
+		else if (ISWHITESPACE(*p))
+		{
+			*p = '\0';
+			*ppArg = p + 1;
+			GETNONWHITESPACE(*ppArg);
+			return true;
+		}
+		p++;
+	}
+	*ppArg = p; // empty string at end
+	return false;
+}
+// Legacy 2-arg overload
+inline bool Str_Parse(TCHAR* pLine, TCHAR* pArg2)
+{
+	TCHAR* pTmp;
+	return Str_Parse(pLine, &pTmp);
+}
+inline int Str_GetEndWhitespace(LPCTSTR pStr, int iLen)
+{
+	while (iLen > 0 && ISWHITESPACE(pStr[iLen - 1]))
+		iLen--;
+	return iLen;
+}
 inline int Str_ParseCmdsStr(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { return 0; /* STUB */ }
 inline int Str_ParseCmds(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { return 0; /* STUB */ }
 inline MATCH_TYPE Str_Match(LPCTSTR pStr, LPCTSTR pPattern) { return MATCH_ABORT; /* STUB */ }
