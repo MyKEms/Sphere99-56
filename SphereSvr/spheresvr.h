@@ -895,12 +895,12 @@ public:
 class CMailSMTP
 {
 public:
-	static bool IsValidEmailAddressChar(char ch) { throw "not implemented"; }
-	static bool IsValidEmailAddressFormat(LPCTSTR pszEmail) { throw "not implemented"; }
+	static bool IsValidEmailAddressChar(char ch) { return (isalnum(ch) || ch == '@' || ch == '.' || ch == '-' || ch == '_'); }
+	static bool IsValidEmailAddressFormat(LPCTSTR pszEmail) { return (pszEmail && strchr(pszEmail, '@') != NULL); }
 
 public:
-	bool SendMail(LPCTSTR pszIp, LPCTSTR pszFrom, LPCTSTR pszTo, CGStringArray* pString) { throw "not implemented"; }
-	LPCTSTR GetLastResponse() const { throw "not implemented"; }
+	bool SendMail(LPCTSTR pszIp, LPCTSTR pszFrom, LPCTSTR pszTo, CGStringArray* pString) { return false; /* SMTP not implemented */ }
+	LPCTSTR GetLastResponse() const { return "SMTP not implemented"; }
 };
 
 enum PROFILE_TYPE

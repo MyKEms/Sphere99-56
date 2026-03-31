@@ -2411,6 +2411,21 @@ HRESULT CItem::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item Script
 {
+	// Handle extended Attr_xxx format (e.g. Attr_MoveNever=1)
+	if ( ! _strnicmp(pszKey, "Attr_", 5) )
+	{
+		LPCTSTR pszAttrName = pszKey + 5;
+		int j = FindTable( pszAttrName, sm_szAttrNames );
+		if ( j >= 0 )
+		{
+			if ( vVal.GetInt())
+				SetAttr(_1BITMASK(j));
+			else
+				ClrAttr(_1BITMASK(j));
+			return NO_ERROR;
+		}
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{

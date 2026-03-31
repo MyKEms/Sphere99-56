@@ -39,7 +39,7 @@ struct CPointMapBase : public CGPointBase
 	CMulMapPtr GetMulMap() const;	// What VERFILE_MAP0 is this on ?
 	CSectorPtr GetSector() const;
 	CRegionPtr GetRegion( DWORD dwType ) const;
-	bool IsSameMapPlane(BYTE mapplane) const { throw "not implemented"; }
+	bool IsSameMapPlane(BYTE mapplane) const { return m_mapplane == mapplane; }
 	bool IsValidZ() const
 	{
 		return( m_z > SPHEREMAP_SIZE_MIN_Z && m_z < SPHEREMAP_SIZE_Z );
@@ -56,12 +56,38 @@ struct CPointMapBase : public CGPointBase
 	{
 		return( GetDistZ(pt) / (PLAYER_HEIGHT/2) );
 	}
-	void Move(DIR_TYPE dir) { throw "not implemented"; }
+	void Move(DIR_TYPE dir)
+	{
+		// Move 1 step in a direction.
+		static const short sm_dx[DIR_QTY] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+		static const short sm_dy[DIR_QTY] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+		if ( dir >= 0 && dir < DIR_QTY )
+		{
+			m_x += sm_dx[dir];
+			m_y += sm_dy[dir];
+		}
+	}
 	void Move(short dx, short dy, short dz = 0) { m_x += dx; m_y += dy; m_z += dz; }
-	void MoveN(DIR_TYPE dir, int amount) { throw "not implemented"; }
+	void MoveN(DIR_TYPE dir, int amount)
+	{
+		// Move N steps in a direction.
+		static const short sm_dx[DIR_QTY] = { 0, 1, 1, 1, 0, -1, -1, -1 };
+		static const short sm_dy[DIR_QTY] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+		if ( dir >= 0 && dir < DIR_QTY )
+		{
+			m_x += sm_dx[dir] * amount;
+			m_y += sm_dy[dir] * amount;
+		}
+	}
 
-	bool operator==(const CPointMapBase& rhs) const { throw "not implemented"; }
-	bool operator!=(const CPointMapBase& rhs) const { throw "not implemented"; }
+	bool operator==(const CPointMapBase& rhs) const
+	{
+		return( m_x == rhs.m_x && m_y == rhs.m_y && m_z == rhs.m_z && m_mapplane == rhs.m_mapplane );
+	}
+	bool operator!=(const CPointMapBase& rhs) const
+	{
+		return !( *this == rhs );
+	}
 };
 
 struct CPointMap : public CPointMapBase
@@ -121,10 +147,26 @@ struct CPointMap : public CPointMapBase
 
 	bool IsSameMapPlane(BYTE mapplane) const { return m_mapplane == mapplane; }
 
-	bool operator==(const CPointMap& rhs) const { throw "not implemented"; }
-	bool operator!=(const CPointMap& rhs) const { throw "not implemented"; }
-	void operator+=(const CPointMap& rhs) { throw "not implemented"; }
-	void operator-=(const CPointMap& rhs) { throw "not implemented"; }
+	bool operator==(const CPointMap& rhs) const
+	{
+		return( m_x == rhs.m_x && m_y == rhs.m_y && m_z == rhs.m_z && m_mapplane == rhs.m_mapplane );
+	}
+	bool operator!=(const CPointMap& rhs) const
+	{
+		return !( *this == rhs );
+	}
+	void operator+=(const CPointMap& rhs)
+	{
+		m_x += rhs.m_x;
+		m_y += rhs.m_y;
+		m_z += rhs.m_z;
+	}
+	void operator-=(const CPointMap& rhs)
+	{
+		m_x -= rhs.m_x;
+		m_y -= rhs.m_y;
+		m_z -= rhs.m_z;
+	}
 };
 
 
@@ -148,11 +190,30 @@ public:
 	// Keep in range for the selected map.
 	void NormalizeRect();
 	void NormalizeRectMax();
-	CPointMap GetCenter() const { throw "not implemented"; }
+	CPointMap GetCenter() const
+	{
+		return CPointMap( (m_left + m_right) / 2, (m_top + m_bottom) / 2 );
+	}
 
 	CSectorPtr GetSector( int i ) const;	// get all the sectors that make up this rect.
 
-	void v_Set(CGVariant& val) { throw "not implemented"; }
+	void v_Set(CGVariant& val)
+	{
+		// Parse "left,top,right,bottom" from variant
+		LPCTSTR pszVal = val.GetPSTR();
+		if ( pszVal == NULL || *pszVal == '\0' )
+			return;
+		m_left = atoi( pszVal );
+		while ( *pszVal && *pszVal != ',' ) pszVal++;
+		if ( *pszVal == ',' ) pszVal++;
+		m_top = atoi( pszVal );
+		while ( *pszVal && *pszVal != ',' ) pszVal++;
+		if ( *pszVal == ',' ) pszVal++;
+		m_right = atoi( pszVal );
+		while ( *pszVal && *pszVal != ',' ) pszVal++;
+		if ( *pszVal == ',' ) pszVal++;
+		m_bottom = atoi( pszVal );
+	}
 };
 
 #endif	// _INC_CPOINTMAP_H

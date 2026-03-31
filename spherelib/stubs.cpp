@@ -92,3 +92,35 @@ bool CSocketAddressIP::IsSameIP(const CSocketAddressIP& ip) const
 CScriptPropArray CScriptExecContext::sm_FunctionsAll;
 
 // g_pLog is defined in SphereSvr/spheresvr.cpp
+
+// CVarDefArray::s_WriteTags - must be in .cpp because CScript is incomplete in CExpression.h
+#include "CScript.h"
+void CVarDefArray::s_WriteTags(CScript& script, LPCTSTR pszName)
+{
+	// Write all the tags to the script file.
+	// pszName = format string for the key name (e.g. "TAG.%s" or "%s" or NULL for "Tag.%s")
+	for (int i = 0; i < (int)this->GetSize(); i++)
+	{
+		CVarDef* pVar = this->GetAt(i);
+		if ( pVar == NULL )
+			continue;
+		LPCTSTR pszKey = pVar->GetKey();
+		LPCTSTR pszVal = pVar->GetValStr();
+		if ( pszKey == NULL || pszKey[0] == '\0' )
+			continue;
+		TCHAR szKeyFull[EXPRESSION_MAX_KEY_LEN];
+		if ( pszName )
+		{
+			snprintf(szKeyFull, sizeof(szKeyFull), pszName, pszKey);
+		}
+		else
+		{
+			snprintf(szKeyFull, sizeof(szKeyFull), "Tag.%s", pszKey);
+		}
+		// Write key=value pair.
+		if ( pszVal && pszVal[0] )
+		{
+			script.WriteKey(szKeyFull, pszVal);
+		}
+	}
+}

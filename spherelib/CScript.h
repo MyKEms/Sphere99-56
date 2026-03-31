@@ -143,7 +143,37 @@ private:
 	void ParseKey();
 };
 
-inline void s_FixExtendedProp(LPCTSTR pszKey, LPCTSTR pszName, CGVariant& vVal) { /* STUB */ }
+inline void s_FixExtendedProp(LPCTSTR pszKey, LPCTSTR pszName, CGVariant& vVal)
+{
+	// If pszKey starts with pszName followed by '.' or '_', then:
+	//   Transform the value to prepend the sub-key, so that
+	//   "Tag.xyz=value" becomes key="Tag" value="xyz value"
+	//   "Attr_MoveNever=1" becomes key="Attr" value="MoveNever 1"
+	// This modifies vVal in-place.
+	if ( pszKey == NULL || pszName == NULL )
+		return;
+	int iLen = strlen(pszName);
+	if ( _strnicmp(pszKey, pszName, iLen) != 0 )
+		return;
+	if ( pszKey[iLen] != '.' && pszKey[iLen] != '_' )
+		return;
+	// We have "Tag.subkey" or "Attr_subkey" - prepend subkey to vVal
+	LPCTSTR pszSubKey = pszKey + iLen + 1;
+	if ( *pszSubKey == '\0' )
+		return;
+	// Build "subkey value" string
+	CGString sNewVal;
+	LPCTSTR pszOldVal = vVal.GetPSTR();
+	if ( pszOldVal && pszOldVal[0] )
+	{
+		sNewVal.Format("%s %s", pszSubKey, pszOldVal);
+	}
+	else
+	{
+		sNewVal = pszSubKey;
+	}
+	vVal.SetStr(sNewVal);
+}
 
 // Implementations of s_FindKeyInTable for CScriptProp/CScriptMethod.
 // These are defined here (after the class definitions) to avoid incomplete-type errors.
@@ -156,6 +186,26 @@ inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptProp pTable[])
 		if ( !_stricmp(pszKey, pTable[i].m_pszName) )
 			return i;
 	}
+	// Try prefix match for compound keys like "Tag.xyz" or "Attr_Newbie" matching "Tag" or "Attr"
+	LPCTSTR pSep = NULL;
+	for ( LPCTSTR p = pszKey; *p; p++ )
+	{
+		if ( *p == '.' || *p == '_' )
+		{
+			pSep = p;
+			break;
+		}
+	}
+	if ( pSep )
+	{
+		int iLen = pSep - pszKey;
+		for ( int i = 0; pTable[i].m_pszName; i++ )
+		{
+			if ( (int)strlen(pTable[i].m_pszName) == iLen &&
+				!_strnicmp(pszKey, pTable[i].m_pszName, iLen) )
+				return i;
+		}
+	}
 	return -1;
 }
 
@@ -167,6 +217,26 @@ inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[])
 	{
 		if ( !_stricmp(pszKey, pTable[i].m_pszName) )
 			return i;
+	}
+	// Try prefix match for compound method keys like "Tag.xyz" matching "Tag"
+	LPCTSTR pSep = NULL;
+	for ( LPCTSTR p = pszKey; *p; p++ )
+	{
+		if ( *p == '.' || *p == '_' )
+		{
+			pSep = p;
+			break;
+		}
+	}
+	if ( pSep )
+	{
+		int iLen = pSep - pszKey;
+		for ( int i = 0; pTable[i].m_pszName; i++ )
+		{
+			if ( (int)strlen(pTable[i].m_pszName) == iLen &&
+				!_strnicmp(pszKey, pTable[i].m_pszName, iLen) )
+				return i;
+		}
 	}
 	return -1;
 }

@@ -437,14 +437,26 @@ public:
 	CGTime m_timeChange;
 	DWORD m_Size;
 
-	CFileAttributes() { throw "not implemented"; }
+	CFileAttributes() : m_Size(0) {}
 };
 
 class CFileDir : public CGStringArray
 {
 public:
-	static bool ReadFileInfo(LPCTSTR pszFilePath, CFileAttributes& attr) { throw "not implemented"; }
-	int ReadDir(LPCTSTR pszFilePath) { throw "not implemented"; }
+	static bool ReadFileInfo(LPCTSTR pszFilePath, CFileAttributes& attr)
+	{
+		struct stat sb;
+		if ( stat(pszFilePath, &sb) != 0 )
+			return false;
+		attr.m_Size = sb.st_size;
+		attr.m_timeChange = CGTime(sb.st_mtime);
+		return true;
+	}
+	int ReadDir(LPCTSTR pszFilePath)
+	{
+		// Not critical for world persistence.
+		return 0;
+	}
 
 };
 

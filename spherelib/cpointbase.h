@@ -33,13 +33,28 @@ public:
 
 public:
 	void InitPoint();
-	virtual void ZeroPoint() { throw "not implemented"; }
+	virtual void ZeroPoint()
+	{
+		m_x = 0;
+		m_y = 0;
+		m_z = 0;
+		m_mapplane = 0;
+	}
 
 	int GetDistZ(const CGPointBase& pt) const;
 	int GetDist(const CGPointBase& pt) const; // Distance between points
 	int GetDist3D(const CGPointBase& pt) const; // 3D Distance between points
-	int GetDistBase(const CGPointBase& pt) const { throw "not implemented"; } // Distance between points
-	bool IsSame2D(const CGPointBase& pt) const { throw "not implemented"; }
+	int GetDistBase(const CGPointBase& pt) const
+	{
+		// GetDistBase ignores Z and map plane, just 2d distance.
+		int dx = abs(m_x - pt.m_x);
+		int dy = abs(m_y - pt.m_y);
+		return (dx > dy) ? dx : dy;
+	}
+	bool IsSame2D(const CGPointBase& pt) const
+	{
+		return( m_x == pt.m_x && m_y == pt.m_y );
+	}
 
 	void Set(const CGPointBase& pt);
 	void Set(const POINT pt);
@@ -59,8 +74,8 @@ public:
 		return pt;
 	}
 
-	LPCTSTR v_Get() const { throw "not implemented"; }
-	void v_Get(CGVariant& vVal) const { throw "not implemented"; }
+	LPCTSTR v_Get() const;
+	void v_Get(CGVariant& vVal) const;
 };
 
 #define MAPPLANE_ALL	255

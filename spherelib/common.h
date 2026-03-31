@@ -145,9 +145,11 @@ struct RECT { long left; long top; long right; long bottom; };
 template <int size>
 class CBitArray
 {
+	BYTE m_bits[ (size + 7) / 8 ];
 public:
-	bool IsSet(int iBit) { throw "not implemented"; }
-	void SetBit(int iBit) { throw "not implemented"; }
+	CBitArray() { memset(m_bits, 0, sizeof(m_bits)); }
+	bool IsSet(int iBit) { return( iBit >= 0 && iBit < size && (m_bits[iBit >> 3] & (1 << (iBit & 7)))); }
+	void SetBit(int iBit) { if ( iBit >= 0 && iBit < size ) m_bits[iBit >> 3] |= (1 << (iBit & 7)); }
 };
 
 #define ISWHITESPACE(ch)		 (isspace(ch)||(ch)==0xa0)	// isspace
@@ -186,11 +188,53 @@ enum LOGL_TYPE
 class CLogBase
 {
 public:
-	virtual void Event(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg, ...) { throw "not implemented"; }
-	void EventEvent(LPCTSTR pszFormat, ...) { throw "not implemented"; }
-	void EventTrace(LPCTSTR pszFormat, ...) { throw "not implemented"; }
-	void EventError(LPCTSTR pszFormat, ...) { throw "not implemented"; }
-	void EventWarn(LPCTSTR pszFormat, ...) { throw "not implemented"; }
+	virtual int EventStr(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg) = 0;
+
+	void Event(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg, ...)
+	{
+		va_list vargs;
+		va_start(vargs, pszMsg);
+		TCHAR szBuf[1024];
+		vsprintf(szBuf, pszMsg, vargs);
+		va_end(vargs);
+		EventStr(dwGroupMask, level, szBuf);
+	}
+	void EventEvent(LPCTSTR pszFormat, ...)
+	{
+		va_list vargs;
+		va_start(vargs, pszFormat);
+		TCHAR szBuf[1024];
+		vsprintf(szBuf, pszFormat, vargs);
+		va_end(vargs);
+		EventStr(0, LOGL_EVENT, szBuf);
+	}
+	void EventTrace(LPCTSTR pszFormat, ...)
+	{
+		va_list vargs;
+		va_start(vargs, pszFormat);
+		TCHAR szBuf[1024];
+		vsprintf(szBuf, pszFormat, vargs);
+		va_end(vargs);
+		EventStr(0, LOGL_TRACE, szBuf);
+	}
+	void EventError(LPCTSTR pszFormat, ...)
+	{
+		va_list vargs;
+		va_start(vargs, pszFormat);
+		TCHAR szBuf[1024];
+		vsprintf(szBuf, pszFormat, vargs);
+		va_end(vargs);
+		EventStr(0, LOGL_ERROR, szBuf);
+	}
+	void EventWarn(LPCTSTR pszFormat, ...)
+	{
+		va_list vargs;
+		va_start(vargs, pszFormat);
+		TCHAR szBuf[1024];
+		vsprintf(szBuf, pszFormat, vargs);
+		va_end(vargs);
+		EventStr(0, LOGL_WARN, szBuf);
+	}
 };
 
 extern CLogBase* g_pLog;
@@ -209,7 +253,14 @@ public:
 class CGSystemInfo
 {
 public:
-	static bool IsNt() { throw "not implemented"; }
+	static bool IsNt()
+	{
+#ifdef _WIN32
+		return true;	// Assume NT-based on modern Windows
+#else
+		return false;	// Not Windows
+#endif
+	}
 };
 
 class CAssocStrVal
@@ -219,10 +270,47 @@ public:
 	int m_iVal;
 
 public:
-	LPCTSTR FindValSorted(int iVal) const { throw "not implemented"; }
+	LPCTSTR FindValSorted(int iVal) const
+	{
+		// Walk the sorted table to find the name for a given value.
+		// The table must be sorted by m_iVal and terminated with m_pszName==NULL.
+		const CAssocStrVal* p = this;
+		for ( ; p->m_pszName != NULL; p++ )
+		{
+			if ( iVal < p[1].m_iVal || p[1].m_pszName == NULL )
+				return p->m_pszName;
+		}
+		return "";
+	}
 };
 
-inline int CvtUNICODEToSystem(TCHAR* pOut, int iSizeOutBytes, WCHAR* pwChar, int iSizeInBytes) { return 0; /* STUB */ }
-inline int CvtSystemToUNICODE(WCHAR* wChar, int iSizeInBytes, LPCTSTR pInp) { return 0; /* STUB */ }
+inline int CvtUNICODEToSystem(TCHAR* pOut, int iSizeOutBytes, WCHAR* pwChar, int iSizeInBytes)
+{
+	// Convert UNICODE (wide) string to system (ASCII/Latin-1) string.
+	int iLen = iSizeInBytes / sizeof(WCHAR);
+	int iOutMax = iSizeOutBytes - 1;
+	int i;
+	for ( i = 0; i < iLen && i < iOutMax; i++ )
+	{
+		WCHAR wch = pwChar[i];
+		if ( wch == 0 )
+			break;
+		pOut[i] = (TCHAR)( wch > 0xFF ? '?' : wch );
+	}
+	pOut[i] = '\0';
+	return i;
+}
+inline int CvtSystemToUNICODE(WCHAR* wChar, int iSizeInBytes, LPCTSTR pInp)
+{
+	// Convert system (ASCII/Latin-1) string to UNICODE (wide) string.
+	int iOutMax = (iSizeInBytes / sizeof(WCHAR)) - 1;
+	int i;
+	for ( i = 0; pInp[i] && i < iOutMax; i++ )
+	{
+		wChar[i] = (WCHAR)(unsigned char)pInp[i];
+	}
+	wChar[i] = 0;
+	return i;
+}
 
 #endif // _INC_COMMON_H

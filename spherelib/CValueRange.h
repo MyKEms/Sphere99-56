@@ -39,7 +39,7 @@ public:
 	int GetRandomLinear( int iPercent ) const;
 	void v_Set(CGVariant& vVal);
 	void v_Get(CGVariant& vVal);
-	bool IsInvalid() const { throw "not implemented"; }
+	bool IsInvalid() const { return( m_iLo == INT_MIN && m_iHi == INT_MAX ); }
 
 public:
 	CValueRangeInt()
@@ -113,8 +113,32 @@ public:
 	int GetRandom() const;
 	int GetRandomLinear(int iPercent) const;
 
-	void v_Get(CGVariant& val) { throw "not implemented"; }
-	void v_Set(CGVariant& val) { throw "not implemented"; }
+	void v_Get(CGVariant& val)
+	{
+		// Write the curve values as a comma-separated string.
+		CGString sTmp;
+		for ( int i = 0; i < m_aiValues.GetSize(); i++ )
+		{
+			if ( i > 0 ) sTmp += ",";
+			TCHAR szNum[16];
+			sprintf(szNum, "%d", m_aiValues[i]);
+			sTmp += szNum;
+		}
+		val = (LPCTSTR)sTmp;
+	}
+	void v_Set(CGVariant& val)
+	{
+		// Parse curve values from comma-separated string.
+		m_aiValues.Empty();
+		LPCTSTR pszVal = val.GetPSTR();
+		if ( pszVal == NULL ) return;
+		while ( *pszVal )
+		{
+			m_aiValues.Add( atoi(pszVal) );
+			while ( *pszVal && *pszVal != ',' ) pszVal++;
+			if ( *pszVal == ',' ) pszVal++;
+		}
+	}
 };
 
 #endif // _INC_CVALUERANGE_H

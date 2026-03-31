@@ -62,7 +62,10 @@ public:
 	*/
 	CGString(const CGString& s);
 
-	void FormatErrorMessage(const HRESULT hRes) { throw "not implemented"; }
+	void FormatErrorMessage(const HRESULT hRes)
+	{
+		Format("Error code: %d", hRes);
+	}
 
 	/**
 	* @brief Check if there is data allocated and if the string is zero ended.
@@ -368,9 +371,69 @@ extern int strcpylen(TCHAR* pDst, LPCTSTR pSrc, int imaxlen);
 // extern TCHAR * Str_GetTemporary(int amount = 1);
 inline LPCTSTR Str_GetArticleAndSpace(LPCTSTR pszWords) { return pszWords; /* STUB */ }
 extern TCHAR* Str_GetTemp();
-inline int Str_GetBare(TCHAR* pszOut, LPCTSTR pszInp, int iMaxSize, LPCTSTR pszStrip = NULL) { return 0; /* STUB */ }
-inline TCHAR* Str_TrimWhitespace(TCHAR* pStr) { return pStr; /* STUB */ }
-inline TCHAR* Str_GetNonWhitespace(LPCTSTR pStr) { return (TCHAR*)pStr; /* STUB */ }
+inline int Str_GetBare(TCHAR* pszOut, LPCTSTR pszInp, int iMaxSize, LPCTSTR pszStrip = NULL)
+{
+	// Copy the string removing/replacing any special characters in it.
+	// pszStrip = characters to strip (NULL = use defaults: "{}[]|~")
+	static const TCHAR szDefaultStrip[] = "{}[]|~";
+	if ( pszStrip == NULL )
+		pszStrip = szDefaultStrip;
+	int j = 0;
+	for ( int i = 0; pszInp[i] && j < iMaxSize - 1; i++ )
+	{
+		TCHAR ch = pszInp[i];
+		if ( ch < ' ' ) // control chars
+		{
+			if ( ch == '\t' )
+			{
+				pszOut[j++] = ' ';
+			}
+			continue;
+		}
+		// Check strip list
+		bool fStrip = false;
+		for ( LPCTSTR p = pszStrip; *p; p++ )
+		{
+			if ( ch == *p )
+			{
+				fStrip = true;
+				break;
+			}
+		}
+		if ( ! fStrip )
+		{
+			pszOut[j++] = ch;
+		}
+	}
+	pszOut[j] = '\0';
+	return j;
+}
+inline TCHAR* Str_TrimWhitespace(TCHAR* pStr)
+{
+	// Skip leading whitespace and trim trailing whitespace.
+	TCHAR* p = pStr;
+	GETNONWHITESPACE(p);
+	// Move string to start if needed
+	if ( p != pStr )
+	{
+		int len = strlen(p);
+		memmove(pStr, p, len + 1);
+	}
+	// Trim trailing whitespace
+	int len = strlen(pStr);
+	while ( len > 0 && ISWHITESPACE(pStr[len - 1]) )
+	{
+		pStr[--len] = '\0';
+	}
+	return pStr;
+}
+inline TCHAR* Str_GetNonWhitespace(LPCTSTR pStr)
+{
+	// Skip whitespace, return pointer to first non-whitespace char.
+	TCHAR* p = (TCHAR*)pStr;
+	GETNONWHITESPACE(p);
+	return p;
+}
 inline bool Str_Parse(TCHAR* pLine, TCHAR** ppArg, LPCTSTR pSep)
 {
 	// Split line at separator into key + arg
@@ -429,14 +492,146 @@ inline int Str_GetEndWhitespace(LPCTSTR pStr, int iLen)
 		iLen--;
 	return iLen;
 }
-inline int Str_ParseCmdsStr(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { return 0; /* STUB */ }
-inline int Str_ParseCmds(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { return 0; /* STUB */ }
-inline MATCH_TYPE Str_Match(LPCTSTR pStr, LPCTSTR pPattern) { return MATCH_ABORT; /* STUB */ }
-inline int Str_FindWord(LPCTSTR pStr, LPCTSTR pWord) { return -1; /* STUB */ }
+inline int Str_ParseCmds(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators = NULL)
+{
+	// Parse a string into multiple commands by separators.
+	// pStr must be a modifiable string (despite LPCTSTR).
+	// Returns the number of parts found.
+	static const TCHAR szDefaultSep[] = ",";
+	if ( lpcSeparators == NULL || *lpcSeparators == '\0' )
+		lpcSeparators = szDefaultSep;
+
+	TCHAR* pLine = (TCHAR*) pStr;
+	int iCount = 0;
+
+	while ( iCount < iCmdCount )
+	{
+		// skip leading whitespace
+		while ( *pLine && ISWHITESPACE(*pLine) )
+			pLine++;
+		ppCmds[iCount++] = pLine;
+
+		// find next separator
+		bool fFound = false;
+		for ( ; *pLine; pLine++ )
+		{
+			for ( LPCTSTR p = lpcSeparators; *p; p++ )
+			{
+				if ( *pLine == *p )
+				{
+					*pLine++ = '\0';
+					fFound = true;
+					break;
+				}
+			}
+			if ( fFound )
+				break;
+		}
+		if ( ! *pLine && ! fFound )
+			break;
+	}
+	// fill remaining slots with empty strings
+	for ( int i = iCount; i < iCmdCount; i++ )
+	{
+		ppCmds[i] = pLine; // points to '\0' at end
+	}
+	return iCount;
+}
+inline int Str_ParseCmdsStr(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators)
+{
+	return Str_ParseCmds(pStr, ppCmds, iCmdCount, lpcSeparators);
+}
+inline MATCH_TYPE Str_Match(LPCTSTR pStr, LPCTSTR pPattern)
+{
+	// Simple wildcard match. * matches any sequence, ? matches single char.
+	if ( pPattern == NULL || pStr == NULL )
+		return MATCH_ABORT;
+	while ( *pPattern )
+	{
+		if ( *pPattern == '*' )
+		{
+			pPattern++;
+			if ( *pPattern == '\0' )
+				return MATCH_VALID; // trailing * matches everything
+			while ( *pStr )
+			{
+				if ( Str_Match(pStr, pPattern) == MATCH_VALID )
+					return MATCH_VALID;
+				pStr++;
+			}
+			return MATCH_ABORT;
+		}
+		if ( *pStr == '\0' )
+			return MATCH_ABORT;
+		if ( *pPattern == '?' || toupper(*pPattern) == toupper(*pStr) )
+		{
+			pPattern++;
+			pStr++;
+		}
+		else
+		{
+			return MATCH_ABORT;
+		}
+	}
+	return( *pStr == '\0' ? MATCH_VALID : MATCH_ABORT );
+}
+inline int Str_FindWord(LPCTSTR pStr, LPCTSTR pWord)
+{
+	// Find a word in a comma-separated list. Return the index. -1 = not found.
+	if ( pStr == NULL || pWord == NULL )
+		return -1;
+	int iWordLen = strlen(pWord);
+	int iIndex = 0;
+	while ( *pStr )
+	{
+		// skip whitespace
+		while ( *pStr && ISWHITESPACE(*pStr) )
+			pStr++;
+		// compare
+		if ( ! _strnicmp(pStr, pWord, iWordLen) )
+		{
+			TCHAR ch = pStr[iWordLen];
+			if ( ch == '\0' || ch == ',' || ISWHITESPACE(ch) )
+				return iIndex;
+		}
+		// skip to next word
+		while ( *pStr && *pStr != ',' )
+			pStr++;
+		if ( *pStr == ',' )
+			pStr++;
+		iIndex++;
+	}
+	return -1;
+}
 inline void Str_EscSeqAdd(LPCTSTR pStr1, LPCTSTR pStr2, int iSize) { /* STUB */ }
 inline void Str_EscSeqRemove(LPCTSTR pStr1, LPCTSTR pStr2, int iSize) { /* STUB */ }
 
-inline UINT Str_ahextou(LPCTSTR pszStr) { return 0; /* STUB */ }
+inline UINT Str_ahextou(LPCTSTR pszStr)
+{
+	// Convert hex string to unsigned int. Supports optional "0x" or "0" prefix.
+	if ( pszStr == NULL )
+		return 0;
+	// skip whitespace
+	while ( ISWHITESPACE(*pszStr) )
+		pszStr++;
+	// skip optional "0x" or "0X" prefix
+	if ( pszStr[0] == '0' && ( pszStr[1] == 'x' || pszStr[1] == 'X' ) )
+		pszStr += 2;
+	UINT val = 0;
+	for ( ; ; pszStr++ )
+	{
+		TCHAR ch = *pszStr;
+		if ( ch >= '0' && ch <= '9' )
+			val = (val << 4) | (ch - '0');
+		else if ( ch >= 'a' && ch <= 'f' )
+			val = (val << 4) | (ch - 'a' + 10);
+		else if ( ch >= 'A' && ch <= 'F' )
+			val = (val << 4) | (ch - 'A' + 10);
+		else
+			break;
+	}
+	return val;
+}
 
 class CScriptProp;
 class CScriptMethod;

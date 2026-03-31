@@ -202,26 +202,85 @@ private:
 
 public:
 	size_t FindObj(const CObjBase* pChar) const;
-	size_t FindObj(const CResourceObj* pObj) const { throw "not implemented"; }
+	size_t FindObj(const CResourceObj* pObj) const
+	{
+		if ( pObj == NULL ) return BadIndex();
+		CSphereUID uid = pObj->GetUIDIndex();
+		for ( size_t i = 0; i < GetCharCount(); i++ )
+		{
+			if ( GetChar(i) == uid ) return i;
+		}
+		return BadIndex();
+	}
 	size_t AttachObj(const CObjBase* pChar);
-	size_t AttachObj(const CResourceObj* pObj) { throw "not implemented"; }
+	size_t AttachObj(const CResourceObj* pObj)
+	{
+		if ( pObj == NULL ) return BadIndex();
+		return AttachUID( pObj->GetUIDIndex() );
+	}
 	size_t InsertObj(const CObjBase* pChar, size_t i);
 	void DetachObj(size_t i);
 	size_t DetachObj(const CObjBase* pChar);
-	size_t DetachObj(const CResourceObj* pObj) { throw "not implemented"; }
+	size_t DetachObj(const CResourceObj* pObj)
+	{
+		size_t i = FindObj(pObj);
+		if ( i != BadIndex() ) DetachObj(i);
+		return i;
+	}
 	size_t GetSize() const { return m_uidCharArray.GetSize(); }
 
-	CSphereUID GetAt(size_t i) const { throw "not implemented"; }
+	CSphereUID GetAt(size_t i) const
+	{
+		return m_uidCharArray[i];
+	}
 
-	int AttachUID(const CSphereUID uid) { throw "not implemented"; }
-	void RemoveAll() { throw "not implemented"; }
-	void RemoveAt(size_t i) { throw "not implemented"; }
-	void CopyArray(const CUIDRefArray& arr) { throw "not implemented"; }
+	int AttachUID(const CSphereUID uid)
+	{
+		// Don't add duplicates.
+		for ( size_t i = 0; i < GetCharCount(); i++ )
+		{
+			if ( GetChar(i) == uid ) return (int)i;
+		}
+		return (int) m_uidCharArray.Add( uid );
+	}
+	void RemoveAll()
+	{
+		m_uidCharArray.RemoveAll();
+	}
+	void RemoveAt(size_t i)
+	{
+		m_uidCharArray.RemoveAt(i);
+	}
+	void CopyArray(const CUIDRefArray& arr)
+	{
+		RemoveAll();
+		for ( size_t i = 0; i < arr.GetCharCount(); i++ )
+		{
+			m_uidCharArray.Add( arr.GetChar(i) );
+		}
+	}
 
-	bool IsUIDIn(const CSphereUID uid) { throw "not implemented"; }
+	bool IsUIDIn(const CSphereUID uid)
+	{
+		for ( size_t i = 0; i < GetCharCount(); i++ )
+		{
+			if ( GetChar(i) == uid ) return true;
+		}
+		return false;
+	}
 
-	void s_WriteObjs(CScript& s, LPCTSTR pszKey) { throw "not implemented"; }
-	HRESULT s_MethodObjs(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
+	void s_WriteObjs(CScript& s, LPCTSTR pszKey)
+	{
+		for ( size_t i = 0; i < GetCharCount(); i++ )
+		{
+			s.WriteKeyInt( pszKey, (int)(DWORD)GetChar(i) );
+		}
+	}
+	HRESULT s_MethodObjs(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc)
+	{
+		// Stub for now - not critical for loading.
+		return HRES_INVALID_FUNCTION;
+	}
 
 	CSphereUID GetChar(size_t i) const
 	{
