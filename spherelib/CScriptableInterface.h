@@ -41,31 +41,46 @@
 	static CScriptClass sm_ScriptClass;
 
 #define CSCRIPT_CLASS_IMP1(CLASS_NAME,b,c,d,e) \
-	int C##CLASS_NAME::s_FindMyPropKey(LPCTSTR pszKey) { throw "not implemented"; } \
-	int C##CLASS_NAME::s_FindMyMethodKey(LPCTSTR pszKey) { throw "not implemented"; }
+	int C##CLASS_NAME::s_FindMyPropKey(LPCTSTR pszKey) { \
+		const CScriptProp* _tbl = (b); \
+		return _tbl ? s_FindKeyInTable(pszKey, _tbl) : -1; \
+	} \
+	int C##CLASS_NAME::s_FindMyMethodKey(LPCTSTR pszKey) { \
+		const CScriptMethod* _tbl = (c); \
+		return _tbl ? s_FindKeyInTable(pszKey, _tbl) : -1; \
+	}
 
 #define CSCRIPT_CLASS_DEF2(...) \
 	int s_FindMyPropKey(LPCTSTR pszKey); \
 	int s_FindMyMethodKey(LPCTSTR pszKey);
 
 #define CSCRIPT_CLASS_IMP2(CLASS_NAME,b,c,d,e) \
-	int C##CLASS_NAME::s_FindMyPropKey(LPCTSTR pszKey) { throw "not implemented"; } \
-	int C##CLASS_NAME::s_FindMyMethodKey(LPCTSTR pszKey) { throw "not implemented"; }
+	int C##CLASS_NAME::s_FindMyPropKey(LPCTSTR pszKey) { \
+		const CScriptProp* _tbl = (b); \
+		return _tbl ? s_FindKeyInTable(pszKey, _tbl) : -1; \
+	} \
+	int C##CLASS_NAME::s_FindMyMethodKey(LPCTSTR pszKey) { \
+		const CScriptMethod* _tbl = (c); \
+		return _tbl ? s_FindKeyInTable(pszKey, _tbl) : -1; \
+	}
 
 
 class CScriptClass
 {
 public:
-	void InitScriptClass() { throw "not implemented"; }
-	void AddSubClass(CScriptClass* pSubClass) { throw "not implemented"; }
+	void InitScriptClass() { /* no-op for now -- script class registration deferred */ }
+	void AddSubClass(CScriptClass* pSubClass) { /* no-op for now */ }
 };
 
 template <class TYPE>
 class CScriptClassTemplate : public CScriptClass
 {
+private:
+	bool m_fInit;
 public:
-	virtual void InitScriptClass();
-	bool IsInit() { throw "not implemented"; }
+	CScriptClassTemplate() : m_fInit(false) {}
+	virtual void InitScriptClass() { m_fInit = true; }
+	bool IsInit() { return m_fInit; }
 };
 
 #endif // _INC_CSCRIPTABLEINTERFACE_H

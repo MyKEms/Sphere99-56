@@ -37,7 +37,11 @@ class CScriptExecContext;
 class CScriptObj
 {
 public:
-	virtual TRIGRET_TYPE OnTrigger(LPCTSTR pszTrigName, CScriptExecContext& exec) { throw "not implemented"; }
+	virtual TRIGRET_TYPE OnTrigger(LPCTSTR pszTrigName, CScriptExecContext& exec)
+	{
+		// Default: no triggers handled. Subclasses (CChar, CItem) override this.
+		return TRIGRET_RET_DEFAULT;
+	}
 	virtual CGString GetName() const { return CGString(); }
 };
 

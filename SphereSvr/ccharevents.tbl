@@ -14,6 +14,19 @@ CCHAREVENT(Hit,				0, "I just hit someone (TARG)")
 CCHAREVENT(HitMiss,			0, "I just missed")
 CCHAREVENT(HitTry,			0, "I am trying to hit someone. starting swing")
 
+// Erebor extended combat triggers
+CCHAREVENT(BeforeSwing,		0, "Before I swing at someone")
+CCHAREVENT(AfterSwing,		0, "After I swing at someone")
+CCHAREVENT(beforeGetSwing,	0, "Before I get swung at")
+CCHAREVENT(afterGetSwing,	0, "After I get swung at")
+CCHAREVENT(beforeDoEffect,	0, "Before I do a spell/skill effect")
+CCHAREVENT(afterDoEffect,	0, "After I do a spell/skill effect")
+CCHAREVENT(beforeGetEffect,	0, "Before I receive a spell/skill effect")
+CCHAREVENT(finalBlow,		0, "I just dealt the killing blow")
+CCHAREVENT(DrinkingPotion,	0, "I am drinking a potion")
+CCHAREVENT(playerKill,		0, "I (player) just killed someone")
+CCHAREVENT(npckill,			0, "I (NPC) just killed someone")
+
 #include "citemevents.tbl"
 
 CCHAREVENT(LogIn,			0, "Client logs in")

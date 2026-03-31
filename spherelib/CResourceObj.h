@@ -15,17 +15,17 @@ public:
 		m_dwHashIndex = dwHashIndex;
 	}
 
-	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
-	virtual bool s_LoadProps(CScript& s) { throw "not implemented"; } // Load an item from script
-	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
-	virtual HRESULT s_PropSet(const char* pszKey, CGVariant& vVal) { throw "not implemented"; }
+	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
+	virtual bool s_LoadProps(CScript& s) { return false; } // Load an item from script
+	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
+	virtual HRESULT s_PropSet(const char* pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 
-	int GetRefCount() { throw "not implemented"; }
+	int GetRefCount() { return 1; /* stub - always at least 1 */ }
 	void IncRefCount() { /* stub */ }
 	void StaticDestruct() { /* stub */ }
 	HASH_INDEX GetUIDIndex() const { return m_dwHashIndex; }
 	HASH_INDEX GetHashCode() const { return m_dwHashIndex; }
-	bool IsValidUID() const { throw "not implemented"; }
+	bool IsValidUID() const { return m_dwHashIndex != 0; }
 };
 typedef CRefPtr<CResourceObj> CResourceObjPtr;
 
