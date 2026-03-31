@@ -880,10 +880,11 @@ CPointMap CSphereResourceMgr::GetRegionPoint( LPCTSTR pCmd ) const // Decode a t
 	{
 		// Match the region name with global regions.
 
-		FOR_HASH( m_ResHash, i, j )
+		for ( int _hi = 0; _hi < (int)m_ResHash.GetCount(); _hi++ )
 		{
-			CResourceDefPtr pResDef = m_ResHash.GetAtArray(i,j);
-			ASSERT(pResDef);
+			CResourceDefPtr pResDef = m_ResHash.GetAt(_hi);
+			if ( !pResDef )
+				continue;
 
 			// RES_Room
 			// RES_Area
@@ -1110,7 +1111,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			CSphereUID ridnew( RES_TypeDef, s.GetArgInt());
 			CResourceDefPtr pResDef = new CResourceDef( ridnew, s.GetKey());
 			ASSERT(pResDef);
-			m_ResHash.AddSortKey( ridnew, pResDef );
+			m_ResHash.AddSortKey( pResDef, ridnew );
 		}
 		return( true );
 
@@ -1214,7 +1215,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		{
 			pNewDef = new CRegionResourceDef( rid );
 			ASSERT(pNewDef);
-			m_ResHash.AddSortKey( rid, pNewDef );
+			m_ResHash.AddSortKey( pNewDef, rid );
 		}
 		pNewDef->s_LoadProps(s);
 		break;
@@ -1256,7 +1257,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			if ( pRegion->RealizeRegion())
 			{
 				// might be a dupe ?
-				m_ResHash.AddSortKey( rid, pRegion );
+				m_ResHash.AddSortKey( pRegion, rid );
 			}
 		}
 		return( true );
@@ -1272,7 +1273,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			if ( pRegion->RealizeRegion())
 			{
 				// might be a dupe ?
-				m_ResHash.AddSortKey( rid, pRegion );
+				m_ResHash.AddSortKey( pRegion, rid );
 			}
 		}
 		return( true );
@@ -1332,7 +1333,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		m_SkillNameDefs.AddSortKey( pSkill, pSkill->GetSkillKey());
 		// Hard coded value for skill index.
 		m_SkillIndexDefs.SetAtGrow( rid.GetResIndex(), pSkill );
-		// m_ResHash.AddSortKey( rid, pSkill );
+		// m_ResHash.AddSortKey( pSkill, rid );
 		}
 		break;
 
@@ -1346,7 +1347,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			pNewLink = new CCharEvents( rid );
 		}
 		ASSERT(pNewLink);
-		m_ResHash.AddSortKey( rid, pNewLink );
+		m_ResHash.AddSortKey( pNewLink, rid );
 		break;
 
 	case RES_TypeDef:
@@ -1359,7 +1360,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			pNewLink = new CItemTypeDef( rid );
 		}
 		ASSERT(pNewLink);
-		m_ResHash.AddSortKey( rid, pNewLink );
+		m_ResHash.AddSortKey( pNewLink, rid );
 		break;
 
 	case RES_BlockEMail:	// single instance link?
@@ -1388,7 +1389,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		{
 			pNewLink = new CResourceLink( rid );
 			ASSERT(pNewLink);
-			m_ResHash.AddSortKey( rid, pNewLink );
+			m_ResHash.AddSortKey( pNewLink, rid );
 		}
 		break;
 
@@ -1403,7 +1404,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		{
 			pNewLink = new CRegionType( rid );
 			ASSERT(pNewLink);
-			m_ResHash.AddSortKey( rid, pNewLink );
+			m_ResHash.AddSortKey( pNewLink, rid );
 		}
 		{
 			CScriptLineContext LineContext = s.GetContext();
@@ -1422,7 +1423,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		{
 			pNewLink = new CProfessionDef( rid );
 			ASSERT(pNewLink);
-			m_ResHash.AddSortKey( rid, pNewLink );
+			m_ResHash.AddSortKey( pNewLink, rid );
 		}
 		{
 			CScriptLineContext LineContext = s.GetContext();
@@ -1449,7 +1450,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		{
 			pNewLink = new CCharEvents( rid );
 			ASSERT(pNewLink);
-			m_ResHash.AddSortKey( rid, pNewLink );
+			m_ResHash.AddSortKey( pNewLink, rid );
 		}
 		break;
 
@@ -1476,7 +1477,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		{
 			pNewLink = new CItemTypeDef( rid );
 			ASSERT(pNewLink);
-			m_ResHash.AddSortKey( rid, pNewLink );
+			m_ResHash.AddSortKey( pNewLink, rid );
 		}
 		break;
 
@@ -1874,14 +1875,14 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 CResourceDefPtr CSphereResourceMgr::ResourceGetDef( UID_INDEX uid )
 {
 	// Get a CResourceDef from the CSphereUID.
-	// NOTE: 
+	// NOTE:
 	//  this does not load CCharDef and CItemDef if not already loaded !
 	// ARGS:
 	//	restype = id must be this type.
 
 	CSphereUID rid = uid;
 	if ( ! rid.IsValidRID())
-		return( NULL );	
+		return( NULL );
 
 	int index = rid.GetResIndex();
 	RES_TYPE restype = rid.GetResType();
@@ -2246,12 +2247,19 @@ void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
 
 bool CResourceMgr::OpenScriptFind(CScript& s, LPCTSTR pszName)
 {
+	// If no name provided, use the file's existing path
+	if (!pszName || !pszName[0])
+		pszName = s.GetFilePath();
+
+	if (!pszName || !pszName[0])
+		return false;
+
 	// Try opening the file directly
-	if (pszName && s.Open(pszName))
+	if (s.Open(pszName))
 		return true;
 
 	// Try with the base directory prefix
-	if (pszName && m_sSCPBaseDir.GetLength() > 0)
+	if (m_sSCPBaseDir.GetLength() > 0)
 	{
 		CGString sPath = CGFile::GetMergedFileName(m_sSCPBaseDir, pszName);
 		if (s.Open(sPath))
@@ -2424,11 +2432,11 @@ void CSphereResourceMgr::Unload( bool fResync )
 		return;
 	}
 
-	FOR_HASH( m_ResHash, i, j )
+	for ( int _hi = (int)m_ResHash.GetCount() - 1; _hi >= 0; _hi-- )
 	{
-		CResourceDefPtr pResDef = m_ResHash.GetAtArray(i,j);
-		ASSERT(pResDef);
-		pResDef->UnLink();
+		CResourceDefPtr pResDef = m_ResHash.GetAt(_hi);
+		if ( pResDef )
+			pResDef->UnLink();
 	}
 
 	// m_LogIP
@@ -2469,7 +2477,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 		{
 			CResourceDefPtr pRes = new CResourceDef( CSphereUID( RES_Stat, i ), g_Stat_Name[i] );
 			ASSERT(pRes);
-			m_ResHash.AddSortKey( CSphereUID( RES_Stat, i ), pRes );
+			m_ResHash.AddSortKey( pRes, CSphereUID( RES_Stat, i ) );
 		}
 
 		m_DefaultRaceClass = new CRaceClassDef(RES_RaceClass);
@@ -2600,7 +2608,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 		// must have at least 1 Profession.
 		CProfessionPtr pProfession = new CProfessionDef( CSphereUID( RES_Profession ));
 		ASSERT(pProfession);
-		m_ResHash.AddSortKey( CSphereUID( RES_Profession, 0 ), pProfession );
+		m_ResHash.AddSortKey( pProfession, CSphereUID( RES_Profession, 0 ) );
 	}
 	if ( ! m_StartDefs.GetSize())	// must have 1 start location
 	{
@@ -2618,7 +2626,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 		CRefPtr<CRegionComplex> pRegionAll = new CRegionComplex( CSphereUID(RES_Area,RID_INDEX_MASK-1), GetName());
 		if ( pRegionAll->RealizeRegion())
 		{
-			m_ResHash.AddSortKey( rid, pRegionAll );
+			m_ResHash.AddSortKey( pRegionAll, rid );
 		}
 	}
 #endif

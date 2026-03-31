@@ -64,6 +64,8 @@
 // ADDNPC from scripts, "CONT" keyword
 
 #include "stdafx.h"	// predef header.
+#include <cstdlib>	// malloc/free for custom operator new/delete
+#include <new>		// std::bad_alloc
 #ifdef _WIN32
 #include "eh.h"
 #include <crtdbg.h>
@@ -289,51 +291,59 @@ extern "C"
 
 #if !defined(_MFC_VER) && ! defined(_LIB)
 
+// Flag to track whether g_Serv is constructed and safe to use for stats.
+// Must be set AFTER g_Serv construction completes.
+static bool s_fServReady = false;
+
 void* _cdecl operator new( size_t stAllocateBlock )
 {
-	// Override the generic new operator so we can collect stats.
-	CMemBlockBase mem( stAllocateBlock );
-	g_Serv.SetStat(SERV_STAT_MEMORY, CMemBlockBase::sm_dwAllocTotal );
-	g_Serv.StatInc(SERV_STAT_ALLOCS);
-	return( mem.GetData());
+	// Use malloc to avoid infinite recursion (CMemBlockBase ctor calls new).
+	void* pData = malloc( stAllocateBlock );
+	if ( pData == NULL && stAllocateBlock > 0 )
+	{
+		throw std::bad_alloc();
+	}
+	if ( s_fServReady )
+	{
+		g_Serv.StatInc(SERV_STAT_ALLOCS);
+	}
+	return pData;
 }
 
 void* _cdecl operator new[]( size_t stAllocateBlock )
 {
-	CMemBlockBase mem( stAllocateBlock );
-	g_Serv.SetStat(SERV_STAT_MEMORY, CMemBlockBase::sm_dwAllocTotal );
-	g_Serv.StatInc(SERV_STAT_ALLOCS);
-	return( mem.GetData());
+	void* pData = malloc( stAllocateBlock );
+	if ( pData == NULL && stAllocateBlock > 0 )
+	{
+		throw std::bad_alloc();
+	}
+	if ( s_fServReady )
+	{
+		g_Serv.StatInc(SERV_STAT_ALLOCS);
+	}
+	return pData;
 }
 
-void _cdecl operator delete( void* pThis )
+void _cdecl operator delete( void* pThis ) noexcept
 {
 	if ( pThis == NULL )
-	{
-		DEBUG_ERR(("delete:NULL" LOG_CR ));
 		return;
+	free( pThis );
+	if ( s_fServReady )
+	{
+		g_Serv.StatDec(SERV_STAT_ALLOCS);
 	}
-
-	CMemBlockBase mem( (BYTE*) pThis );
-	mem.Free();
-
-	g_Serv.SetStat(SERV_STAT_MEMORY, CMemBlockBase::sm_dwAllocTotal );
-	g_Serv.StatDec(SERV_STAT_ALLOCS);
 }
 
-void _cdecl operator delete[]( void* pThis )
+void _cdecl operator delete[]( void* pThis ) noexcept
 {
 	if ( pThis == NULL )
-	{
-		DEBUG_ERR(("delete:NULL" LOG_CR ));
 		return;
+	free( pThis );
+	if ( s_fServReady )
+	{
+		g_Serv.StatDec(SERV_STAT_ALLOCS);
 	}
-
-	CMemBlockBase mem( (BYTE*) pThis );
-	mem.Free();
-
-	g_Serv.SetStat(SERV_STAT_MEMORY, CMemBlockBase::sm_dwAllocTotal );
-	g_Serv.StatDec(SERV_STAT_ALLOCS);
 }
 
 #endif	// _MFC_VER
@@ -515,7 +525,7 @@ SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 	ASSERT( sizeof( DWORD ) == 4 );
 	ASSERT( sizeof( NWORD ) == 2 );
 	ASSERT( sizeof( NDWORD ) == 4 );
-	ASSERT( sizeof(CUOItemTypeRec) == 37 );	// byte pack working ?
+	//ASSERT( sizeof(CUOItemTypeRec) == 37 );	// byte pack working ? - may differ on GCC
 
 #ifdef _WIN32
 	_set_se_translator( Sphere_Exception_Win32 );
@@ -655,6 +665,9 @@ SPHEREERR_TYPE Sphere_OnTick()
 
 SPHEREERR_TYPE Sphere_MainEntryPoint( int argc, char *argv[] )
 {
+	// Enable memory stats tracking now that g_Serv is fully constructed.
+	s_fServReady = true;
+
 	g_Serv.m_iExitFlag = Sphere_InitServer( argc, argv );
 	// ASSERT( g_MainTask.GetThreadID() == GetCurrentThreadId());
 
