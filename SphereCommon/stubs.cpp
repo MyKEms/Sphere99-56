@@ -117,5 +117,35 @@ void CCryptBase::Encrypt(BYTE* pOutput, const BYTE* pInput, int iLen)
 		memcpy(pOutput, pInput, iLen);
 }
 
+TCHAR* CCryptBase::WriteClientVer(TCHAR* pStr) const
+{
+	if (pStr)
+	{
+		int iMajor = (m_iClientVersion >> 20) & 0xFFF;
+		int iMinor = (m_iClientVersion >> 12) & 0xFF;
+		int iPatch = (m_iClientVersion >> 4) & 0xFF;
+		sprintf(pStr, "%d.%d.%d", iMajor, iMinor, iPatch);
+	}
+	return pStr;
+}
+
+bool CCryptBase::SetClientVerEnum(int iVer)
+{
+	m_iClientVersion = iVer;
+	m_fInit = false;
+	return true;
+}
+
+bool CCryptBase::SetClientVer(LPCTSTR pszVersion)
+{
+	if (pszVersion == NULL)
+		return false;
+	int iMajor = 0, iMinor = 0, iPatch = 0;
+	sscanf(pszVersion, "%d.%d.%d", &iMajor, &iMinor, &iPatch);
+	m_iClientVersion = (iMajor << 20) | (iMinor << 12) | (iPatch << 4);
+	m_fInit = false;
+	return true;
+}
+
 // g_MapList - global map list instance
 class CMapList g_MapList;
