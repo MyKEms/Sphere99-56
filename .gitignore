@@ -368,17 +368,42 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# NEVER commit these - sensitive shard data
-run/
-save/
+# =============================================================
+# SENSITIVE SHARD DATA — NEVER COMMIT TO PUBLIC REPO
+# =============================================================
+
+# Account files
+sphereacct.scp
+sphereaccu.scp
 accounts/
-*.log
-sphere.ini
-spheretables.scp
-spheretable_x.scp
+accounts/**
 
 # Save files
+save/
+save/**
 sphereworld.scp
 spherechars.scp
 spheredata.scp
 spherestatics.scp
+
+# Server logs
+logs/
+logs/**
+*.log
+
+# MUL data files (UO client data, copyrighted)
+muls/
+muls/**
+
+# Scripts (shard-specific, private)
+scripts/
+scripts/**
+
+# Server config (contains shard-specific settings)
+sphere.ini
+spheretables.scp
+spheretable_x.scp
+
+# Run directory (built artifacts + symlinks to data)
+run/
+run/**
