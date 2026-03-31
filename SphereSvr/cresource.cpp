@@ -2210,13 +2210,22 @@ void CResourceMgr::AddResourceFile(LPCTSTR pszFile)
 
 	// Build full path if relative
 	CGString sFullPath;
-	if (szPath[0] != '/' && m_sSCPBaseDir.GetLength() > 0)
+	// Try the path as-is first (it may already be relative to CWD)
 	{
-		sFullPath = CGFile::GetMergedFileName(m_sSCPBaseDir, szPath);
-	}
-	else
-	{
-		sFullPath = szPath;
+		FILE* fTest = fopen(szPath, "r");
+		if (fTest)
+		{
+			fclose(fTest);
+			sFullPath = szPath;
+		}
+		else if (szPath[0] != '/' && m_sSCPBaseDir.GetLength() > 0)
+		{
+			sFullPath = CGFile::GetMergedFileName(m_sSCPBaseDir, szPath);
+		}
+		else
+		{
+			sFullPath = szPath;
+		}
 	}
 
 	CResourceScript* pNewScript = new CResourceScript;

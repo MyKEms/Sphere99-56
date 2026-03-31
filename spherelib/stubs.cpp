@@ -124,3 +124,15 @@ void CVarDefArray::s_WriteTags(CScript& script, LPCTSTR pszName)
 		}
 	}
 }
+
+// CResourceObj::s_LoadProps - read key=value pairs from script section
+bool CResourceObj::s_LoadProps(CScript& s)
+{
+	while (s.ReadKeyParse())
+	{
+		CGVariant vArg;
+		vArg = s.GetArgRaw();
+		s_PropSet(s.GetKey(), vArg);
+	}
+	return true;
+}

@@ -16,17 +16,7 @@ public:
 	}
 
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
-	virtual bool s_LoadProps(CScript& s)
-	{
-		// Read key=value pairs and dispatch to s_PropSet (virtual)
-		while (s.ReadKeyParse())
-		{
-			CGVariant vArg;
-			vArg = s.GetArgRaw();
-			s_PropSet(s.GetKey(), vArg);
-		}
-		return true;
-	}
+	virtual bool s_LoadProps(CScript& s); // Implemented in spherelib/stubs.cpp
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropSet(const char* pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 
