@@ -367,3 +367,18 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# NEVER commit these - sensitive shard data
+run/
+save/
+accounts/
+*.log
+sphere.ini
+spheretables.scp
+spheretable_x.scp
+
+# Save files
+sphereworld.scp
+spherechars.scp
+spheredata.scp
+spherestatics.scp
