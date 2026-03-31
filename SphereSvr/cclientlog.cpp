@@ -712,35 +712,45 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 		return( false );
 	}
 
-	// Try all client versions on the msg.
+	// Try all client encryption keys on the msg.
+	// We save a copy of the raw encrypted data and try decrypting with each known
+	// client key until we get a valid login packet (0x80 or 0x91).
 	CUOEvent bincopy;		// in buffer. (from client)
-	ASSERT( iLen <= sizeof(bincopy));
+	ASSERT( iLen <= (int)sizeof(bincopy));
 	memcpy( bincopy.m_Raw, pEvent->m_Raw, iLen );
 
-	int iVer = -1;	// just use whatever it was do default.
 	LOGIN_ERR_TYPE lErr = LOGIN_ERR_OTHER;
-	for(;;)
+
+	// Start with NoCrypt (index 0), then try each known encrypted client key.
+	for ( int iVer = 0; ; iVer++ )
 	{
+		if ( ! m_Crypt.SetClientVerEnum( iVer ))
+			break;
+
+		// Re-initialize the crypt masks from the seed for each attempt,
+		// since the XOR rotation is stateful and modifies the masks.
+		m_Crypt.Init( m_Targ.m_tmSetup.m_dwCryptKey );
+
 		m_Crypt.Decrypt( pEvent->m_Raw, bincopy.m_Raw, iLen );
 
+		// Validate: first byte should be a known login command.
 		if ( pEvent->Default.m_Cmd == XCMD_ServersReq )
 		{
-			if ( iLen < sizeof( pEvent->ServersReq ))
+			if ( iLen < (int)sizeof( pEvent->ServersReq ))
 				return(false);
+			// Extra validation from 0.56d: null terminators at end of fixed-size fields
+			// acctname[30] should have a null, acctpass[30] should have a null
+			if ( pEvent->m_Raw[30] != '\0' || pEvent->m_Raw[60] != '\0' )
+				continue;	// wrong decryption key, try next
 			lErr = Login_ServerList( pEvent->ServersReq.m_acctname, pEvent->ServersReq.m_acctpass );
 		}
 		else if ( pEvent->Default.m_Cmd == XCMD_CharListReq )
 		{
-			if ( iLen < sizeof( pEvent->CharListReq ))
+			if ( iLen < (int)sizeof( pEvent->CharListReq ))
 				return(false);
 			lErr = Setup_CharListReq( pEvent->CharListReq.m_acctname, pEvent->CharListReq.m_acctpass, 0 );
 		}
 		if ( lErr != LOGIN_ERR_OTHER )
-			break;
-		iVer ++;
-		if ( iVer == 0 && m_Crypt.GetCryptVer() == 0 )	// we already tried this.
-			iVer ++;
-		if ( ! m_Crypt.SetCryptVerEnum( iVer ))
 			break;
 	}
 
