@@ -16,7 +16,10 @@ public:
 	}
 
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
-	virtual bool s_LoadProps(CScript& s) { return false; } // Load an item from script
+	virtual bool s_LoadProps(CScript& s)
+	{
+		return true; // Base stub - derived classes (CResourceDef) provide real implementation
+	}
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropSet(const char* pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 

@@ -267,7 +267,10 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_MulFiles:
 	case P_Files: // Get data files from here.
-		g_MulInstall.SetPreferPath( CGFile::GetMergedFileName( vVal.GetPSTR(), "" ));
+		{
+			CGString sMul = CGFile::GetMergedFileName( vVal.GetPSTR(), "" );
+			g_MulInstall.SetPreferPath( sMul );
+		}
 		break;
 	case P_MapCacheTime:
 		m_iMapCacheTime = vVal.GetInt()* TICKS_PER_SEC;
@@ -2469,9 +2472,13 @@ bool CSphereResourceMgr::Load( bool fResync )
 	// ARGS:
 	//  fResync = just look for changes.
 
+	fprintf(stderr, "DBG: CSphereResourceMgr::Load(fResync=%d) start\n", fResync); fflush(stderr);
+
 	if ( ! fResync )
 	{
+		fprintf(stderr, "DBG: calling LoadIni(true)...\n"); fflush(stderr);
 		LoadIni(true);
+		fprintf(stderr, "DBG: LoadIni done\n"); fflush(stderr);
 
 		for ( int i=0; i<STAT_QTY; i++ )
 		{
@@ -2543,12 +2550,14 @@ bool CSphereResourceMgr::Load( bool fResync )
 		);
 
 	// Load the optional verdata cache. (modifies MUL stuff)
+	fprintf(stderr, "DBG: loading verdata cache...\n"); fflush(stderr);
 	bool fRet = false;
 	try
 	{
 		fRet = g_MulVerData.Load( g_MulInstall.m_File[VERFILE_VERDATA] );
 	}
 	SPHERE_LOG_TRY_CATCH( "g_MulVerData.Load" )
+	fprintf(stderr, "DBG: verdata load returned %d\n", fRet); fflush(stderr);
 	if ( ! fRet )
 	{
 		return( false );
@@ -2557,10 +2566,12 @@ bool CSphereResourceMgr::Load( bool fResync )
 	Debug_CheckPoint();
 
 	// Now load the *TABLES.SCP file.
+	fprintf(stderr, "DBG: adding spheretables resource file...\n"); fflush(stderr);
 	if ( m_ResourceFiles.GetSize() == 0 )
 	{
 		AddResourceFile( SPHERE_FILE "tables" );
 	}
+	fprintf(stderr, "DBG: resource files count = %d\n", m_ResourceFiles.GetSize()); fflush(stderr);
 
 	// open and index all my script files i'm going to use.
 
@@ -2570,8 +2581,10 @@ bool CSphereResourceMgr::Load( bool fResync )
 		if ( pResFile == NULL )
 			break;
 
+		fprintf(stderr, "DBG: loading resource file %d: %s\n", j, pResFile ? (LPCTSTR)pResFile->GetFilePath() : "NULL"); fflush(stderr);
 		// Debug_CheckPoint();
 		bool fRet = LoadResources( pResFile );	// load or resync
+		fprintf(stderr, "DBG: resource file %d loaded, ret=%d\n", j, fRet); fflush(stderr);
 		if (!fRet)
 		{
 			// remove from the list ?!
@@ -2581,15 +2594,18 @@ bool CSphereResourceMgr::Load( bool fResync )
 
 		if ( j == 0 )
 		{
+			fprintf(stderr, "DBG: adding resource dir '%s'\n", (LPCTSTR)m_sSCPBaseDir); fflush(stderr);
 			AddResourceDir( m_sSCPBaseDir );		// if we want to get *.SCP files from elsewhere.
 			DeleteResourceFile( m_sWorldStatics );	// don't read this way
 			g_Log.Event( LOG_GROUP_INIT, LOGL_TRACE, "Indexing %d scripts..." LOG_CR, m_ResourceFiles.GetSize());
+			fprintf(stderr, "DBG: after AddResourceDir, total scripts = %d\n", m_ResourceFiles.GetSize()); fflush(stderr);
 		}
 		else
 		{
 			g_Serv.Event_PrintPercent( SERVTRIG_TestStatus, j+1, m_ResourceFiles.GetSize());
 		}
 	}
+	fprintf(stderr, "DBG: all resource files loaded\n"); fflush(stderr);
 
 	// Make sure we have the basics.
 

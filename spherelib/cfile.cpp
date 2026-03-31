@@ -215,7 +215,20 @@ bool CGFile::Open(LPCTSTR pszName, UINT uMode, void* pExtra)
 		return false;
 
 	m_uMode = uMode;
-	return OpenBase(pExtra);
+	if (OpenBase(pExtra))
+		return true;
+
+	// If open failed and the name has no extension, try appending .scp
+	LPCTSTR pszExt = GetFileNameExt(m_strFileName);
+	if (!pszExt || !pszExt[0])
+	{
+		CGString sWithExt;
+		sWithExt.Format("%s.scp", (LPCTSTR)m_strFileName);
+		m_strFileName = sWithExt;
+		return OpenBase(pExtra);
+	}
+
+	return false;
 }
 
 void CGFile::Close()

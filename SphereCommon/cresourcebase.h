@@ -103,11 +103,13 @@ public:
 	{
 		while (s.ReadKeyParse())
 		{
-			s_PropSet(s.GetKey(), s.GetArgVar());
+			CGVariant vArg;
+			vArg = s.GetArgRaw();
+			s_PropSet(s.GetKey(), vArg);
 		}
 		return true;
 	}
-	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
+	virtual HRESULT s_PropSet(LPCTSTR pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 
@@ -162,7 +164,7 @@ public:
 		m_pScript = pScript;
 	}
 
-	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
+	virtual HRESULT s_PropSet(LPCTSTR pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 };
