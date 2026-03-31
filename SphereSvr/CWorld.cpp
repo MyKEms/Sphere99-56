@@ -795,10 +795,11 @@ void CWorld::Restock()
 
 	SERVMODE_TYPE iModePrv = g_Serv.SetServerMode( SERVMODE_RestockAll );
 
-	FOR_HASH( g_Cfg.m_ResHash, i, j )
+	for ( int _hi = 0; _hi < (int)g_Cfg.m_ResHash.GetCount(); _hi++ )
 	{
-		CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAtArray(i,j);
-		ASSERT(pResDef);
+		CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAt(_hi);
+		if ( !pResDef )
+			continue;
 		if ( RES_GET_TYPE(pResDef->GetUIDIndex()) != RES_ItemDef )
 			continue;
 		CItemDefPtr pBase = REF_CAST(CItemDef,pResDef);

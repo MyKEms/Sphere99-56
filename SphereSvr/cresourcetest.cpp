@@ -143,16 +143,17 @@ bool CSphereResourceMgr::ResourceDump( const char* pArg )
 			if ( ! FileOut.Open( "dumpnpcs.txt", OF_WRITE|OF_TEXT ))
 				return( false );
 
-			FOR_HASH( g_Cfg.m_ResHash, i, j )
+			for ( int _hi = 0; _hi < (int)g_Cfg.m_ResHash.GetCount(); _hi++ )
 			{
-				CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAtArray(i,j);
-				ASSERT(pResDef);
+				CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAt(_hi);
+				if ( !pResDef )
+					continue;
 				if ( RES_GET_TYPE(pResDef->GetUIDIndex()) != RES_CharDef )
 					continue;
 				CCharDefPtr pCharDef = CCharDef::TranslateBase(pResDef);
 				if ( pCharDef == NULL )
 					continue;
-				FileOut.Printf( "[%04x] '%s'" LOG_CR, i, pCharDef->GetTypeName());
+				FileOut.Printf( "[%04x] '%s'" LOG_CR, _hi, pCharDef->GetTypeName());
 			}
 		}
 		return true;
@@ -257,9 +258,11 @@ bool CSphereResourceMgr::ResourceTestSkills()
 
 	sm_iResourceChanges = 0;
 
-	FOR_HASH( m_ResHash, i, j )
+	for ( int _hi = 0; _hi < (int)m_ResHash.GetCount(); _hi++ )
 	{
-		CResourceDefPtr pResDef = m_ResHash.GetAtArray(i,j);
+		CResourceDefPtr pResDef = m_ResHash.GetAt(_hi);
+		if ( !pResDef )
+			continue;
 		if ( RES_GET_TYPE(pResDef->GetUIDIndex()) != RES_SkillMenu )
 			continue;
 		CResourceLinkPtr pResSkill = REF_CAST(CResourceLink,pResDef);
@@ -1382,10 +1385,11 @@ bool CSphereResourceMgr::ResourceTest( LPCTSTR pszFilename )
 
 	// Now look for all the elements in it.
 
-	FOR_HASH( m_ResHash, i, j )
+	for ( int _hi = 0; _hi < (int)m_ResHash.GetCount(); _hi++ )
 	{
-		CResourceDefPtr pResDef = m_ResHash.GetAtArray(i,j);
-		ASSERT(pResDef);
+		CResourceDefPtr pResDef = m_ResHash.GetAt(_hi);
+		if ( !pResDef )
+			continue;
 		CResourceLinkPtr pLink = REF_CAST(CResourceLink,pResDef);
 		if ( pLink == NULL )
 			continue;
