@@ -105,10 +105,14 @@ HRESULT CMulInstall::SetMulFile( VERFILE_TYPE i, LPCTSTR pszName )
 bool CMulInstall::OpenFile( CGFile& file, LPCTSTR pszName, WORD wFlags )
 {
 	ASSERT(pszName);
+	fprintf(stderr, "DBG: OpenFile name='%s' preferPath='%s'\n", pszName, (LPCTSTR)m_sPreferPath);
 	if ( ! m_sPreferPath.IsEmpty())
 	{
-		if ( file.Open( GetPreferPath( pszName ), wFlags ))
+		CGString sTry = GetPreferPath( pszName );
+		fprintf(stderr, "DBG: Trying prefer path: '%s'\n", (LPCTSTR)sTry);
+		if ( file.Open( sTry, wFlags ))
 			return true;
+		fprintf(stderr, "DBG: Prefer path failed\n");
 	}
 
 #ifdef _AFXDLL

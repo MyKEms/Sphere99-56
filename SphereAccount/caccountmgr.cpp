@@ -160,9 +160,12 @@ bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
 	CGString sLoadName;
 	sLoadName.Format( _TEXT("%s%s"), (LPCTSTR)sBaseDir, pszBaseName );
 
+	fprintf(stderr, "DBG: Account_LoadAll fChanges=%d, sBaseDir='%s', loading='%s'\n", fChanges, (LPCTSTR)sBaseDir, (LPCTSTR)sLoadName); fflush(stderr);
+
 	CScript s;
 	if ( ! s.Open( sLoadName, fChanges ? (OF_NONCRIT|OF_READ|OF_TEXT) : (OF_READ|OF_TEXT)))
 	{
+		fprintf(stderr, "DBG: Account_LoadAll failed to open '%s'\n", (LPCTSTR)sLoadName); fflush(stderr);
 		if ( ! fChanges )
 		{
 			if ( Account_LoadAll( true ))	// if we have changes then we are ok.
@@ -171,6 +174,7 @@ bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
 		}
 		return false;
 	}
+	fprintf(stderr, "DBG: Account_LoadAll opened '%s' OK\n", (LPCTSTR)sLoadName); fflush(stderr);
 
 	if ( fClearChanges )
 	{
@@ -188,10 +192,14 @@ bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
 
 	CSphereScriptContext ScriptContext( &s );
 
+	fprintf(stderr, "DBG: Account_LoadAll parsing sections...\n"); fflush(stderr);
+	int nAcct = 0;
 	while (s.FindNextSection())
 	{
 		Account_Load( s, fChanges );
+		nAcct++;
 	}
+	fprintf(stderr, "DBG: Account_LoadAll loaded %d sections from '%s'\n", nAcct, (LPCTSTR)sLoadName); fflush(stderr);
 
 	if ( ! fChanges )
 	{

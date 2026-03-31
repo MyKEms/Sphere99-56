@@ -199,7 +199,8 @@ bool CSectorTemplate::IsInDungeonRegion() const
 
 	CPointMap pt = GetMidPoint();
 	CRegionPtr pRegion = GetRegion( pt, REGION_TYPE_AREA );
-	ASSERT(pRegion);
+	if ( pRegion == NULL )
+		return false;
 	return( pRegion->IsFlag(REGION_FLAG_UNDERGROUND));
 }
 
