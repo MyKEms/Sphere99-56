@@ -707,7 +707,7 @@ public:
 	enum P_TYPE_
 	{
 #define CITEMDEFWEAPONPROP(a,b,c)	P_##a,
-#include "citemdefweaponprops.tbl"
+#include "CItemDefWeaponProps.tbl"
 #undef CITEMDEFWEAPONPROP
 		P_QTY,
 	};
@@ -835,7 +835,7 @@ public:
 	enum M_TYPE_
 	{
 #define CRACECLASSMETHOD(a,b,c) M_##a,
-#include "craceclassmethods.tbl"
+#include "CRaceClassMethods.tbl"
 #undef CRACECLASSMETHOD
 		M_QTY,
 	};
@@ -843,7 +843,7 @@ public:
 	static const CScriptMethod sm_Methods[M_QTY+1];
 #ifdef USE_JSCRIPT
 #define CRACECLASSMETHOD(a,b,c) JSCRIPT_METHOD_DEF(a)
-#include "craceclassmethods.tbl"
+#include "CRaceClassMethods.tbl"
 #undef CRACECLASSMETHOD
 #endif
 

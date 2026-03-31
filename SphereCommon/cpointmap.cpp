@@ -7,7 +7,7 @@
 #include "spherecommon.h"
 #include "spheremul.h"
 #include "cpointmap.h"
-#include "cmulmap.h"
+#include "cMulMap.h"
 
 CMulMap g_MulMap[8] = // { ClientMapPlane, ClientResourceLevel, }
 {

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CQUEUEBYTES_H
+#define _INC_CQUEUEBYTES_H
 
 class CGQueueBytes
 {
@@ -22,3 +23,5 @@ public:
 	void RemoveDataAmount(int iSize) { throw "not implemented"; }
 	void Empty() { throw "not implemented"; }
 };
+
+#endif // _INC_CQUEUEBYTES_H

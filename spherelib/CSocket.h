@@ -3,13 +3,28 @@
 #ifndef _INC_CSOCKET_H
 #define _INC_CSOCKET_H
 #if _MSC_VER >= 1000
-#pragma once
 #endif // _MSC_VER >= 1000
 
 #include "common.h"
 
+#ifdef _WIN32
 #include <winsock.h>
 typedef int socklen_t;
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#define SOCKET int
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
+#define WSAEWOULDBLOCK EWOULDBLOCK
+#define closesocket close
+#define ioctlsocket ioctl
+#endif
 
 struct CSocketAddressIP : public in_addr
 {
@@ -110,6 +125,7 @@ public:
 	{
 		return(m_port);
 	}
+	void SetPort(WORD port) { m_port = port; }
 	void SetPortA(WORD port) { throw "not implemented"; }
 
 	CSocketAddress() { throw "not implemented"; }

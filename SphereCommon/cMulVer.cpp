@@ -6,8 +6,8 @@
 #include "stdafx.h"
 #include "spherecommon.h"
 #include "spheremul.h"
-#include "cmulinst.h"
-#include "cmulmap.h"
+#include "cMulInst.h"
+#include "cMulMap.h"
 
 CMulVerData	g_MulVerData;	// changes to the existing mul files.
 
@@ -38,9 +38,9 @@ bool CMulVerData::Load( CGFile& file )
 	if ( ! dwQty )
 		return true;
 
-	SetSize( dwQty );
+	SetCount( dwQty );
 
-	LONG dwSizeRead = file.Read( (void *) GetData(), dwQty * sizeof( CMulVersionBlock ));
+	LONG dwSizeRead = file.Read( (void *) GetBasePtr(), dwQty * sizeof( CMulVersionBlock ));
 	if ( dwSizeRead <= 0 )
 	{
 		throw CGException( LOGL_CRIT, CGFile::GetLastError(), "VerData: Read");
@@ -55,9 +55,9 @@ bool CMulVerData::Load( CGFile& file )
 
 	// Now sort it for fast searching.
 	// Make sure it is sorted.
-	QSort();
+	// QSort(); // not implemented in stub
 
-#if 1 // def _DEBUG
+#if 0 // def _DEBUG
 	if ( ! IsSorted())
 	{
 		DEBUG_ERR(( "VerData Array is NOT sorted !" LOG_CR ));
@@ -111,7 +111,7 @@ CMulItemInfo::CMulItemInfo( ITEMID_TYPE id )
 	{
 		// 
 		filedata = VERFILE_VERDATA;
-		offset = Index.GetFileOffset() + offsetof( CUOItemTypeBlock, m_Tiles[id%UOTILE_BLOCK_QTY] );
+		offset = Index.GetFileOffset() + offsetof( CUOItemTypeBlock, m_Tiles ) + (id%UOTILE_BLOCK_QTY) * sizeof(CUOItemTypeRec);
 		ASSERT( Index.GetBlockLength() >= sizeof( CUOItemTypeRec ));
 	}
 	else

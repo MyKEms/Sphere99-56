@@ -9,9 +9,9 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cstring.h"
-#include "../spherelib/cpointbase.h"
-#include "../spherelib/cregion.h"
+#include "cstring.h"
+#include "cpointbase.h"
+#include "cregion.h"
 #include "spheremul.h"
 
 class CMulMap;
@@ -57,6 +57,7 @@ struct CPointMapBase : public CGPointBase
 		return( GetDistZ(pt) / (PLAYER_HEIGHT/2) );
 	}
 	void Move(DIR_TYPE dir) { throw "not implemented"; }
+	void Move(short dx, short dy, short dz = 0) { m_x += dx; m_y += dy; m_z += dz; }
 	void MoveN(DIR_TYPE dir, int amount) { throw "not implemented"; }
 
 	bool operator==(const CPointMapBase& rhs) const { throw "not implemented"; }

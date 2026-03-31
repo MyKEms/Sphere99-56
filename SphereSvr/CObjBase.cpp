@@ -693,7 +693,7 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 
 	ASSERT(pSrc);
 	CCharPtr pCharSrc = GET_ATTACHED_CCHAR(pSrc);
-	CClientPtr pClientSrc = (pCharSrc && pCharSrc->IsClient()) ? (pCharSrc->GetClient()) : NULL ;
+	CClientPtr pClientSrc = (pCharSrc && pCharSrc->IsClient()) ? (CClient*)(pCharSrc->GetClient()) : (CClient*)NULL ;
 
 	switch (iProp)
 	{

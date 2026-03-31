@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CREGION_H
+#define _INC_CREGION_H
 
 struct CGRect			// Basic rectangle. (May not be on the map)
 {
@@ -144,3 +145,5 @@ inline DIR_TYPE GetDirTurn(DIR_TYPE dir, int offset)
 	offset %= DIR_QTY;
 	return((DIR_TYPE)(offset));
 }
+
+#endif // _INC_CREGION_H

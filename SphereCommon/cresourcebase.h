@@ -8,7 +8,7 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "csphereexp.h"
+#include "cSphereExp.h"
 
 // Desguise an id as a pointer.
 #ifndef MAKEINTRESOURCE
@@ -92,7 +92,10 @@ private:
 
 public:
 	CResourceDef(CSphereUID rid);
+	CResourceDef(CSphereUID rid, LPCTSTR pszName) : CResourceObj(rid.GetHashCode()), m_rid(rid) { SetResourceName(pszName); }
 	LPCTSTR GetResourceName() const { throw "not implemented"; }
+	void SetResourceName(LPCTSTR pszName) { /* stub */ }
+	void SetResourceVar(const void* pVarNum) { /* STUB */ }
 
 	virtual CGString GetName() const { throw "not implemented"; } // default to same as the DEFNAME name.
 	virtual bool s_LoadProps(CScript& s) { throw "not implemented"; } // Load an item from script
@@ -103,6 +106,10 @@ public:
 	CSphereUID GetUIDIndex() const
 	{
 		return(m_rid);
+	}
+	CSphereUID GetHashCode() const
+	{
+		return m_rid;
 	}
 
 	// unlink all this data. (tho don't delete the def as the pointer might still be used !)
@@ -124,6 +131,9 @@ public:
 	CResourceLink(CSphereUID rid);
 
 	CResourceScript* GetLinkFile() const { throw "not implemented"; }
+	CScriptLineContext GetLinkContext() const { return CScriptLineContext(); } // STUB
+	void CopyLink( const CResourceLink* pLink ) { /* STUB */ }
+	void SetLinkSection(CResourceScript* pScript) { /* STUB */ }
 
 	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { throw "not implemented"; }
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
@@ -137,12 +147,14 @@ public:
 	CResourceTriggered(CSphereUID rid);
 
 	TRIGRET_TYPE OnTriggerScript(CScriptExecContext& context, int iNum, LPCTSTR pszName) { throw "not implemented"; }
+	bool HasTrigger(int trig) const { return true; } // STUB
 };
 typedef CRefPtr<CResourceTriggered> CResourceTrigPtr;
 
 class CResourceNamed : public CResourceLink
 {
 public:
+	CResourceNamed(CSphereUID rid, LPCTSTR pszName) : CResourceLink(rid) { SetResourceName(pszName); }
 	CGString GetName() const { throw "not implemented"; }
 };
 
@@ -160,15 +172,18 @@ private:
 
 public:
 	size_t FindObj(const CObjBase* pChar) const;
+	size_t FindObj(const CResourceObj* pObj) const { throw "not implemented"; }
 	size_t AttachObj(const CObjBase* pChar);
+	size_t AttachObj(const CResourceObj* pObj) { throw "not implemented"; }
 	size_t InsertObj(const CObjBase* pChar, size_t i);
 	void DetachObj(size_t i);
 	size_t DetachObj(const CObjBase* pChar);
+	size_t DetachObj(const CResourceObj* pObj) { throw "not implemented"; }
 	size_t GetSize() const { return m_uidCharArray.GetSize(); }
 
 	CSphereUID GetAt(size_t i) const { throw "not implemented"; }
 
-	void AttachUID(const CSphereUID uid) { throw "not implemented"; }
+	int AttachUID(const CSphereUID uid) { throw "not implemented"; }
 	void RemoveAll() { throw "not implemented"; }
 	void RemoveAt(size_t i) { throw "not implemented"; }
 	void CopyArray(const CUIDRefArray& arr) { throw "not implemented"; }
@@ -233,8 +248,8 @@ private:
 	CString GetResourceName( int iIndex ) const
 	{
 		// look up the name of the fragment given it's index.
-		CResourceLinkPtr pResourceLink = &ConstElementAt( iIndex );
-		ASSERT(pResourceLink);
+		CResourceLink* pResourceLink = this->GetAt( iIndex );
+		if (!pResourceLink) return CString();
 		return( pResourceLink->GetResourceName());
 	}
 
@@ -243,14 +258,14 @@ public:
 	enum M_TYPE_
 	{
 #define CUIDREFARRAYMETHOD(a,b,c,d) M_##a,
-#include "..\spherelib\cuidrefarraymethods.tbl"
+#include "cuidrefarraymethods.tbl"
 #undef CUIDREFARRAYMETHOD
 		M_QTY,
 	};
 	static const CScriptMethod sm_Methods[M_QTY+1];
 #ifdef USE_JSCRIPT
 #define CUIDREFARRAYMETHOD(a,b,c,d) JSCRIPT_METHOD_DEF(a)
-#include "..\spherelib\cuidrefarraymethods.tbl"
+#include "cuidrefarraymethods.tbl"
 #undef CUIDREFARRAYMETHOD
 #endif
 };

@@ -205,9 +205,9 @@ SKILL_TYPE CChar::Skill_GetBest( int iRank ) const // Which skill is the highest
 		iRank = SKILL_First;
 
 	CGTypedArray<DWORD,DWORD> adwSkills;
-	adwSkills.SetSize(iRank+1);
+	adwSkills.SetCount(iRank+1);
 
-	DWORD* pdwSkills = adwSkills.GetData();
+	DWORD* pdwSkills = adwSkills.GetBasePtr();
 	memset( pdwSkills, 0, (iRank+1)*sizeof(DWORD));
 
 	DWORD dwSkillTmp;
@@ -871,7 +871,7 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 
 	pItem->SetAttr(ATTR_MOVE_ALWAYS | ATTR_CAN_DECAY);	// Any made item is movable.
 
-	CSphereExpArgs execArgs( this, this, Skill_GetActive(), 0, pItem );
+	CSphereExpArgs execArgs( this, this, Skill_GetActive(), 0, (CResourceObj*)(CItem*)pItem );
 	if ( OnTrigger( "@SkillMakeItem", execArgs ) == TRIGRET_RET_VAL )
 	{
 		pItem->DeleteThis();
@@ -3195,7 +3195,7 @@ int CChar::Skill_Act_Looting( CSkillDef::T_TYPE_ stage )
 	{
 		if ( m_Act.m_atLooting.m_iDistCurrent == 0 )
 		{
-			CSphereExpArgs Args( this, this, g_World.ItemFind(m_Act.m_Targ));
+			CSphereExpArgs Args( this, this, (CResourceObj*)(CItem*)g_World.ItemFind(m_Act.m_Targ));
 			if ( OnTrigger( CCharDef::T_NPCSeeWantItem, Args ) == TRIGRET_RET_VAL )
 				return( false );
 		}

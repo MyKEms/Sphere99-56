@@ -11,7 +11,7 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cpointbase.h"
+#include "cpointbase.h"
 
 //---------------------------MUL FILE DEFS---------------------------
 

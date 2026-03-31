@@ -167,7 +167,7 @@ bool CContainer::ContentFindKeyFor( CItem* pLocked ) const
 CItemPtr CContainer::ContentFindRandom( void ) const
 {
 	// returns Pointer of random item, NULL if player carrying none
-	return( GetAt( Calc_GetRandVal( GetCount())));
+	return static_cast<CItem*>( GetAt( Calc_GetRandVal( GetCount())));
 }
 
 int CContainer::ContentConsume( CSphereUID rid, int amount, bool fTest, DWORD dwArg )
@@ -387,7 +387,7 @@ HRESULT CContainer::s_MethodContainer( LPCTSTR pszKey, CGVariant& vArgs, CGVaria
 			int index = vArgs.GetInt();
 			if ( index <= GetCount())
 			{
-				GetAt(index)->DeleteThis();
+				static_cast<CItem*>(GetAt(index))->DeleteThis();
 				break;
 			}
 		}
@@ -401,7 +401,7 @@ HRESULT CContainer::s_MethodContainer( LPCTSTR pszKey, CGVariant& vArgs, CGVaria
 		break;
 	case M_FindCont:
 		// Get enumerated item from the container.
-		vValRet.SetRef( GetAt( vArgs.GetInt()));
+		vValRet.SetRef( static_cast<CScriptObj*>(static_cast<CItem*>(GetAt( vArgs.GetInt()))));
 		break;
 	case M_FindType:
 		vValRet.SetRef( ContentFind( g_Cfg.ResourceGetIDByName( RES_TypeDef, vArgs.GetPSTR())));

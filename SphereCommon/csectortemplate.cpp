@@ -121,7 +121,7 @@ void CSectorTemplate::CheckMapBlockCache( int iAge )
 	int iQty = m_MapBlockCache.GetSize();
 	for ( int i=0; i<iQty; i++ )
 	{
-		CMulMapBlock* pMapBlock = m_MapBlockCache[i];
+		CMulMapBlock* pMapBlock = m_MapBlockCache.ElementAt(i);
 		ASSERT(pMapBlock);
 		if ( iAge <= 0 || pMapBlock->m_timeCache.GetCacheAge() >= iAge )
 		{
@@ -154,7 +154,7 @@ const CMulMapBlock* CSectorTemplate::GetMapBlock( const CPointMap& pt )
 	int i = m_MapBlockCache.FindKey(dwHashIndex);
 	if ( i >= 0 )
 	{
-		pMapBlock = m_MapBlockCache[i];
+		pMapBlock = m_MapBlockCache.ElementAt(i);
 		ASSERT(pMapBlock);
 		pMapBlock->m_timeCache.InitTimeCurrent();
 		return( pMapBlock );
@@ -247,8 +247,21 @@ bool CSectorTemplate::UnLinkRegion( CRegionBasic* pRegionOld, bool fRetestChars 
 	// NOTE: What about unlinking it from all the CChar(s) here ? m_pArea
 	ASSERT(pRegionOld);
 
-	if ( ! m_RegionLinks.RemoveArg(pRegionOld))
-		return false;
+	// Find and remove the region from our links
+	{
+		bool bFound = false;
+		for (int i = m_RegionLinks.GetCount() - 1; i >= 0; i--)
+		{
+			if (&m_RegionLinks.ElementAt(i) == pRegionOld)
+			{
+				m_RegionLinks.RemoveAt(i);
+				bFound = true;
+				break;
+			}
+		}
+		if (!bFound)
+			return false;
+	}
 
 #ifdef SPHERE_SVR
 	if ( fRetestChars )
@@ -326,7 +339,7 @@ CTeleportPtr CSectorTemplate::GetTeleport2d( const CPointMap& pt ) const
 	int i = m_Teleports.FindKey( pt.GetHashCode());
 	if ( i < 0 )
 		return( NULL );
-	return m_Teleports[i];
+	return m_Teleports.ConstElementAt(i);
 }
 
 CTeleportPtr CSectorTemplate::GetTeleport( const CPointMap& pt ) const

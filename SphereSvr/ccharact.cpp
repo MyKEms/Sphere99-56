@@ -198,7 +198,7 @@ void CChar::Jail( CScriptConsole* pSrc, int iTimeMinutes )
 		}
 		ClearPrivFlags( PRIV_JAILED );
 		WriteString( "You have been forgiven" );
-		Spell_Effect_Teleport( CPointMap(m_TagDefs.FindKeyVar("JAIL_RELEASEPOINT")), true, false );
+		{ CGVariant vTmp = m_TagDefs.FindKeyVar("JAIL_RELEASEPOINT"); Spell_Effect_Teleport( CPointMap(vTmp), true, false ); }
 	}
 }
 
@@ -545,7 +545,7 @@ void CChar::CancelAllTrades()
 	// remove all trade windows. client logged out.
 	for ( CItemPtr pItem=GetHead(); pItem!=NULL; )
 	{
-		CItemPtr pItemNext = pItem->GetNext();
+		CItemPtr pItemNext = static_cast<CItem*>(pItem->GetNext());
 		if ( pItem->IsType( IT_EQ_TRADE_WINDOW ))
 		{
 			pItem->DeleteThis();
@@ -2249,7 +2249,7 @@ bool CChar::Death()
 
 	// script could generate new loot ?
 	{
-	CSphereExpArgs exec( this, this, pCorpse );
+	CSphereExpArgs exec( this, this, (CResourceObj*)pCorpse );
 	OnTrigger( CCharDef::T_DeathCorpse, exec );
 	}
 

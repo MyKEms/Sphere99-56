@@ -162,7 +162,7 @@ bool CObjBaseTemplate::IsValidContainer() const
 
 int CObjBaseTemplate::IsWeird() const
 {
-	ASSERT( CResourceObj::IsValidHeap());
+	ASSERT( IsValidDynamic());
 
 	if ( GetParent() == NULL )
 	{

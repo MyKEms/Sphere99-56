@@ -5,8 +5,17 @@
 
 #include "stdafx.h"
 #include "spherecommon.h"
-#include "cmulinst.h"
-#include "../spherelib/cregistry.h"
+#include "cMulInst.h"
+#ifdef _WIN32
+#include "cregistry.h"
+#endif
+
+#ifndef _MAX_PATH
+#define _MAX_PATH 260
+#endif
+#ifndef NO_ERROR
+#define NO_ERROR 0
+#endif
 
 CMulInstall g_MulInstall;
 

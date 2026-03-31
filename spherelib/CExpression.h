@@ -1,6 +1,11 @@
-#pragma once
+#ifndef _INC_CEXPRESSION_H
+#define _INC_CEXPRESSION_H
 
-#include "catom.h"
+#include "CAtom.h"
+
+#ifndef VARTYPE
+typedef int VARTYPE;
+#endif
 
 #define _ISCSYM(ch) ( isalnum(ch) || (ch)=='_')	// __iscsym or __iscsymf
 
@@ -46,6 +51,8 @@ public:
 	CGVariant& GetArrayElement(int index) { throw "not implemented"; }
 
 	CGVariant& operator=(const CGString& str) { throw "not implemented"; }
+	CGVariant& operator=(LPCTSTR pszStr) { throw "not implemented"; }
+	CGVariant& operator=(int val) { throw "not implemented"; }
 	operator LPCTSTR() { throw "not implemented"; }
 	operator char*() { throw "not implemented"; }
 	operator int() { throw "not implemented"; }
@@ -130,7 +137,9 @@ public:
 	int ParseCmds(LPCTSTR pszStr, int* pArgs, int iCnt) { throw "not implemented"; }
 };
 
-int Calc_GetRandVal(int iqty) { throw "not implemented"; }
-int Calc_GetLog2(int iNum) { throw "not implemented"; }
-int Calc_GetSCurve(int iValDiff, int iVariance) { throw "not implemented"; }
-int Calc_GetBellCurve(int iValDiff, int iVariance) { throw "not implemented"; }
+inline int Calc_GetRandVal(int iqty) { if (iqty <= 0) return 0; return rand() % iqty; }
+inline int Calc_GetLog2(int iNum) { int i = 0; while (iNum > 1) { iNum >>= 1; i++; } return i; }
+inline int Calc_GetSCurve(int iValDiff, int iVariance) { return 50; /* STUB */ }
+inline int Calc_GetBellCurve(int iValDiff, int iVariance) { return 50; /* STUB */ }
+
+#endif // _INC_CEXPRESSION_H
