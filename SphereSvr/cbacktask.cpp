@@ -199,6 +199,7 @@ void CBackTask::CreateThread()
 {
 	// beginthread() and endthread() are the portable versions of this !
 
+#ifdef _WIN32
 	if ( ! g_Cfg.CanRunBackTask())
 	{
 		// don't bother with the background stuff.
@@ -207,6 +208,8 @@ void CBackTask::CreateThread()
 
 	g_Log.Event( LOG_GROUP_DEBUG, LOGL_EVENT, "Starting background thread" LOG_CR);
 	CThread::CreateThread( EntryProc );
+#endif
+	// Linux: skip background thread to avoid threading issues under QEMU user-mode.
 }
 
 void CBackTask::CheckStuckThread()
