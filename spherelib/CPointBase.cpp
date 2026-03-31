@@ -126,5 +126,39 @@ void CGPointBase::Set(const POINTS pt)
 
 void CGPointBase::v_Set(CGVariant& vVal)
 {
-	// STUB - parse "x,y,z,map" from variant
+	// Parse "x,y,z,map" from variant
+	LPCTSTR pszVal = vVal.GetPSTR();
+	if ( pszVal == NULL || *pszVal == '\0' )
+		return;
+	m_x = atoi( pszVal );
+	while ( *pszVal && *pszVal != ',' ) pszVal++;
+	if ( *pszVal == ',' ) pszVal++;
+	m_y = atoi( pszVal );
+	while ( *pszVal && *pszVal != ',' ) pszVal++;
+	if ( *pszVal == ',' ) pszVal++;
+	if ( *pszVal )
+	{
+		m_z = atoi( pszVal );
+		while ( *pszVal && *pszVal != ',' ) pszVal++;
+		if ( *pszVal == ',' ) pszVal++;
+		if ( *pszVal )
+		{
+			m_mapplane = atoi( pszVal );
+		}
+	}
+}
+
+LPCTSTR CGPointBase::v_Get() const
+{
+	TCHAR* pszTemp = Str_GetTemp();
+	if ( m_mapplane )
+		sprintf( pszTemp, "%d,%d,%d,%d", m_x, m_y, m_z, m_mapplane );
+	else
+		sprintf( pszTemp, "%d,%d,%d", m_x, m_y, m_z );
+	return pszTemp;
+}
+
+void CGPointBase::v_Get(CGVariant& vVal) const
+{
+	vVal = v_Get();
 }

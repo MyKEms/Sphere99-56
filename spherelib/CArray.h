@@ -653,7 +653,15 @@ struct CHashArray : public CGSortedArray< TYPE*, TYPE*, HASH_INDEX>
 struct CGStringArray : public CGTypedArray<CGString, const CGString&>
 {
 public:
-	void AddFormat(LPCTSTR lpszFormat, ...) { throw "not implemented"; }
+	void AddFormat(LPCTSTR lpszFormat, ...)
+	{
+		TCHAR szBuf[1024];
+		va_list vargs;
+		va_start(vargs, lpszFormat);
+		vsprintf(szBuf, lpszFormat, vargs);
+		va_end(vargs);
+		Add(szBuf);
+	}
 };
 
 struct CStringSortArray : public CGStringArray

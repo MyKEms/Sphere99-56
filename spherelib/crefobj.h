@@ -25,10 +25,10 @@ public:
     void ReleaseRefObj() {} // STUB
     virtual void UnLink() {} // STUB
     bool IsValidNewObj() const { return true; } // STUB
-    bool IsValidRefObj() const { throw "not implemented"; }
-    void Free() { throw "not implemented"; }
+    bool IsValidRefObj() const { return m_pointer != NULL; }
+    void Free() { m_pointer = NULL; }
 
-    T* DetachObj() { throw "not implemented"; }
+    T* DetachObj() { T* p = m_pointer; m_pointer = NULL; return p; }
 
     CRefPtr& operator=(const CRefPtr& rhs)
     {                             // Assignment operator (same type).

@@ -54,7 +54,52 @@ struct CUIDArray
 		// Can't free up the UID til after the save !
 		m_UIDs.SetAt(pObj->GetUIDIndex(), UID_PLACE_HOLDER);
 	}
-	DWORD AllocUID(CResourceObj* pObj, DWORD dwIndex) { throw "not implemented"; }
+	DWORD AllocUID(CResourceObj* pObj, DWORD dwIndex)
+	{
+		// Allocate a UID slot for a game object.
+		// dwIndex = desired UID index (0 = allocate new)
+		// RETURN: the UID index actually assigned.
+		ASSERT(pObj);
+		if ( dwIndex > 0 )
+		{
+			// Requested a specific UID slot.
+			if ( dwIndex >= GetUIDCount())
+			{
+				// Grow the array to accommodate.
+				m_UIDs.SetAtGrow( dwIndex, pObj );
+			}
+			else
+			{
+				CResourceObj* pObjPrv = FindUIDObj(dwIndex);
+				if ( pObjPrv && pObjPrv != UID_PLACE_HOLDER && pObjPrv != pObj )
+				{
+					// UID collision - assign a new one instead.
+					dwIndex = 0;
+				}
+				else
+				{
+					m_UIDs.SetAt( dwIndex, pObj );
+				}
+			}
+		}
+		if ( dwIndex <= 0 )
+		{
+			// Find a free slot.
+			DWORD dwCount = GetUIDCount();
+			for ( dwIndex = 1; dwIndex < dwCount; dwIndex++ )
+			{
+				if ( m_UIDs[dwIndex] == NULL || m_UIDs[dwIndex] == UID_PLACE_HOLDER )
+				{
+					m_UIDs.SetAt( dwIndex, pObj );
+					return dwIndex;
+				}
+			}
+			// No free slot found - grow the array.
+			dwIndex = dwCount;
+			m_UIDs.SetAtGrow( dwIndex, pObj );
+		}
+		return dwIndex;
+	}
 	void DeleteAllUIDs() { m_UIDs.RemoveAll(); }
 };
 #endif // _INC_CRESOURCEOBJ_H

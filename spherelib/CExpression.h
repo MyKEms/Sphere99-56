@@ -9,7 +9,11 @@ typedef int VARTYPE;
 
 #define _ISCSYM(ch) ( isalnum(ch) || (ch)=='_')	// __iscsym or __iscsymf
 
+#ifdef SCRIPT_MAX_SECTION_LEN
 #define EXPRESSION_MAX_KEY_LEN SCRIPT_MAX_SECTION_LEN
+#else
+#define EXPRESSION_MAX_KEY_LEN 128
+#endif
 
 // Internal type tag for CGVariant
 enum CGVARIANT_TYPE
@@ -630,7 +634,6 @@ class CVarDef : public CMemDynamic	// A variable from GRAYDEFS.SCP or other.
 {
 	// Similar to CScriptKey
 private:
-#define EXPRESSION_MAX_KEY_LEN SCRIPT_MAX_SECTION_LEN
 	const CAtomRef m_aKey;	// the key for sorting/ etc.
 public:
 	int GetInt();
@@ -779,9 +782,92 @@ public:
 			Add(pArray->GetAt(i)->CopySelf());
 	}
 	bool AddHtmlArgs(LPCTSTR pszName, TCHAR** pArgs = NULL) { return false; /* STUB */ }
-	HRESULT s_PropSetTags(CGVariant& vVal) { return NO_ERROR; /* STUB */ }
-	HRESULT s_MethodTags(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return NO_ERROR; /* STUB */ }
-	void s_WriteTags(CScript& script, LPCTSTR pszName = NULL) { /* STUB */ }
+	HRESULT s_PropSetTags(CGVariant& vVal)
+	{
+		// Set a tag value. vVal format: "tagname value" or "tagname=value"
+		// The value was transformed by s_FixExtendedProp to be "tagname value"
+		LPCTSTR pszStr = vVal.GetPSTR();
+		if ( pszStr == NULL || *pszStr == '\0' )
+			return HRES_BAD_ARGUMENTS;
+		// Extract the tag key name
+		TCHAR szTemp[EXPRESSION_MAX_KEY_LEN];
+		strncpy(szTemp, pszStr, sizeof(szTemp)-1);
+		szTemp[sizeof(szTemp)-1] = '\0';
+		// Split at first space or '='
+		TCHAR* pszVal = szTemp;
+		while ( *pszVal && *pszVal != ' ' && *pszVal != '\t' && *pszVal != '=' )
+			pszVal++;
+		if ( *pszVal )
+		{
+			*pszVal++ = '\0';
+			// skip whitespace and '='
+			while ( *pszVal && ( *pszVal == ' ' || *pszVal == '\t' || *pszVal == '=' ) )
+				pszVal++;
+		}
+		if ( szTemp[0] == '\0' )
+			return HRES_BAD_ARGUMENTS;
+		// Set the var
+		if ( pszVal[0] == '\0' )
+		{
+			// Delete the tag
+			RemoveKey(szTemp);
+		}
+		else if ( pszVal[0] == '"' )
+		{
+			// String value - strip quotes
+			pszVal++;
+			int iLen = strlen(pszVal);
+			if ( iLen > 0 && pszVal[iLen-1] == '"' )
+				pszVal[iLen-1] = '\0';
+			SetKeyStr(szTemp, pszVal);
+		}
+		else
+		{
+			SetKeyStr(szTemp, pszVal);
+		}
+		return NO_ERROR;
+	}
+	HRESULT s_MethodTags(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc)
+	{
+		// Handle TAG method calls - get/set/delete tags.
+		// vArgs = "tagname" for get, "tagname value" for set
+		LPCTSTR pszStr = vArgs.GetPSTR();
+		if ( pszStr == NULL || *pszStr == '\0' )
+			return HRES_BAD_ARGUMENTS;
+		TCHAR szTemp[EXPRESSION_MAX_KEY_LEN];
+		strncpy(szTemp, pszStr, sizeof(szTemp)-1);
+		szTemp[sizeof(szTemp)-1] = '\0';
+		// Split at first separator
+		TCHAR* pszVal = szTemp;
+		while ( *pszVal && *pszVal != ' ' && *pszVal != '\t' && *pszVal != ',' && *pszVal != '=' )
+			pszVal++;
+		if ( *pszVal )
+		{
+			*pszVal++ = '\0';
+			while ( *pszVal && ( *pszVal == ' ' || *pszVal == '\t' || *pszVal == ',' || *pszVal == '=' ) )
+				pszVal++;
+		}
+		if ( *pszVal )
+		{
+			// Set mode
+			SetKeyStr(szTemp, pszVal);
+		}
+		else
+		{
+			// Get mode
+			CVarDefPtr pVar = FindKeyPtr(szTemp);
+			if ( pVar )
+			{
+				vValRet.SetStr(pVar->GetValStr());
+			}
+			else
+			{
+				vValRet.SetStr("");
+			}
+		}
+		return NO_ERROR;
+	}
+	void s_WriteTags(CScript& script, LPCTSTR pszName = NULL); // implemented in stubs.cpp
 
 	CVarDefArray& operator = (const CVarDefArray& array)
 	{
@@ -888,7 +974,30 @@ public:
 
 inline int Calc_GetRandVal(int iqty) { if (iqty <= 0) return 0; return rand() % iqty; }
 inline int Calc_GetLog2(int iNum) { int i = 0; while (iNum > 1) { iNum >>= 1; i++; } return i; }
-inline int Calc_GetSCurve(int iValDiff, int iVariance) { return 50; /* STUB */ }
-inline int Calc_GetBellCurve(int iValDiff, int iVariance) { return 50; /* STUB */ }
+inline int Calc_GetSCurve(int iValDiff, int iVariance)
+{
+	// An S-curve for probability. iValDiff = how far IsFrom target. iVariance = total range.
+	// Return: 0 = very unlikely, 50 = 50/50, 100 = very likely
+	if ( iVariance <= 0 )
+		return ( iValDiff >= 0 ) ? 100 : 0;
+	int iVal = 50 + IMULDIV(iValDiff, 50, iVariance);
+	if ( iVal < 0 ) iVal = 0;
+	if ( iVal > 100 ) iVal = 100;
+	return iVal;
+}
+inline int Calc_GetBellCurve(int iValDiff, int iVariance)
+{
+	// A bell-curve for probability. iValDiff = how far from center. iVariance = std deviation.
+	// Return: 0 = very unlikely, 1000 = very likely (at center)
+	if ( iVariance <= 0 )
+		return ( iValDiff == 0 ) ? 1000 : 0;
+	if ( iValDiff < 0 ) iValDiff = -iValDiff;
+	if ( iValDiff > iVariance * 4 )
+		return 0;
+	// Simple approximation: linear falloff
+	int iVal = 1000 - IMULDIV(iValDiff, 1000, iVariance);
+	if ( iVal < 0 ) iVal = 0;
+	return iVal;
+}
 
 #endif // _INC_CEXPRESSION_H

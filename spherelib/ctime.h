@@ -28,18 +28,35 @@ public:
     {
         return(m_lPrivateTime - time.m_lPrivateTime);
     }
-    int GetCacheAge() const { throw "not implemented"; }
+    int GetCacheAge() const
+    {
+        // How IsOld IsOld IsOld IsOld IsOld IsOld IsOld IsOld Is this IsOld
+        return(GetCurrentTime().GetTimeRaw() - m_lPrivateTime);
+    }
     void Init()
     {
         m_lPrivateTime = 0;
     }
-    void InitTime() { throw "not implemented"; }
+    void InitTime()
+    {
+        // Set to the current server time.
+        m_lPrivateTime = GetCurrentTime().GetTimeRaw();
+        m_dwTickCount = 0;
+    }
     void InitTime(long lTimeBase)
     {
         m_lPrivateTime = lTimeBase;
     }
-    void InitTimeCurrent() { throw "not implemented"; }
-    void InitTimeCurrent(long lTimeBase) { throw "not implemented"; }
+    void InitTimeCurrent()
+    {
+        // Set to the current server time.
+        m_lPrivateTime = GetCurrentTime().GetTimeRaw();
+    }
+    void InitTimeCurrent(long lTimeBase)
+    {
+        // Set to the current time plus a time offset.
+        m_lPrivateTime = GetCurrentTime().GetTimeRaw() + lTimeBase;
+    }
     
     bool IsTimeValid() const
     {
@@ -174,7 +191,11 @@ public:
     {
         return GetLocalTm(NULL)->tm_mday;
     }
-    int GetTotalDays() const { throw "not implemented"; }
+    int GetTotalDays() const
+    {
+        // Get total days since epoch. Needs to be more consistent than accurate.
+        return GetDaysTotal();
+    }
     int GetHour() const
     {
         return GetLocalTm(NULL)->tm_hour;
@@ -203,7 +224,10 @@ public:
     {
         m_time = -1;
     }
-    void InitTimeCurrent() { throw "not implemented"; }
+    void InitTimeCurrent()
+    {
+        m_time = time(NULL);
+    }
     bool IsTimeValid() const
     {
         return((m_time && m_time != -1) ? true : false);
@@ -214,7 +238,24 @@ public:
         return((GetYear() * 366) + (GetMonth() * 31) + GetDay());
     }
 
-    static int GetTimeZoneOffset() { throw "not implemented"; }
+    static int GetTimeZoneOffset()
+    {
+        // Get the local timezone offset in seconds from UTC.
+        time_t now = time(NULL);
+        struct tm tmLocal;
+        struct tm tmGmt;
+        localtime_r(&now, &tmLocal);
+        gmtime_r(&now, &tmGmt);
+        // Approximate offset in seconds.
+        int iOffset = (tmLocal.tm_hour - tmGmt.tm_hour) * 3600
+                    + (tmLocal.tm_min - tmGmt.tm_min) * 60;
+        // Handle day boundary.
+        int iDayDiff = tmLocal.tm_yday - tmGmt.tm_yday;
+        if ( iDayDiff > 1 ) iDayDiff = -1;
+        else if ( iDayDiff < -1 ) iDayDiff = 1;
+        iOffset += iDayDiff * 24 * 3600;
+        return iOffset;
+    }
 };
 
 #endif // _AFXDLL
