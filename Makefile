@@ -11,6 +11,7 @@ TARGET = sphere99svr
 # Source files - excluding Windows-only files
 SPHERELIB_SRC = \
 	spherelib/CPointBase.cpp \
+	spherelib/CScript.cpp \
 	spherelib/cfile.cpp \
 	spherelib/stubs.cpp \
 	spherelib/cstring.cpp \
