@@ -644,44 +644,150 @@ public:
 	{
 	}
 	virtual LPCTSTR GetValStr() const = 0;
-	virtual char* GetPSTR() const { throw "not implemented"; }
+	virtual char* GetPSTR() const { return const_cast<char*>(GetValStr()); }
 	virtual int GetValNum() const = 0;
 	virtual CVarDef* CopySelf() const = 0;
+};
+
+// String variable
+class CVarDefStr : public CVarDef
+{
+	CGString m_sVal;
+public:
+	CVarDefStr(LPCTSTR pszKey, LPCTSTR pszVal) : CVarDef(pszKey), m_sVal(pszVal) {}
+	LPCTSTR GetValStr() const { return m_sVal; }
+	int GetValNum() const { return atoi(m_sVal); }
+	void SetValStr(LPCTSTR pszVal) { m_sVal = pszVal; }
+	CVarDef* CopySelf() const { return new CVarDefStr(GetKey(), m_sVal); }
+};
+
+// Numeric variable
+class CVarDefNum : public CVarDef
+{
+	int m_iVal;
+	mutable TCHAR m_szTemp[32];
+public:
+	CVarDefNum(LPCTSTR pszKey, int iVal) : CVarDef(pszKey), m_iVal(iVal) { m_szTemp[0] = '\0'; }
+	LPCTSTR GetValStr() const { snprintf(const_cast<char*>(m_szTemp), sizeof(m_szTemp), "%d", m_iVal); return m_szTemp; }
+	int GetValNum() const { return m_iVal; }
+	void SetValNum(int iVal) { m_iVal = iVal; }
+	CVarDef* CopySelf() const { return new CVarDefNum(GetKey(), m_iVal); }
 };
 
 class CScript;
 class CScriptConsole;
 
-struct CVarDefArray : public CGSortedArray<CVarDef*, const CVarDef&, LPCTSTR>
+struct CVarDefArray : public CGSortedArray<CVarDef*, CVarDef*, LPCTSTR>
 {
-public:
-	CVarDefPtr FindKeyPtr(LPCTSTR pszKey) const { throw "not implemented"; }
-    // Sorted array
 protected:
-    int CompareKey(LPCTSTR pszKey, const CVarDef& pVar) const { throw "not implemented"; }
-    int Add(CVarDef* pVar) { throw "not implemented"; }
+	int CompareKey(LPCTSTR pszKey, CVarDef* pVar) const
+	{
+		return _stricmp(pszKey, pVar->GetKey());
+	}
+	int Add(CVarDef* pVar)
+	{
+		int i = this->GetSize();
+		this->SetAtGrow(i, pVar);
+		return i;
+	}
 public:
-	bool AddHtmlArgs(LPCTSTR pszName, TCHAR** pArgs = NULL) { throw "not implemented"; }
-    void Copy(const CVarDefArray* pArray) { throw "not implemented"; }
-	int SetKeyVar(LPCTSTR pszKey, const CGVariant& val) { throw "not implemented"; }
-	int SetKeyStr(LPCTSTR pszKey, LPCTSTR pszVal) { throw "not implemented"; }
-	void SetKeyInt(LPCTSTR pszKey, DWORD dwVal) { throw "not implemented"; }
-	CGVariant FindKeyVar(LPCTSTR pszKey) const { throw "not implemented"; }
-	bool FindKeyVar(LPCTSTR pszKey, CGVariant& val) { throw "not implemented"; }
-	CGString FindKeyStr(LPCTSTR pszKey) const { throw "not implemented"; }
-	DWORD FindKeyInt(LPCTSTR pszKey) const { throw "not implemented"; }
+	CVarDefPtr FindKeyPtr(LPCTSTR pszKey) const
+	{
+		for (int i = 0; i < (int)this->GetSize(); i++)
+		{
+			if (_stricmp(this->GetAt(i)->GetKey(), pszKey) == 0)
+				return this->GetAt(i);
+		}
+		return NULL;
+	}
+	int SetKeyStr(LPCTSTR pszKey, LPCTSTR pszVal)
+	{
+		CVarDef* pVar = FindKeyPtr(pszKey);
+		if (pVar)
+		{
+			CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
+			if (pStr) { pStr->SetValStr(pszVal); return 0; }
+			// Type mismatch — remove old, add new
+			RemoveKey(pszKey);
+		}
+		return Add(new CVarDefStr(pszKey, pszVal));
+	}
+	void SetKeyInt(LPCTSTR pszKey, DWORD dwVal)
+	{
+		CVarDef* pVar = FindKeyPtr(pszKey);
+		if (pVar)
+		{
+			CVarDefNum* pNum = dynamic_cast<CVarDefNum*>(pVar);
+			if (pNum) { pNum->SetValNum((int)dwVal); return; }
+			RemoveKey(pszKey);
+		}
+		Add(new CVarDefNum(pszKey, (int)dwVal));
+	}
+	int SetKeyVar(LPCTSTR pszKey, const CGVariant& val)
+	{
+		if (val.IsNumeric())
+		{
+			SetKeyInt(pszKey, (DWORD)const_cast<CGVariant&>(val).GetInt());
+			return 0;
+		}
+		return SetKeyStr(pszKey, (LPCTSTR)const_cast<CGVariant&>(val));
+	}
+	CGVariant FindKeyVar(LPCTSTR pszKey) const
+	{
+		CVarDef* pVar = FindKeyPtr(pszKey);
+		if (!pVar)
+			return CGVariant();
+		CGVariant v;
+		v = pVar->GetValStr();
+		return v;
+	}
+	bool FindKeyVar(LPCTSTR pszKey, CGVariant& val)
+	{
+		CVarDef* pVar = FindKeyPtr(pszKey);
+		if (!pVar)
+			return false;
+		val = pVar->GetValStr();
+		return true;
+	}
+	CGString FindKeyStr(LPCTSTR pszKey) const
+	{
+		CVarDef* pVar = FindKeyPtr(pszKey);
+		return pVar ? CGString(pVar->GetValStr()) : CGString();
+	}
+	DWORD FindKeyInt(LPCTSTR pszKey) const
+	{
+		CVarDef* pVar = FindKeyPtr(pszKey);
+		return pVar ? (DWORD)pVar->GetValNum() : 0;
+	}
+	void RemoveKey(LPCTSTR pszKey)
+	{
+		for (int i = 0; i < (int)this->GetSize(); i++)
+		{
+			if (_stricmp(this->GetAt(i)->GetKey(), pszKey) == 0)
+			{
+				delete this->GetAt(i);
+				this->RemoveAt(i);
+				return;
+			}
+		}
+	}
+	void Copy(const CVarDefArray* pArray)
+	{
+		this->RemoveAll();
+		if (!pArray) return;
+		for (int i = 0; i < (int)pArray->GetSize(); i++)
+			Add(pArray->GetAt(i)->CopySelf());
+	}
+	bool AddHtmlArgs(LPCTSTR pszName, TCHAR** pArgs = NULL) { return false; /* STUB */ }
+	HRESULT s_PropSetTags(CGVariant& vVal) { return NO_ERROR; /* STUB */ }
+	HRESULT s_MethodTags(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return NO_ERROR; /* STUB */ }
+	void s_WriteTags(CScript& script, LPCTSTR pszName = NULL) { /* STUB */ }
 
-	void RemoveKey(LPCTSTR pszKey) { throw "not implemented"; }
-
-	HRESULT s_PropSetTags(CGVariant& vVal) { throw "not implemented"; }
-	HRESULT s_MethodTags(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
-	void s_WriteTags(CScript& script, LPCTSTR pszName = NULL) { throw "not implemented"; }
-
-    CVarDefArray& operator = (const CVarDefArray& array)
-    {
-        Copy(&array);
-        return(*this);
-    }
+	CVarDefArray& operator = (const CVarDefArray& array)
+	{
+		Copy(&array);
+		return(*this);
+	}
 };
 
 #define Exp_GetComplex(str) Exp_GetContext()->GetComplex(str)
@@ -695,13 +801,89 @@ public:
 class CExpression
 {
 public:
-	int GetComplex(LPCTSTR pStr) { throw "not implemented"; }
-	int GetComplexRef(LPCTSTR pStr) { throw "not implemented"; }
-	int GetValue(LPCTSTR pStr) { throw "not implemented"; }
-	int GetValueRef(LPCTSTR pStr) { throw "not implemented"; }
-	int GetIdentifierString(LPCTSTR pStr1, LPCTSTR pStr2) { throw "not implemented"; }
-	bool IsSimpleNumberString(LPCTSTR pStr1) { throw "not implemented"; }
-	int ParseCmds(LPCTSTR pszStr, int* pArgs, int iCnt) { throw "not implemented"; }
+	// Basic number parsing - handles decimal, hex (0x), octal (0)
+	static int GetSingle(LPCTSTR& pStr)
+	{
+		if (!pStr || !*pStr) return 0;
+		// Skip whitespace
+		while (ISWHITESPACE(*pStr)) pStr++;
+		// Handle hex
+		if (pStr[0] == '0' && (pStr[1] == 'x' || pStr[1] == 'X'))
+			return (int)strtol(pStr, (char**)&pStr, 16);
+		// Handle negative
+		bool fNeg = false;
+		if (*pStr == '-') { fNeg = true; pStr++; }
+		else if (*pStr == '+') { pStr++; }
+		// Handle hex without 0x prefix (starts with digit, contains a-f)
+		if (*pStr == '0' && isdigit(pStr[1]))
+			return (int)strtol(pStr, (char**)&pStr, 8);
+		int val = (int)strtol(pStr, (char**)&pStr, 10);
+		return fNeg ? -val : val;
+	}
+
+	// Evaluate a simple numeric expression (right-to-left, no precedence - 0.99 behavior!)
+	int GetComplex(LPCTSTR pStr)
+	{
+		if (!pStr || !*pStr) return 0;
+		LPCTSTR p = pStr;
+		int val = GetSingle(p);
+		while (*p)
+		{
+			while (ISWHITESPACE(*p)) p++;
+			if (!*p) break;
+			char op = *p; p++;
+			int val2 = GetSingle(p);
+			switch (op)
+			{
+			case '+': val = val + val2; break;
+			case '-': val = val - val2; break;
+			case '*': val = val * val2; break;
+			case '/': val = val2 ? (val / val2) : 0; break;
+			case '%': val = val2 ? (val % val2) : 0; break;
+			case '|': val = val | val2; break;
+			case '&': val = val & val2; break;
+			case '^': val = val ^ val2; break;
+			case '>': if (*p == '>') { p++; val = val >> val2; } else { val = (val > val2); } break;
+			case '<': if (*p == '<') { p++; val = val << val2; } else { val = (val < val2); } break;
+			case '!': if (*p == '=') { p++; val = (val != val2); } break;
+			case '=': if (*p == '=') { p++; } val = (val == val2); break;
+			default: return val; // unknown operator, stop
+			}
+		}
+		return val;
+	}
+
+	int GetComplexRef(LPCTSTR pStr) { return GetComplex(pStr); }
+	int GetValue(LPCTSTR pStr) { return GetComplex(pStr); }
+	int GetValueRef(LPCTSTR pStr) { return GetComplex(pStr); }
+
+	int GetIdentifierString(LPCTSTR pStr1, LPCTSTR pStr2)
+	{
+		if (!pStr1 || !pStr2) return 0;
+		return _stricmp(pStr1, pStr2);
+	}
+
+	bool IsSimpleNumberString(LPCTSTR pStr)
+	{
+		if (!pStr || !*pStr) return false;
+		if (*pStr == '-' || *pStr == '+') pStr++;
+		if (*pStr == '0' && (pStr[1] == 'x' || pStr[1] == 'X')) return true;
+		return isdigit(*pStr) != 0;
+	}
+
+	int ParseCmds(LPCTSTR pszStr, int* pArgs, int iCnt)
+	{
+		// Parse comma-separated list of integers
+		int i = 0;
+		while (i < iCnt && pszStr && *pszStr)
+		{
+			while (ISWHITESPACE(*pszStr)) pszStr++;
+			pArgs[i++] = GetSingle(pszStr);
+			while (*pszStr && *pszStr != ',') pszStr++;
+			if (*pszStr == ',') pszStr++;
+		}
+		return i;
+	}
 };
 
 inline int Calc_GetRandVal(int iqty) { if (iqty <= 0) return 0; return rand() % iqty; }
