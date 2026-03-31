@@ -21,7 +21,7 @@ SPHERECOMMON_SRC = \
 	SphereCommon/stubs.cpp \
 	SphereCommon/ccrypt.cpp \
 	SphereCommon/ccryptnew.cpp \
-	SphereCommon/cmulinst.cpp \
+	SphereCommon/cMulInst.cpp \
 	SphereCommon/cmulmap.cpp \
 	SphereCommon/cmulmulti.cpp \
 	SphereCommon/cmultile.cpp \
