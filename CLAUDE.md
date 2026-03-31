@@ -1,146 +1,93 @@
-# Development Instructions — SphereServer 0.99 Engine
+# Claude Development Instructions — SphereServer 0.99 Engine
 
-## Public repository boundary — absolute rule
+## Project Goal
 
-This directory is the public GitHub engine repository. Never copy, import,
-commit, push, upload, or quote private shard scripts, shard-specific
-configuration, `save/`, `accounts/`, world backups, production-derived data,
-or credentials here. If a change cannot be proven generic and public-safe,
-keep it out of this repository.
+Reconstruct a fully functional SphereServer 0.99 engine that can run existing 0.99
+shard scripts and save data. This is the **generic engine** — shard-specific scripts,
+configuration, and customizations live in separate private repositories.
 
-The versioned `.githooks/pre-commit` guard and `tools/check_secrets.py` reject
-sensitive paths and common credentials. Activate them with:
+## Quick Reference
 
 ```bash
-git config core.hooksPath .githooks
+make              # build sphere99svr (32-bit Linux ELF)
+make clean        # remove artifacts
 ```
 
-Never bypass the guard with `--no-verify`.
+Prerequisites: `gcc-multilib g++-multilib make`
 
-For deployment-specific identifiers, keep a machine-local denylist outside the
-worktree and set `SPHERE_PRIVATE_DENYLIST`, or use `.git/info/private-denylist`.
-Its non-empty lines are case-insensitive regexes; `literal:` forces literal
-matching and `regex:` makes regex intent explicit. The pre-commit path scans
-staged additions, `--all` scans tracked files, and `.githooks/commit-msg` also
-checks commit messages. Never put private identifiers into the repository just
-to test the denylist.
-
-## Project goal
-
-Reconstruct a usable, generic SphereServer 0.99 engine from the available
-historical source material. Shard scripts, configuration, UO data files,
-world saves, and account databases are external runtime inputs and are never
-part of this public repository.
-
-## Build
-
-```bash
-# Debian/Ubuntu
-sudo apt-get install -y gcc-multilib g++-multilib make
-make -j"$(nproc)"
-make clean
-```
-
-The supported Linux target is a 32-bit i386 ELF binary. The code still uses
-some historical 32-bit assumptions, so a successful 64-bit build is not a
-replacement for the i386 build.
-
-## Current validation status
-
-- The public CI builds the engine with GCC multilib and checks the ELF type.
-- `tools/test_protocol.py` is the dependency-free offline packet-fixture test.
-- `tools/test_suite.py` runs 14 scenarios / 15 result assertions. CI generates
-  a synthetic disposable runtime fixture locally, including sparse map data,
-  generic resources, and custom trigger hooks. It creates accounts and
-  characters, so never point it at a world you intend to keep. For imported
-  scripts without those fixture hooks, `--skip-fixture-tests` skips only the
-  final two fixture-specific assertions.
-- A real ClassicUO/TazUO client and a representative world remain separate
-  compatibility tests. The public repository does not claim production
-  compatibility from the headless suite alone.
-
-## Source directories
+## Source Directories
 
 ```
-spherelib/          common containers, strings, sockets, expressions
-SphereCommon/       UO protocol, maps, tiles, crypto, regions
-SphereAccount/      account model and persistence interfaces
-SphereSvr/          server, clients, world, characters, items
-tools/              headless protocol client and test utilities
+spherelib/          Base library — MOSTLY IMPLEMENTED (arrays, files, strings, points)
+SphereCommon/       UO data structures (MUL readers, crypto, regions)
+SphereAccount/      Account management
+SphereSvr/          Main server logic
 ```
 
-## Known limitations
+## Implementation Priority
 
-- The Linux runtime intentionally uses a single-threaded server loop while
-  the historical Windows design had additional background threads.
-- Several 0.99 script semantics and object-reference paths still need
-  differential testing against known-good client/server behavior.
-- Death/re-login, container interaction, NPC/combat edge cases, and some
-  world-save paths require more coverage than the headless login fixture.
-- Debugging 32-bit faults under qemu-i386 on Apple Silicon is limited. Use a
-  native x86-64 Linux host for gdb, core files, ASan, and rr; keep all dumps
-  local because they may contain runtime data.
+329 stubs remain (functions with `throw "not implemented"`). Implement in this order:
 
-## Protocol and runtime notes
+### Phase 1 — Script Infrastructure
+1. **CScript** — `ReadLine`, `FindSection`, `ReadKeyParse`, `WriteKey`
+   - Reference: `SphereServer 0.56d src/common/CScript.cpp`
+2. **CGVariant** — full variant data type (string/int/ref/array/UID)
+   - NOTE: 0.56d has no direct equivalent; this is 0.99-specific
+3. **CExpression** — `GetComplex`, `GetValue`, `GetValueRef`
+   - Must support right-to-left evaluation WITHOUT operator precedence
+   - Must support `<?...?>` escaped macro syntax (0.99-only feature)
+4. **CVarDef / CVarDefArray** — variable storage with `FindKeyVar`, `SetKeyVar`
 
-- `sphere.ini` and the resource table may contain historical Windows paths;
-  Linux runtime paths must use `/` and be supplied outside this repository.
-- `SCPFILES` is the external script base directory. The public engine must
-  remain usable with a disposable fixture without assuming a shard name.
-- `CResourceObj::m_dwHashIndex` stores object/resource UIDs. Index `0` is the
-  invalid value, so the UID table reserves slot zero and runtime objects start
-  at a non-zero index.
-- Virtual `s_PropSet`, `s_PropGet`, and `s_Method` signatures must match
-  exactly. A mismatch silently dispatches to a base stub.
+### Phase 2 — Resource Loading
+5. **CResourceDef** — `s_LoadProps`, `s_PropGet`, `s_PropSet`
+6. **CResourceLink** — script file linking, section lookup
+7. **CSphereResourceMgr** — load sphere.ini, spheretables, all .scp resources
 
-## Coding rules
+### Phase 3 — Script Execution & Triggers
+8. **CScriptExecContext** — `ExecuteCommand`, `ExecuteScript`
+9. **CScriptObj** — `OnTrigger`, trigger dispatch
+10. **Extended combat triggers** — add trigger enums and dispatch:
+    ```
+    @BeforeSwing, @AfterSwing, @beforeGetSwing, @afterGetSwing,
+    @beforeDoEffect, @afterDoEffect, @beforeGetEffect,
+    @finalBlow, @DrinkingPotion, @playerKill, @npckill,
+    @HitMiss, @HitTry, @itemDAMAGE
+    ```
 
-- Keep the 32-bit Linux build at zero compile and link errors.
-- Use `-fpermissive` only for historical source patterns that need it.
-- Guard Windows-only APIs with `#ifdef _WIN32`; do not remove the original
-  platform path just to make Linux compile.
-- Use exact filename case in includes and Makefile entries.
-- Add a focused offline or protocol test for each client-facing fix.
-- Do not add `Co-Authored-By` trailers to commits in this repository.
-- Never commit shard scripts, `.scp` data, saves, accounts, MULs, logs,
-  private configuration, archives, keys, or core dumps.
+### Phase 4 — Networking & Crypto
+11. **CCryptBase** — client login encryption (Init, Decrypt, Encrypt)
+12. **CGSocket** — full socket implementation (accept, send, receive)
+13. **CClient** — client connection lifecycle
 
-## Testing and debugging
+### Phase 5 — World & Persistence
+14. **CWorld** — save/load sphereworld.scp, spherechars.scp
+15. **CSector** — sector management, item/char tracking
+16. **CAccount** — account file management
 
-```bash
-python3 -m py_compile tools/*.py
-python3 tools/test_protocol.py
-python3 tools/test_suite.py localhost 2593 --quick
-python3 tools/test_suite.py localhost 2593 --skip-fixture-tests
-python3 tools/check_secrets.py --all
-```
+## Key 0.99-Specific Features to Implement
 
-The public CI path can be reproduced locally on Linux with:
+These features exist in 0.99 but NOT in 0.56 — no reference implementation available:
 
-```bash
-python3 tools/fixtures/make_fixture.py /tmp/sphere99-fixture
-python3 tools/fixtures/run_suite.py \
-  /tmp/sphere99-fixture \
-  --binary "$PWD/sphere99svr" \
-  --repo "$PWD"
-```
+| Feature | Description |
+|---------|-------------|
+| `<?...?>` escaped macros | Deferred expression evaluation, used in dialogs |
+| `argo.` dialog API | Dialog construction: `argo.setText()`, `argo.button()`, etc. |
+| `var()` globals | Server-wide global variables: `var(name,value)` / `<var(name)>` |
+| `safe()` | Error-safe expression evaluation wrapper |
+| `newitemsafe()` | Safe item creation (suppresses errors) |
+| `contents2()` | Container content iteration |
+| `argv()/argvcount` | Function argument parsing system |
+| Right-to-left eval | `<eval 3*2+1>` = 9, not 7 |
 
-The fixture is synthetic and generated outside the repository; it must never
-be replaced with client MULs, shard scripts, saves, accounts, or production
-logs.
+## Coding Rules
 
-The integration suite must run against a disposable world. On Apple Silicon,
-run the i386 binary in a Linux/amd64 VM or container for compatibility checks;
-move crash debugging to native x86-64 Linux. Do not use production data to
-make a test fixture and do not upload logs or cores.
-
-## References
-
-- [SphereServer Source Archive](https://github.com/Sphereserver/Source-Archive)
-- [SphereServer 0.56 source](https://github.com/SphereServer/Source)
-- [SphereServer Source-X](https://github.com/Sphereserver/Source-X)
-- [UO packet documentation](https://modernuo.com/packets.html)
-
-The 0.99 branch was proprietary and was never officially open-sourced. Keep
-copyright and license provenance for every imported or reconstructed section
-visible in the relevant source and project documentation.
+- Build must remain at **0 compile errors, 0 link errors** at all times
+- Must compile as **32-bit** (`-m32`) — UO protocol uses 32-bit data types
+- Use `-fpermissive` for old-style C++ patterns
+- Stub functions use `throw "not implemented"` — replace with real implementations
+- Use SphereServer 0.56d source as reference, but **adapt to 0.99 API** (they differ!)
+- Guard Windows-only code with `#ifdef _WIN32`, don't remove it
+- Include paths are flat — use `-I` flags, not relative `../` paths
+- Use exact filename case in `#include` directives (GCC is case-sensitive)
+- Do not add Co-Authored-By to git commits
+- Do not include shard-specific scripts, configuration, or save data in this repo

@@ -1,217 +1,120 @@
-# Sphere99-56 — SphereServer 0.99 reconstruction
+# Sphere99-56 — SphereServer 0.99 Reconstruction
 
-This repository contains a generic Linux port and reconstruction of the
-SphereServer 0.99 engine for Ultima Online 2D. It contains source code and
-developer tools only. Shard scripts, world saves, account databases, MUL data,
-private configuration, and production logs are deliberately excluded.
+Reconstructed source code for **SphereServer 0.99** — a game server emulator for
+Ultima Online 2D, originally developed by Menasoft (Dennis Robinson). The 0.99 branch
+was proprietary and never officially open-sourced. This project aims to reconstruct
+a fully functional 0.99-compatible server from available partial sources.
 
-## Status
+## Background
 
-The project is under active reconstruction and is not a production-ready
-server distribution. The public CI verifies a 32-bit Linux build, offline
-packet fixtures, and the headless protocol suite against a generated,
-redistributable synthetic runtime. Real-client and representative-world
-compatibility still need to be tested separately.
+SphereServer had two parallel development branches that are **not sequential versions**:
 
-## Public safety boundary
-
-Before contributing, activate the versioned fail-closed hook:
-
-```bash
-git config core.hooksPath .githooks
+```
+1998  GrayWorld (Dennis Robinson / Menasoft)
+        │
+        ├─→ 0.55 → 0.56a → 0.56b → 0.56d    (community, open-source)
+        │
+        └─→ 0.99a → 0.99f → 0.99z8 → 0.99zl  (Menasoft, proprietary, closed)
 ```
 
-The hook and CI reject credentials, private keys, runtime logs, archives, MULs,
-`.scp` files, `save/`, `accounts/`, and shard script directories. Never bypass
-them with `--no-verify`.
+The **0.56 line** is actively maintained by the community as [SphereServer Source-X](https://github.com/Sphereserver/Source-X).
 
-Deployments may add private, machine-local identifiers without putting them in
-this repository. Set `SPHERE_PRIVATE_DENYLIST` to a file outside the worktree,
-or create `.git/info/private-denylist`. Each non-empty line is a
-case-insensitive regular expression; use `literal:value` for a literal string
-and `regex:value` when the intent should be explicit. The pre-commit scan
-checks staged additions, `--all` checks all tracked files, and the versioned
-commit-message hook checks commit messages too. Denylist matches are redacted
-from diagnostics.
+The **0.99 line** died when Menasoft stopped development (~2003). Several UO shards
+still run on 0.99 binaries with no source code to modify or fix bugs. **Scripts between
+0.99 and 0.56 are fundamentally incompatible** — different expression syntax, trigger
+systems, dialog APIs, and variable mechanisms.
+
+This project reconstructs the 0.99 source from:
+- Partial 0.99f source from [Sphereserver/Source-Archive](https://github.com/Sphereserver/Source-Archive)
+- Gap-filling with compatible code from [JakubLinhart/Sphere99-56](https://github.com/JakubLinhart/Sphere99-56)
+- Linux/GCC port and base library implementations (this fork)
+
+## Current Status
+
+| Metric | Value |
+|--------|-------|
+| Compile errors | **0** |
+| Link errors | **0** |
+| Binary | `sphere99svr` — 1.9 MB, 32-bit ELF (Linux x86) |
+| Source files | 146 (.cpp + .h), ~97,500 lines |
+| Stub functions remaining | 329 |
+| Status | Compiles and links, not yet functional |
+
+The server compiles and links but is not yet functional — 329 core functions are
+stubbed with placeholder implementations. See [Development Roadmap](#development-roadmap).
 
 ## Building
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get install -y gcc-multilib g++-multilib make python3
-make -j"$(nproc)"
-make clean
+# Prerequisites (Ubuntu/Debian)
+sudo apt-get install -y gcc-multilib g++-multilib make
+
+# Build
+make            # produces sphere99svr (32-bit ELF binary)
+make clean      # removes build artifacts
 ```
 
-The supported target is a 32-bit i386 ELF binary named `sphere99svr`.
-
-### Debug and sanitizer builds
-
-Use native x86-64 Linux for debugging memory safety. The debug and sanitizer
-targets use separate object trees, so they cannot mix objects with the legacy
-i386 build:
-
-```bash
-make clean
-make debug                         # build/debug/sphere99svr
-
-make clean
-make asan                          # build/asan/sphere99svr
-ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
-  ./build/asan/sphere99svr
-```
-
-`make debug` uses `-O0 -g3 -D_GLIBCXX_ASSERTIONS -fno-omit-frame-pointer`.
-`make asan` uses AddressSanitizer plus UndefinedBehaviorSanitizer with
-`-O1 -g -fno-omit-frame-pointer`. Both targets disable the server's legacy
-`siglongjmp` crash recovery so GDB and sanitizers receive the original fault;
-the custom allocator continues to use `malloc`, which ASan tracks normally.
-
-Crash recovery is opt-in everywhere: normal builds leave SIGSEGV, SIGBUS, and
-SIGABRT with the operating system, debugger, or sanitizer. To build the
-legacy guarded recovery mode explicitly, use `make recover`; it produces
-`build/recover/sphere99svr` with `SPHERE_SEGV_RECOVERY`. That mode only guards
-SIGSEGV/SIGBUS and never intercepts SIGABRT. Do not use it while debugging a
-fault you need GDB or ASan to report at the original instruction.
-
-The sanitizer target is a build-only CI check. Run it against a disposable
-fixture when adding runtime coverage, never against production `save/` or
-`accounts/` data. The i386 runtime and its `-m32` default build are not valid
-ASan/GDB environments under qemu user emulation. On Apple Silicon, use a
-native x86-64 Linux host or an x86-64 Linux VM/container for sanitizer work;
-the ARM host and emulated i386 runtime are useful for ordinary protocol tests,
-not reliable sanitizer diagnostics.
-
-## Testing
-
-Offline packet and helper checks need no server:
-
-```bash
-python3 -m py_compile tools/*.py
-python3 tools/test_protocol.py
-```
-
-The integration suite needs an external disposable runtime directory containing
-the server configuration, scripts, UO MUL files, empty/save fixture, and
-accounts fixture. It creates test accounts and characters, so never run it
-against a world you intend to keep:
-
-```bash
-python3 tools/test_suite.py localhost 2593 --quick
-python3 tools/test_suite.py localhost 2593
-# Imported script sets lack the fixture-only trigger hooks used by the last test.
-python3 tools/test_suite.py localhost 2593 --skip-fixture-tests
-```
-
-The full synthetic-fixture run reports 15 assertions. `--skip-fixture-tests`
-omits the two assertions that require the fixture's custom script hooks; the
-remaining protocol checks still create accounts and characters, so use only a
-disposable runtime in either mode.
-
-For a completely self-contained Linux smoke test, generate the synthetic
-fixture and run the server plus the full suite. The generated directory is
-outside the repository and contains no client or shard data:
-
-```bash
-python3 tools/fixtures/make_fixture.py /tmp/sphere99-fixture
-make -j"$(nproc)"
-python3 tools/fixtures/run_suite.py \
-  /tmp/sphere99-fixture \
-  --binary "$PWD/sphere99svr" \
-  --repo "$PWD"
-
-# Include the bounded client-lifetime soak (ASan/UBSan CI runs 25 cycles).
-python3 tools/fixtures/run_suite.py \
-  /tmp/sphere99-fixture \
-  --binary "$PWD/sphere99svr" \
-  --repo "$PWD" \
-  --lifetime-soak 25
-```
-
-The CI fixture job uses the same flow, polls the login socket with a bounded
-startup timeout, and uploads only the disposable server log if the test fails.
-The lifetime soak alternates graceful and abrupt disconnects, validates the
-game-start packet, sends bounded movement traffic, and checks that the login
-socket remains available after every cycle. See
-[`docs/lifetime-model.md`](docs/lifetime-model.md) for the ownership boundary
-and its deliberate out-of-scope areas.
-
-The loader has a fail-closed save guard. If a world, chars, or statics file
-skips a section or fails to parse, the server logs a critical summary and
-refuses autosave and plain `SAVE`. Review the source first; an administrator
-may explicitly acknowledge the risk with `SAVE FORCE`. The regression test
-uses a temporary broken world file and verifies that no save file is created:
-
-```bash
-make load-safety-test
-build/load-safety/load_safety_test
-```
-
-## Runtime unresolved-keyword report
-
-Reporting is disabled unless the `[SPHERE]` section of `sphere.ini` sets a
-report path:
-
-```ini
-UNKNOWNKEYWORDREPORT=logs/unknown-keywords.json
-```
-
-The server writes the report on a clean shutdown. A path ending in `.csv`
-selects CSV; any other extension selects JSON. An administrator can write the
-current snapshot on demand with `SERV.UNKNOWNREPORT`. Writing a snapshot does
-not clear the collected counts.
-
-Each entry groups a normalized keyword by kind (`get`, `set`, `method`,
-`function`, `trigger`, or `rejected`) and includes its count and first source
-file, line, and object type. `rejected` records unresolved dispatches that
-return a bad-argument or invalid-result code. Dotted suffixes and numeric
-indexes are grouped, so `TAG.name` becomes `TAG.*` and `ARGV[3]` becomes
-`ARGV[]`. Collection retains
-at most 1,024 distinct keys; later new keys increment the `overflow` counter.
-The JSON root includes `distinct`, `total`, `overflow`, and `entries` fields.
-CSV output uses the same entry columns and ends with `overflow` and `total`
-summary rows.
-
-## Layout
+## Project Structure
 
 ```
-spherelib/          base library
-SphereCommon/       UO protocol and world-data structures
-SphereAccount/      account management
-SphereSvr/          server and game logic
-tools/              headless protocol client, synthetic fixtures, and checks
-Makefile            GNU Make build
+spherelib/          Base library (strings, files, arrays, sockets, threads)
+SphereCommon/       Shared UO data structures (maps, tiles, crypto, regions)
+SphereAccount/      Account management
+SphereSvr/          Main server (game logic: characters, items, clients, world)
+Makefile            GNU Make build system (Linux/GCC)
+CLAUDE.md           Detailed technical documentation
 ```
 
-At runtime, paths such as `scripts/`, `save/`, `accounts/`, and `muls/` are
-provided by the deployment environment, not committed here.
+## Development Roadmap
 
-## Background
+### Goal: Complete 0.99 Server Reconstruction
 
-SphereServer had separate 0.56 and proprietary 0.99 development lines. The
-0.99 source was not officially open-sourced; this project combines available
-historical material with a Linux/GCC port and compatibility work. The 0.99
-script language, triggers, dialogs, and persistence formats are not assumed to
-be interchangeable with 0.56.
+Finish implementing the 329 remaining stubs to create a fully functional SphereServer
+0.99 compatible with existing 0.99 shard scripts and save data.
 
-## Roadmap
+**Implementation priority:**
 
-- complete differential coverage for 0.99 expression and script semantics;
-- improve object references, triggers, dialogs, combat, and re-login paths;
-- add packet-level regression fixtures for client-facing behavior;
-- validate world loading and saving with disposable representative fixtures;
-- move crash debugging to native x86-64 Linux while keeping i386 runtime CI.
+1. **Script parser** (`CScript`) — load and parse .scp script files
+2. **Expression evaluator** (`CExpression`, `CGVariant`) — including `<?...?>` escaped macro syntax unique to 0.99
+3. **Resource loader** (`CResourceDef`) — ITEMDEF, CHARDEF, SPELL, SKILL definitions
+4. **Script executor** (`CScriptExecContext`) — trigger and event handling
+5. **Extended trigger support** — combat triggers like `@BeforeSwing`, `@AfterSwing`, `@finalBlow` used by many 0.99 shards
+6. **Client crypto** (`CCryptBase`) — UO client login encryption
+7. **Network layer** (`CGSocket`) — accept client connections
+8. **World persistence** (`CWorld`) — save/load game state
+
+### Why not migrate to 0.56d?
+
+Analysis confirmed that migrating existing 0.99 shard scripts to 0.56d is
+**not feasible** for established shards:
+
+- `<?...?>` escaped macro syntax (0.99-only) has no 0.56d equivalent
+- `argo.` dialog construction API is completely different in 0.56d
+- Expression evaluation semantics differ (right-to-left without operator precedence in 0.99)
+- Custom combat triggers don't exist in standard 0.56d
+- Community consensus: migration is "practically impossible" for large script bases
+- The 0.99 and 0.56 branches diverged too far to be compatible
+
+## Contributing
+
+Contributions welcome! All changes go through Pull Requests with code review.
+
+When implementing stubs, use [SphereServer 0.56d source](https://github.com/SphereServer/Source)
+as reference, but adapt to the 0.99 class interfaces (they differ significantly).
 
 ## References
 
 | Resource | Description |
-|---|---|
-| [SphereServer/Source-Archive](https://github.com/Sphereserver/Source-Archive) | Partial historical source material |
-| [SphereServer/Source](https://github.com/SphereServer/Source) | 0.56 reference implementation |
-| [SphereServer/Source-X](https://github.com/Sphereserver/Source-X) | Active community reference |
-| [ModernUO packet documentation](https://modernuo.com/packets.html) | UO protocol reference |
+|----------|-------------|
+| [Sphereserver/Source-Archive](https://github.com/Sphereserver/Source-Archive) | Partial 0.99f source code |
+| [JakubLinhart/Sphere99-56](https://github.com/JakubLinhart/Sphere99-56) | Original reconstruction effort |
+| [SphereServer Source-X](https://github.com/Sphereserver/Source-X) | Active 0.56d+ development (reference only) |
+| [SphereCommunity](https://www.sphereserver.com/) | Community forums and documentation |
+| [Sphere99.VsCode](https://github.com/uoinfusion/Sphere99.VsCode) | VS Code extension for 0.99 script editing |
 
 ## License
 
-See [LICENSE](LICENSE). Preserve the original copyright and license notices
-when modifying reconstructed source.
+Server engine code derived from sources published under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+by the [Sphereserver](https://github.com/Sphereserver) organization.
+
+Original code copyright Menace Software (www.menasoft.com).
