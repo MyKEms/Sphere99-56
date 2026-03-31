@@ -167,10 +167,46 @@ private:
 	UINT m_uMode;	///< MMSYSTEM may use 32 bit flags.
 public:
 	static const char* m_sClassName;
-	static void ExtractPath(LPTSTR szPath) { throw "not implemented"; }
-	static LPCTSTR GetFileNameTitle(LPCTSTR pszFileName) { throw "not implemented"; }
-	static void GetStrippedDirName(LPCTSTR pszDirName) { throw "not implemented"; }
-	static LPCTSTR GetFileNameExt(LPCTSTR pszFileName) { throw "not implemented"; }
+	static void ExtractPath(LPTSTR szPath)
+	{
+		// Remove the file name from the path, leaving just the directory.
+		if (!szPath) return;
+		LPTSTR pSlash = NULL;
+		for (LPTSTR p = szPath; *p; p++)
+		{
+			if (*p == '/' || *p == '\\')
+				pSlash = p;
+		}
+		if (pSlash) pSlash[1] = '\0';
+		else szPath[0] = '\0';
+	}
+	static LPCTSTR GetFileNameTitle(LPCTSTR pszFileName)
+	{
+		// Get just the file name without directory path.
+		if (!pszFileName) return "";
+		LPCTSTR pTitle = pszFileName;
+		for (LPCTSTR p = pszFileName; *p; p++)
+		{
+			if (*p == '/' || *p == '\\')
+				pTitle = p + 1;
+		}
+		return pTitle;
+	}
+	static void GetStrippedDirName(LPCTSTR pszDirName) { /* STUB */ }
+	static LPCTSTR GetFileNameExt(LPCTSTR pszFileName)
+	{
+		// Get the file extension (including the dot).
+		if (!pszFileName) return NULL;
+		LPCTSTR pExt = NULL;
+		for (LPCTSTR p = pszFileName; *p; p++)
+		{
+			if (*p == '.')
+				pExt = p;
+			else if (*p == '/' || *p == '\\')
+				pExt = NULL; // reset at directory separator
+		}
+		return pExt;
+	}
 
 private:
 	/**

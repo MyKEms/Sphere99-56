@@ -174,15 +174,15 @@ public:
 	virtual int EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg );
 	void _cdecl CatchEvent( CGException* pErr, const char* pszCatchContext, ...  );
 
-	bool IsLogged(LOGL_TYPE level) const { throw "not implemented"; }
-	bool IsLogged(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level) const { throw "not implemented"; }
-	bool IsLoggedGroupMask(LOG_GROUP_TYPE dwGroupMask) const { throw "not implemented"; }
+	bool IsLogged(LOGL_TYPE level) const { return level <= m_logLevel; }
+	bool IsLogged(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level) const { return IsLoggedGroupMask(dwGroupMask) && level <= m_logLevel; }
+	bool IsLoggedGroupMask(LOG_GROUP_TYPE dwGroupMask) const { return (m_dwGroupMask & dwGroupMask) != 0; }
 
-	void SetLogLevel(LOGL_TYPE level) { throw "not implemented"; }
-	void SetLogGroupMask(LOG_GROUP_TYPE dwGroupMask) { throw "not implemented"; }
-	
-	LOGL_TYPE GetLogLevel() const { throw "not implemented"; }
-	LOG_GROUP_TYPE GetLogGroupMask() const { throw "not implemented"; }
+	void SetLogLevel(LOGL_TYPE level) { m_logLevel = level; }
+	void SetLogGroupMask(LOG_GROUP_TYPE dwGroupMask) { m_dwGroupMask = dwGroupMask; }
+
+	LOGL_TYPE GetLogLevel() const { return m_logLevel; }
+	LOG_GROUP_TYPE GetLogGroupMask() const { return m_dwGroupMask; }
 
 public:
 	bool m_fLockOpen;	// resource is locked open ?
@@ -191,6 +191,8 @@ protected:
 	void EventStrPrint( int iColorType, const char* pMsg );
 
 private:
+	LOGL_TYPE m_logLevel;
+	LOG_GROUP_TYPE m_dwGroupMask;
 	int m_iDayStamp;			// last real time stamp. for day transitions
 	CGString m_sBaseDir;
 

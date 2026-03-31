@@ -446,17 +446,17 @@ public:
 	CGRefArray<CResourceScript> m_ResourceFiles;
 
 public:
-	LPCTSTR ResourceGetName(CSphereUID rid) const { throw "not implemented"; }
-	CResourceFilePtr FindResourceFile(LPCTSTR pszName) { throw "not implemented"; }
-	CResourceFilePtr LoadResourcesAdd(LPCTSTR pszNewName) { throw "not implemented"; }
-	virtual CResourceDefPtr ResourceGetDef(UID_INDEX rid) { throw "not implemented"; }
-	bool LoadResources(CResourceScript* pResScript) { throw "not implemented"; }
-	void LoadResourcesOpen(CResourceScript &script) { throw "not implemented"; }
-	void AddResourceFile(LPCTSTR pszFile) { throw "not implemented"; }
-	bool OpenScriptFind(CScript& s, LPCTSTR pszName) { throw "not implemented"; }
-	CResourceFilePtr GetResourceFile(int iIndex) { throw "not implemented"; }
-	void AddResourceDir(LPCTSTR pszDirName) { throw "not implemented"; }
-	void DeleteResourceFile(LPCTSTR pszFile) { throw "not implemented"; }
+	LPCTSTR ResourceGetName(CSphereUID rid) const;
+	CResourceFilePtr FindResourceFile(LPCTSTR pszName);
+	CResourceFilePtr LoadResourcesAdd(LPCTSTR pszNewName);
+	virtual CResourceDefPtr ResourceGetDef(UID_INDEX rid);
+	bool LoadResources(CResourceScript* pResScript);
+	void LoadResourcesOpen(CResourceScript &script);
+	void AddResourceFile(LPCTSTR pszFile);
+	bool OpenScriptFind(CScript& s, LPCTSTR pszName);
+	CResourceFilePtr GetResourceFile(int iIndex);
+	void AddResourceDir(LPCTSTR pszDirName);
+	void DeleteResourceFile(LPCTSTR pszFile);
 };
 
 class CSphereResourceMgr : public CResourceMgr

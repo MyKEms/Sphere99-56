@@ -18,7 +18,7 @@ bool CResourceDef::IsValidHeap() const
 
 // CResourceLink
 CResourceLink::CResourceLink(CSphereUID rid)
-	: CResourceDef(rid)
+	: CResourceDef(rid), m_pScript(NULL)
 {
 }
 
