@@ -7,8 +7,14 @@
 #ifndef _WIN32
 #include <signal.h>
 #include <cstring>
+#include <poll.h>
 #define strcmpi strcasecmp
-static DWORD GetTickCount() { return (DWORD)(time(NULL)*1000); }
+static DWORD GetTickCount()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (DWORD)((unsigned long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
 static int MulDiv(int a, int b, int c) { return (int)(((long long)a * b) / c); }
 #endif
 
@@ -66,13 +72,17 @@ void CScriptClassTemplate<CServer>::InitScriptClass()
 #ifndef _WIN32
 void _cdecl Signal_Terminate(int x=0) // If shutdown is initialized
 {
-	// LINUX specific stuff.
-	throw CGException( LOGL_FATAL, x, "Signal_Terminate" );
+	// LINUX specific: set exit flag instead of throwing from a signal handler.
+	// Throwing C++ exceptions from signal handlers is undefined behavior.
+	g_Serv.SetExitFlag( (x == SIGTERM) ? SPHEREERR_TIMED_CLOSE : SPHEREERR_CTRLC );
 }
 
 void _cdecl Signal_Illegal_Instruction(int x=0)
 {
-	throw CGException( LOGL_FATAL, x, "Signal_Illegal_Instruction" );
+	// For truly fatal signals (SIGSEGV, SIGILL), we must abort since
+	// the process state is corrupted.
+	signal(x, SIG_DFL);  // Reset to default handler
+	raise(x);            // Re-raise to get core dump
 }
 #endif
 
@@ -1186,7 +1196,137 @@ CClientPtr CServer::SocketsAccept( CGSocket& socket, bool fGod ) // Check for me
 
 void CServer::SocketsReceive() // Check for messages from the clients
 {
-	// What sockets do I want to look at ?
+#ifndef _WIN32
+	// Use poll() on Linux - more reliable than select() under qemu-user emulation.
+	// Build an array of pollfd entries: god socket, main socket, then client sockets.
+	// Use a reasonable max (64 should be more than enough for active clients + 2 server sockets)
+	static const int MAX_POLL_FDS = 64;
+	struct pollfd pollfds[MAX_POLL_FDS];
+	int nfds = 0;
+
+	// God socket
+	if ( m_SocketGod.GetSocket() != INVALID_SOCKET )
+	{
+		pollfds[nfds].fd = m_SocketGod.GetSocket();
+		pollfds[nfds].events = POLLIN;
+		pollfds[nfds].revents = 0;
+		nfds++;
+	}
+	int iGodIdx = (m_SocketGod.GetSocket() != INVALID_SOCKET) ? 0 : -1;
+
+	// Main socket
+	pollfds[nfds].fd = m_SocketMain.GetSocket();
+	pollfds[nfds].events = POLLIN;
+	pollfds[nfds].revents = 0;
+	int iMainIdx = nfds;
+	nfds++;
+
+	// Client sockets - also clean up closed ones
+	CClientPtr pClientNext;
+	CClientPtr pClient = GetClientHead();
+	for ( ; pClient!=NULL; pClient = pClientNext )
+	{
+		pClientNext = pClient->GetNext();
+		if ( ! pClient->m_Socket.IsOpen())
+		{
+			pClient->DeleteThis();
+			continue;
+		}
+		if ( nfds < MAX_POLL_FDS )
+		{
+			pollfds[nfds].fd = pClient->m_Socket.GetSocket();
+			pollfds[nfds].events = POLLIN;
+			pollfds[nfds].revents = 0;
+			nfds++;
+		}
+	}
+
+	// we task sleep in here. NOTE: this is where we give time back to the OS.
+	m_Profile.SwitchTask( PROFILE_Idle );
+
+	int ret = ::poll( pollfds, nfds, 1 ); // 1ms timeout
+	if ( ret <= 0 )
+	{
+		return;
+	}
+
+	m_Profile.SwitchTask( PROFILE_NetworkRx );
+
+	// Any events from clients ?
+	for ( pClient = GetClientHead(); pClient!=NULL; pClient = pClientNext )
+	{
+		pClientNext = pClient->GetNext();
+		if ( ! pClient->m_Socket.IsOpen())
+		{
+			pClient->DeleteThis();
+			continue;
+		}
+
+		// Find this client's pollfd entry
+		bool fReadable = false;
+		SOCKET cliSock = pClient->m_Socket.GetSocket();
+		for ( int i = 0; i < nfds; i++ )
+		{
+			if ( pollfds[i].fd == (int)cliSock && (pollfds[i].revents & POLLIN) )
+			{
+				fReadable = true;
+				break;
+			}
+		}
+
+		if ( fReadable )
+		{
+			if ( pClient->GetAccount())
+			{
+				// Update time of last comm.
+				pClient->m_timeLastEvent.InitTimeCurrent();
+			}
+			if ( ! pClient->xRecvData())
+			{
+				pClient->DeleteThis();
+				continue;
+			}
+		}
+		else
+		{
+			// NOTE: Not all CClient are game clients.
+
+			int iLastEventDiff = pClient->m_timeLastEvent.GetCacheAge();
+
+			if ( g_Cfg.m_iDeadSocketTime &&
+				iLastEventDiff > g_Cfg.m_iDeadSocketTime &&
+				(	pClient->m_ConnectType != CONNECT_TELNET )
+				)
+			{
+				// We have not talked in several minutes.
+				DEBUG_ERR(( "%x:Dead Socket Timeout" LOG_CR, pClient->m_Socket.GetSocket()));
+				pClient->DeleteThis();
+				continue;
+			}
+			if ( pClient->IsConnectTypePacket())	// packetized?
+			{
+				if ( iLastEventDiff > 1*60*TICKS_PER_SEC &&
+					pClient->m_timeLastSend.GetCacheAge() > 1*60*TICKS_PER_SEC )
+				{
+					// Send a periodic ping to the client. If no other activity !
+					pClient->addPing(0);
+				}
+			}
+		}
+	}
+
+	// Any new connections ?
+	if ( iGodIdx >= 0 && (pollfds[iGodIdx].revents & POLLIN) )
+	{
+		SocketsAccept( m_SocketGod, true );
+	}
+	if ( pollfds[iMainIdx].revents & POLLIN )
+	{
+		SocketsAccept( m_SocketMain, false );
+	}
+
+#else // _WIN32
+	// Windows: use select() as before
 	CGSocketSet readfds( m_SocketGod.GetSocket());
 	readfds.Set( m_SocketMain.GetSocket());
 
@@ -1279,6 +1419,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 	{
 		SocketsAccept( m_SocketMain, false );
 	}
+#endif // _WIN32
 }
 
 void CServer::SocketsFlush() // Sends ALL buffered data
@@ -1457,7 +1598,12 @@ bool CServer::SocketsInit() // Initialize sockets
 	}
 
 	SetServerMode( SERVMODE_Run );	// ready to go. ! IsLoading()
+#ifdef _WIN32
 	g_BackTask.CreateThread();
+#else
+	// Linux/QEMU: skip background thread to avoid threading issues.
+	// Registration, polling, and mail sending are not needed for local operation.
+#endif
 	return( true );
 }
 
@@ -1531,6 +1677,14 @@ bool CServTimeMaster::AdvanceTime()
 	//  true = time has changed measureably.
 
 	DWORD dwTickCount = ::GetTickCount();	// get the system time.
+
+	// On first call, m_dwTickCount may be 0 (uninitialized). Seed it to avoid
+	// a massive time jump based on system uptime.
+	if ( m_dwTickCount == 0 )
+	{
+		m_dwTickCount = dwTickCount;
+		return false;
+	}
 
 	int iTimeSysDiff = dwTickCount - m_dwTickCount;
 	iTimeSysDiff = IMULDIV( TICKS_PER_SEC, iTimeSysDiff, 1000 );

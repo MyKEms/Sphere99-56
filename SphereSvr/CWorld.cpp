@@ -466,11 +466,9 @@ void CWorld::Save( bool fForceImmediate ) // Save world state
 
 bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 {
-	fprintf(stderr, "DBG: LoadFile('%s')...\n", pszLoadName ? pszLoadName : "NULL"); fflush(stderr);
 	CScript s;
 	if ( ! s.Open( pszLoadName ))
 	{
-		fprintf(stderr, "DBG: LoadFile: can't open '%s'\n", pszLoadName ? pszLoadName : "NULL"); fflush(stderr);
 		g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Can't Load %s" LOG_CR, (LPCTSTR) pszLoadName );
 		return( false );
 	}
@@ -479,25 +477,20 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 
 	// Find the size of the file.
 	FILE_POS_TYPE lLoadSize = s.GetLength();
-	fprintf(stderr, "DBG: LoadFile: opened '%s', size=%ld\n", (LPCTSTR)s.GetFilePath(), (long)lLoadSize); fflush(stderr);
 	int iLoadStage = 0;
 
 	CSphereScriptContext ScriptContext( &s );
 
 	// Read the header stuff first.
-	fprintf(stderr, "DBG: LoadFile: reading header...\n"); fflush(stderr);
 	while ( s.ReadKeyParse())
 	{
-		fprintf(stderr, "DBG: LoadFile: header key='%s'\n", s.GetKey()); fflush(stderr);
 		s_PropSet(s.GetKey(),s.GetArgVar());
 	}
-	fprintf(stderr, "DBG: LoadFile: header done, reading sections...\n"); fflush(stderr);
 
 	while ( s.FindNextSection())
 	{
 		if (! ( ++iLoadStage & 0x1FF ))	// don't update too often
 		{
-			fprintf(stderr, "DBG: LoadFile: section %d, section='%s'\n", iLoadStage, s.GetSection()); fflush(stderr);
 			g_Serv.Event_PrintPercent( SERVTRIG_LoadStatus, s.GetPosition(), lLoadSize );
 		}
 
@@ -507,13 +500,11 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 		}
 		SPHERE_LOG_TRY_CATCH1( "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum )
 	}
-	fprintf(stderr, "DBG: LoadFile: all sections loaded (%d total)\n", iLoadStage); fflush(stderr);
 
 	if ( s.IsSectionType( "EOF" ))
 	{
 		// The only valid way to end.
 		s.Close();
-		fprintf(stderr, "DBG: LoadFile: success (EOF found)\n"); fflush(stderr);
 		return( true );
 	}
 
@@ -532,28 +523,17 @@ bool CWorld::LoadWorld() // Load world from script
 	CGString sCharsName;
 	sCharsName.Format( "%s" SPHERE_FILE "chars", (LPCTSTR) g_Cfg.m_sWorldBaseDir );
 
-	fprintf(stderr, "DBG: LoadWorld: world='%s' chars='%s'\n", (LPCTSTR)sWorldName, (LPCTSTR)sCharsName); fflush(stderr);
-
 	int iPrevSaveCount = m_iSaveCountID;
 	for(;;)
 	{
-		fprintf(stderr, "DBG: LoadWorld: trying LoadFile(world)...\n"); fflush(stderr);
 		if ( LoadFile( sWorldName ))
 		{
-			fprintf(stderr, "DBG: LoadWorld: world loaded, m_iLoadVersion=%d\n", (int)m_iLoadVersion); fflush(stderr);
 			if ( m_iLoadVersion < 53 )
 				return( true );
-			fprintf(stderr, "DBG: LoadWorld: trying LoadFile(chars)...\n"); fflush(stderr);
 			if ( LoadFile( sCharsName ))
 			{
-				fprintf(stderr, "DBG: LoadWorld: chars loaded OK\n"); fflush(stderr);
 				return( true );
 			}
-			fprintf(stderr, "DBG: LoadWorld: chars load FAILED\n"); fflush(stderr);
-		}
-		else
-		{
-			fprintf(stderr, "DBG: LoadWorld: world load FAILED\n"); fflush(stderr);
 		}
 
 		// If we could not open the file at all then it was a bust!
@@ -588,7 +568,6 @@ bool CWorld::LoadWorld() // Load world from script
 
 bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 {
-	fprintf(stderr, "DBG: CWorld::LoadAll() start\n"); fflush(stderr);
 	if ( GetUIDCount())	// we already loaded?
 		return( true );
 
@@ -599,13 +578,10 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	m_Clock.InitTime();		// will be loaded from the world file.
 
 	// Load all the accounts.
-	fprintf(stderr, "DBG: loading accounts...\n"); fflush(stderr);
 	if ( ! g_Accounts.Account_LoadAll( false ))
 	{
-		fprintf(stderr, "DBG: Account_LoadAll returned false\n"); fflush(stderr);
 		return( false );
 	}
-	fprintf(stderr, "DBG: accounts loaded OK\n"); fflush(stderr);
 
 	// If we are the master list. Then read the list from a sep file.
 	if ( ! g_Cfg.m_sMainLogServerDir.IsEmpty())
@@ -617,7 +593,6 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	}
 
 	// Try to load the world and chars files .
-	fprintf(stderr, "DBG: loading world files (pszLoadName=%s)...\n", pszLoadName ? pszLoadName : "NULL"); fflush(stderr);
 	if ( pszLoadName )
 	{
 		// Command line load this file. g_Cfg.m_sWorldBaseDir
@@ -628,32 +603,23 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	{
 		if ( ! LoadWorld())
 		{
-			fprintf(stderr, "DBG: LoadWorld() returned false\n"); fflush(stderr);
 			return( false );
 		}
 	}
-	fprintf(stderr, "DBG: world files loaded OK\n"); fflush(stderr);
 
 	// Load static items into the world. WORLDSTATICS=
-	fprintf(stderr, "DBG: loading statics (m_sWorldStatics='%s')...\n", (LPCTSTR)g_Cfg.m_sWorldStatics); fflush(stderr);
 	if ( ! g_Cfg.m_sWorldStatics.IsEmpty())
 	{
-		if ( ! LoadFile( g_Cfg.m_sWorldStatics ))
-		{
-			fprintf(stderr, "DBG: statics load failed (non-fatal)\n"); fflush(stderr);
-		}
+		LoadFile( g_Cfg.m_sWorldStatics );
 	}
-	fprintf(stderr, "DBG: statics done\n"); fflush(stderr);
 
 	m_timeStartup.InitTimeCurrent();
 	m_timeSave.InitTimeCurrent( g_Cfg.m_iSavePeriod );	// next save time.
 
-	fprintf(stderr, "DBG: setting sector light levels (SECTOR_QTY=%d)...\n", SECTOR_QTY); fflush(stderr);
 	// Set all the sector light levels now that we know the time.
 	// This should not look like part of the load. (CCharDef::T_EnvironChange triggers should run)
 	for ( int j=0; j<SECTOR_QTY; j++ )
 	{
-		if ( j % 1000 == 0 ) { fprintf(stderr, "DBG: sector %d/%d\n", j, SECTOR_QTY); fflush(stderr); }
 		if ( ! m_Sectors[j].IsLightOverriden())
 		{
 			m_Sectors[j].SetLight(-1);
@@ -666,17 +632,12 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 			DEBUG_ERR(( "Warning: %d items at %s, Sector too complex!" LOG_CR, iCount, (LPCTSTR) m_Sectors[j].GetBasePoint().v_Get()));
 		}
 	}
-	fprintf(stderr, "DBG: sector lights done\n"); fflush(stderr);
 
-	fprintf(stderr, "DBG: running GarbageCollection...\n"); fflush(stderr);
 	GarbageCollection();
-	fprintf(stderr, "DBG: GarbageCollection done\n"); fflush(stderr);
 
 	// Set the current version now.
 	const TCHAR* pszVersion = SPHERE_VERSION;
-	fprintf(stderr, "DBG: calling Exp_GetComplex for version '%s'...\n", pszVersion); fflush(stderr);
 	m_iLoadVersion = Exp_GetComplex( pszVersion );	// Set m_iLoadVersion
-	fprintf(stderr, "DBG: calling OnTriggerEvent(SERVTRIG_LoadDone)...\n"); fflush(stderr);
 	g_Serv.OnTriggerEvent( SERVTRIG_LoadDone );
 
 	return( true );

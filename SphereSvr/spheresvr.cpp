@@ -376,10 +376,8 @@ int CSphereService::MainEntryPoint( int argc, char* argv[] )
 
 THREAD_ENTRY_RET _cdecl CServTask::EntryProc( void* lpThreadParameter ) // static
 {
-	fprintf(stderr, "DBG: CServTask::EntryProc started\n"); fflush(stderr);
 	// The main message loop.
 	g_ServTask.InitInstance();
-	fprintf(stderr, "DBG: CServTask::EntryProc: InitInstance done\n"); fflush(stderr);
 #ifdef _WIN32
 	_set_se_translator( Sphere_Exception_Win32 );	// must be called for each thread.
 #endif
@@ -390,7 +388,6 @@ THREAD_ENTRY_RET _cdecl CServTask::EntryProc( void* lpThreadParameter ) // stati
 		DEBUG_CHECK( g_ServTask.SetExecContext(NULL) == NULL );
 #endif
 	}
-	fprintf(stderr, "DBG: CServTask::EntryProc: exiting\n"); fflush(stderr);
 	g_ServTask.ExitInstance();
 }
 
@@ -462,42 +459,30 @@ void CServTask::CheckStuckThread()
 
 THREAD_ENTRY_RET _cdecl CMainTask::EntryProc( void* lpThreadParameter ) // static
 {
-	fprintf(stderr, "DBG: CMainTask::EntryProc started\n"); fflush(stderr);
 	// Just make sure the main loop is alive every so often.
 	// This should be the parent thread.
 	// try to restart it if it is not.
 
 	g_MainTask.InitInstance();
-	fprintf(stderr, "DBG: CMainTask: InitInstance done, checking ASSERT...\n"); fflush(stderr);
 
 	// ASSERT( CThread::GetCurrentThreadId() == g_Serv.m_dwParentThread ); -- skip, thread IDs may differ
-	fprintf(stderr, "DBG: CMainTask: entering main loop (m_iExitFlag=%d)\n", g_Serv.m_iExitFlag); fflush(stderr);
-	int nMainLoop = 0;
 	while ( ! g_Serv.m_iExitFlag )
 	{
-		nMainLoop++;
-		if (nMainLoop <= 3) { fprintf(stderr, "DBG: CMainTask loop #%d\n", nMainLoop); fflush(stderr); }
-
 		if ( g_Cfg.m_iFreezeRestartTime <= 0 )
 		{
 			DEBUG_ERR(( "Freeze Restart Time cannot be cleared at run time" LOG_CR ));
 			g_Cfg.m_iFreezeRestartTime = 10;
 		}
 
-		if (nMainLoop <= 3) { fprintf(stderr, "DBG: CMainTask: calling OnTick...\n"); fflush(stderr); }
 		g_ServConsole.OnTick( g_Cfg.m_iFreezeRestartTime * 1000 );
-		if (nMainLoop <= 3) { fprintf(stderr, "DBG: CMainTask: OnTick done\n"); fflush(stderr); }
 
 		// Don't look for freezing when doing certain things.
 		if ( g_Serv.IsLoading() || ! g_Cfg.m_fSecure )
 			continue;
 
-		if (nMainLoop <= 3) { fprintf(stderr, "DBG: CMainTask: CheckStuckThread...\n"); fflush(stderr); }
 		g_ServTask.CheckStuckThread();
 		g_BackTask.CheckStuckThread();
-		if (nMainLoop <= 3) { fprintf(stderr, "DBG: CMainTask: loop end\n"); fflush(stderr); }
 	}
-	fprintf(stderr, "DBG: CMainTask: exiting loop\n"); fflush(stderr);
 
 	g_MainTask.ExitInstance(); // ?? main task runs til process ends.
 }
@@ -578,13 +563,11 @@ SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 	}
 
 	Debug_CheckPoint();
-	fprintf(stderr, "DBG: calling g_Serv.Load()...\n"); fflush(stderr);
 	if ( ! g_Serv.Load())
 	{
 		g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL, "The " SPHERE_FILE ".INI file is corrupt or missing" LOG_CR );
 		return( SPHEREERR_BAD_INI );
 	}
-	fprintf(stderr, "DBG: g_Serv.Load() returned true\n"); fflush(stderr);
 
 	Debug_CheckPoint();
 	for ( int argn=1; argn<argc; argn++ )
@@ -596,36 +579,27 @@ SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 	}
 
 	Debug_CheckPoint();
-	fprintf(stderr, "DBG: calling g_World.LoadAll()...\n"); fflush(stderr);
 	if ( ! g_World.LoadAll())
 	{
-		fprintf(stderr, "DBG: g_World.LoadAll() returned false\n"); fflush(stderr);
 		if ( g_Cfg.m_sMainLogServerDir.IsEmpty())
 		{
 			return( SPHEREERR_BAD_WORLD );
 		}
 	}
-	fprintf(stderr, "DBG: g_World.LoadAll() done\n"); fflush(stderr);
 
 	Debug_CheckPoint();
-	fprintf(stderr, "DBG: calling g_Serv.SocketsInit()...\n"); fflush(stderr);
 	if ( ! g_Serv.SocketsInit())
 	{
 		return( SPHEREERR_BAD_SOCKET );
 	}
-	fprintf(stderr, "DBG: SocketsInit() done\n"); fflush(stderr);
 
 	Debug_CheckPoint();
 
-	fprintf(stderr, "DBG: getting status string...\n"); fflush(stderr);
 	g_Log.Event( LOG_GROUP_INIT, LOGL_TRACE, g_Serv.GetStatusString( 0x24 ));
-	fprintf(stderr, "DBG: logging startup complete...\n"); fflush(stderr);
 	g_Log.Event( LOG_GROUP_INIT, LOGL_TRACE, _TEXT("Startup complete. items=%d, chars=%d" LOG_CR), g_Serv.StatGet(SERV_STAT_ITEMS), g_Serv.StatGet(SERV_STAT_CHARS));
 
-	fprintf(stderr, "DBG: firing SERVTRIG_Startup...\n"); fflush(stderr);
 	g_Serv.OnTriggerEvent( SERVTRIG_Startup, (DWORD) ( "Press '?' for console commands" LOG_CR ), 0 );
 
-	fprintf(stderr, "DBG: Sphere_InitServer done, returning SPHEREERR_OK\n"); fflush(stderr);
 	return( SPHEREERR_OK );
 }
 
@@ -672,7 +646,6 @@ SPHEREERR_TYPE Sphere_OnTick()
 
 	static int s_nTick = 0;
 	s_nTick++;
-	if ( s_nTick <= 3 ) { fprintf(stderr, "DBG: Sphere_OnTick #%d\n", s_nTick); fflush(stderr); }
 
 	// ASSERT( g_ServTask.GetThreadID() == GetCurrentThreadId());
 #ifndef _DEBUG
@@ -680,11 +653,8 @@ SPHEREERR_TYPE Sphere_OnTick()
 	try
 	{
 #endif
-		if ( s_nTick <= 3 ) { fprintf(stderr, "DBG: calling g_World.OnTick()...\n"); fflush(stderr); }
 		g_World.OnTick();
-		if ( s_nTick <= 3 ) { fprintf(stderr, "DBG: calling g_Serv.OnTick()...\n"); fflush(stderr); }
 		g_Serv.OnTick();
-		if ( s_nTick <= 3 ) { fprintf(stderr, "DBG: OnTick done\n"); fflush(stderr); }
 
 #ifndef _DEBUG
 	}
@@ -702,33 +672,24 @@ SPHEREERR_TYPE Sphere_MainEntryPoint( int argc, char *argv[] )
 	s_fServReady = true;
 
 	g_Serv.m_iExitFlag = Sphere_InitServer( argc, argv );
-	fprintf(stderr, "DBG: Sphere_MainEntryPoint: InitServer returned %d\n", g_Serv.m_iExitFlag); fflush(stderr);
 	// ASSERT( g_MainTask.GetThreadID() == GetCurrentThreadId());
 
 	if ( ! g_Serv.m_iExitFlag )
 	{
-		fprintf(stderr, "DBG: m_iFreezeRestartTime=%d\n", g_Cfg.m_iFreezeRestartTime); fflush(stderr);
 #ifdef _WIN32
 		if ( CGSystemInfo::IsNt() && g_Cfg.m_iFreezeRestartTime )
-#else
-		if ( g_Cfg.m_iFreezeRestartTime )
-#endif
 		{
-			fprintf(stderr, "DBG: creating ServTask thread + MainTask.EntryProc\n"); fflush(stderr);
 			// Create a thread to do server stuff on, just monitor with this one.
-			fprintf(stderr, "DBG: calling g_ServTask.CreateThread()...\n"); fflush(stderr);
 			g_ServTask.CreateThread();
-			fprintf(stderr, "DBG: ServTask thread created, calling g_MainTask.EntryProc(0)...\n"); fflush(stderr);
 			g_MainTask.EntryProc( 0 );
-			fprintf(stderr, "DBG: g_MainTask.EntryProc returned\n"); fflush(stderr);
 		}
 		else
+#endif
 		{
-			fprintf(stderr, "DBG: calling g_MainTask.ExitInstance()...\n"); fflush(stderr);
-			// No monitor thread at all. just called directly.
+			// Linux: run single-threaded to avoid threading issues under QEMU user-mode.
+			// The monitoring thread (CMainTask) and separate CServTask thread are
+			// not needed -- run the tick loop directly in the main thread.
 			g_MainTask.ExitInstance();	// not used anymore.
-			fprintf(stderr, "DBG: calling g_ServTask.EntryProc(0)...\n"); fflush(stderr);
-			// g_MainTask.EntryProc( 0 );	// If we don't run this, we lose console function
 			g_ServTask.EntryProc( 0 );	// This is the main task now.
 		}
 	}
