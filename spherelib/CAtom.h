@@ -24,7 +24,16 @@ class CAtomRef
 private:
     CAtomDef* m_pDef;
 private:
-    void ClearRef();
+    void ClearRef()
+    {
+        if (m_pDef)
+        {
+            m_pDef->m_iUseCount--;
+            if (m_pDef->m_iUseCount <= 0)
+                delete m_pDef;
+            m_pDef = NULL;
+        }
+    }
 public:
     DWORD GetIndex() const
     {
@@ -36,8 +45,19 @@ public:
             return(NULL);
         return(*m_pDef);
     }
-    void SetStr(LPCTSTR pszText);
-    void Copy(const CAtomRef& atom);
+    void SetStr(LPCTSTR pszText)
+    {
+        ClearRef();
+        if (pszText && pszText[0])
+            m_pDef = new CAtomDef(pszText);
+    }
+    void Copy(const CAtomRef& atom)
+    {
+        ClearRef();
+        m_pDef = atom.m_pDef;
+        if (m_pDef)
+            m_pDef->m_iUseCount++;
+    }
 
     bool IsValid() const
     {
