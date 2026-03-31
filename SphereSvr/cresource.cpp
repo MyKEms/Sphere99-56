@@ -4,6 +4,9 @@
 //
 
 #include "stdafx.h"	// predef header.
+#ifndef _WIN32
+#include <dirent.h>
+#endif
 
 const CAssocReg CSphereResourceMgr::sm_PropsAssoc[CSphereResourceMgr::P_QTY+1] =
 {
@@ -2135,6 +2138,214 @@ void CSphereResourceMgr::OnTick( bool fNow )
 
 	m_timePeriodic.InitTimeCurrent( 60* TICKS_PER_SEC );
 }
+
+//*************************************************************
+// CResourceMgr base methods
+
+LPCTSTR CResourceMgr::ResourceGetName(CSphereUID rid) const
+{
+	// Format the RID as a hex string, or look up the resource name.
+	int index = m_ResHash.FindKey(rid);
+	if (index >= 0)
+	{
+		CResourceDef* pDef = m_ResHash.GetAt(index);
+		if (pDef)
+		{
+			LPCTSTR pszName = pDef->GetResourceName();
+			if (pszName && pszName[0])
+				return pszName;
+		}
+	}
+	return "?";
+}
+
+CResourceFilePtr CResourceMgr::FindResourceFile(LPCTSTR pszName)
+{
+	if (!pszName || !pszName[0])
+		return NULL;
+
+	LPCTSTR pszTitle = CGFile::GetFileNameTitle(pszName);
+
+	for (int i = 0; i < m_ResourceFiles.GetSize(); i++)
+	{
+		CResourceScript* pScript = m_ResourceFiles[i];
+		if (!pScript)
+			continue;
+		LPCTSTR pszExistingTitle = CGFile::GetFileNameTitle(pScript->GetFilePath());
+		if (!_stricmp(pszTitle, pszExistingTitle))
+			return static_cast<CResourceFile*>(pScript);
+	}
+	return NULL;
+}
+
+void CResourceMgr::AddResourceFile(LPCTSTR pszFile)
+{
+	if (!pszFile || !pszFile[0])
+		return;
+
+	// Normalize backslashes to forward slashes on Linux
+	TCHAR szPath[1024];
+	strncpy(szPath, pszFile, sizeof(szPath) - 1);
+	szPath[sizeof(szPath) - 1] = '\0';
+	for (TCHAR* p = szPath; *p; p++)
+	{
+		if (*p == '\\')
+			*p = '/';
+	}
+
+	// Append .scp extension if no extension present
+	LPCTSTR pszExt = CGFile::GetFileNameExt(szPath);
+	if (!pszExt || !pszExt[0])
+	{
+		strncat(szPath, ".scp", sizeof(szPath) - strlen(szPath) - 1);
+	}
+
+	// Check for duplicate
+	if (FindResourceFile(szPath) != NULL)
+		return;
+
+	// Build full path if relative
+	CGString sFullPath;
+	if (szPath[0] != '/' && m_sSCPBaseDir.GetLength() > 0)
+	{
+		sFullPath = CGFile::GetMergedFileName(m_sSCPBaseDir, szPath);
+	}
+	else
+	{
+		sFullPath = szPath;
+	}
+
+	CResourceScript* pNewScript = new CResourceScript;
+	ASSERT(pNewScript);
+	pNewScript->SetFilePath(sFullPath);
+	m_ResourceFiles.Add(pNewScript);
+
+	g_Log.Event(LOG_GROUP_INIT, LOGL_TRACE, "Indexing resource '%s'" LOG_CR, (LPCTSTR)sFullPath);
+}
+
+bool CResourceMgr::LoadResources(CResourceScript* pResScript)
+{
+	if (!pResScript)
+		return false;
+	if (!pResScript->Open())
+		return false;
+	LoadResourcesOpen(*pResScript);
+	pResScript->Close();
+	return true;
+}
+
+void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
+{
+	while (script.FindNextSection())
+	{
+		// Delegate to the virtual LoadScriptSection on the derived CSphereResourceMgr
+		CSphereResourceMgr* pMgr = static_cast<CSphereResourceMgr*>(this);
+		pMgr->LoadScriptSection(script);
+	}
+}
+
+bool CResourceMgr::OpenScriptFind(CScript& s, LPCTSTR pszName)
+{
+	// Try opening the file directly
+	if (pszName && s.Open(pszName))
+		return true;
+
+	// Try with the base directory prefix
+	if (pszName && m_sSCPBaseDir.GetLength() > 0)
+	{
+		CGString sPath = CGFile::GetMergedFileName(m_sSCPBaseDir, pszName);
+		if (s.Open(sPath))
+			return true;
+	}
+
+	// If pszName is NULL, try opening based on the file's already-set path
+	if (!pszName)
+	{
+		return s.Open();
+	}
+
+	return false;
+}
+
+CResourceFilePtr CResourceMgr::GetResourceFile(int iIndex)
+{
+	if (iIndex < 0 || iIndex >= m_ResourceFiles.GetSize())
+		return NULL;
+	return static_cast<CResourceFile*>(m_ResourceFiles[iIndex]);
+}
+
+CResourceDefPtr CResourceMgr::ResourceGetDef(UID_INDEX rid)
+{
+	int index = m_ResHash.FindKey(rid);
+	if (index < 0)
+		return NULL;
+	return m_ResHash.GetAt(index);
+}
+
+void CResourceMgr::AddResourceDir(LPCTSTR pszDirName)
+{
+#ifndef _WIN32
+	// Use opendir/readdir on Linux
+	if (!pszDirName || !pszDirName[0])
+		return;
+
+	DIR* pDir = opendir(pszDirName);
+	if (!pDir)
+	{
+		g_Log.Event(LOG_GROUP_INIT, LOGL_WARN, "Can't open resource directory '%s'" LOG_CR, pszDirName);
+		return;
+	}
+
+	struct dirent* pEntry;
+	while ((pEntry = readdir(pDir)) != NULL)
+	{
+		// Check for .scp extension
+		LPCTSTR pszExt = CGFile::GetFileNameExt(pEntry->d_name);
+		if (!pszExt || _stricmp(pszExt, ".scp"))
+			continue;
+
+		CGString sFullPath = CGFile::GetMergedFileName(pszDirName, pEntry->d_name);
+		AddResourceFile(sFullPath);
+	}
+	closedir(pDir);
+#endif
+}
+
+CResourceFilePtr CResourceMgr::LoadResourcesAdd(LPCTSTR pszNewName)
+{
+	if (!pszNewName || !pszNewName[0])
+		return NULL;
+
+	AddResourceFile(pszNewName);
+	CResourceFilePtr pFile = FindResourceFile(pszNewName);
+	if (pFile)
+	{
+		LoadResources(pFile);
+	}
+	return pFile;
+}
+
+void CResourceMgr::DeleteResourceFile(LPCTSTR pszFile)
+{
+	if (!pszFile || !pszFile[0])
+		return;
+
+	LPCTSTR pszTitle = CGFile::GetFileNameTitle(pszFile);
+	for (int i = 0; i < m_ResourceFiles.GetSize(); i++)
+	{
+		CResourceScript* pScript = m_ResourceFiles[i];
+		if (!pScript)
+			continue;
+		LPCTSTR pszExistingTitle = CGFile::GetFileNameTitle(pScript->GetFilePath());
+		if (!_stricmp(pszTitle, pszExistingTitle))
+		{
+			m_ResourceFiles.RemoveAt(i);
+			return;
+		}
+	}
+}
+
+//*************************************************************
 
 bool CSphereResourceMgr::LoadIni( bool fTest )
 {

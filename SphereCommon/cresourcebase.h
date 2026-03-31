@@ -89,18 +89,26 @@ class CResourceDef : public CResourceObj
 {
 private:
 	CSphereUID m_rid;		// the true resource id. (must be unique for the RES_TYPE)
+	CGString m_sName;		// the DEFNAME name
 
 public:
 	CResourceDef(CSphereUID rid);
 	CResourceDef(CSphereUID rid, LPCTSTR pszName) : CResourceObj(rid.GetHashCode()), m_rid(rid) { SetResourceName(pszName); }
-	LPCTSTR GetResourceName() const { throw "not implemented"; }
-	void SetResourceName(LPCTSTR pszName) { /* stub */ }
+	LPCTSTR GetResourceName() const { return m_sName; }
+	void SetResourceName(LPCTSTR pszName) { if (pszName) m_sName = pszName; }
 	void SetResourceVar(const void* pVarNum) { /* STUB */ }
 
-	virtual CGString GetName() const { throw "not implemented"; } // default to same as the DEFNAME name.
-	virtual bool s_LoadProps(CScript& s) { throw "not implemented"; } // Load an item from script
-	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { throw "not implemented"; }
-	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
+	virtual CGString GetName() const { return m_sName; } // default to same as the DEFNAME name.
+	virtual bool s_LoadProps(CScript& s)
+	{
+		while (s.ReadKeyParse())
+		{
+			s_PropSet(s.GetKey(), s.GetArgVar());
+		}
+		return true;
+	}
+	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
+	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; } // Execute command from script
 
 	CSphereUID GetUIDIndex() const
@@ -127,16 +135,30 @@ typedef CRefPtr<CResourceDef> CResourceDefPtr;
 class CResourceScript;
 class CResourceLink : public CResourceDef
 {
+private:
+	CResourceScript* m_pScript;
+	CScriptLineContext m_LineContext;
+
 public:
 	CResourceLink(CSphereUID rid);
 
-	CResourceScript* GetLinkFile() const { throw "not implemented"; }
-	CScriptLineContext GetLinkContext() const { return CScriptLineContext(); } // STUB
-	void CopyLink( const CResourceLink* pLink ) { /* STUB */ }
-	void SetLinkSection(CResourceScript* pScript) { /* STUB */ }
+	CResourceScript* GetLinkFile() const { return m_pScript; }
+	CScriptLineContext GetLinkContext() const { return m_LineContext; }
+	void CopyLink( const CResourceLink* pLink )
+	{
+		if (pLink)
+		{
+			m_pScript = pLink->m_pScript;
+			m_LineContext = pLink->m_LineContext;
+		}
+	}
+	void SetLinkSection(CResourceScript* pScript)
+	{
+		m_pScript = pScript;
+	}
 
-	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { throw "not implemented"; }
-	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; }
+	virtual HRESULT s_PropSet(LPCTSTR pszKey, const CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
+	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { throw "not implemented"; } // Execute command from script
 };
 typedef CRefPtr<CResourceLink> CResourceLinkPtr;
@@ -155,7 +177,7 @@ class CResourceNamed : public CResourceLink
 {
 public:
 	CResourceNamed(CSphereUID rid, LPCTSTR pszName) : CResourceLink(rid) { SetResourceName(pszName); }
-	CGString GetName() const { throw "not implemented"; }
+	CGString GetName() const { return GetResourceName(); }
 };
 
 class CUIDRefArray
@@ -273,7 +295,7 @@ public:
 class CResourceScript : public CScript, public CMemDynamic
 {
 public:
-	virtual void OnTick(bool fNow) { throw "not implemented"; }
+	virtual void OnTick(bool fNow) { /* no-op for now */ }
 
 	// A script file containing resource, speech, motives or events handlers.
 	// NOTE: we should check periodically if this file has been altered externally ?
@@ -285,7 +307,7 @@ typedef CRefPtr<CResourceScript> CResourceScriptPtr;
 class CResourceFile : public CResourceScript
 {
 public:
-	void OnTick(bool fNow) { throw "not implemented"; }
+	void OnTick(bool fNow) { /* no-op for now */ }
 };
 typedef CRefPtr<CResourceFile> CResourceFilePtr;
 
