@@ -371,10 +371,9 @@ extern TCHAR* Str_GetTemp();
 inline int Str_GetBare(TCHAR* pszOut, LPCTSTR pszInp, int iMaxSize, LPCTSTR pszStrip = NULL) { return 0; /* STUB */ }
 inline TCHAR* Str_TrimWhitespace(TCHAR* pStr) { return pStr; /* STUB */ }
 inline TCHAR* Str_GetNonWhitespace(LPCTSTR pStr) { return (TCHAR*)pStr; /* STUB */ }
-inline bool Str_Parse(TCHAR* pLine, TCHAR** ppArg, LPCTSTR pSep = NULL)
+inline bool Str_Parse(TCHAR* pLine, TCHAR** ppArg, LPCTSTR pSep)
 {
 	// Split line at separator into key + arg
-	// Default separators: '=', space, tab, comma
 	TCHAR* p = pLine;
 	while (*p)
 	{
@@ -410,11 +409,19 @@ inline bool Str_Parse(TCHAR* pLine, TCHAR** ppArg, LPCTSTR pSep = NULL)
 	*ppArg = p; // empty string at end
 	return false;
 }
-// Legacy 2-arg overload
+inline bool Str_Parse(TCHAR* pLine, TCHAR** ppArg)
+{
+	return Str_Parse(pLine, ppArg, (LPCTSTR)NULL);
+}
+// Legacy overloads for callers that pass TCHAR* instead of TCHAR**
+// These callers are broken (can't modify caller's pointer by value) but must compile.
+inline bool Str_Parse(TCHAR* pLine, TCHAR* pArg2, LPCTSTR pSep)
+{
+	return false; // STUB - caller needs migration to TCHAR** form
+}
 inline bool Str_Parse(TCHAR* pLine, TCHAR* pArg2)
 {
-	TCHAR* pTmp;
-	return Str_Parse(pLine, &pTmp);
+	return false; // STUB - caller needs migration to TCHAR** form
 }
 inline int Str_GetEndWhitespace(LPCTSTR pStr, int iLen)
 {
