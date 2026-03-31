@@ -1,6 +1,8 @@
-#pragma once
+#ifndef _INC_CWINDOW_H
+#define _INC_CWINDOW_H
 
-#include "..\SphereSvr\stdafx.h"
+#ifdef _WIN32
+#include "stdafx.h"
 #include "cstring.h"
 #include <RICHEDIT.H>	// CRichEditCtrl
 
@@ -278,3 +280,7 @@ public:
 	void Add(LPCTSTR pszCmd) { throw "not implemented"; }
 	LPCTSTR ScrollCmd(DWORD dwParam) { throw "not implemented"; }
 };
+
+#endif // _WIN32
+
+#endif // _INC_CWINDOW_H

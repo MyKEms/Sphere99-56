@@ -51,31 +51,13 @@
 #include <sys/types.h>
 #include <sys/timeb.h>
 #include <unistd.h>
+#include <limits.h>
 
-#define HANDLE			DWORD
-#define _cdecl
-#define LONG			DWORD
-#define LONGLONG		DWORD	// This should be 64 bit ???
-#define WCHAR			unsigned short
-#define FAR
-#define E_FAIL			0x80004005
-#define BOOL			unsigned short
+// Type definitions are now in spherelib/common.h - no duplicates here.
+#ifndef PUINT
 #define PUINT			unsigned int *
-#define LPTSTR			LPCTSTR
-
-#define IsBadReadPtr( p, len )		((p) == NULL)
-#define IsBadStringPtr( p, len )	((p) == NULL)
-#define Sleep(mSec)					usleep( (mSec) * 1000 )	// arg is microseconds = 1/1000000
-
-#ifndef INT_MIN	// now in limits.h
-#define INT_MIN			(-2147483647) // - 1)
-#define INT_MAX			2147483647    // maximum (signed) int value
 #endif
-#ifndef SHRT_MIN
-#define SHRT_MIN    (-32768)        // minimum (signed) short value
-#define SHRT_MAX      32767         // maximum (signed) short value
-#define USHRT_MAX	0xffff
-#endif
+
 #endif // !_WIN32
 
 #ifdef _DEBUG
@@ -118,15 +100,15 @@ extern void Assert_CheckFail( const char * pExp, const char *pFile, unsigned uLi
 
 #endif	// ! _DEBUG
 
-#include "../spherelib/spherelib.h"
+#include "spherelib.h"
 #include "cresourcebase.h"
 #include "spheremul.h"
 #include "sphereproto.h"
 #include "cregionmap.h"
-#include "cmulinst.h"
-#include "cmulmap.h"
+#include "cMulInst.h"
+#include "cMulMap.h"
 #include "cmulmulti.h"
-#include "cmultile.h"
+#include "cMulTile.h"
 #include "ccrypt.h"
 
 #ifdef SPHERE_SVR
@@ -156,7 +138,7 @@ enum SPHERECLIENTMSG_TYPE
 #endif
 
 #ifdef SPHERE_SVR
-#include "../spheresvr/spheresvr.h"
+#include "spheresvr.h"
 #endif
 
 #endif	// _INC_SPHERECOMMON_H

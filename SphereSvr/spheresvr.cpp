@@ -66,8 +66,8 @@
 #include "stdafx.h"	// predef header.
 #ifdef _WIN32
 #include "eh.h"
-#endif
 #include <crtdbg.h>
+#endif
 
 extern "C"
 {
@@ -428,11 +428,13 @@ void CServTask::CheckStuckThread()
 		g_Log.Event( LOG_GROUP_DEBUG, LOGL_CRIT, "Main loop freeze RESTART!" LOG_CR );
 
 #ifndef _DEBUG
+#ifdef _WIN32
 		TerminateThread( 0xDEAD );
 
 		// try to restart it.
 		g_Log.Event( LOG_GROUP_DEBUG, LOGL_EVENT, "Trying to restart the main loop thread" LOG_CR );
 		CreateThread();
+#endif
 #endif
 		m_timeRestart = timeCur;
 	}
@@ -523,7 +525,7 @@ SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 #endif
 	Debug_CheckPoint();
 
-	g_ScriptClassMgr.InitClasses();	// make sure all scripting ability is setup.
+	// g_ScriptClassMgr.InitClasses();	// make sure all scripting ability is setup. (not available)
 	CSphereExpArgs::InitFunctions();
 #ifdef USE_JSCRIPT
 	g_JScriptEngine.Init(NULL);

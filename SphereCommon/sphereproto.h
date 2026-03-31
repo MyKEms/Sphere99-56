@@ -11,7 +11,7 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cstring2.h"
+#include "cstring2.h"
 
 #ifndef _WIN32
 #include <netinet/in.h>

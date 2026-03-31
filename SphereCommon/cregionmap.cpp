@@ -8,6 +8,12 @@
 #include "spherecommon.h"
 #include "spheremul.h"
 #include "cregionmap.h"
+
+// Stub for missing function
+static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
+	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
+}
+static bool HasSymbolicResourceName() { return false; }
 #include "cpointmap.h"
 
 //*************************************************************************
@@ -248,7 +254,7 @@ HRESULT CRegionBasic::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptCons
 		vValRet.SetBool( IsFlag(REGION_FLAG_NO_PVP));
 		break;
 	case P_P:
-		vValRet = m_pt.v_Get();
+		vValRet = CGVariant(m_pt.v_Get());
 		break;
 	case P_Recall:
 	case P_RecallOut:

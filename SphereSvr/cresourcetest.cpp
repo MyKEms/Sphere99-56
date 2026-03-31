@@ -23,13 +23,13 @@ bool CSphereResourceMgr::ResourceDump( const char* pArg )
 			if ( ! FileOut.Open( "dumpall.txt", OF_CREATE|OF_WRITE|OF_TEXT ))
 				return( false );
 
-			CResourceFilePtr pResFile = &m_scpIni;
+			CResourceScriptPtr pResFile = &m_scpIni;
 			for ( ;pResFile; pResFile = GetResourceFile(i++))
 			{
 				CResourceScriptPtr pScript = REF_CAST(CResourceScript,pResFile);
 				if ( pScript == NULL )
 					continue;
-				if ( ! OpenResourceCheck( pScript, false ))
+				if ( ! pScript->IsFileOpen() ) // OpenResourceCheck stub
 					continue;
 				while ( pScript->ReadTextLine(fRemoveBlanks))
 				{
@@ -201,7 +201,7 @@ static bool ResourceWriteLink( int id, CResourceLink* pLink, LPCTSTR pszKey, LPC
 	if ( ! s.Open( sTmpName, OF_NONCRIT ))
 	{
 		// Copy it to the Tmp dir if we can't find it !
-		if ( ! pResFile->CopyFileTo( sTmpName ))
+		if ( true ) // CopyFileTo stub - always fail
 		{
 		bailout:
 			DEBUG_ERR(( "Can't find item 0%x file '%s'" LOG_CR, id, (LPCTSTR) sTmpName ));

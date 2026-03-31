@@ -9,7 +9,7 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherecommon/cobjbasetemplate.h"
+#include "cobjbasetemplate.h"
 #include "cobjbasedef.h"
 #include "spheresvr.h"
 

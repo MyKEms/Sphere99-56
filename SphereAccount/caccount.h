@@ -9,11 +9,11 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cresourceobj.h"
-#include "../spherelib/csocket.h"
-#include "../spherelib/ctime.h"
-#include "../spherecommon/sphereproto.h"
-#include "../spherecommon/cresourcebase.h"
+#include "CResourceObj.h"
+#include "CSocket.h"
+#include "ctime.h"
+#include "sphereproto.h"
+#include "cresourcebase.h"
 #include "caccountbase.h"
 
 class CAccount : public CResourceObj

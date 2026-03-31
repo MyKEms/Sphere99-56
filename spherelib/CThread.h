@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CTHREAD_H
+#define _INC_CTHREAD_H
 
 #ifdef _WIN32
 #define THREAD_ENTRY_RET void
@@ -35,3 +36,5 @@ public:
 
 	void WaitForClose(int iSec) { throw "not implemented"; }
 };
+
+#endif // _INC_CTHREAD_H

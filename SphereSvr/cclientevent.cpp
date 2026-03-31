@@ -4,6 +4,10 @@
 //
 #include "stdafx.h"	// predef header.
 
+static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
+	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
+}
+
 /////////////////////////////////
 // Events from the Client.
 
@@ -1155,7 +1159,7 @@ void CClient::Event_BBoardRequest( CSphereUID uid, const CUOEvent* pEvent )
 		if ( pBoard->GetCount() > 32 )
 		{
 			// Role a message off.
-			pBoard->GetAt(pBoard->GetCount()-1)->DeleteThis();
+			static_cast<CItem*>(pBoard->GetAt(pBoard->GetCount()-1))->DeleteThis();
 		}
 		// if pMsgItem then this is a reply to it !
 		{
@@ -1169,7 +1173,7 @@ void CClient::Event_BBoardRequest( CSphereUID uid, const CUOEvent* pEvent )
 
 			int lenstr = pEvent->BBoard.m_data[0];
 			pMsgNew->SetName( (LPCTSTR) &pEvent->BBoard.m_data[1] );
-			pMsgNew->m_itBook.m_Time = CServTime::GetCurrentTime();
+			// pMsgNew->m_itBook.m_Time = CServTime::GetCurrentTime(); // field removed
 			pMsgNew->m_sAuthor = m_pChar->GetName();
 			pMsgNew->m_uidLink = m_pChar->GetUID();	// Link it to you forever.
 
@@ -2244,7 +2248,7 @@ void CClient::Event_MenuChoice( CSphereUID uidItem, DWORD context, WORD select )
 	{
 	case CLIMODE_MENU:
 		// A generic menu from script.
-		ItemMenu_OnSelect( m_Targ.m_tmMenu.m_ResourceID, select, g_World.ObjFind(uidItem) );
+		Menu_OnSelect( m_Targ.m_tmMenu.m_ResourceID, select, g_World.ObjFind(uidItem) );
 		return;
 	case CLIMODE_MENU_SKILL:
 		// Some skill menu got us here.

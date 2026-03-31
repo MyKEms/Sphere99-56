@@ -490,7 +490,7 @@ void CAccountMgr::Cmd_AllUnused( CScriptConsole* pSrc, int iDaysTest, CGVariant&
 {
 	// do something to all the unused accounts.
 
-	CGString sCmd = vCommand;
+	CGString sCmd = (LPCTSTR)vCommand;
 	CGTime datetime;
 	datetime.InitTimeCurrent();
 	int iDaysCur = datetime.GetTotalDays();

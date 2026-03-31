@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CVALUERANGE_H
+#define _INC_CVALUERANGE_H
 struct CValueRangeInt
 {
 	// Simple linearity
@@ -115,3 +116,5 @@ public:
 	void v_Get(CGVariant& val) { throw "not implemented"; }
 	void v_Set(CGVariant& val) { throw "not implemented"; }
 };
+
+#endif // _INC_CVALUERANGE_H

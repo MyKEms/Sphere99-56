@@ -465,7 +465,7 @@ PNT_Z_TYPE CItemDef::GetItemHeight( ITEMID_TYPE id, CAN_TYPE& wBlockThis ) // st
 	int index = g_Cfg.m_ResHash.FindKey(rid);
 	if ( index >= 0 )	// already loaded ?
 	{
-		CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAt( rid, index );
+		CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAt( index );
 		ASSERT(pResDef);
 		CItemDefPtr pBase = REF_CAST(CItemDef,pResDef);
 		if ( pBase )
@@ -1022,7 +1022,7 @@ CItemDefPtr CItemDef::MakeDupeReplacement( CItemDef* pBase, CGVariant& vValMaste
 const CScriptProp CItemDefWeapon::sm_Props[CItemDefWeapon::P_QTY+1] =
 {
 #define CITEMDEFWEAPONPROP(a,b,c)	CSCRIPT_PROP_IMP(a,b,c)
-#include "citemdefweaponprops.tbl"
+#include "CItemDefWeaponProps.tbl"
 #undef CITEMDEFWEAPONPROP
 	NULL,	
 };

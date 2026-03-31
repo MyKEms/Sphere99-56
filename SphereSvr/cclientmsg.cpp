@@ -1272,7 +1272,7 @@ void CClient::addChar( const CChar* pChar )
 			// Make certain that no more than one of each layer goes out to client....crashes otherwise!!
 			if ( fLayer[layer] )
 			{
-				DEBUG_ERR(( "'%s' Has multiple items on layer %d, '%s'" LOG_CR, (LPCTSTR) GetResourceName(), layer, (LPCTSTR) pItem->GetResourceName()));
+				DEBUG_ERR(( "'%s' Has multiple items on layer %d, '%s'" LOG_CR, (LPCTSTR) GetName(), layer, (LPCTSTR) pItem->GetName()));
 				continue;
 			}
 			fLayer[layer] = true;
@@ -3271,7 +3271,11 @@ LOGIN_ERR_TYPE CClient::Setup_Start( CChar* pChar ) // Send character startup st
 	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Setup_Start acct='%s', char='%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) GetAccount()->GetName(), (LPCTSTR) pChar->GetName());
 
 #ifndef _DEBUG
+#ifdef _WIN32
 	srand( GetTickCount()); // Perform randomize
+#else
+	srand( time(NULL) ); // Perform randomize
+#endif
 #endif
 
 	bool fQuickLogIn = false;

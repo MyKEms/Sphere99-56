@@ -6,7 +6,7 @@
 //
 
 #include "stdafx.h"	// predef header.
-#include "cchat.h"
+#include "CChat.h"
 
 void CClient::Event_ChatButton(const NCHAR* pszName) // Client's chat button was pressed
 {
@@ -922,7 +922,7 @@ void CChatChannel::Voice_Set( CClient* pClient, bool fFlag )
 	ASSERT(pAccount);
 	if (fFlag)
 	{
-		m_NoVoices.DetachObj( pAccount );
+		m_NoVoices.DetachObj( (const CResourceObj*)(CAccount*)pAccount );
 	}
 	else 
 	{
@@ -1004,7 +1004,7 @@ void CChatChannel::Moderator_Set(CClient* pClient, bool fFlag)
 	ASSERT(pAccount);
 	if (!fFlag)
 	{
-		m_Moderators.DetachObj( pAccount );
+		m_Moderators.DetachObj( (const CResourceObj*)(CAccount*)pAccount );
 	}
 	else
 	{

@@ -1183,8 +1183,8 @@ void CChar::Memory_Fight_Retreat( CChar* pTarg, CItemMemory* pFight )
 		return;
 
 	ASSERT(pFight);
-	int iMyDistFromBattle = GetTopPoint().GetDist( pFight->m_itEqMemory.m_pt );
-	int iHisDistFromBattle = pTarg->GetTopPoint().GetDist( pFight->m_itEqMemory.m_pt );
+	int iMyDistFromBattle = GetTopPoint().GetDist( pFight->m_itEqMemory.m_ptStart );
+	int iHisDistFromBattle = pTarg->GetTopPoint().GetDist( pFight->m_itEqMemory.m_ptStart );
 
 	bool fCowardice = ( iMyDistFromBattle > iHisDistFromBattle );
 

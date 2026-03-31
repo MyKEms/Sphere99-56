@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CSCRIPTABLEINTERFACE_H
+#define _INC_CSCRIPTABLEINTERFACE_H
 
 #define CSCRIPTPROP_RETNUL	0x0001
 #define CSCRIPTPROP_RETREF	0x0002
@@ -67,4 +68,4 @@ public:
 	bool IsInit() { throw "not implemented"; }
 };
 
-
+#endif // _INC_CSCRIPTABLEINTERFACE_H

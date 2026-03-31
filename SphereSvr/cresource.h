@@ -9,10 +9,10 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cassoc.h"
-#include "../spherecommon/cresourcebase.h"
-#include "../sphereaccount/caccountbase.h"
-#include "../spherecommon/cmulmulti.h"
+#include "CAssoc.h"
+#include "cresourcebase.h"
+#include "caccountbase.h"
+#include "cmulmulti.h"
 
 class CAccount;
 class CClient;

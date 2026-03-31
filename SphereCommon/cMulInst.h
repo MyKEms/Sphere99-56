@@ -9,8 +9,8 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cfile.h"
-#include "../spherelib/carray.h"
+#include "cfile.h"
+#include "CArray.h"
 
 #include "spheremul.h"
 

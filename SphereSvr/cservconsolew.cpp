@@ -12,7 +12,7 @@
 #include <windowsx.h>
 #include <commctrl.h>	// NM_RCLICK
 #include "resource.h"
-#include "../spherelib/cwindow.h"
+#include "cwindow.h"
 
 #define WM_USER_POST_MSG		(WM_USER+10)
 #define WM_USER_TRAY_NOTIFY		(WM_USER+12)

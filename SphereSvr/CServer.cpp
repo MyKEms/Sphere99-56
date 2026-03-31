@@ -4,6 +4,13 @@
 //
 
 #include "stdafx.h"	// predef header.
+#ifndef _WIN32
+#include <signal.h>
+#include <cstring>
+#define strcmpi strcasecmp
+static DWORD GetTickCount() { return (DWORD)(time(NULL)*1000); }
+static int MulDiv(int a, int b, int c) { return (int)(((long long)a * b) / c); }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // -CServer
@@ -46,12 +53,13 @@ CServer::~CServer()
 	StaticDestruct();	// static singleton
 }
 
+template<>
 void CScriptClassTemplate<CServer>::InitScriptClass()
 {
 	if ( IsInit())
 		return;
-	AddSubClass(g_World.GetScriptClass());
-	AddSubClass(g_Cfg.GetScriptClass());
+	AddSubClass(&g_World.sm_ScriptClass);
+	AddSubClass(&g_Cfg.sm_ScriptClass);
 	CScriptClass::InitScriptClass();
 }
 
@@ -525,10 +533,10 @@ bool CServer::OnConsoleCmd( CGString& sText, CScriptConsole* pSrc )
 		break;
 
 	case 'H':	// Hear all said.
-		s_Method( M_HearAll, CGVariant("!"), vValRet, pSrc );
+		{ CGVariant vTmpH("!"); s_Method( M_HearAll, vTmpH, vValRet, pSrc ); }
 		break;
 	case 'S': // Toggle
-		s_Method( M_Secure, CGVariant("!"), vValRet, pSrc );
+		{ CGVariant vTmpS("!"); s_Method( M_Secure, vTmpS, vValRet, pSrc ); }
 		break;
 	case 'L': // Turn the log file on or off.
 		s_Method( M_Log, vValRet, vValRet, pSrc );
@@ -1291,7 +1299,7 @@ void CServer::OnTick()
 
 	if ( g_ServConsole.IsCommandReady())	// window is on another thread ?
 	{
-		OnConsoleCmd( g_ServConsole.GetCommand(), this );
+		{ CGString sCmd = g_ServConsole.GetCommand(); OnConsoleCmd( sCmd, this ); }
 	}
 
 	SetValidTime();	// we are a valid game server.
@@ -1400,7 +1408,7 @@ bool CServer::SocketsInit() // Initialize sockets
 	// What are we listing our port as to the world.
 	// Tell the admin what we know.
 
-	TCHAR szName[ _MAX_PATH ];
+	TCHAR szName[ 260 ];
 	struct hostent* pHost = NULL;
 	int iRet = gethostname( szName, sizeof( szName ));
 	if ( iRet )

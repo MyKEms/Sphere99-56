@@ -1,11 +1,10 @@
-#pragma once
 // CAtom.h
 //
 
 #ifndef _INC_CATOM_H
 #define _INC_CATOM_H
 
-#include "carray.h"
+#include "CArray.h"
 
 class CAtomDef : public CGString
 {

@@ -186,7 +186,7 @@ HRESULT CServerDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_EmailLink:
 		if ( this != &g_Serv &&
 			! g_Serv.m_sEMail.IsEmpty() &&
-			strstr( vVal, g_Serv.m_sEMail ))
+			strstr( (LPCTSTR)vVal.GetPSTR(), (LPCTSTR)g_Serv.m_sEMail ))
 			return( HRES_BAD_ARGUMENTS );
 		if ( ! CMailSMTP::IsValidEmailAddressFormat(vVal))
 			return( HRES_BAD_ARGUMENTS );
@@ -615,7 +615,7 @@ HRESULT CServerDef::ParseStatus( LPCTSTR pszStatus, bool fStore )
 			}
 		}
 
-		s_PropSet( pszKey, CGVariant(pEquals));
+		{ CGVariant vTmp(pEquals); s_PropSet( pszKey, vTmp ); }
 	}
 
 	if ( fStore )

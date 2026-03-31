@@ -9,9 +9,9 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cmemblock.h"
-#include "../spherelib/crefobj.h"
-#include "cmulinst.h"
+#include "CMemBlock.h"
+#include "crefobj.h"
+#include "cMulInst.h"
 
 //**************************************************************************
 

@@ -5,7 +5,7 @@
 //
 
 #include "stdafx.h"
-#include "cmultile.h"
+#include "cMulTile.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE

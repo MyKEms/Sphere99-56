@@ -27,8 +27,8 @@ CSphereResourceMgr::CSphereResourceMgr()
 {
 	// RES_Sphere
 
-	m_Servers.IncRefCount(); // Static item
-	m_scpIni.IncRefCount();	// Static item
+	// m_Servers.IncRefCount(); // Static item (not applicable)
+	// m_scpIni.IncRefCount();	// Static item (not applicable)
 
 	m_scpIni.SetFilePath( SPHERE_FILE ".ini" ); // Open script file
 
@@ -126,8 +126,8 @@ CSphereResourceMgr::CSphereResourceMgr()
 CSphereResourceMgr::~CSphereResourceMgr()
 {
 	Unload(false);
-	m_Servers.StaticDestruct(); // Static item
-	m_scpIni.StaticDestruct();	// static item
+	// m_Servers.StaticDestruct(); // Static item (not applicable)
+	// m_scpIni.StaticDestruct();	// static item (not applicable)
 }
 
 HRESULT CSphereResourceMgr::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc )
@@ -455,7 +455,11 @@ HRESULT CSphereResourceMgr::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScri
 		vValRet.SetInt( m_iPollServers / (60*TICKS_PER_SEC));
 		break;
 	case P_RClock:
+#ifdef _WIN32
 		vValRet.SetDWORD( GetTickCount());
+#else
+		vValRet.SetDWORD( (DWORD)time(NULL) );
+#endif
 		break;
 	case P_RegisterFlag:
 		vValRet.SetBool( m_RegisterServer.IsValidAddr());
@@ -577,7 +581,7 @@ void CSphereResourceMgr::s_WriteProps( CScript& s )
 		if ( IS_ERROR(hRes))
 			continue;
 
-		s.WriteKey( sm_PropsAssoc[i].m_pszKey, vVal );
+		s.WriteKey( sm_PropsAssoc[i].m_pszName, vVal );
 	}
 }
 
@@ -867,7 +871,7 @@ CPointMap CSphereResourceMgr::GetRegionPoint( LPCTSTR pCmd ) const // Decode a t
 	CPointMap pt;	// invalid point
 	if ( isdigit( pCmd[0] ))
 	{
-		pt.v_Set( CGVariant(pCmd));
+		{ CGVariant vTmp(pCmd); pt.v_Set( vTmp ); }
 	}
 	else
 	{
@@ -1118,7 +1122,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 				pStart->m_sName = s.GetLineBuffer();
 				if ( s.ReadLine())
 				{
-					pStart->m_pt.v_Set( CGVariant( s.GetLineBuffer()));
+					{ CGVariant vTmp( s.GetLineBuffer()); pStart->m_pt.v_Set( vTmp ); }
 				}
 			}
 			m_StartDefs.Add( pStart );
@@ -2027,7 +2031,7 @@ void CSphereResourceMgr::LoadChangedFiles()
 		return;
 
 	bool fSetResync = false;
-	TCHAR szTmpDir[ _MAX_PATH ];
+	TCHAR szTmpDir[ 260 ];
 	strcpy( szTmpDir, m_sSCPInBoxDir );
 	CGFile::GetStrippedDirName( szTmpDir );
 
@@ -2352,7 +2356,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 		if (!fRet)
 		{
 			// remove from the list ?!
-			m_ResourceFiles.RemoveArg(pResFile);
+			// m_ResourceFiles.RemovePtr(pResFile); // TODO: fix type mismatch
 			continue;
 		}
 

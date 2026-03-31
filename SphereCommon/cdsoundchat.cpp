@@ -6,7 +6,7 @@
 
 #include "stdafx.h"
 #include "cdsound.h"
-#include "../spherelib/common.h"
+#include "common.h"
 
 #if 0 // def SPHERE_CLIENT
 

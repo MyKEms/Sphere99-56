@@ -9,9 +9,9 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherelib/cresourceobj.h"
+#include "CResourceObj.h"
 #include "cobjbasetemplate.h"
-#include "cmulmap.h"
+#include "cMulMap.h"
 #include "cregionmap.h"
 
 class CCharsList : public CGObListType<CChar>

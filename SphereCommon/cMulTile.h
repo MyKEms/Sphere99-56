@@ -13,11 +13,11 @@
 #ifdef _WIN32
 
 #ifdef SPHERE_CLIENT
-#include "../SphereLib/cdirectdraw.h"		// CDirectSurface
+#include "cdirectdraw.h"		// CDirectSurface
 #endif
 
-#include "CMulMap.h"
-#include "CMulMulti.h"
+#include "cMulMap.h"
+#include "cmulmulti.h"
 
 inline COLORREF CvtColorToCOLORREF( COLOR_TYPE wColor )
 {

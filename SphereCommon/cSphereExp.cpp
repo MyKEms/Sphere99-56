@@ -154,7 +154,7 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));
 		break;
 	case F_Var:
-		return g_Cfg.m_Var.s_MethodTags( vArgs, vValRet, m_pSrc );
+		return g_Cfg.m_Var.s_MethodTags( vArgs, vValRet, GetSrc() );
 	default:
 		DEBUG_CHECK(0);
 		return( HRES_INTERNAL_ERROR );
@@ -203,9 +203,9 @@ void CSphereExpArgs::InitFunctions()	// static
 
 HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet ) // virtual
 {
-	CScriptObj::s_FixExtendedProp( pszKey, "ArgV", vArgs );
-	CScriptObj::s_FixExtendedProp( pszKey, "ArgChk", vArgs );
-	CScriptObj::s_FixExtendedProp( pszKey, "ArgTxt", vArgs );
+	s_FixExtendedProp( pszKey, "ArgV", vArgs );
+	s_FixExtendedProp( pszKey, "ArgChk", vArgs );
+	s_FixExtendedProp( pszKey, "ArgTxt", vArgs );
 
 	F_TYPE_ iProp = (F_TYPE_) s_FindKeyInTable( pszKey, sm_Functions );
 	if ( iProp < 0 )

@@ -18,6 +18,7 @@ class CServTime
     // A time stamp in the server/game world.
 public:
     long m_lPrivateTime;
+    DWORD m_dwTickCount;
 public:
     long GetTimeRaw() const
     {

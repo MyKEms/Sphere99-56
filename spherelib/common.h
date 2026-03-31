@@ -1,4 +1,89 @@
-#pragma once
+#ifndef _INC_COMMON_H
+#define _INC_COMMON_H
+
+#include <cstdio>
+#include <cstdarg>
+#include <climits>
+
+#ifndef _WIN32
+// Windows type definitions for Linux
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <cctype>
+#include <strings.h>
+
+typedef unsigned char BYTE;
+typedef unsigned short WORD;
+typedef unsigned int UINT;
+typedef unsigned int DWORD;
+typedef int INT;
+typedef long LONG;
+typedef long long LONGLONG;
+typedef const char* LPCSTR;
+typedef const char* LPCTSTR;
+typedef char* LPSTR;
+typedef char* LPTSTR;
+typedef int HRESULT;
+typedef unsigned short WCHAR;
+typedef void* HANDLE;
+typedef void* HMODULE;
+typedef void* HINSTANCE;
+typedef void* HWND;
+
+#ifndef FALSE
+#define FALSE 0
+#define TRUE 1
+#endif
+typedef int BOOL;
+
+#define E_FAIL ((HRESULT)0x80004005L)
+#define NO_ERROR 0
+#define S_OK 0
+#define S_FALSE 1
+#define IS_ERROR(hr) ((hr) < 0)
+#define FAILED(hr) ((hr) < 0)
+#define SUCCEEDED(hr) ((hr) >= 0)
+#define HRESULT_CODE(hr) ((hr) & 0xFFFF)
+#define HRES_BAD_ARG_QTY E_FAIL
+#define HRES_INVALID_HANDLE ((HRESULT)0x80070006L)
+#define HRES_UNKNOWN_PROPERTY ((HRESULT)0x80020006L)
+#define HRES_INTERNAL_ERROR ((HRESULT)0x80004005L)
+#define FAR
+#define _cdecl
+#define __cdecl
+
+// Win32 struct
+struct POINT { long x; long y; };
+struct POINTS { short x; short y; };
+struct RECT { long left; long top; long right; long bottom; };
+
+// Win32 macros
+#define MAKEWORD(a, b)   ((WORD)(((BYTE)((DWORD)(a) & 0xff)) | ((WORD)((BYTE)((DWORD)(b) & 0xff))) << 8))
+#define LOBYTE(w)        ((BYTE)((DWORD)(w) & 0xff))
+#define HIBYTE(w)        ((BYTE)(((DWORD)(w) >> 8) & 0xff))
+#define LOWORD(l)        ((WORD)((DWORD)(l) & 0xffff))
+#define HIWORD(l)        ((WORD)(((DWORD)(l) >> 16) & 0xffff))
+#define TEXT(x)          x
+#define _TEXT(x)         (char*)x
+
+#define IsBadReadPtr(p, len)    ((p) == NULL)
+#define IsBadStringPtr(p, len)  ((p) == NULL)
+
+// MSVC -> POSIX string function mappings
+#define _stricmp  strcasecmp
+#define _strnicmp strncasecmp
+#define _strlwr(s) ({ char* _p = (s); while (*_p) { *_p = tolower(*_p); _p++; } (s); })
+#define _strupr(s) ({ char* _p = (s); while (*_p) { *_p = toupper(*_p); _p++; } (s); })
+#define _vsnprintf vsnprintf
+#define _snprintf  snprintf
+
+#define Sleep(mSec) usleep((mSec) * 1000)
+#include <unistd.h>
+
+#define min(a,b) ((a)<(b)?(a):(b))
+#define max(a,b) ((a)>(b)?(a):(b))
+#endif // !_WIN32
 
 #define MIN min
 #define MAX max
@@ -25,6 +110,12 @@
 #define __printfargs(a,b) __attribute__ ((format(printf, a, b)))
 #else
 #define __printfargs(a,b)
+#endif
+
+// Fallback ASSERT if not yet defined by spherecommon.h
+#ifndef ASSERT
+#include <cassert>
+#define ASSERT assert
 #endif
 
 #ifndef MAKEDWORD
@@ -107,11 +198,12 @@ extern CLogBase* g_pLog;
 class CGException
 {
 public:
-	CGException() { throw "not implemented"; }
-	CGException(LOGL_TYPE level, int lastError, LPCTSTR pszMessage) { throw "not implemented"; }
+	LOGL_TYPE m_eSeverity;
+	CGException() : m_eSeverity(LOGL_EVENT) {}
+	CGException(LOGL_TYPE level, int lastError, LPCTSTR pszMessage) : m_eSeverity(level) {}
 
-	LOGL_TYPE GetSeverity() const { throw "not implemented"; }
-	void GetErrorMessage(char* pBuf, int iBufLen) { throw "not implemented"; }
+	LOGL_TYPE GetSeverity() const { return m_eSeverity; }
+	void GetErrorMessage(char* pBuf, int iBufLen) { /* STUB */ }
 };
 
 class CGSystemInfo
@@ -130,5 +222,7 @@ public:
 	LPCTSTR FindValSorted(int iVal) const { throw "not implemented"; }
 };
 
-int CvtUNICODEToSystem(TCHAR* pOut, int iSizeOutBytes, WCHAR* pwChar, int iSizeInBytes) { throw "not implemented"; }
-int CvtSystemToUNICODE(WCHAR* wChar, int iSizeInBytes, LPCTSTR pInp) { throw "not implemented"; }
+inline int CvtUNICODEToSystem(TCHAR* pOut, int iSizeOutBytes, WCHAR* pwChar, int iSizeInBytes) { return 0; /* STUB */ }
+inline int CvtSystemToUNICODE(WCHAR* wChar, int iSizeInBytes, LPCTSTR pInp) { return 0; /* STUB */ }
+
+#endif // _INC_COMMON_H

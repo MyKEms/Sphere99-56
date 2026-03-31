@@ -287,7 +287,8 @@ bool CPartyDef::Disband( CSphereUID uidMaster )
 		pChar->m_pParty.ReleaseRefObj();
 	}
 
-	DeleteThis();	// should remove itself from the world list.
+	RemoveSelf();	// should remove itself from the world list.
+	delete this;
 	return( true );
 }
 

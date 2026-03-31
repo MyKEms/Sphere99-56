@@ -7,8 +7,8 @@
 #include "spherecommon.h"
 #include "spheremul.h"
 #include "cregionmap.h"
-#include "cmulmap.h"
-#include "cmulinst.h"
+#include "cMulMap.h"
+#include "cMulInst.h"
 
 //****************************************************************
 
@@ -202,10 +202,10 @@ void CMulStaticsBlock::LoadStatics( const CMulMap* pMap, DWORD ulBlockIndex )
 		datafile = (VERFILE_TYPE)( pMap->m_file+2 );
 	}
 
-	m_Statics.SetSize( index.GetBlockLength() / sizeof( CMulStaticItemRec ));
+	m_Statics.SetCount( index.GetBlockLength() / sizeof( CMulStaticItemRec ));
 	ASSERT( GetStaticQty());
 
-	if ( ! g_MulInstall.ReadMulData( datafile, index, m_Statics.GetData() ))
+	if ( ! g_MulInstall.ReadMulData( datafile, index, m_Statics.GetBasePtr() ))
 	{
 		throw CGException(LOGL_CRIT, CGFile::GetLastError(), "CMulMapBlock: Read fStatics0");
 	}

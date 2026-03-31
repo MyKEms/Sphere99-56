@@ -3,6 +3,16 @@
 // Copyright 1996 - 2001 Menace Software (www.menasoft.com)
 //
 #include "stdafx.h"	// predef header.
+#ifndef _WIN32
+#include <netinet/tcp.h>
+#endif
+
+static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
+	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
+}
+static void s_DumpHelp(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) {
+	// STUB
+}
 
 /////////////////////////////////////////////////////////////////
 // -CClient stuff.

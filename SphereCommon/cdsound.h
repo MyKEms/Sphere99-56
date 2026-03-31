@@ -12,7 +12,7 @@
 #ifdef _WIN32
 
 //#include <d3d8types.h>
-#include "..\spherelib\cmemblock.h"
+#include "CMemBlock.h"
 #include "cpointmap.h"
 
 #ifdef D3DRGB

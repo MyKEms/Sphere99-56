@@ -9,10 +9,10 @@
 #pragma once
 #endif // _MSC_VER >= 1000
 
-#include "../spherecommon/sphereproto.h"
-#include "../spherecommon/csectortemplate.h"
-#include "../spherelib/common.h"
-#include "../spheresvr/cobjbase.h"
+#include "sphereproto.h"
+#include "csectortemplate.h"
+#include "common.h"
+#include "cObjBase.h"
 
 struct CSectorEnviron	// When these change it is an CCharDef::T_EnvironChange,
 {
@@ -266,6 +266,8 @@ public:
 	}
 
 	// UID Managenent
+	void SetPreventUIDReuse() { /* STUB */ }
+	void SetAllowUIDReuse() { /* STUB */ }
 
 	int FixObjTry( CObjBase* pObj, int iUID = 0 );
 	int  FixObj( CObjBase* pObj, int iUID = 0 );
@@ -447,6 +449,8 @@ public:
 	void Save( bool fForceImmediate ); // Save world state
 	bool LoadAll( LPCTSTR pszLoadName = NULL );
 	void Close( bool fResources );
+
+	DWORD LoadUID( DWORD dwUID, CResourceObj* pObj ) { return AllocUID(pObj, dwUID); }
 
 	virtual CGString GetName() const { return( "World" ); }
 

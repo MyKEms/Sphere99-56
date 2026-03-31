@@ -404,7 +404,7 @@ void CClient::Cmd_GM_PageSelect( int iSelect )
 		return;
 	}
 
-	CGMPagePtr pPage = g_World.m_GMPages.GetAt( m_Targ.m_tmMenu.m_Item[iSelect] );
+	CGMPagePtr pPage = static_cast<CGMPage*>(g_World.m_GMPages.GetAt( m_Targ.m_tmMenu.m_Item[iSelect] ));
 	if ( pPage != NULL )
 	{
 		if ( pPage->FindGMHandler())

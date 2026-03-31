@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_SPHERELIB_H
+#define _INC_SPHERELIB_H
 #include "common.h"
 #include "crefobj.h"
 #include "cstring.h"
@@ -19,4 +20,8 @@
 #include "CQueueBytes.h"
 #include "CSocket.h"
 #include "CResourceObj.h"
+#ifdef _WIN32
 #include "cregistry.h"
+#endif
+
+#endif // _INC_SPHERELIB_H

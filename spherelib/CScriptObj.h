@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CSCRIPTOBJ_H
+#define _INC_CSCRIPTOBJ_H
 
 #define SCRIPT_EXT ".scp"
 
@@ -37,9 +38,11 @@ class CScriptObj
 {
 public:
 	virtual TRIGRET_TYPE OnTrigger(LPCTSTR pszTrigName, CScriptExecContext& exec) { throw "not implemented"; }
+	virtual CGString GetName() const { return CGString(); }
 };
 
 class CRefObjDef
 {
 };
 
+#endif // _INC_CSCRIPTOBJ_H

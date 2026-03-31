@@ -11,7 +11,7 @@
 
 CLog::CLog()
 {
-	IncRefCount();	// static singleton
+	// IncRefCount();	// static singleton (not applicable here)
 
 	m_fLockOpen = false;
 	SetLogLevel( LOGL_EVENT );
@@ -21,7 +21,7 @@ CLog::CLog()
 
 CLog::~CLog()
 {
-	StaticDestruct();
+	// StaticDestruct(); // not applicable here
 }
 
 bool CLog::OpenLog( LPCTSTR pszBaseDirName )	// name set previously.
@@ -141,7 +141,7 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		}
 
 		// Get the script context. (if there is one)
-		TCHAR szScriptContext[ _MAX_PATH + 16 ];
+		TCHAR szScriptContext[ 260 + 16 ];
 		CSphereThread* pThread = CSphereThread::GetCurrentThread();
 		ASSERT(pThread);
 		if ( pThread && pThread->m_pScriptContext )

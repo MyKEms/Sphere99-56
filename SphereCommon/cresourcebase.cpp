@@ -6,19 +6,22 @@
 #include "stdafx.h"
 #include "spherecommon.h"
 
+// Stub for missing function
+static int FindArg(void* p) { return -1; }
+
 /////////////////////////////////////////////////
 // -CResourceRefArray
 
 #ifdef USE_JSCRIPT
 #define CUIDREFARRAYMETHOD(a,b,c,d) JSCRIPT_METHOD_IMP(CUIDRefArray,a)
-#include "..\spherelib\cuidrefarraymethods.tbl"
+#include "cuidrefarraymethods.tbl"
 #undef CUIDREFARRAYMETHOD
 #endif
 
 const CScriptMethod CResourceRefArray::sm_Methods[CResourceRefArray::M_QTY+1] =
 {
 #define CUIDREFARRAYMETHOD(a,b,c,d) CSCRIPT_METHOD_IMP(a,b,c d)
-#include "..\spherelib\cuidrefarraymethods.tbl"
+#include "cuidrefarraymethods.tbl"
 #undef CUIDREFARRAYMETHOD
 	NULL,
 };
@@ -110,7 +113,7 @@ int CResourceRefArray::FindResourceType( RES_TYPE restype ) const
 	int iQty = GetSize();
 	for ( int i=0; i<iQty; i++ )
 	{
-		CSphereUID ridtest = ConstElementAt(i).GetRefObj()->GetUIDIndex();
+		CSphereUID ridtest = ConstElementAt(i)->GetUIDIndex();
 		if ( ridtest.GetResType() == restype )
 			return( i );
 	}
@@ -123,7 +126,7 @@ int CResourceRefArray::FindResourceID( CSphereUID rid ) const
 	int iQty = GetSize();
 	for ( int i=0; i<iQty; i++ )
 	{
-		CSphereUID ridtest = ConstElementAt(i).GetRefObj()->GetUIDIndex();
+		CSphereUID ridtest = ConstElementAt(i)->GetUIDIndex();
 		if ( ridtest == rid )
 			return( i );
 	}
@@ -357,7 +360,7 @@ void CResourceQtyArray::v_GetKeys( CGVariant& vVal ) const
 		j += ConstElementAt(i).WriteKey( szTmp+j );
 	}
 	szTmp[j] = '\0';
-	vVal = szTmp;
+	vVal = CGVariant((LPCTSTR)szTmp);
 }
 
 void CResourceQtyArray::v_GetNames( CGVariant& vVal ) const
@@ -377,7 +380,7 @@ void CResourceQtyArray::v_GetNames( CGVariant& vVal ) const
 		j += ConstElementAt(i).WriteNameSingle( szTmp+j );
 	}
 	szTmp[j] = '\0';
-	vVal = szTmp;
+	vVal = CGVariant((LPCTSTR)szTmp);
 }
 
 bool CResourceQtyArray::operator == ( const CResourceQtyArray& array ) const

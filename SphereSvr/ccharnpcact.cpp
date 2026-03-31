@@ -247,7 +247,7 @@ HRESULT CChar::NPC_StablePetRetrieve( CChar* pCharPlayer )
 	CItemPtr pItem = GetBank()->GetHead();
 	while ( pItem!=NULL )
 	{
-		CItemPtr pItemNext = pItem->GetNext();
+		CItemPtr pItemNext = static_cast<CItem*>(pItem->GetNext());
 		if ( pItem->IsType( IT_FIGURINE ) && pItem->m_uidLink == pCharPlayer->GetUID())
 		{
 			if ( pCharPlayer->Use_Figurine( pItem, 2 ))

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CSCRIPTCONSOLE_H
+#define _INC_CSCRIPTCONSOLE_H
 
 class CStreamText
 {
@@ -17,3 +18,5 @@ public:
 	CScriptObj* GetAttachedObj() const { throw "not implemented"; }
 	int AddConsoleKey(LPCTSTR pszKey, BYTE bVal, bool bEcho) { throw "not implemented"; }
 };
+
+#endif // _INC_CSCRIPTCONSOLE_H

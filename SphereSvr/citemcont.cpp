@@ -30,6 +30,7 @@ CItemContainer::CItemContainer( ITEMID_TYPE id, CItemDef* pItemDef ) :
 	// m_fTinkerTrapped = false;
 }
 
+template<>
 void CScriptClassTemplate<CItemContainer>::InitScriptClass()
 {
 	if ( IsInit())

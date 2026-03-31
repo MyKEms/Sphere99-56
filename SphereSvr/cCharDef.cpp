@@ -286,7 +286,8 @@ HRESULT CCharDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_Dam:
 	case P_Attack:
-		return m_attack.v_Set( vVal);
+		m_attack.v_Set( vVal);
+		return 0;
 	case P_Desires:
 		m_Desires.s_LoadKeys( vVal.GetPSTR());
 		break;

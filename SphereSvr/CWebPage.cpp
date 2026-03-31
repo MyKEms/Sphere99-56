@@ -4,7 +4,11 @@
 //
 
 #include "stdafx.h"	// predef header.
-#include "../spherelib/cfiledir.h"
+#include "cfiledir.h"
+#define ERROR_INTERNAL_ERROR HRES_INTERNAL_ERROR
+#define ERROR_INVALID_HANDLE HRES_INVALID_HANDLE
+#define ERROR_BAD_ARGUMENTS HRES_BAD_ARGUMENTS
+static int sm_iListColIndex = 0;
 
 const CScriptProp CWebPageDef::sm_Props[CWebPageDef::P_QTY+1] =
 {
@@ -49,6 +53,7 @@ private:
 public:
 	CServersSortArray();
 	int CompareData( CServerDef* pServLeft, CServerDef* pServRef ) const;
+	virtual int CompareKey(CServerDef key, CServerDef* obj) const { return 0; } // stub
 	void SortByType( CServerDef::P_TYPE_ iType );
 };
 
@@ -150,7 +155,7 @@ CServersSortArray::CServersSortArray()
 
 	// Copy a bunch of pointers.
 	CThreadLockPtr lock( &(g_Cfg.m_Servers));
-	SetSize(g_Cfg.m_Servers.GetSize());
+	SetCount(g_Cfg.m_Servers.GetSize());
 	for ( int i=0; i<GetSize(); i++ )
 	{
 		SetAt(i,g_Cfg.m_Servers.ElementAt(i));
@@ -982,7 +987,7 @@ HRESULT CWebPageDef::ServePage( CClient* pClient, const char* pszPage, CGTime* p
 	ASSERT(pClient);
 	ASSERT(pszPage);
 
-	TCHAR szPageName[ _MAX_PATH ];
+	TCHAR szPageName[ 260 ];
 	int lenPageName = Str_GetBare( szPageName, pszPage, sizeof(szPageName), " !\"#$%&()*,:;<=>?[]^{|}-+'`" );
 
 	int iErrorCode;

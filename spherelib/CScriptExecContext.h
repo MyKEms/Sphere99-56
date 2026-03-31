@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CSCRIPTEXECCONTEXT_H
+#define _INC_CSCRIPTEXECCONTEXT_H
 
 class CScriptExecContext : public CExpression
 {
@@ -21,4 +22,6 @@ public:
 	void s_ParseEscapes(LPCTSTR pszBuf, DWORD dwFlags) { throw "not implemented"; }
 	HRESULT ExecuteCommand(LPCTSTR pszCmd) { throw "not implemented"; }
 	TRIGRET_TYPE ExecuteScript(CScript& script, TRIGRUN_TYPE type) { throw "not implemented"; }
-};	
+};
+
+#endif // _INC_CSCRIPTEXECCONTEXT_H

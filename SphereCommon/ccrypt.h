@@ -28,10 +28,19 @@ enum CONNECT_TYPE	// What type of client connection is this ?
 
 class CCompressTree
 {
+public:
+	bool IsLoaded() const { return false; }
+	bool Load(LPCTSTR pszFile = NULL) { return false; }
+	int Decode(BYTE* pOutput, const BYTE* pInput, int iLen) { throw "not implemented"; }
+	int Encode(BYTE* pOutput, const BYTE* pInput, int iLen) { throw "not implemented"; }
 };
 
 class CCompressXOR
 {
+public:
+	bool InitTable(DWORD dwKey) { return true; }
+	int CompressXOR(BYTE* pOutput, const BYTE* pInput, int iLen) { throw "not implemented"; }
+	int CompressXOR(BYTE* pOutput, int iLen) { throw "not implemented"; }
 };
 
 class CCryptVersion

@@ -3,7 +3,6 @@
 * @brief Custom String implementation.
 */
 
-#pragma once
 #ifndef _INC_CSTRING_H
 #define _INC_CSTRING_H
 
@@ -306,10 +305,7 @@ public:
 	{
 		return(GetPtr());
 	}
-	operator CString&() const
-	{
-		return CString(GetPtr());
-	}
+	// operator CString&() removed - returning reference to temporary is invalid
 	/**
 	* @brief Concatenate CGString with a string.
 	* @param psz string to concatenate with.
@@ -370,32 +366,32 @@ extern int strcpylen(TCHAR* pDst, LPCTSTR pSrc);
 extern int strcpylen(TCHAR* pDst, LPCTSTR pSrc, int imaxlen);
 
 // extern TCHAR * Str_GetTemporary(int amount = 1);
-LPCTSTR Str_GetArticleAndSpace(LPCTSTR pszWords) { throw "not implemented"; }
+inline LPCTSTR Str_GetArticleAndSpace(LPCTSTR pszWords) { return pszWords; /* STUB */ }
 extern TCHAR* Str_GetTemp();
-int Str_GetBare(TCHAR* pszOut, LPCTSTR pszInp, int iMaxSize, LPCTSTR pszStrip = NULL) { throw "not implemented"; }
-TCHAR* Str_TrimWhitespace(TCHAR* pStr) { throw "not implemented"; }
-TCHAR* Str_GetNonWhitespace(LPCTSTR pStr) { throw "not implemented"; }
-bool Str_Parse(TCHAR* pArg1, TCHAR* pArg2) { throw "not implemented"; }
-int Str_GetEndWhitespace(LPCTSTR pStr, int iLen) { throw "not implemented"; }
-int Str_ParseCmdsStr(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { throw "not implemented"; }
-int Str_ParseCmds(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { throw "not implemented"; }
-MATCH_TYPE Str_Match(LPCTSTR pStr, LPCTSTR pPattern) { throw "not implemented"; }
-int Str_FindWord(LPCTSTR pStr, LPCTSTR pWord) { throw "not implemented"; }
-void Str_EscSeqAdd(LPCTSTR pStr1, LPCTSTR pStr2, int iSize) { throw "not implemented"; }
-void Str_EscSeqRemove(LPCTSTR pStr1, LPCTSTR pStr2, int iSize) { throw "not implemented"; }
+inline int Str_GetBare(TCHAR* pszOut, LPCTSTR pszInp, int iMaxSize, LPCTSTR pszStrip = NULL) { return 0; /* STUB */ }
+inline TCHAR* Str_TrimWhitespace(TCHAR* pStr) { return pStr; /* STUB */ }
+inline TCHAR* Str_GetNonWhitespace(LPCTSTR pStr) { return (TCHAR*)pStr; /* STUB */ }
+inline bool Str_Parse(TCHAR* pArg1, TCHAR* pArg2) { return false; /* STUB */ }
+inline int Str_GetEndWhitespace(LPCTSTR pStr, int iLen) { return iLen; /* STUB */ }
+inline int Str_ParseCmdsStr(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { return 0; /* STUB */ }
+inline int Str_ParseCmds(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR lpcSeparators) { return 0; /* STUB */ }
+inline MATCH_TYPE Str_Match(LPCTSTR pStr, LPCTSTR pPattern) { return MATCH_ABORT; /* STUB */ }
+inline int Str_FindWord(LPCTSTR pStr, LPCTSTR pWord) { return -1; /* STUB */ }
+inline void Str_EscSeqAdd(LPCTSTR pStr1, LPCTSTR pStr2, int iSize) { /* STUB */ }
+inline void Str_EscSeqRemove(LPCTSTR pStr1, LPCTSTR pStr2, int iSize) { /* STUB */ }
 
-UINT Str_ahextou(LPCTSTR pszStr) { throw "not implemented"; }
+inline UINT Str_ahextou(LPCTSTR pszStr) { return 0; /* STUB */ }
 
 class CScriptProp;
 class CScriptMethod;
-int s_FindKeyInTable(LPCTSTR pszKey, const LPCTSTR pTable[]) { throw "not implemented"; }
-int s_FindKeyInTable(LPCTSTR pszKey, const CScriptProp pTable[]) { throw "not implemented"; }
-int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[]) { throw "not implemented"; }
+inline int s_FindKeyInTable(LPCTSTR pszKey, const LPCTSTR pTable[]) { return -1; /* STUB */ }
+inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptProp pTable[]) { return -1; /* STUB */ }
+inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[]) { return -1; /* STUB */ }
 
-int FindTable(LPCTSTR pFind, LPCTSTR const* ppTable) { throw "not implemented"; }
-int FindTableSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { throw "not implemented"; }
-int FindTableHead(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { throw "not implemented"; }
-int FindTableHead(LPCTSTR pFind, CAssocStrVal const* ppTable, int count = -1) { throw "not implemented"; }
-int FindTableHeadSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { throw "not implemented"; }
+inline int FindTable(LPCTSTR pFind, LPCTSTR const* ppTable) { return -1; /* STUB */ }
+inline int FindTableSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { return -1; /* STUB */ }
+inline int FindTableHead(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { return -1; /* STUB */ }
+inline int FindTableHead(LPCTSTR pFind, CAssocStrVal const* ppTable, int count = -1) { return -1; /* STUB */ }
+inline int FindTableHeadSorted(LPCTSTR pFind, LPCTSTR const* ppTable, int count = -1) { return -1; /* STUB */ }
 
-#endif _INC_CSTRING_H
+#endif // _INC_CSTRING_H

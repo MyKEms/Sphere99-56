@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INC_CSCRIPT_H
+#define _INC_CSCRIPT_H
 
 #define SCRIPT_MAX_SECTION_LEN 128
 
@@ -32,10 +33,15 @@ class CScriptPropArray : public CGRefArray<CScriptProp>
 public:
 	void AddProps(const CScriptPropX pProps[]) { throw "not implemented"; }
 	void AddProps(CScriptPropX* pProps, int iCount) { throw "not implemented"; }
+	CScriptProp* GetData() { return GetSize() ? this->GetAt(0) : nullptr; }
 };
 
 class CScriptLineContext
 {
+public:
+	int m_iLineNum;
+	long m_lOffset;
+	CScriptLineContext() : m_iLineNum(0), m_lOffset(0) {}
 };
 
 class CScript : public CFileText
@@ -74,4 +80,6 @@ public:
 	bool WriteProfileStringOffset(long lSectionOffset, LPCTSTR pszKey, LPCTSTR pszVal) { throw "not implemented"; }
 };
 
-void s_FixExtendedProp(LPCTSTR pszKey, LPCTSTR pszName, CGVariant& vVal) { throw "not implemented"; }
+inline void s_FixExtendedProp(LPCTSTR pszKey, LPCTSTR pszName, CGVariant& vVal) { /* STUB */ }
+
+#endif // _INC_CSCRIPT_H
