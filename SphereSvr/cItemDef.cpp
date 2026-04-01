@@ -1312,8 +1312,8 @@ CItemDefPtr CItemDef::TranslateBase( CResourceDef* pResDef ) // static
 		pBase->s_PropSet(s.GetKey(), s.GetArgVar());
 	}
 
-	// replace existing one
-	g_Cfg.m_ResHash.AddSortKey( pResDef->GetHashCode(), pBase );	// Replace with new in sorted order.
+	// replace existing one (AddSortKey takes element first, then key)
+	g_Cfg.m_ResHash.AddSortKey( (CResourceDef*)(CItemDef*)pBase, pResDef->GetHashCode() );
 	return( pBase );
 }
 

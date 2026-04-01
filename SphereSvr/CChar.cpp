@@ -1114,6 +1114,15 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	// Handle P= property for position
+	if ( ! _stricmp(pszKey, "P") )
+	{
+		CPointMap pt;
+		pt.v_Set( vVal );
+		MoveToChar( pt );
+		return NO_ERROR;
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{

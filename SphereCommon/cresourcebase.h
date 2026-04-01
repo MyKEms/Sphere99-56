@@ -159,9 +159,10 @@ public:
 			m_LineContext = pLink->m_LineContext;
 		}
 	}
-	void SetLinkSection(CResourceScript* pScript)
+	void SetLinkSection(CResourceScript* pScript, CScriptLineContext context)
 	{
 		m_pScript = pScript;
+		m_LineContext = context;
 	}
 
 	virtual HRESULT s_PropSet(LPCTSTR pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
@@ -399,12 +400,9 @@ public:
 		CResourceScript* pScript = pLink->GetLinkFile();
 		if ( !pScript )
 			return;
-		// Open the same file that the resource link points to.
-		if ( !pScript->IsFileOpen() )
-			return;
-		// Copy the file path and open it.
+		// Copy the file path and open it for reading.
 		SetFilePath(pScript->GetFilePath());
-		if ( !Open(pScript->GetFilePath(), OF_READ) )
+		if ( !Open(pScript->GetFilePath(), OF_READ|OF_TEXT) )
 			return;
 		// Seek to the section start.
 		CScriptLineContext ctx = pLink->GetLinkContext();

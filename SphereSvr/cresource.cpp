@@ -6,6 +6,23 @@
 #include "stdafx.h"	// predef header.
 #ifndef _WIN32
 #include <dirent.h>
+#include <signal.h>
+#include <setjmp.h>
+#include <execinfo.h>
+#endif
+
+// Signal handler that prints backtrace before crashing
+#ifndef _WIN32
+static void CrashHandler(int sig)
+{
+	fprintf(stderr, "\n=== CRASH: signal %d ===\n", sig);
+	void* bt[30];
+	int n = backtrace(bt, 30);
+	backtrace_symbols_fd(bt, n, 2); // write to stderr
+	fflush(stderr);
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
 #endif
 
 const CAssocReg CSphereResourceMgr::sm_PropsAssoc[CSphereResourceMgr::P_QTY+1] =
@@ -1080,7 +1097,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 					pServ->m_ip.SetHostPortStr( s.GetKey());
 					if ( s.ReadLine())
 					{
-						pServ->m_ip.SetPort( s.GetArgInt());
+						pServ->m_ip.SetPort( (WORD)atoi( s.GetKey()));
 					}
 				}
 				if ( ! _stricmp( pServ->GetName(), g_Serv.GetName()))
@@ -1250,7 +1267,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		return( true );
 
 	case RES_Area:
-		{
+		try {
 			// Map stuff that could be duplicated !!!
 			// NOTE: ArgStr is NOT the DEFNAME in this case
 			CRegionComplexPtr pRegion = new CRegionComplex( rid, s.GetArgStr());
@@ -1262,6 +1279,8 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 				// might be a dupe ?
 				m_ResHash.AddSortKey( pRegion, rid );
 			}
+		} catch (...) {
+			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN, "Failed to load AREA '%s'" LOG_CR, (LPCTSTR) s.GetArgStr());
 		}
 		return( true );
 	case RES_Room:
@@ -1298,8 +1317,14 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Undefined char type '%s'" LOG_CR, (LPCTSTR) s.GetArgRaw());
 			return( false );
 		}
-		pNewObj = CChar::CreateBasic((CREID_TYPE)rid.GetResIndex());
-		return( pNewObj->s_LoadProps(s));
+		try {
+			pNewObj = CChar::CreateBasic((CREID_TYPE)rid.GetResIndex());
+			if ( pNewObj == NULL )
+				return false;
+			return( pNewObj->s_LoadProps(s));
+		} catch (...) {
+			return false;
+		}
 
 	case RES_WorldItem:	// saved in world file.
 		if ( ! rid.IsValidRID())
@@ -1307,8 +1332,14 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Undefined item type '%s'" LOG_CR, (LPCTSTR) s.GetArgRaw());
 			return( false );
 		}
-		pNewObj = CItem::CreateBase((ITEMID_TYPE)rid.GetResIndex());
-		return( pNewObj->s_LoadProps(s));
+		try {
+			pNewObj = CItem::CreateBase((ITEMID_TYPE)rid.GetResIndex());
+			if ( pNewObj == NULL )
+				return false;
+			return( pNewObj->s_LoadProps(s));
+		} catch (...) {
+			return false;
+		}
 
 	//*******************************************************************
 	// Linked Class objects.
@@ -1532,8 +1563,28 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			return( false );
 		}
 
-		// Now scan it for DEFNAME= or DEFNAME2= stuff ?
-		pNewLink->SetLinkSection(pResScript);
+		// Save the section context BEFORE scanning for DEFNAME properties.
+		// This context is the file offset pointing to the start of the section body.
+		CScriptLineContext LinkContext = s.GetContext();
+
+		// Scan section for DEFNAME= and DEFNAME2= properties to register them in m_Const.
+		// This is needed because numeric [ITEMDEF 0e75] sections define their DEFNAME inside.
+		{
+			while ( s.ReadKeyParse())
+			{
+				if ( ! _stricmp( s.GetKey(), "DEFNAME" ) || ! _stricmp( s.GetKey(), "DEFNAME2" ))
+				{
+					LPCTSTR pszDefName = s.GetArgStr();
+					if ( pszDefName && pszDefName[0] )
+					{
+						g_Cfg.m_Const.SetKeyVar( pszDefName, CGVariant( VARTYPE_UID, &rid ));
+					}
+				}
+			}
+			s.SeekContext( LinkContext );
+		}
+
+		pNewLink->SetLinkSection(pResScript, LinkContext);
 	}
 	else if ( pNewDef && pVarNum )
 	{
@@ -1718,6 +1769,13 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		pVarNum = g_Cfg.m_Const.FindKeyPtr( pszName );
 		if ( pVarNum )
 		{
+			static int s_nWorldHit = 0;
+			if ( (restype == RES_WorldChar || restype == RES_WorldItem) && s_nWorldHit < 5 )
+			{
+				fprintf(stderr, "DBG: DEFNAME '%s' FOUND in m_Const (restype=%d, rid=0x%x)\n", pszName, (int)restype, (unsigned)pVarNum->GetDWORD());
+				fflush(stderr);
+				s_nWorldHit++;
+			}
 			// An existing VarDef with the same name ?
 			// We are creating a new Block but using an old name ? weird.
 			// just check to see if this is a strange type conflict ?
@@ -1776,6 +1834,20 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		return( ridinvalid );
 	case RES_WorldChar:
 	case RES_WorldItem:
+		{
+			static int s_nWorldMiss = 0;
+			if ( s_nWorldMiss < 20 )
+			{
+				fprintf(stderr, "DBG: WorldItem/Char DEFNAME '%s' NOT found in m_Const (restype=%d)\n", pszName ? pszName : "(null)", (int)restype);
+				fflush(stderr);
+			}
+			s_nWorldMiss++;
+			if ( s_nWorldMiss == 20 )
+			{
+				fprintf(stderr, "DBG: (suppressing further WorldItem/Char miss messages)\n");
+				fflush(stderr);
+			}
+		}
 		return( ridinvalid );
 
 		// Just find a free entry in proper range.
@@ -2251,7 +2323,6 @@ void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
 {
 	while (script.FindNextSection())
 	{
-		// Delegate to the virtual LoadScriptSection on the derived CSphereResourceMgr
 		CSphereResourceMgr* pMgr = static_cast<CSphereResourceMgr*>(this);
 		pMgr->LoadScriptSection(script);
 	}
@@ -2481,6 +2552,17 @@ bool CSphereResourceMgr::Load( bool fResync )
 	// ARGS:
 	//  fResync = just look for changes.
 
+#ifndef _WIN32
+	// Install crash handler for backtrace on segfault
+	struct sigaction sa;
+	sa.sa_handler = CrashHandler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_RESETHAND; // one-shot
+	sigaction(SIGSEGV, &sa, NULL);
+	sigaction(SIGBUS, &sa, NULL);
+	sigaction(SIGABRT, &sa, NULL);
+#endif
+
 	if ( ! fResync )
 	{
 		LoadIni(true);
@@ -2569,9 +2651,11 @@ bool CSphereResourceMgr::Load( bool fResync )
 	Debug_CheckPoint();
 
 	// Now load the *TABLES.SCP file.
+	fprintf(stderr, "DBG: m_ResourceFiles.GetSize()=%d before tables check\n", (int)m_ResourceFiles.GetSize()); fflush(stderr);
 	if ( m_ResourceFiles.GetSize() == 0 )
 	{
 		AddResourceFile( SPHERE_FILE "tables" );
+		fprintf(stderr, "DBG: Added spheretables, m_ResourceFiles.GetSize()=%d\n", (int)m_ResourceFiles.GetSize()); fflush(stderr);
 	}
 
 	// open and index all my script files i'm going to use.
@@ -2583,11 +2667,17 @@ bool CSphereResourceMgr::Load( bool fResync )
 			break;
 
 		// Debug_CheckPoint();
-		bool fRet = LoadResources( pResFile );	// load or resync
+		fprintf(stderr, "DBG: Loading resource [%d]: '%s'\n", j, (LPCTSTR)pResFile->GetFilePath()); fflush(stderr);
+		bool fRet;
+		try {
+			fRet = LoadResources( pResFile );	// load or resync
+		}
+		catch (...)
+		{
+			fRet = false;
+		}
 		if (!fRet)
 		{
-			// remove from the list ?!
-			// m_ResourceFiles.RemovePtr(pResFile); // TODO: fix type mismatch
 			continue;
 		}
 
