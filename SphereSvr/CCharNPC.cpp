@@ -102,7 +102,6 @@ HRESULT CChar::Player_SetAccount( LPCTSTR pszAccName )
 		}
 
 		// it's a free server so just create one.
-		// used for loading world files without the accounts file.
 		pAccount = g_Accounts.Account_Create( pszAccName );
 		ASSERT( pAccount );
 	}

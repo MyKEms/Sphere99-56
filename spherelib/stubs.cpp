@@ -126,8 +126,17 @@ void CVarDefArray::s_WriteTags(CScript& script, LPCTSTR pszName)
 }
 
 // CResourceObj::s_LoadProps - read key=value pairs from script section
+// NOTE: Due to multiple inheritance (CResourceObj + CResourceDef both define
+// virtual s_LoadProps), this version is called via CResourceObjPtr.
+// For CObjBase-derived objects, delegate to CResourceDef::s_LoadProps which
+// properly dispatches through the class hierarchy (CChar/CItem overrides).
 bool CResourceObj::s_LoadProps(CScript& s)
 {
+	// Read key=value pairs and dispatch via s_PropSet.
+	// NOTE: Due to multiple inheritance, CChar/CItem override s_PropSet
+	// on the CResourceDef chain, not the CResourceObj chain.
+	// We must avoid calling this->s_PropSet() which goes through
+	// the CResourceObj vtable. Instead, use s_LoadProps_Default.
 	while (s.ReadKeyParse())
 	{
 		CGVariant vArg;

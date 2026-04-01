@@ -2576,7 +2576,14 @@ HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item 
 
 bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 {
-	CObjBase::s_LoadProps( s );
+	// Read all properties directly through CItem's virtual s_PropSet,
+	// NOT through CObjBase::s_LoadProps which dispatches via CResourceObj vtable.
+	while (s.ReadKeyParse())
+	{
+		CGVariant vArg;
+		vArg = s.GetArgRaw();
+		s_PropSet(s.GetKey(), vArg);
+	}
 	if ( GetContainer() == NULL )	// Place into the world.
 	{
 		if ( GetTopPoint().IsCharValid())
