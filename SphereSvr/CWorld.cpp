@@ -551,12 +551,10 @@ bool CWorld::LoadWorld() // Load world from script
 	{
 		if ( LoadFile( sWorldName ))
 		{
-			if ( m_iLoadVersion < 53 )
-				return( true );
-			if ( LoadFile( sCharsName ))
-			{
-				return( true );
-			}
+			// Version 0.99 stores chars in separate file — always try to load it.
+			// (m_iLoadVersion check removed: "0.99z8" parses as 0, but chars file is always present)
+			LoadFile( sCharsName );
+			return( true );
 		}
 
 		// If we could not open the file at all then it was a bust!

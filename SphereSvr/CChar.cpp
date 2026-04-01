@@ -1123,6 +1123,12 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		return NO_ERROR;
 	}
 
+	// Handle Account= directly (critical for world loading)
+	if ( ! _stricmp(pszKey, "Account") || ! _stricmp(pszKey, "AccountName") )
+	{
+		return Player_SetAccount( vVal.GetPSTR() );
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
@@ -2099,7 +2105,13 @@ void CChar::s_WriteParity( CScript& s )
 
 bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 {
-	CObjBase::s_LoadProps(s);
+	// Read all properties directly through CChar's virtual s_PropSet.
+	while (s.ReadKeyParse())
+	{
+		CGVariant vArg;
+		vArg = s.GetArgRaw();
+		s_PropSet(s.GetKey(), vArg);
+	}
 
 	// Init the STATF_SaveParity flag.
 	// StatFlag_Mod( STATF_SaveParity, g_World.m_fSaveParity );
