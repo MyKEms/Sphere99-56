@@ -177,8 +177,11 @@ void CRegionBasic::SetName( LPCTSTR pszName )
 		return;
 	}
 #endif
-	ASSERT(pszName);
-	ASSERT(pszName[0]);
+	if ( pszName == NULL || pszName[0] == '\0' )
+	{
+		m_sName = "Unnamed";
+		return;
+	}
 #ifdef _DEBUG
 	if ( ! m_sName.IsEmpty() && strcmp( m_sName, pszName ))
 	{

@@ -103,8 +103,22 @@ void CWorldThread::GarbageCollection_New()
 	{
 		if ( m_ObjNew.GetCount())
 		{
-			g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "%d Lost object deleted" LOG_CR, m_ObjNew.GetCount());
-			m_ObjNew.DeleteAll();
+			// During initial load, don't delete objects — they may be items in containers
+			// that haven't been placed yet. Just clear the list without deleting.
+			if ( g_Serv.IsLoading() || g_Serv.m_iModeCode >= 0x10 )
+			{
+				// Just detach objects from the list without deleting them.
+				// They should be referenced from sectors, containers, or UID table.
+				while (m_ObjNew.GetHead())
+				{
+					m_ObjNew.GetHead()->RemoveSelf();
+				}
+			}
+			else
+			{
+				g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "%d Lost object deleted" LOG_CR, m_ObjNew.GetCount());
+				m_ObjNew.DeleteAll();
+			}
 		}
 		m_ObjDelete.DeleteAll();	// clean up our delete list.
 	}
@@ -126,12 +140,21 @@ void CWorldThread::GarbageCollection_UIDs()
 
 	GarbageCollection_New();
 
+	fprintf(stderr, "DBG: GarbageCollection_UIDs: UIDCount=%d ObjCount=%d m_ObjNew=%d\n", (int)GetUIDCount(), (int)CObjBase::sm_iCount, (int)m_ObjNew.GetCount());
+	fflush(stderr);
+
 	int iCount = 0;
 	for ( int i=1; i<GetUIDCount(); i++ )
 	{
-		CObjBasePtr pObj = STATIC_CAST(CObjBase,FindUIDObj(i));
-		if ( pObj == NULL )
+		CResourceObj* pRaw = FindUIDObj(i);
+		if ( pRaw == NULL )
 			continue;	// not used.
+		if ( i <= 5 )
+		{
+			fprintf(stderr, "DBG: GC_UIDs[%d] pRaw=%p\n", i, (void*)pRaw);
+			fflush(stderr);
+		}
+		CObjBasePtr pObj = STATIC_CAST(CObjBase, pRaw);
 
 		// Look for anomolies and fix them (that might mean delete it.)
 		FixObj( pObj, i );
@@ -633,7 +656,12 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 		}
 	}
 
-	GarbageCollection();
+	// Skip full GarbageCollection during initial load — objects are still being placed.
+	// Just clean up the ObjNew list without deleting objects.
+	while (m_ObjNew.GetHead())
+	{
+		m_ObjNew.GetHead()->RemoveSelf();
+	}
 
 	// Set the current version now.
 	const TCHAR* pszVersion = SPHERE_VERSION;

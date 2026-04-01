@@ -900,9 +900,9 @@ public:
 		bool fNeg = false;
 		if (*pStr == '-') { fNeg = true; pStr++; }
 		else if (*pStr == '+') { pStr++; }
-		// Handle hex without 0x prefix (starts with digit, contains a-f)
-		if (*pStr == '0' && isdigit(pStr[1]))
-			return (int)strtol(pStr, (char**)&pStr, 8);
+		// Handle hex without 0x prefix — Sphere 0.99 convention: 0xxx values are hex
+		if (*pStr == '0' && isxdigit(pStr[1]))
+			return (int)strtol(pStr, (char**)&pStr, 16);
 		int val = (int)strtol(pStr, (char**)&pStr, 10);
 		return fNeg ? -val : val;
 	}

@@ -413,8 +413,8 @@ CCharDefPtr CCharDef::TranslateBase( CResourceDef* pResDef ) // static
 	ASSERT(pBase);
 	pBase->CopyLink( pBaseLink );
 
-	// replace existing one
-	g_Cfg.m_ResHash.AddSortKey( pResDef->GetHashCode(), pBase );
+	// replace existing one (AddSortKey takes element first, then key)
+	g_Cfg.m_ResHash.AddSortKey( (CResourceDef*)(CCharDef*)pBase, pResDef->GetHashCode() );
 
 	// load it's data on demand.
 	CResourceLock s(pBase);

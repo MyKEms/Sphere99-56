@@ -198,7 +198,10 @@ foundit:
 		}
 	}
 
-	// Store section name
+	// Split section type from section args first
+	ParseKey();
+
+	// Store just the section TYPE (not args) in m_szSection
 	strncpy(m_szSection, m_pszKey, sizeof(m_szSection) - 1);
 	m_szSection[sizeof(m_szSection) - 1] = '\0';
 
@@ -206,8 +209,6 @@ foundit:
 	if (IsSectionType("EOF"))
 		return false;
 
-	// Split section type from section args
-	ParseKey();
 	return true;
 }
 

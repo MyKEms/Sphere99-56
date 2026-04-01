@@ -2411,6 +2411,15 @@ HRESULT CItem::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item Script
 {
+	// Handle P= property for position (world loading and scripts)
+	if ( ! _stricmp(pszKey, "P") )
+	{
+		CPointMap pt;
+		pt.v_Set( vVal );
+		MoveTo( pt );
+		return NO_ERROR;
+	}
+
 	// Handle extended Attr_xxx format (e.g. Attr_MoveNever=1)
 	if ( ! _strnicmp(pszKey, "Attr_", 5) )
 	{

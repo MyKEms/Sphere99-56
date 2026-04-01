@@ -43,6 +43,7 @@ struct CUIDArray
 #define UID_PLACE_HOLDER (CResourceObj*)0xFFFFFFFF
 	CResourceObj* FindUIDObj(DWORD dwIndex) const
 	{
+		dwIndex &= 0x3FFFFFFF; // strip type flags
 		if (!dwIndex || dwIndex >= GetUIDCount())
 			return(NULL);
 		if (m_UIDs[dwIndex] == UID_PLACE_HOLDER)	// unusable for now. (background save is going on)
@@ -52,14 +53,19 @@ struct CUIDArray
 	void FreeUID(CResourceObj* pObj)
 	{
 		// Can't free up the UID til after the save !
-		m_UIDs.SetAt(pObj->GetUIDIndex(), UID_PLACE_HOLDER);
+		DWORD dwIndex = pObj->GetUIDIndex() & 0x3FFFFFFF; // strip type flags
+		if (dwIndex > 0 && dwIndex < GetUIDCount())
+			m_UIDs.SetAt(dwIndex, UID_PLACE_HOLDER);
 	}
 	DWORD AllocUID(CResourceObj* pObj, DWORD dwIndex)
 	{
 		// Allocate a UID slot for a game object.
-		// dwIndex = desired UID index (0 = allocate new)
+		// dwIndex = desired UID index (0 = allocate new), may include UID_F_ITEM flag
 		// RETURN: the UID index actually assigned.
 		ASSERT(pObj);
+		// Strip type flags — only use the index portion for array storage.
+		// UID_INDEX_MASK = 0x3FFFFFFF (lose upper 2 bits: UID_F_ITEM and RID_F_RESOURCE)
+		dwIndex &= 0x3FFFFFFF;
 		if ( dwIndex > 0 )
 		{
 			// Requested a specific UID slot.
