@@ -1847,12 +1847,18 @@ int CClient::Setup_FillCharList( CUOEventCharDef* pCharList, const CChar* pCharF
 	}
 
 	int iQty = pAccount->m_Chars.GetSize();
+	fprintf(stderr, "DBG: FillCharList acct='%s' chars=%d\n", (LPCTSTR)pAccount->GetName(), iQty);
+	fflush(stderr);
 	for ( int k=0; k<iQty; k++ )
 	{
 		CSphereUID uid( pAccount->m_Chars.GetAt(k));
 		CCharPtr pChar = g_World.CharFind(uid);
 		if ( pChar == NULL )
+		{
+			fprintf(stderr, "DBG: FillCharList: CharFind(0x%x) returned NULL\n", (unsigned)uid.IsValidRID());
+			fflush(stderr);
 			continue;
+		}
 		DEBUG_CHECK( pChar->GetAccount() == pAccount );
 		if ( pCharFirst == pChar )
 			continue;
