@@ -1283,7 +1283,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			}
 			if ( ! pClient->xRecvData())
 			{
-				pClient->DeleteThis();
+				try { pClient->DeleteThis(); } catch (...) {}
 				continue;
 			}
 		}
@@ -1378,7 +1378,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			}
 			if ( ! pClient->xRecvData())
 			{
-				pClient->DeleteThis();
+				try { pClient->DeleteThis(); } catch (...) {}
 				continue;
 			}
 		}
@@ -1446,8 +1446,14 @@ void CServer::OnTick()
 	SetValidTime();	// we are a valid game server.
 
 	// Check clients for incoming packets.
-	// Do this on a timer so clients with faster connections can't overwealm the system.
-	SocketsReceive();
+	try
+	{
+		SocketsReceive();
+	}
+	catch (...)
+	{
+		g_Log.Event( LOG_GROUP_CLIENTS, LOGL_ERROR, "Exception in SocketsReceive" LOG_CR );
+	}
 
 	if ( ! IsLoading())
 	{
@@ -1465,12 +1471,19 @@ void CServer::OnTick()
 			}
 			SPHERE_LOG_TRY_CATCH( "Server xDispatchMsg" )
 
-			pClient->xFinishProcessMsg(fRet);
+			try
+			{
+				pClient->xFinishProcessMsg(fRet);
+			}
+			catch (...)
+			{
+				// Client cleanup failed
+			}
 		}
 	}
 
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
-	SocketsFlush();
+	try { SocketsFlush(); } catch (...) {}
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
 	if ( m_timeShutdown.IsTimeValid())
