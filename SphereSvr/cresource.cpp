@@ -1769,13 +1769,6 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		pVarNum = g_Cfg.m_Const.FindKeyPtr( pszName );
 		if ( pVarNum )
 		{
-			static int s_nWorldHit = 0;
-			if ( (restype == RES_WorldChar || restype == RES_WorldItem) && s_nWorldHit < 5 )
-			{
-				fprintf(stderr, "DBG: DEFNAME '%s' FOUND in m_Const (restype=%d, rid=0x%x)\n", pszName, (int)restype, (unsigned)pVarNum->GetDWORD());
-				fflush(stderr);
-				s_nWorldHit++;
-			}
 			// An existing VarDef with the same name ?
 			// We are creating a new Block but using an old name ? weird.
 			// just check to see if this is a strange type conflict ?
@@ -1834,20 +1827,6 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		return( ridinvalid );
 	case RES_WorldChar:
 	case RES_WorldItem:
-		{
-			static int s_nWorldMiss = 0;
-			if ( s_nWorldMiss < 20 )
-			{
-				fprintf(stderr, "DBG: WorldItem/Char DEFNAME '%s' NOT found in m_Const (restype=%d)\n", pszName ? pszName : "(null)", (int)restype);
-				fflush(stderr);
-			}
-			s_nWorldMiss++;
-			if ( s_nWorldMiss == 20 )
-			{
-				fprintf(stderr, "DBG: (suppressing further WorldItem/Char miss messages)\n");
-				fflush(stderr);
-			}
-		}
 		return( ridinvalid );
 
 		// Just find a free entry in proper range.
@@ -2651,11 +2630,9 @@ bool CSphereResourceMgr::Load( bool fResync )
 	Debug_CheckPoint();
 
 	// Now load the *TABLES.SCP file.
-	fprintf(stderr, "DBG: m_ResourceFiles.GetSize()=%d before tables check\n", (int)m_ResourceFiles.GetSize()); fflush(stderr);
 	if ( m_ResourceFiles.GetSize() == 0 )
 	{
 		AddResourceFile( SPHERE_FILE "tables" );
-		fprintf(stderr, "DBG: Added spheretables, m_ResourceFiles.GetSize()=%d\n", (int)m_ResourceFiles.GetSize()); fflush(stderr);
 	}
 
 	// open and index all my script files i'm going to use.
@@ -2667,7 +2644,6 @@ bool CSphereResourceMgr::Load( bool fResync )
 			break;
 
 		// Debug_CheckPoint();
-		fprintf(stderr, "DBG: Loading resource [%d]: '%s'\n", j, (LPCTSTR)pResFile->GetFilePath()); fflush(stderr);
 		bool fRet;
 		try {
 			fRet = LoadResources( pResFile );	// load or resync

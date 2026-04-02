@@ -140,20 +140,12 @@ void CWorldThread::GarbageCollection_UIDs()
 
 	GarbageCollection_New();
 
-	fprintf(stderr, "DBG: GarbageCollection_UIDs: UIDCount=%d ObjCount=%d m_ObjNew=%d\n", (int)GetUIDCount(), (int)CObjBase::sm_iCount, (int)m_ObjNew.GetCount());
-	fflush(stderr);
-
 	int iCount = 0;
 	for ( int i=1; i<GetUIDCount(); i++ )
 	{
 		CResourceObj* pRaw = FindUIDObj(i);
 		if ( pRaw == NULL )
 			continue;	// not used.
-		if ( i <= 5 )
-		{
-			fprintf(stderr, "DBG: GC_UIDs[%d] pRaw=%p\n", i, (void*)pRaw);
-			fflush(stderr);
-		}
 		CObjBasePtr pObj = STATIC_CAST(CObjBase, pRaw);
 
 		// Look for anomolies and fix them (that might mean delete it.)
