@@ -676,7 +676,6 @@ SPHEREERR_TYPE Sphere_OnTick()
 	{
 		g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "Exception in Server OnTick %d" LOG_CR, s_nTick );
 	}
-#endif
 
 	return( g_Serv.m_iExitFlag );
 }
