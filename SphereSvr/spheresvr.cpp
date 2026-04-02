@@ -660,18 +660,22 @@ SPHEREERR_TYPE Sphere_OnTick()
 	static int s_nTick = 0;
 	s_nTick++;
 
-	// ASSERT( g_ServTask.GetThreadID() == GetCurrentThreadId());
-#ifndef _DEBUG
-// I put the try stuff in the debug section so I could isolate some of the exceptions we are getting
 	try
 	{
-#endif
 		g_World.OnTick();
-		g_Serv.OnTick();
-
-#ifndef _DEBUG
 	}
-	SPHERE_LOG_TRY_CATCH( "Main Loop" )
+	catch (...)
+	{
+		g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "Exception in World OnTick %d" LOG_CR, s_nTick );
+	}
+	try
+	{
+		g_Serv.OnTick();
+	}
+	catch (...)
+	{
+		g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "Exception in Server OnTick %d" LOG_CR, s_nTick );
+	}
 #endif
 
 	return( g_Serv.m_iExitFlag );

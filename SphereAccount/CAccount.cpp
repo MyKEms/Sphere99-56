@@ -784,26 +784,17 @@ HRESULT CAccount::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		}
 		break;
 	case P_CharUID:
-		// This is done automatically
-		// just ignore this if loading, chars are loaded later !
-		if ( ! g_Serv.IsLoading())
+		// During loading, store the UID directly into m_Chars.
+		// The character objects don't exist yet, but we record the UID so that
+		// Setup_FillCharList can find them later via CharFind.
+		// At runtime, AttachChar is called from Player_SetAccount instead.
+		if ( g_Serv.IsLoading())
 		{
-			return( HRES_INVALID_FUNCTION );
-#if 0
-			CSphereUID uid( vVal.GetUID());
-			CCharPtr pChar = g_World.CharFind(uid);
-			if (pChar == NULL)
+			DWORD dwUID = vVal.GetInt();
+			if ( dwUID )
 			{
-				DEBUG_ERR(( "Invalid CHARUID 0%x for account '%s'" LOG_CR, (DWORD) uid, (LPCTSTR) GetName()));
-				return( HRES_INVALID_INDEX );
+				m_Chars.AttachUID( CSphereUID(dwUID) );
 			}
-			if ( pChar->GetAccount() != this )
-			{
-				DEBUG_ERR(( "CHARUID 0%x (%s) not attached to account '%s'" LOG_CR, (DWORD) uid, (LPCTSTR) pChar->GetName(), (LPCTSTR) GetName()));
-				return( HRES_INVALID_INDEX );
-			}
-			AttachChar(pChar);
-#endif
 		}
 		break;
 	case P_ChatName:

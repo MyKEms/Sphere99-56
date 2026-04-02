@@ -77,12 +77,23 @@ void _cdecl Signal_Terminate(int x=0) // If shutdown is initialized
 	g_Serv.SetExitFlag( (x == SIGTERM) ? SPHEREERR_TIMED_CLOSE : SPHEREERR_CTRLC );
 }
 
+static volatile int s_nSEGV = 0;
 void _cdecl Signal_Illegal_Instruction(int x=0)
 {
-	// For truly fatal signals (SIGSEGV, SIGILL), we must abort since
-	// the process state is corrupted.
-	signal(x, SIG_DFL);  // Reset to default handler
-	raise(x);            // Re-raise to get core dump
+	s_nSEGV++;
+	if ( s_nSEGV > 3 )
+	{
+		// Too many crashes — give up and dump core
+		signal(x, SIG_DFL);
+		raise(x);
+		return;
+	}
+	// Log and try to continue — process state may be corrupted but
+	// for a game server it's better to limp along than crash completely.
+	fprintf(stderr, "SEGV/ILL signal %d caught (count=%d) — attempting recovery\n", x, s_nSEGV);
+	fflush(stderr);
+	// Re-install handler (signal resets to default after delivery)
+	signal(x, &Signal_Illegal_Instruction);
 }
 #endif
 

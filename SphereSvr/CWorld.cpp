@@ -1285,7 +1285,14 @@ void CWorld::OnTick()
 
 		for ( int i=0; i<SECTOR_QTY; i++ )
 		{
-			m_Sectors[i].OnTick( m_Sector_Pulse );
+			try
+			{
+				m_Sectors[i].OnTick( m_Sector_Pulse );
+			}
+			catch (...)
+			{
+				g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "Exception in Sector %d OnTick" LOG_CR, i );
+			}
 		}
 
 		g_Serv.m_Profile.SwitchTask( PROFILE_Debug );
