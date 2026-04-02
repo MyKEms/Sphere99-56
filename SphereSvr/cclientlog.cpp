@@ -115,20 +115,19 @@ void CClient::addWebLaunch( LPCTSTR pPage )
 bool CClient::addRelay( const CServerDef* pServ )
 {
 	// Tell the client to play on this server.
+	if ( pServ == NULL || ! m_Socket.IsOpen())
+		return false;
 
-	ASSERT(pServ);
 	CSocketAddressIP ipAddr = pServ->m_ip;
 
-	if ( ipAddr.IsLocalAddr())	// local server address not yet filled in.
+	if ( ipAddr.IsLocalAddr())
 	{
 		ipAddr = m_Socket.GetSockName();
-		DEBUG_MSG(( "%x:Login_Relay to %s" LOG_CR, m_Socket.GetSocket(), ipAddr.GetAddrStr() ));
 	}
 
 	CSocketAddress PeerName = m_Socket.GetPeerName();
-	if ( PeerName.IsLocalAddr() || PeerName.IsSameIP( ipAddr ))	// weird problem with client relaying back to self.
+	if ( PeerName.IsLocalAddr() || PeerName.IsSameIP( ipAddr ))
 	{
-		DEBUG_MSG(( "%x:Login_Relay loopback to server %s" LOG_CR, m_Socket.GetSocket(), ipAddr.GetAddrStr() ));
 		ipAddr.SetAddrIP( SOCKET_LOCAL_ADDRESS );
 	}
 
@@ -141,15 +140,14 @@ bool CClient::addRelay( const CServerDef* pServ )
 	cmd.Relay.m_ip[1] = ( dwAddr >> 8  ) & 0xFF;
 	cmd.Relay.m_ip[0] = ( dwAddr	   ) & 0xFF;
 	cmd.Relay.m_port = pServ->m_ip.GetPort();
-	cmd.Relay.m_Account = 0x7f000001; // dwAddr = customer account handshake. (don't bother to check this.)
+	cmd.Relay.m_Account = 0x7f000001;
 
 	xSendPkt( &cmd, sizeof(cmd.Relay));
-	xFlush();	// flush b4 we turn into a game server.
+	xFlush();
 
 	m_Targ.m_Mode = CLIMODE_SETUP_RELAY;
 
-	// just in case they are on the same machine, change over to the new game encrypt
-	m_Crypt.SetCryptType( UNPACKDWORD( cmd.Relay.m_ip ), CONNECT_GAME ); // Init decryption table
+	m_Crypt.SetCryptType( UNPACKDWORD( cmd.Relay.m_ip ), CONNECT_GAME );
 	m_CompressXOR.InitTable( 0x7f000001 );
 	m_ConnectType = CONNECT_GAME;
 	return( true );

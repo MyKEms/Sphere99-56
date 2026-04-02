@@ -25,6 +25,7 @@ public:
 	void StaticDestruct() { /* stub */ }
 	HASH_INDEX GetUIDIndex() const { return m_dwHashIndex; }
 	HASH_INDEX GetHashCode() const { return m_dwHashIndex; }
+	void SetUIDIndex(HASH_INDEX uid) { m_dwHashIndex = uid; }
 	bool IsValidUID() const { return m_dwHashIndex != 0; }
 };
 typedef CRefPtr<CResourceObj> CResourceObjPtr;

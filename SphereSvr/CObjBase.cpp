@@ -649,7 +649,7 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			DWORD dwUID = vVal.GetInt();
 			if ( IsItem())
 			{
-				dwUID |= UID_F_ITEM; 
+				dwUID |= UID_F_ITEM;
 			}
 			if ( g_World.LoadUID( dwUID, this ) == 0 )
 				return HRES_INVALID_INDEX;
