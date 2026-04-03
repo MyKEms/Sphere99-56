@@ -137,6 +137,7 @@ bool CClient::addRelay( const CServerDef* pServ )
 	}
 
 	DWORD dwAddr = ipAddr.GetAddrIP();
+	fprintf(stderr, "DBG: addRelay IP=%d.%d.%d.%d port=%d\n", dwAddr&0xFF, (dwAddr>>8)&0xFF, (dwAddr>>16)&0xFF, (dwAddr>>24)&0xFF, pServ->m_ip.GetPort()); fflush(stderr);
 
 	CUOCommand cmd;
 	cmd.Relay.m_Cmd = XCMD_Relay;
@@ -683,6 +684,7 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 	// (CUOEvent::ServersReq) or (CUOEvent::CharListReq)
 	// NOTE: Anything else we get at this point is tossed !
 
+	fprintf(stderr, "DBG: xProcessClientSetup len=%d connType=%d\n", iLen, m_ConnectType); fflush(stderr);
 	ASSERT( m_ConnectType == CONNECT_CRYPT );
 	// ASSERT( !m_Crypt.IsInitCrypt());
 	ASSERT( iLen );
@@ -764,6 +766,7 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 		lErr = LOGIN_ERR_OTHER;
 	}
 
+	fprintf(stderr, "DBG: xProcessClientSetup result lErr=%d connType=%d cryptVer=0x%x\n", lErr, m_ConnectType, m_Crypt.GetCryptVer()); fflush(stderr);
 	if ( lErr == LOGIN_ERR_OTHER )	// it never matched any crypt format.
 	{
 		addLoginErr( lErr );
@@ -896,6 +899,7 @@ bool CClient::OnRxUnk( BYTE* pData, int iLen ) // Receive message from client
 	// This is the first data we get on a new connection.
 	// Figure out what the other side wants.
 
+	fprintf(stderr, "DBG: OnRxUnk len=%d data[0-3]=%02x %02x %02x %02x\n", iLen, pData[0], pData[1], pData[2], pData[3]); fflush(stderr);
 	// DEBUG_CHECK( ! m_Crypt.IsInitCrypt());
 
 	if ( iLen < 4 )	// just a ping for server info. (maybe, or CONNECT_TELNET?)
@@ -955,8 +959,10 @@ bool CClient::xRecvData() // Receive message from client
 	// High level Rx from Client.
 	// RETURN: false = dump the client.
 
+	fprintf(stderr, "DBG: xRecvData connType=%d\n", m_ConnectType); fflush(stderr);
 	CUOEvent Event;
 	int iCountNew = m_Socket.Receive( &Event, sizeof(Event), 0 );
+	fprintf(stderr, "DBG: xRecvData received %d bytes\n", iCountNew); fflush(stderr);
 	if ( iCountNew <= 0 )	// I should always get data here.
 	{
 		return( false ); // this means that the client is gone.

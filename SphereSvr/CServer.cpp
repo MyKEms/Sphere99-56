@@ -78,21 +78,34 @@ void _cdecl Signal_Terminate(int x=0) // If shutdown is initialized
 }
 
 static volatile int s_nSEGV = 0;
+#ifndef _WIN32
+#include <setjmp.h>
+volatile sig_atomic_t g_fSEGV_catch = 0;  // 1 = longjmp recovery enabled
+sigjmp_buf g_SEGV_jmpbuf;
+#endif
+
 void _cdecl Signal_Illegal_Instruction(int x=0)
 {
 	s_nSEGV++;
-	if ( s_nSEGV > 3 )
+	fprintf(stderr, "SEGV/ILL signal %d caught (count=%d)\n", x, s_nSEGV);
+	fflush(stderr);
+
+#ifndef _WIN32
+	if ( g_fSEGV_catch )
 	{
-		// Too many crashes — give up and dump core
+		// Jump back to the recovery point (skips the faulting code).
+		signal(x, &Signal_Illegal_Instruction);
+		siglongjmp(g_SEGV_jmpbuf, 1);
+		return; // not reached
+	}
+#endif
+
+	if ( s_nSEGV > 10 )
+	{
 		signal(x, SIG_DFL);
 		raise(x);
 		return;
 	}
-	// Log and try to continue — process state may be corrupted but
-	// for a game server it's better to limp along than crash completely.
-	fprintf(stderr, "SEGV/ILL signal %d caught (count=%d) — attempting recovery\n", x, s_nSEGV);
-	fflush(stderr);
-	// Re-install handler (signal resets to default after delivery)
 	signal(x, &Signal_Illegal_Instruction);
 }
 #endif
@@ -1202,6 +1215,7 @@ CClientPtr CServer::SocketsAccept( CGSocket& socket, bool fGod ) // Check for me
 		return NULL;
 	}
 
+	fprintf(stderr, "DBG: New client from %s (ip_count=%d)\n", (LPCTSTR) client_addr.GetAddrStr(), iClientsOnIPCount); fflush(stderr);
 	return( new CClient( socknew.Detach()));
 }
 
@@ -1387,11 +1401,29 @@ void CServer::SocketsReceive() // Check for messages from the clients
 				// Only do this if the connection is logged in ?
 				pClient->m_timeLastEvent.InitTimeCurrent();	// We should always get pinged every couple minutes or so
 			}
-			if ( ! pClient->xRecvData())
+#ifndef _WIN32
+			extern volatile sig_atomic_t g_fSEGV_catch;
+			extern sigjmp_buf g_SEGV_jmpbuf;
+			g_fSEGV_catch = 1;
+			if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
 			{
+				g_fSEGV_catch = 0;
+				fprintf(stderr, "DBG: SEGV in xRecvData — dropping client\n"); fflush(stderr);
 				try { pClient->DeleteThis(); } catch (...) {}
 				continue;
 			}
+#endif
+			if ( ! pClient->xRecvData())
+			{
+				try { pClient->DeleteThis(); } catch (...) {}
+#ifndef _WIN32
+				g_fSEGV_catch = 0;
+#endif
+				continue;
+			}
+#ifndef _WIN32
+			g_fSEGV_catch = 0;
+#endif
 		}
 		else
 		{
