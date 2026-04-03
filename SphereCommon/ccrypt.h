@@ -26,24 +26,48 @@ enum CONNECT_TYPE	// What type of client connection is this ?
 	CONNECT_QTY,
 };
 
+#define COMPRESS_TREE_SIZE 257
+
 class CCompressTree
 {
+	// Standard UO Huffman compression/decompression
+	static const WORD sm_xCompress_Base[COMPRESS_TREE_SIZE];
 public:
-	bool IsLoaded() const { return false; }
-	bool Load(LPCTSTR pszFile = NULL) { return false; }
+	bool IsLoaded() const { return true; }
+	bool Load(LPCTSTR pszFile = NULL) { return true; }
 	int Decode(BYTE* pOutput, const BYTE* pInput, int iLen)
 	{
-		// No compression tree loaded - just copy through
+		// TODO: implement Huffman decompression if needed
 		if (pOutput != pInput)
 			memcpy(pOutput, pInput, iLen);
 		return iLen;
 	}
 	int Encode(BYTE* pOutput, const BYTE* pInput, int iLen)
 	{
-		// No compression tree loaded - just copy through
-		if (pOutput != pInput)
-			memcpy(pOutput, pInput, iLen);
-		return iLen;
+		// Standard UO Huffman compression (from SphereServer 0.56d)
+		BYTE bOutVal = 0;
+		int iOutLen = 0;
+		WORD wBitIndex = 0;
+
+		for ( int i = 0; i <= iLen; i++ )
+		{
+			WORD wValue = sm_xCompress_Base[(i == iLen) ? COMPRESS_TREE_SIZE - 1 : pInput[i]];
+			int iBits = wValue & 0xF;
+			wValue >>= 4;
+			while ( iBits-- )
+			{
+				bOutVal <<= 1;
+				bOutVal |= (wValue >> iBits) & 0x1;
+				if ( ++wBitIndex == 8 )
+				{
+					wBitIndex = 0;
+					pOutput[iOutLen++] = bOutVal;
+				}
+			}
+		}
+		if ( wBitIndex )
+			pOutput[iOutLen++] = bOutVal << (8 - wBitIndex);
+		return iOutLen;
 	}
 };
 
