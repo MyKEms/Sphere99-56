@@ -899,6 +899,7 @@ bool CClient::OnRxUnk( BYTE* pData, int iLen ) // Receive message from client
 	// This is the first data we get on a new connection.
 	// Figure out what the other side wants.
 
+	fprintf(stderr, "DBG: OnRxUnk len=%d data[0-3]=%02x %02x %02x %02x\n", iLen, pData[0], pData[1], pData[2], pData[3]); fflush(stderr);
 	// DEBUG_CHECK( ! m_Crypt.IsInitCrypt());
 
 	if ( iLen < 4 )	// just a ping for server info. (maybe, or CONNECT_TELNET?)
@@ -958,8 +959,10 @@ bool CClient::xRecvData() // Receive message from client
 	// High level Rx from Client.
 	// RETURN: false = dump the client.
 
+	fprintf(stderr, "DBG: xRecvData connType=%d\n", m_ConnectType); fflush(stderr);
 	CUOEvent Event;
 	int iCountNew = m_Socket.Receive( &Event, sizeof(Event), 0 );
+	fprintf(stderr, "DBG: xRecvData received %d bytes\n", iCountNew); fflush(stderr);
 	if ( iCountNew <= 0 )	// I should always get data here.
 	{
 		return( false ); // this means that the client is gone.

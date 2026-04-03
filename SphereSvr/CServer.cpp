@@ -1401,11 +1401,29 @@ void CServer::SocketsReceive() // Check for messages from the clients
 				// Only do this if the connection is logged in ?
 				pClient->m_timeLastEvent.InitTimeCurrent();	// We should always get pinged every couple minutes or so
 			}
-			if ( ! pClient->xRecvData())
+#ifndef _WIN32
+			extern volatile sig_atomic_t g_fSEGV_catch;
+			extern sigjmp_buf g_SEGV_jmpbuf;
+			g_fSEGV_catch = 1;
+			if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
 			{
+				g_fSEGV_catch = 0;
+				fprintf(stderr, "DBG: SEGV in xRecvData — dropping client\n"); fflush(stderr);
 				try { pClient->DeleteThis(); } catch (...) {}
 				continue;
 			}
+#endif
+			if ( ! pClient->xRecvData())
+			{
+				try { pClient->DeleteThis(); } catch (...) {}
+#ifndef _WIN32
+				g_fSEGV_catch = 0;
+#endif
+				continue;
+			}
+#ifndef _WIN32
+			g_fSEGV_catch = 0;
+#endif
 		}
 		else
 		{
