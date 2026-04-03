@@ -72,6 +72,11 @@ CClient::CClient( SOCKET client ) :
 
 	m_Env.SetInvalid();
 
+	// Self-ref: prevent premature destruction when callers don't hold CClientPtr.
+	// The m_Clients list uses raw pointers, so we must ensure the CClient stays
+	// alive as long as it's in the list. DecRefCount happens in DeleteThis.
+	IncRefCount();
+
 	g_Serv.StatInc( SERV_STAT_CLIENTS );
 	g_Serv.ClientsAvgCalc();
 	g_Serv.m_Clients.InsertHead( this );
