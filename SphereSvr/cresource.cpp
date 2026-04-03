@@ -12,14 +12,28 @@
 #include <execinfo.h>
 #endif
 
-// Signal handler that prints backtrace before crashing
+// Signal handler: if siglongjmp recovery is enabled, use it.
+// Otherwise print backtrace and crash.
 #ifndef _WIN32
+#include <setjmp.h>
+extern volatile sig_atomic_t g_fSEGV_catch;
+extern sigjmp_buf g_SEGV_jmpbuf;
+
 static void CrashHandler(int sig)
 {
+	if ( g_fSEGV_catch )
+	{
+		// Recovery enabled — jump back to safe point.
+		g_fSEGV_catch = 0;
+		signal(sig, CrashHandler); // re-install (SA_RESETHAND cleared it)
+		siglongjmp(g_SEGV_jmpbuf, 1);
+		return; // not reached
+	}
+	// No recovery — print backtrace and crash.
 	fprintf(stderr, "\n=== CRASH: signal %d ===\n", sig);
 	void* bt[30];
 	int n = backtrace(bt, 30);
-	backtrace_symbols_fd(bt, n, 2); // write to stderr
+	backtrace_symbols_fd(bt, n, 2);
 	fflush(stderr);
 	signal(sig, SIG_DFL);
 	raise(sig);
@@ -2550,7 +2564,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 	struct sigaction sa;
 	sa.sa_handler = CrashHandler;
 	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_RESETHAND; // one-shot
+	sa.sa_flags = 0; // persistent — CrashHandler checks g_fSEGV_catch for recovery
 	sigaction(SIGSEGV, &sa, NULL);
 	sigaction(SIGBUS, &sa, NULL);
 	sigaction(SIGABRT, &sa, NULL);

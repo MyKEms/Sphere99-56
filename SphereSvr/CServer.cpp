@@ -1507,11 +1507,15 @@ void CServer::SocketsFlush() // Sends ALL buffered data
 
 void CServer::OnTick()
 {
+#ifndef _WIN32
+	extern volatile sig_atomic_t g_fSEGV_catch;
+	extern sigjmp_buf g_SEGV_jmpbuf;
+#endif
 	static int s_iTickDbg = 0;
 	s_iTickDbg++;
-	m_Profile.SwitchTask( PROFILE_Overhead );	// PROFILE_Resources
+	m_Profile.SwitchTask( PROFILE_Overhead );
 
-	OnTick_Busy();	// periodically give the console a tick.
+	OnTick_Busy();
 
 	if ( g_ServConsole.IsCommandReady())	// window is on another thread ?
 	{
@@ -1522,14 +1526,25 @@ void CServer::OnTick()
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase1 ok (tick=%d)", s_iTickDbg); }
 
 	// Check clients for incoming packets.
+#ifndef _WIN32
+	g_fSEGV_catch = 1;
+	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
+	{
+		g_fSEGV_catch = 0;
+		// SEGV in SocketsReceive — skip to flush
+		goto do_flush;
+	}
+#endif
 	try
 	{
 		SocketsReceive();
 	}
 	catch (...)
 	{
-		g_Log.Event( LOG_GROUP_CLIENTS, LOGL_ERROR, "Exception in SocketsReceive" LOG_CR );
 	}
+#ifndef _WIN32
+	g_fSEGV_catch = 0;
+#endif
 
 	if ( ! IsLoading())
 	{
@@ -1560,7 +1575,8 @@ void CServer::OnTick()
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase2 ok (tick=%d)", s_iTickDbg); }
 
-	// Network flush — ALWAYS runs, never skipped by SEGV recovery.
+do_flush:
+	// Network flush — ALWAYS runs, even after SEGV recovery.
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
 	try { SocketsFlush(); } catch (...) {}
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
