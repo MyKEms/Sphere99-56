@@ -795,7 +795,7 @@ void CClient::xFlush()
 	m_timeLastSend.InitTimeCurrent();
 
 	int iLenRet;
-	if ( m_ConnectType != CONNECT_GAME /* || m_Crypt.GetCryptVer() >= 0x200040 */ )	// acting as a login server to this client.
+	if ( m_ConnectType != CONNECT_GAME || m_Crypt.GetCryptVer() == 0 )	// login server or NoCrypt game client — send raw
 	{
 		iLenRet = m_Socket.Send( m_bout.RemoveDataLock(), iLen );
 		if ( iLenRet != SOCKET_ERROR )
