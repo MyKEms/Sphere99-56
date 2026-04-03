@@ -2,7 +2,7 @@ CXX = g++
 BASEDIR = $(CURDIR)
 CXXFLAGS = -g -std=c++14 -m32 -fpermissive -Wno-endif-labels -Wno-write-strings \
            -Wno-narrowing -Wno-unused-result -Wno-format-security \
-           -DSPHERE_SVR -D_CONSOLE -D_MT \
+           -DSPHERE_SVR -DSPHERE_GAME_SERVER -D_CONSOLE -D_MT \
            -I$(BASEDIR) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereCommon \
            -I$(BASEDIR)/SphereAccount -I$(BASEDIR)/SphereSvr
 LDFLAGS = -m32 -lpthread
@@ -22,10 +22,10 @@ SPHERECOMMON_SRC = \
 	SphereCommon/ccrypt.cpp \
 	SphereCommon/ccryptnew.cpp \
 	SphereCommon/cMulInst.cpp \
-	SphereCommon/cmulmap.cpp \
+	SphereCommon/cMulMap.cpp \
 	SphereCommon/cmulmulti.cpp \
-	SphereCommon/cmultile.cpp \
-	SphereCommon/cmulver.cpp \
+	SphereCommon/cMulTile.cpp \
+	SphereCommon/cMulVer.cpp \
 	SphereCommon/cobjbasetemplate.cpp \
 	SphereCommon/cpointmap.cpp \
 	SphereCommon/cregioncomplex.cpp \
