@@ -4,6 +4,10 @@
 //
 
 #include "stdafx.h"	// predef header.
+#ifndef _WIN32
+#include <setjmp.h>
+#include <signal.h>
+#endif
 
 static const SOUND_TYPE sm_Sounds_Ghost[] =
 {
@@ -515,7 +519,25 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 
 		try
 		{
+#ifndef _WIN32
+			// Set up SEGV recovery point — if a section causes a segfault,
+			// we skip it and continue loading the next section.
+			extern volatile sig_atomic_t g_fSEGV_catch;
+			extern sigjmp_buf g_SEGV_jmpbuf;
+			g_fSEGV_catch = 1;
+			if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
+			{
+				// Returned here from SEGV handler via siglongjmp.
+				g_fSEGV_catch = 0;
+				fprintf(stderr, "DBG: SEGV recovery — skipped section at line %d\n", s.GetContext().m_iLineNum);
+				fflush(stderr);
+				continue; // skip this section, try next
+			}
+#endif
 			g_Cfg.LoadScriptSection(s);
+#ifndef _WIN32
+			g_fSEGV_catch = 0;
+#endif
 		}
 		SPHERE_LOG_TRY_CATCH1( "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum )
 	}
