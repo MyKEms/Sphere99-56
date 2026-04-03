@@ -108,17 +108,26 @@ CItemContainerPtr CChar::GetBank( LAYER_TYPE layer )
 		}
 
 		// Give them a bank box if not already have one.
+		fprintf(stderr, "[NET] GetBank: CreateScript(0x%x)...\n", id); fflush(stderr);
 		pItemTest = CItem::CreateScript( id, this );
+		fprintf(stderr, "[NET] GetBank: CreateScript done, casting...\n"); fflush(stderr);
 		pBankBox = REF_CAST(CItemContainer,pItemTest);
-		ASSERT(pBankBox);
+		if ( pBankBox == NULL )
+		{
+			fprintf(stderr, "[ERR] GetBank: cast to CItemContainer FAILED for id=0x%x\n", id); fflush(stderr);
+			return NULL;
+		}
+		fprintf(stderr, "[NET] GetBank: LayerAdd layer=%d...\n", layer); fflush(stderr);
 		pBankBox->SetAttr(ATTR_NEWBIE | ATTR_MOVE_NEVER);
 		LayerAdd( pBankBox, layer );
+		fprintf(stderr, "[NET] GetBank: LayerAdd done\n"); fflush(stderr);
 		if ( layer != LAYER_PACK )
 		{
 			pBankBox->SetRestockTimeSeconds( 15*60 );
-			pBankBox->SetTimeout( pBankBox->GetRestockTimeSeconds()* TICKS_PER_SEC );	// restock count
+			pBankBox->SetTimeout( pBankBox->GetRestockTimeSeconds()* TICKS_PER_SEC );
 		}
 	}
+	fprintf(stderr, "[NET] GetBank: returning pBankBox=%p\n", (void*)pBankBox.GetRefObj()); fflush(stderr);
 	return( pBankBox );
 }
 
