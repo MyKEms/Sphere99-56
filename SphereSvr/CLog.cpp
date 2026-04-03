@@ -85,68 +85,53 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 
 int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
 {
-	// Some event has occured. 
-	// Record it to whomever might be interested.
-	// NOTE: This could be called in odd interrupt context so don't use dynamic stuff
+	if ( ! IsLogged( dwGroupMask, level ))
+		return( 0 );
+	if ( pszMsg == NULL || *pszMsg == '\0' )
+		return( 0 );
+
+#ifndef _WIN32
+	// Linux: write to stderr. The CFileText open/close per-line cycle is
+	// broken on Linux (causes SEGV). All critical messages also go through
+	// SPHERE_LOG_* macros to stderr.
+	fprintf(stderr, "%s", pszMsg);
+	fflush(stderr);
+	try { g_Serv.Event_PrintClient( pszMsg ); } catch (...) {}
+	return 1;
+#else
 	int iRet = 0;
 	try
 	{
-		if ( ! IsLogged( dwGroupMask, level ))	// I don't care about these ?
-			return( 0 );
-
 		CThreadLockPtr lock(this);
-
 		ASSERT( pszMsg && *pszMsg );
 
-		// Put up the date/time.
-		CGTime datetime;	// last real time stamp.
+		CGTime datetime;
 		datetime.InitTimeCurrent();
 		struct tm* pDateTm = datetime.GetLocalTm();
 
 		if ( pDateTm->tm_mday != m_iDayStamp )
 		{
-			// it's a new day, open with new day name.
-			Close();	// LINUX should alrady be closed.
+			Close();
 			OpenLog(NULL);
 			WriteString( datetime.Format(CTIME_FORMAT_DEFAULT));
 			WriteString( LOG_CR );
 			m_iDayStamp = pDateTm->tm_mday;
-		}
-		else
-		{
-			// On Linux, keep the file open instead of re-opening per line.
-			// The original open/close cycle crashes when the file path is invalid.
-			if ( ! IsFileOpen())
-			{
-				OpenLog(NULL);
-			}
 		}
 
 		TCHAR szTime[ 32 ];
 		sprintf( szTime, "%02d:%02d:", pDateTm->tm_hour, pDateTm->tm_min );
 
 		LPCTSTR pszLabel = NULL;
-
 		switch (level)
 		{
-		case LOGL_FATAL:	// fatal error !
-			pszLabel = "FATAL:";
-			break;
-		case LOGL_CRIT:	// critical.
-			pszLabel = "CRITICAL:";
-			break;
-		case LOGL_ERROR:	// non-fatal errors.
-			pszLabel = "ERROR:";
-			break;
-		case LOGL_WARN:
-			pszLabel = "WARNING:";
-			break;
+		case LOGL_FATAL:  pszLabel = "FATAL:"; break;
+		case LOGL_CRIT:   pszLabel = "CRITICAL:"; break;
+		case LOGL_ERROR:  pszLabel = "ERROR:"; break;
+		case LOGL_WARN:   pszLabel = "WARNING:"; break;
 		}
 
-		// Get the script context. (if there is one)
 		TCHAR szScriptContext[ 260 + 16 ];
 		CSphereThread* pThread = CSphereThread::GetCurrentThread();
-		ASSERT(pThread);
 		if ( pThread && pThread->m_pScriptContext )
 		{
 			CScriptLineContext LineContext = pThread->m_pScriptContext->GetContext();
@@ -157,33 +142,22 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 			szScriptContext[0] = '\0';
 		}
 
-		// Print to screen.
-
 		if ( ! ( dwGroupMask & LOG_GROUP_INIT ) && ! g_Serv.IsLoading())
-		{
 			EventStrPrint( 1, szTime );
-		}
-		if ( pszLabel )	// some sort of error
-		{
+		if ( pszLabel )
 			EventStrPrint( 2, pszLabel );
-		}
 		if ( szScriptContext[0] )
-		{
 			EventStrPrint( 3, szScriptContext );
-		}
 		EventStrPrint( 0, pszMsg );
-
-		Flush();	// Make sure the log is up to date !
-
+		Flush();
 		iRet = 1;
 	}
 	catch (...)
 	{
-		// Not much we can do about this. don't log this again because it is reentrant.
 		iRet = 0;
 	}
-
 	return( iRet );
+#endif
 }
 
 CGTime CLog::sm_prevCatchTick;
