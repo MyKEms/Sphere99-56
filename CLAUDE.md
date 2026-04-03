@@ -125,3 +125,20 @@ breaks silently — the base class stub gets called instead of the derived overr
 - Use exact filename case in `#include` directives and Makefile
 - Do not add Co-Authored-By to git commits
 - **NEVER** commit shard-specific data: scripts/, save/, accounts/, muls/, sphere.ini, *.log
+
+## Debug Logging & Testing
+
+### Logging (spherelog.h)
+- **NEVER remove** `SPHERE_LOG_NET`/`SPHERE_LOG_ERR` messages — they are controlled by DEBUGLEVEL
+- `DEBUGLEVEL=0` (sphere.ini) = errors only (production)
+- `DEBUGLEVEL=2` = network trace (login, packets, relay) — default for dev
+- `DEBUGLEVEL=3` = full trace (script execution)
+- Use `SPHERE_LOG_NET()` for all network/client events
+- Use `fprintf(stderr, "[NET]...")` for temporary pinpoint debugging (remove after fix)
+
+### Test Tools (tools/)
+- `tools/uo_test_client.py` — single login flow test (needs Huffman decompress)
+- `tools/test_suite.py` — 6-test quality suite
+- Run `python3 tools/test_suite.py` after every significant code change
+- Add new test for each milestone (char create, game entry, walk, combat)
+- After build: always `cp sphere99svr /workspace/Erebor/sphere/` then restart

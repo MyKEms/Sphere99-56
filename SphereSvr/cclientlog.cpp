@@ -974,6 +974,12 @@ bool CClient::xRecvData() // Receive message from client
 	SPHERE_LOG_NET("xRecvData received %d bytes", iCountNew);
 	if ( iCountNew <= 0 )	// I should always get data here.
 	{
+		// For game connections that just sent charlist, don't close immediately.
+		// Client may still be reading our response from TCP buffer.
+		if ( m_ConnectType == CONNECT_GAME && m_bout.GetDataQty() > 0 )
+		{
+			xFlush();  // make sure we sent everything
+		}
 		return( false ); // this means that the client is gone.
 	}
 	if ( iCountNew > 0 )

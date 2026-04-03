@@ -890,11 +890,13 @@ void CChar::InitPlayer( const CUOEvent* pBin, CClient* pClient )
 		}
 	}
 
-	fprintf(stderr, "[NET] InitPlayer: stats done, creating bank/pack...\n"); fflush(stderr);
+	fprintf(stderr, "[NET] InitPlayer: stats done, creating bank...\n"); fflush(stderr);
 	// Create the bank box.
 	CItemContainerPtr pBankBox = GetBank( LAYER_BANKBOX );
+	fprintf(stderr, "[NET] InitPlayer: bank done, creating pack...\n"); fflush(stderr);
 	// Create the pack.
 	CItemContainerPtr pPack = GetPackSafe();
+	fprintf(stderr, "[NET] InitPlayer: pack done\n"); fflush(stderr);
 
 	fprintf(stderr, "[NET] InitPlayer: bank/pack done, loading newbie items...\n"); fflush(stderr);
 	// Get special equip for the starting skills.
