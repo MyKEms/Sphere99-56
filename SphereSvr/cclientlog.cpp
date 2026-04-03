@@ -6,6 +6,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 
 BYTE CClient::sm_xCompress_Buffer[UO_MAX_EVENT_BUFFER];	// static
 CCompressTree CClient::sm_xComp;
@@ -80,8 +81,12 @@ bool CClient::addLoginErr( LOGIN_ERR_TYPE code )
 	// LOGIN_ERR_OTHER
 
 	if ( code == LOGIN_SUCCESS )
+	{
+		SPHERE_LOG_NET("addLoginErr: LOGIN_SUCCESS sock=%d", m_Socket.GetSocket());
 		return true;
+	}
 
+	SPHERE_LOG_ERR("addLoginErr: FAILED code=%d sock=%d", code, m_Socket.GetSocket());
 	DEBUG_ERR(( "%x:Bad Login %d" LOG_CR, m_Socket.GetSocket(), code ));
 
 	CUOCommand cmd;
@@ -137,7 +142,7 @@ bool CClient::addRelay( const CServerDef* pServ )
 	}
 
 	DWORD dwAddr = ipAddr.GetAddrIP();
-	fprintf(stderr, "DBG: addRelay IP=%d.%d.%d.%d port=%d\n", dwAddr&0xFF, (dwAddr>>8)&0xFF, (dwAddr>>16)&0xFF, (dwAddr>>24)&0xFF, pServ->m_ip.GetPort()); fflush(stderr);
+	SPHERE_LOG_NET("addRelay IP=%d.%d.%d.%d port=%d", dwAddr&0xFF, (dwAddr>>8)&0xFF, (dwAddr>>16)&0xFF, (dwAddr>>24)&0xFF, pServ->m_ip.GetPort());
 
 	CUOCommand cmd;
 	cmd.Relay.m_Cmd = XCMD_Relay;
@@ -162,8 +167,7 @@ bool CClient::addRelay( const CServerDef* pServ )
 bool CClient::Login_Relay( int iRelay ) // Relay player to a selected IP
 {
 	// Client wants to be relayed to another server. XCMD_ServerSelect
-	// DEBUG_MSG(( "%x:Login_Relay" LOG_CR, GetSocket() ));
-	// iRelay = 0 = this local server.
+	SPHERE_LOG_NET("Login_Relay: iRelay=%d sock=%d", iRelay, m_Socket.GetSocket());
 
 	if ( !m_ProtoVer.GetCryptVer() || m_ProtoVer.GetCryptVer() >= 0x126000 )
 	{
@@ -195,6 +199,7 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 	// XCMD_ServersReq
 	// Initial login (Login on "loginserver", new format)
 	// If the messages are garbled make sure they are terminated to correct length.
+	SPHERE_LOG_NET("Login_ServerList: acct='%s' sock=%d", pszAccount ? pszAccount : "(null)", m_Socket.GetSocket());
 
 	TCHAR szAccount[MAX_ACCOUNT_NAME_SIZE+3];
 	int iLenAccount = Str_GetBare( szAccount, pszAccount, sizeof(szAccount)-1 );
@@ -252,6 +257,7 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 	cmd.ServerList.m_VerCode = 0x3d; // 0xFF;
 	xSendPkt( &cmd, iLen );
 
+	SPHERE_LOG_NET("Login_ServerList: sent %d servers, %d bytes", j, iLen);
 	m_Targ.m_Mode = CLIMODE_SETUP_SERVERS;
 	return( LOGIN_SUCCESS );
 }
@@ -684,7 +690,7 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 	// (CUOEvent::ServersReq) or (CUOEvent::CharListReq)
 	// NOTE: Anything else we get at this point is tossed !
 
-	fprintf(stderr, "DBG: xProcessClientSetup len=%d connType=%d\n", iLen, m_ConnectType); fflush(stderr);
+	SPHERE_LOG_NET("xProcessClientSetup len=%d connType=%d sock=%d", iLen, m_ConnectType, m_Socket.GetSocket());
 	ASSERT( m_ConnectType == CONNECT_CRYPT );
 	// ASSERT( !m_Crypt.IsInitCrypt());
 	ASSERT( iLen );
@@ -766,7 +772,7 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 		lErr = LOGIN_ERR_OTHER;
 	}
 
-	fprintf(stderr, "DBG: xProcessClientSetup result lErr=%d connType=%d cryptVer=0x%x\n", lErr, m_ConnectType, m_Crypt.GetCryptVer()); fflush(stderr);
+	SPHERE_LOG_NET("xProcessClientSetup result lErr=%d connType=%d cryptVer=0x%x", lErr, m_ConnectType, m_Crypt.GetCryptVer());
 	if ( lErr == LOGIN_ERR_OTHER )	// it never matched any crypt format.
 	{
 		addLoginErr( lErr );
@@ -899,7 +905,7 @@ bool CClient::OnRxUnk( BYTE* pData, int iLen ) // Receive message from client
 	// This is the first data we get on a new connection.
 	// Figure out what the other side wants.
 
-	fprintf(stderr, "DBG: OnRxUnk len=%d data[0-3]=%02x %02x %02x %02x\n", iLen, pData[0], pData[1], pData[2], pData[3]); fflush(stderr);
+	SPHERE_LOG_NET("OnRxUnk len=%d data[0-3]=%02x %02x %02x %02x", iLen, pData[0], pData[1], pData[2], pData[3]);
 	// DEBUG_CHECK( ! m_Crypt.IsInitCrypt());
 
 	if ( iLen < 4 )	// just a ping for server info. (maybe, or CONNECT_TELNET?)
@@ -946,8 +952,10 @@ bool CClient::OnRxUnk( BYTE* pData, int iLen ) // Receive message from client
 	m_Targ.m_tmSetup.m_dwCryptKey = UNPACKDWORD(pData);
 	iLen -= sizeof( DWORD );
 	m_ConnectType = CONNECT_CRYPT;
+	SPHERE_LOG_NET("OnRxUnk: seed=0x%08x, remaining=%d bytes", m_Targ.m_tmSetup.m_dwCryptKey, iLen);
 	if ( iLen <= 0 )
 	{
+		SPHERE_LOG_NET("OnRxUnk: seed only, waiting for login packet");
 		return( true );
 	}
 
@@ -959,10 +967,10 @@ bool CClient::xRecvData() // Receive message from client
 	// High level Rx from Client.
 	// RETURN: false = dump the client.
 
-	fprintf(stderr, "DBG: xRecvData connType=%d\n", m_ConnectType); fflush(stderr);
+	SPHERE_LOG_NET("xRecvData connType=%d sock=%d", m_ConnectType, m_Socket.GetSocket());
 	CUOEvent Event;
 	int iCountNew = m_Socket.Receive( &Event, sizeof(Event), 0 );
-	fprintf(stderr, "DBG: xRecvData received %d bytes\n", iCountNew); fflush(stderr);
+	SPHERE_LOG_NET("xRecvData received %d bytes", iCountNew);
 	if ( iCountNew <= 0 )	// I should always get data here.
 	{
 		return( false ); // this means that the client is gone.

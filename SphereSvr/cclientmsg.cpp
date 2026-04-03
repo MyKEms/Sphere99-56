@@ -6,6 +6,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 
 /////////////////////////////////////////////////////////////////
 // -CClient stuff.
@@ -1545,6 +1546,7 @@ void CClient::addPlayerWalkCancel( void )
 
 void CClient::addPlayerStart( CChar* pChar )
 {
+	SPHERE_LOG_NET("addPlayerStart: char=%s uid=0x%x", pChar ? (LPCTSTR)pChar->GetName() : "(null)", pChar ? (DWORD)pChar->GetUID() : 0);
 	if ( m_pChar != pChar )	// death option just uses this as a reload.
 	{
 		// This must be a CONTROL command ?
@@ -3470,6 +3472,7 @@ void CClient::Setup_CreateDialog( const CUOEvent* pEvent ) // All the character 
 
 bool CClient::Setup_Play( int iSlot ) // After hitting "Play Character" button
 {
+	SPHERE_LOG_NET("Setup_Play: slot=%d sock=%d", iSlot, m_Socket.GetSocket());
 	// Mode == CLIMODE_SETUP_CHARLIST
 
 	DEBUG_TRACE(( "%x:Setup_Play slot %d" LOG_CR, m_Socket.GetSocket(), iSlot ));
@@ -3535,11 +3538,13 @@ LOGIN_ERR_TYPE CClient::Setup_CharListReq( const char* pszAccName, const char* p
 {
 	// XCMD_CharListReq
 	// Gameserver login and request character listing
-	// dwAccount is the account id we got from XCMD_Relay
-	// This is used to alter the encryption.
+	SPHERE_LOG_NET("Setup_CharListReq: acct='%s' dwAccount=0x%x connType=%d", pszAccName ? pszAccName : "(null)", dwAccount, m_ConnectType);
 
 	if ( m_ConnectType != CONNECT_GAME )	// Not a game connection ?
+	{
+		SPHERE_LOG_ERR("Setup_CharListReq: REJECTED — not a game connection (connType=%d)", m_ConnectType);
 		return(LOGIN_ERR_OTHER);
+	}
 
 	switch ( GetTargMode())
 	{
