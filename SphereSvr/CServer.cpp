@@ -1461,7 +1461,23 @@ void CServer::SocketsReceive() // Check for messages from the clients
 	}
 	if ( readfds.IsSet( m_SocketMain.GetSocket()))
 	{
+#ifndef _WIN32
+		extern volatile sig_atomic_t g_fSEGV_catch;
+		extern sigjmp_buf g_SEGV_jmpbuf;
+		g_fSEGV_catch = 1;
+		if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
+		{
+			g_fSEGV_catch = 0;
+			SPHERE_LOG_ERR("SEGV in SocketsAccept/CClient — recovered");
+		}
+		else
+		{
+			SocketsAccept( m_SocketMain, false );
+			g_fSEGV_catch = 0;
+		}
+#else
 		SocketsAccept( m_SocketMain, false );
+#endif
 	}
 #endif // _WIN32
 }
