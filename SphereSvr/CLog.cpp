@@ -114,9 +114,12 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		}
 		else
 		{
-#ifndef _WIN32
-			Open(NULL, OF_SHARE_DENY_WRITE|OF_READWRITE|OF_TEXT);	// LINUX needs to close and re-open for each log line !
-#endif
+			// On Linux, keep the file open instead of re-opening per line.
+			// The original open/close cycle crashes when the file path is invalid.
+			if ( ! IsFileOpen())
+			{
+				OpenLog(NULL);
+			}
 		}
 
 		TCHAR szTime[ 32 ];
@@ -173,10 +176,6 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		Flush();	// Make sure the log is up to date !
 
 		iRet = 1;
-
-#ifndef _WIN32
-		Close();
-#endif
 	}
 	catch (...)
 	{

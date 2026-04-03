@@ -1486,14 +1486,30 @@ void CServer::SocketsFlush() // Sends ALL buffered data
 {
 	for ( CClientPtr pClient = GetClientHead(); pClient!=NULL; pClient = pClient->GetNext())
 	{
-		pClient->xFlush();
-		pClient->addPause( false );	// always turn off pause here if it is on.
-		pClient->xFlush();
+		try
+		{
+			pClient->xFlush();
+			pClient->addPause( false );	// always turn off pause here if it is on.
+			pClient->xFlush();
+		}
+		catch (...) {}
 	}
 }
 
 void CServer::OnTick()
 {
+#ifndef _WIN32
+	// Protect entire server tick from SEGV — server must not die.
+	extern volatile sig_atomic_t g_fSEGV_catch;
+	extern sigjmp_buf g_SEGV_jmpbuf;
+	g_fSEGV_catch = 1;
+	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
+	{
+		g_fSEGV_catch = 0;
+		SPHERE_LOG_ERR("SEGV in OnTick — recovered, continuing server loop");
+		return; // skip rest of this tick
+	}
+#endif
 	m_Profile.SwitchTask( PROFILE_Overhead );	// PROFILE_Resources
 
 	OnTick_Busy();	// periodically give the console a tick.
@@ -1559,6 +1575,9 @@ void CServer::OnTick()
 	}
 
 	g_Cfg.OnTick(false);
+#ifndef _WIN32
+	g_fSEGV_catch = 0;
+#endif
 }
 
 bool CServer::SocketsInit( CGSocket& socket, int iPort )

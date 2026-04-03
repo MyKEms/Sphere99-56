@@ -2833,14 +2833,21 @@ bool CClient::xDispatchMsg()
 		SPHERE_LOG_ERR("xDispatchMsg: BAD cmd=0x%02x >= XCMD_QTY=%d", pEvent->Default.m_Cmd, XCMD_QTY);
 		return( false );
 	}
+	// Throttle non-critical packets to prevent client flooding.
+	// Skip throttle for: walk, skill, and all login-phase packets.
 	if ( pEvent->Default.m_Cmd != XCMD_Walk &&
-		pEvent->Default.m_Cmd != XCMD_Skill )
+		pEvent->Default.m_Cmd != XCMD_Skill &&
+		pEvent->Default.m_Cmd != XCMD_ServerSelect &&
+		pEvent->Default.m_Cmd != XCMD_Spy &&
+		pEvent->Default.m_Cmd != XCMD_CharListReq &&
+		pEvent->Default.m_Cmd != XCMD_CharPlay &&
+		pEvent->Default.m_Cmd != XCMD_ServersReq &&
+		m_ConnectType == CONNECT_GAME &&
+		GetAccount() != NULL )
 	{
 		int iAge = m_timeLastDispatch.GetCacheAge();
 		if ( iAge < TICKS_PER_SEC/2 )
 		{
-			// not long enough !
-			SPHERE_LOG_NET("xDispatchMsg: THROTTLED cmd=0x%02x age=%d", pEvent->Default.m_Cmd, iAge);
 			m_bin_msg_len = 0;	// wait longer. then process this.
 			return true;
 		}
