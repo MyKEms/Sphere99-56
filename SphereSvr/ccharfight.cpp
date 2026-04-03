@@ -1009,7 +1009,7 @@ int CChar::OnTakeDamage( int iDmg, CChar* pSrc, DAMAGE_TYPE uType )
 
 	if ( pSrc != this )	// this could be an infinite loop if called in @GetHit
 	{
-		CSphereExpArgs execArgs( this, pSrc, iDmg, uType, NULL );
+		CSphereExpArgs execArgs( this, pSrc, iDmg, (int)uType, (CResourceObj*)NULL );
 		if ( OnTrigger( CCharDef::T_GetHit, execArgs ) == TRIGRET_RET_VAL )
 			return( 0 );
 	}

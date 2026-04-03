@@ -7,7 +7,7 @@ a fully functional 0.99-compatible server from available partial sources.
 
 ## Current Status
 
-**The server starts, loads scripts, loads the game world, and runs the main loop.**
+**The server loads the world, accepts UO client connections, and runs the game loop.**
 
 | Metric | Value |
 |--------|-------|
@@ -16,8 +16,9 @@ a fully functional 0.99-compatible server from available partial sources.
 | Remaining stubs | **9** (Windows-only: registry + GUI, N/A on Linux) |
 | Binary | `sphere99svr` — ~2.0 MB, 32-bit ELF (Linux x86) |
 | Source files | 148 (.cpp + .h), ~101,500 lines |
-| Startup | Loads sphere.ini, MUL files, 300+ scripts, world save, accounts |
-| Runtime | Main game loop runs stable (tested 120+ seconds) |
+| World load | 509K items, 22K chars, 3K player chars linked to 1.7K accounts |
+| Network | Login → ServerList → CharList → Game entry works |
+| Encryption | NoCrypt + 17 client key versions (XOR rotation) |
 
 ## Building
 
@@ -114,8 +115,8 @@ CLAUDE.md           Technical documentation and development instructions
 - [x] CGSocketSet (fd_set wrapper for select() multiplexing)
 - [x] CLogIP / CLogIPArray (connection tracking, flood protection)
 - [x] CCryptBase (passthrough crypto — real UO encryption TBD)
-- [ ] Real UO client encryption (login handshake, game encryption)
-- [ ] Full packet parsing and response
+- [x] Real UO client encryption (17 key versions, XOR rotation cipher)
+- [x] Huffman compression for game-mode packets
 
 ### Phase 5 — World Persistence
 - [x] CVarDefArray tag persistence (s_PropSetTags, s_WriteTags)
@@ -123,7 +124,7 @@ CLAUDE.md           Technical documentation and development instructions
 - [x] String utilities (Str_ahextou, Str_GetBare, Str_Match, etc.)
 - [x] Unicode conversion (CvtUNICODEToSystem, CvtSystemToUNICODE)
 - [x] World save loading (sphereworld.scp, spherechars.scp)
-- [ ] World save writing (full save cycle)
+- [x] World save writing (SaveStage/SaveForce — staged sector-by-sector save)
 
 ### Phase 6 — Server Stability & Runtime
 - [x] Fix static init crash (custom operator new/delete with malloc/free)
@@ -133,19 +134,23 @@ CLAUDE.md           Technical documentation and development instructions
 - [x] Fix script path double-prefix (scripts/scripts/ → scripts/)
 - [x] Single-threaded mode on Linux (avoids QEMU threading issues)
 - [x] CServTimeMaster first-tick time delta fix
+- [x] Fix UID system — SetUIDIndex after AllocUID/LoadUID (objects survive loading)
+- [x] Fix hex number parsing (strtol base 16 for 0-prefixed values)
+- [x] SIGSEGV crash handler with backtrace
 - [ ] Multi-threaded mode (native Linux, not under QEMU)
-- [ ] Console input handling (Linux terminal)
 
-### Phase 7 — Client Connection (next)
-- [ ] UO client login encryption (seed, keys, handshake)
-- [ ] Character list / character selection packets
-- [ ] Game world entry packets
-- [ ] Movement and basic interaction packets
-- [ ] Full UO protocol implementation
+### Phase 7 — Client Connection
+- [x] UO client login encryption (seed, keys, handshake)
+- [x] Login → ServerList → ServerSelect → Relay flow
+- [x] Character list with real char names from world save
+- [x] Character selection → game world entry
+- [x] Game entry packets (XCMD_Start, view, items, light, weather)
+- [x] Walk/movement event handling
+- [x] Item display, click, pickup, drop, equip packets
 
-### Phase 8 — Game Logic Completion
+### Phase 8 — Game Logic & Script Support (current)
 - [ ] `<?...?>` escaped macro evaluation (0.99-specific)
-- [ ] `argo.` dialog construction API
+- [ ] `argo.` dialog construction API (15K+ calls in Erebor scripts)
 - [ ] Full `var()` global variable system
 - [ ] `safe()` error-safe expression wrapper
 - [ ] Complete trigger dispatch for all game events

@@ -9,7 +9,7 @@ configuration, and customizations live in separate private repositories.
 ## Quick Reference
 
 ```bash
-cd /workspace/Sphere99-56
+cd /workspace/Erebor/Migrace/Sphere99-56
 make              # build sphere99svr (32-bit Linux ELF)
 make clean        # remove artifacts
 ```
@@ -18,48 +18,57 @@ Prerequisites: `gcc-multilib g++-multilib make`
 
 ## Current State
 
-**Server starts and runs the main game loop.** All 5 phases of core infrastructure
-are implemented. 9 stubs remain (Windows registry + GUI, not applicable on Linux).
+**Server loads world and accepts UO client connections.** Phase 7 (client connection)
+is complete. The server is ready for game testing.
 
 Startup sequence working:
 1. Parse sphere.ini — all properties applied via virtual s_PropSet dispatch
 2. Open MUL files (map0, statics, tiledata, multi)
-3. Load 300+ .scp script files
-4. Load world save (sphereworld.scp, spherechars.scp)
-5. Load accounts
+3. Load 300+ .scp script files — 18,498 DEFNAMEs registered
+4. Load world save — 509,594 items + 22,665 chars (3,152 player chars linked to accounts)
+5. Load accounts — 1,702 accounts with char UIDs
 6. Initialize network socket (port 2593)
 7. Enter main game loop — runs stable indefinitely
+
+Login sequence working end-to-end:
+- TCP connect → seed → Login (0x80) → ServerList (0xA8) → ServerSelect (0xA0)
+- Relay (0x8C) → CharListReq (0x91) → CharList (0xA9) with real char names
+- CharPlay (0x5D) → game entry (XCMD_Start, map, view, items, light, weather)
+- NoCrypt + 17 encrypted client key versions supported
+- Huffman compression active in game mode
 
 ## Source Directories
 
 ```
-spherelib/          Base library — fully implemented (arrays, files, strings, sockets,
-                    expressions, variants, script parser, threads)
-SphereCommon/       UO data structures (MUL readers, crypto, regions) — mostly implemented
+spherelib/          Base library — fully implemented
+SphereCommon/       UO data structures — mostly implemented
 SphereAccount/      Account management — functional
-SphereSvr/          Main server logic — loads and runs, game logic needs work
+SphereSvr/          Main server logic — loads, accepts clients, game logic implemented
 ```
 
-## Next Priority: Client Connection (Phase 7)
+## Next Priority: Game Testing & Script Support
 
-The server runs but UO clients cannot connect yet. Needed:
+The server accepts clients and can enter the game. Primary areas needing work:
 
-1. **UO login encryption** — CCryptBase currently passthrough; need real handshake
-   - Client sends 4-byte seed, server responds with encryption keys
-   - Reference: SphereServer 0.56d `src/common/CEncrypt.cpp`
-   - Also: `src/graysvr/CClientLog.cpp` for login packet handling
+1. **Script triggers** — basic trigger system works but shard scripts may fail on
+   unimplemented features (safe(), argo.dialog API, <?...?> macros)
 
-2. **Packet parsing** — CClient needs to parse UO protocol packets
-   - Login packet (0x80), character list (0xA8), play character (0x5D)
-   - Reference: `src/graysvr/CClientEvent.cpp`, `CClientMsg.cpp`
+2. **`argo.` dialog API** — 15K+ calls in Erebor scripts; not yet implemented
 
-3. **Game world entry** — send map, character, items to client
-   - Reference: `src/graysvr/CClientMsg.cpp` for addCharToView, addItemToView
+3. **`safe()` expression** — error-safe wrapper; not yet implemented
 
-## Key 0.99-Specific Features Still Needed
+4. **CResourceLock** — may leak file handles (opens script files for lazy loading)
+
+## Key 0.99-Specific Features
 
 | Feature | Status | Description |
 |---------|--------|-------------|
+| Login protocol | Done | Full login → charlist → game entry works |
+| World load | Done | 509K items + 22K chars loaded from .scp save files |
+| UID system | Done | `SetUIDIndex()` fix ensures objects survive load and CharFind works |
+| Walk/move | Done | Event_Walking → WalkAck, collision detection |
+| World view | Done | addPlayerSee, addItem_OnGround, addChar all implemented |
+| World save | Done | SaveStage/SaveForce write items/chars/accounts |
 | `<?...?>` escaped macros | Not started | Deferred expression evaluation in dialogs |
 | `argo.` dialog API | Not started | Dialog construction (15K+ calls in Erebor scripts) |
 | `var()` globals | Partial | Server-wide variables — basic CVarDefArray works |
@@ -74,6 +83,20 @@ On Linux, the server runs single-threaded (CServTask runs in main thread).
 The original Win32 design used 3 threads (ServTask, MainTask, BackTask) but
 this crashes under QEMU user-mode emulation. Native Linux threading can be
 re-enabled later when running on real i386 or with proper synchronization.
+
+### UID System
+`CResourceObj::m_dwHashIndex` is the UID storage for all game objects. It must be
+set explicitly after `AllocUID`/`LoadUID` — these functions store the object pointer
+in the UID table but do NOT call `SetUIDIndex()`. Without `SetUIDIndex()`:
+- `IsValidUID()` returns false → `IsWeird()` returns 0x3104 → object is deleted
+- `FreeUID()` does nothing (m_dwHashIndex=0 → index 0, slot is empty)
+- `CharFind`/`ItemFind` return NULL (UID table has dangling pointer)
+
+Key fix in `SphereSvr/CObjBase.cpp`:
+- P_Serial handler (loading): call `SetUIDIndex(dwUID)` after `LoadUID()` succeeds
+- Constructor (runtime): save `AllocUID()` return value, call `SetUIDIndex(result|flags)`
+
+Item UIDs have `UID_F_ITEM = 0x40000000` set; char UIDs have no flags.
 
 ### Virtual Dispatch
 The s_PropSet/s_PropGet/s_Method chain is critical. Signatures MUST match

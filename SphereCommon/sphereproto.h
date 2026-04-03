@@ -2269,7 +2269,7 @@ struct CUOCommand	// command buffer from server to client.
 				BYTE m_id;
 				char m_area[MAX_NAME_SIZE+1];
 				char m_name[MAX_NAME_SIZE+1];
-			} m_start[1];
+			} m_start[32];
 		} CharList;
 
 		struct // size = 5 = response to attack.
