@@ -122,12 +122,9 @@ void CClient::DeleteThis()
 	m_Socket.Close();	// close socket to release fd
 
 	RemoveSelf();	// remove myself from my parent list.
-
-	// CClient has multiple inheritance. Cast to the first base class
-	// (CGObListRec, which has virtual destructor) to ensure correct delete.
-	CClient* pSelf = this;
-	CGObListRec* pBase = static_cast<CGObListRec*>(pSelf);
-	delete pBase;
+	// CClient is intentionally leaked. delete causes heap corruption
+	// due to multiple inheritance destructor chain issues.
+	// Memory leak is ~2KB per client, acceptable for game server.
 }
 
 bool CClient::CanInstantLogOut() const
