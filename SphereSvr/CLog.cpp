@@ -93,11 +93,9 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		return( 0 );
 
 #ifndef _WIN32
-	// Linux: write to stderr. The CFileText open/close per-line cycle is
-	// broken on Linux (causes SEGV). All critical messages also go through
-	// SPHERE_LOG_* macros to stderr.
-	fprintf(stderr, "%s", pszMsg);
-	fflush(stderr);
+	// Linux: skip file I/O entirely. SPHERE_LOG_* macros handle stderr output.
+	// g_Log.Event is called thousands of times during script loading — writing
+	// to stderr here blocks when output is piped/redirected.
 	try { g_Serv.Event_PrintClient( pszMsg ); } catch (...) {}
 	return 1;
 #else
