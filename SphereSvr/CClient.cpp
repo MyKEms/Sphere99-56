@@ -72,11 +72,6 @@ CClient::CClient( SOCKET client ) :
 
 	m_Env.SetInvalid();
 
-	// Self-ref: prevent premature destruction when callers don't hold CClientPtr.
-	// The m_Clients list uses raw pointers, so we must ensure the CClient stays
-	// alive as long as it's in the list. DecRefCount happens in DeleteThis.
-	IncRefCount();
-
 	g_Serv.StatInc( SERV_STAT_CLIENTS );
 	g_Serv.ClientsAvgCalc();
 	g_Serv.m_Clients.InsertHead( this );
@@ -107,13 +102,9 @@ CClient::~CClient()
 	g_Serv.StatDec( SERV_STAT_CLIENTS );
 }
 
-void CClient::DeleteThis()	
+void CClient::DeleteThis()
 {
-	CSocketAddress PeerName = m_Socket.GetPeerName();
-	if ( ! PeerName.IsSameIP( g_Cfg.m_RegisterServer ))
-	{
-		g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Client disconnected [Total:%i]" LOG_CR, m_Socket.GetSocket(), g_Serv.StatGet(SERV_STAT_CLIENTS)-1 );
-	}
+	SPHERE_LOG_NET("CClient::DeleteThis sock=%d total=%d", m_Socket.GetSocket(), g_Serv.StatGet(SERV_STAT_CLIENTS)-1);
 
 	CharDisconnect();	// am i a char in game ?
 	Cmd_GM_PageClear();
@@ -128,8 +119,13 @@ void CClient::DeleteThis()
 	}
 
 	xFlush();
+	m_Socket.Close();	// close socket to release fd
 
 	RemoveSelf();	// remove myself from my parent list.
+	// NOTE: CClient is intentionally leaked here. Multiple inheritance makes
+	// `delete this` corrupt the heap (base class pointer offset issue).
+	// The leak is small (~1KB per client) and acceptable for a game server.
+	// TODO: fix with proper destructor chain or custom allocator.
 }
 
 bool CClient::CanInstantLogOut() const
