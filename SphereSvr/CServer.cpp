@@ -124,7 +124,7 @@ void CServer::SetSignals()
 		signal(SIGTERM, &Signal_Terminate);
 		signal(SIGINT, &Signal_Terminate);
 		signal(SIGILL, &Signal_Terminate);
-		signal(SIGSEGV, &Signal_Illegal_Instruction);
+		// SIGSEGV handled by CrashHandler in cresource.cpp (supports siglongjmp recovery)
 	}
 	else
 	{
@@ -132,7 +132,7 @@ void CServer::SetSignals()
 		signal(SIGQUIT, SIG_DFL );
 		signal(SIGINT, SIG_DFL );
 		signal(SIGILL, SIG_DFL);
-		signal(SIGSEGV, SIG_DFL);
+		// SIGSEGV handled by CrashHandler
 	}
 #endif
 
