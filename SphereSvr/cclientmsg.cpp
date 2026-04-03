@@ -3602,6 +3602,7 @@ LOGIN_ERR_TYPE CClient::Setup_CharListReq( const char* pszAccName, const char* p
 	}
 
 	xSendPkt( &cmd, len );
+	xFlush();	// Must flush immediately — client closes connection if no response
 	m_Targ.m_Mode = CLIMODE_SETUP_CHARLIST;
 	return LOGIN_SUCCESS;
 }
