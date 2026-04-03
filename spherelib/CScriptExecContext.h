@@ -80,11 +80,192 @@ public:
 		return m_pSrc;
 	}
 
-	void s_ParseEscapes(LPCTSTR pszBuf, DWORD dwFlags)
+	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags)
 	{
-		// Basic macro expansion placeholder.
-		// Full <variable> resolution and <?...?> handling deferred to Phase 4+.
-		// For now, this is intentionally a no-op -- the raw text passes through.
+		// Resolve <...> expression tags in a text buffer, in-place.
+		// <eval 1+2>  → "3"
+		// <SRC.NAME>  → character name
+		// <STRLEN(x)> → string length
+		// <safe ...>  → returns "" on error
+		// <?...?>     → deferred macro, pass through for now
+		//
+		// dwFlags: CSCRIPT_PARSE_HTML = use %% delimiters instead of <>
+
+		if ( pszBuf == NULL || *pszBuf == '\0' )
+			return;
+
+		TCHAR chBegin = '<';
+		TCHAR chEnd = '>';
+		if ( dwFlags & 0x01 ) // CSCRIPT_PARSE_HTML
+		{
+			chBegin = '%';
+			chEnd = '%';
+		}
+
+		for ( int i = 0; pszBuf[i]; i++ )
+		{
+			if ( pszBuf[i] != chBegin )
+				continue;
+
+			// Check for <?...?> deferred macros — pass through for now.
+			if ( pszBuf[i+1] == '?' )
+				continue;
+
+			// Must start with an alphanumeric or '<' (nested).
+			if ( !isalnum(pszBuf[i+1]) && pszBuf[i+1] != '<' )
+				continue;
+
+			int iBegin = i;
+			int iDepth = 1;
+			int iEnd = -1;
+
+			// Find the matching '>' respecting nesting.
+			for ( int j = i + 1; pszBuf[j]; j++ )
+			{
+				if ( pszBuf[j] == chBegin && (isalnum(pszBuf[j+1]) || pszBuf[j+1] == '<') )
+					iDepth++;
+				else if ( pszBuf[j] == chEnd )
+				{
+					iDepth--;
+					if ( iDepth <= 0 )
+					{
+						iEnd = j;
+						break;
+					}
+				}
+			}
+			if ( iEnd < 0 )
+				continue; // unmatched bracket
+
+			// Extract the expression between < and >.
+			pszBuf[iEnd] = '\0';
+			TCHAR* pszExpr = pszBuf + iBegin + 1;
+
+			// Recursively resolve any nested <...> first.
+			s_ParseEscapes(pszExpr, dwFlags);
+
+			// Check for "safe" prefix.
+			bool fSafe = false;
+			if ( !_strnicmp(pszExpr, "safe", 4) )
+			{
+				TCHAR ch5 = pszExpr[4];
+				if ( ch5 == ' ' || ch5 == '.' || ch5 == '(' || ch5 == '\0' )
+				{
+					fSafe = true;
+					pszExpr += 4;
+					if ( *pszExpr == ' ' || *pszExpr == '.' )
+						pszExpr++;
+				}
+			}
+
+			// Try to resolve the expression.
+			CGString sResult;
+			bool fResolved = false;
+
+			try
+			{
+				// Split function name from arguments: "FUNC(args)" or "FUNC args" or "OBJ.PROP"
+				TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+				strncpy(szKey, pszExpr, sizeof(szKey)-1);
+				szKey[sizeof(szKey)-1] = '\0';
+
+				// Find argument separator: space, '(', or '.'
+				TCHAR* pszArgs = szKey;
+				while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
+					pszArgs++;
+
+				CGVariant vArgs;
+				CGVariant vValRet;
+
+				if ( *pszArgs == '(' )
+				{
+					// Function call: FUNC(args)
+					*pszArgs++ = '\0';
+					// Strip trailing ')'
+					int len = strlen(pszArgs);
+					if ( len > 0 && pszArgs[len-1] == ')' )
+						pszArgs[len-1] = '\0';
+					vArgs = pszArgs;
+				}
+				else if ( *pszArgs == ' ' )
+				{
+					// Function or eval: "eval 1+2" or "FUNC args"
+					*pszArgs++ = '\0';
+					while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
+					vArgs = pszArgs;
+				}
+
+				// Try global function dispatch.
+				HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
+				if ( hRes == NO_ERROR )
+				{
+					sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+					fResolved = true;
+				}
+
+				// Try object property access (SRC.NAME, OBJ.PROP, etc.)
+				if ( !fResolved )
+				{
+					CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+					if ( pObj )
+					{
+						hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
+						if ( hRes == NO_ERROR )
+						{
+							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+							fResolved = true;
+						}
+					}
+				}
+
+				// Try method call on object.
+				if ( !fResolved && szKey[0] )
+				{
+					CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+					if ( pObj )
+					{
+						hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
+						if ( hRes == NO_ERROR )
+						{
+							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+							fResolved = true;
+						}
+					}
+				}
+			}
+			catch (...)
+			{
+				fResolved = fSafe;
+			}
+
+			if ( !fResolved )
+			{
+				if ( fSafe )
+				{
+					sResult = "";
+					fResolved = true;
+				}
+				else
+				{
+					// Restore the '>' and skip — don't modify unresolvable tags.
+					pszBuf[iEnd] = chEnd;
+					continue;
+				}
+			}
+
+			// Replace <expr> with the resolved value, shifting the buffer.
+			int iExprLen = iEnd - iBegin + 1; // includes < and >
+			int iResultLen = sResult.GetLength();
+			int iTrailLen = strlen(pszBuf + iEnd + 1); // chars after '>'
+
+			// Restore the null we placed at iEnd for the trailing copy.
+			// pszBuf[iEnd] is already '\0', the trailing starts at iEnd+1.
+			memmove(pszBuf + iBegin + iResultLen, pszBuf + iEnd + 1, iTrailLen + 1);
+			memcpy(pszBuf + iBegin, (LPCTSTR)sResult, iResultLen);
+
+			// Re-scan from the end of the replacement (don't re-resolve our own output).
+			i = iBegin + iResultLen - 1; // -1 because the for loop increments.
+		}
 	}
 
 	//

@@ -155,6 +155,192 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		break;
 	case F_Var:
 		return g_Cfg.m_Var.s_MethodTags( vArgs, vValRet, GetSrc() );
+
+	case F_Eval:
+		{
+			// Evaluate a numeric expression and return the result.
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
+			long lVal = GetValue(pszStr);
+			vValRet.SetInt(lVal);
+		}
+		break;
+
+	case F_Safe:
+		{
+			// Error-safe wrapper: try to resolve the expression, return 0 on failure.
+			// <safe EXPR> or <safe(EXPR)>
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
+			try
+			{
+				// Try as a function dispatch first.
+				TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+				strncpy(szKey, pszStr, sizeof(szKey)-1);
+				szKey[sizeof(szKey)-1] = '\0';
+				// Split at first space or '('
+				TCHAR* pArg = szKey;
+				while ( *pArg && *pArg != ' ' && *pArg != '(' ) pArg++;
+				CGVariant vInnerArgs;
+				if ( *pArg )
+				{
+					*pArg++ = '\0';
+					if ( *pArg == '(' ) pArg++; // skip open paren
+					vInnerArgs = pArg;
+				}
+				CGVariant vInnerRet;
+				HRESULT hRes = Function_Dispatch(szKey, vInnerArgs, vInnerRet);
+				if ( hRes == NO_ERROR )
+				{
+					vValRet = vInnerRet;
+					break;
+				}
+				// Try as a numeric expression.
+				long lVal = GetValue(pszStr);
+				vValRet.SetInt(lVal);
+			}
+			catch (...)
+			{
+				vValRet.SetInt(0);
+			}
+		}
+		break;
+
+	case F_StrLen:
+		{
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
+			// Strip surrounding quotes if present.
+			if ( *pszStr == '"' )
+			{
+				pszStr++;
+				int len = strlen(pszStr);
+				if ( len > 0 && pszStr[len-1] == '"' )
+					len--;
+				vValRet.SetInt(len);
+			}
+			else
+			{
+				vValRet.SetInt(strlen(pszStr));
+			}
+		}
+		break;
+
+	case F_StrCmp:
+		{
+			// strcmp(str1,str2) — case-sensitive compare.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[2] = { NULL, NULL };
+			Str_ParseCmds(szTmp, ppArgs, 2, ",");
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetInt(1);
+				break;
+			}
+			vValRet.SetInt(strcmp(ppArgs[0], ppArgs[1]));
+		}
+		break;
+
+	case F_StrCmpI:
+		{
+			// strcmpi(str1,str2) — case-insensitive compare.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[2] = { NULL, NULL };
+			Str_ParseCmds(szTmp, ppArgs, 2, ",");
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetInt(1);
+				break;
+			}
+			vValRet.SetInt(_stricmp(ppArgs[0], ppArgs[1]));
+		}
+		break;
+
+	case F_StrIndexOf:
+		{
+			// strindexof(haystack,needle[,start]) — find substring, returns -1 if not found.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[3] = { NULL, NULL, NULL };
+			Str_ParseCmds(szTmp, ppArgs, 3, ",");
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetInt(-1);
+				break;
+			}
+			int iStart = ppArgs[2] ? atoi(ppArgs[2]) : 0;
+			LPCTSTR pHay = ppArgs[0] + iStart;
+			LPCTSTR pFound = strstr(pHay, ppArgs[1]);
+			vValRet.SetInt( pFound ? (int)(pFound - ppArgs[0]) : -1 );
+		}
+		break;
+
+	case F_StrMatch:
+		{
+			// strmatch(str,pattern) — wildcard match.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[2] = { NULL, NULL };
+			Str_ParseCmds(szTmp, ppArgs, 2, ",");
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetInt(0);
+				break;
+			}
+			vValRet.SetInt( Str_Match(ppArgs[1], ppArgs[0]) == MATCH_VALID ? 1 : 0 );
+		}
+		break;
+
+	case F_Rand:
+		{
+			// rand(n) — random 0..n-1.
+			int iMax = vArgs.GetInt();
+			vValRet.SetInt( iMax > 0 ? Calc_GetRandVal(iMax) : 0 );
+		}
+		break;
+
+	case F_QVal:
+		{
+			// qval(test,ret_neg,ret_zero,ret_pos) — conditional.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[4] = { NULL, NULL, NULL, NULL };
+			Str_ParseCmds(szTmp, ppArgs, 4, ",");
+			int iTest = ppArgs[0] ? atoi(ppArgs[0]) : 0;
+			if ( iTest < 0 )
+				vValRet.SetInt( ppArgs[1] ? atoi(ppArgs[1]) : 0 );
+			else if ( iTest == 0 )
+				vValRet.SetInt( ppArgs[2] ? atoi(ppArgs[2]) : 0 );
+			else
+				vValRet.SetInt( ppArgs[3] ? atoi(ppArgs[3]) : 0 );
+		}
+		break;
+
+	case F_IsNum:
+		{
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			if ( pszStr == NULL || *pszStr == '\0' ) { vValRet.SetInt(0); break; }
+			if ( *pszStr == '-' || *pszStr == '+' ) pszStr++;
+			if ( *pszStr == '0' && (pszStr[1] == 'x' || pszStr[1] == 'X') )
+			{
+				pszStr += 2;
+				while ( isxdigit(*pszStr) ) pszStr++;
+			}
+			else
+			{
+				while ( isdigit(*pszStr) ) pszStr++;
+			}
+			vValRet.SetInt( *pszStr == '\0' ? 1 : 0 );
+		}
+		break;
+
 	default:
 		DEBUG_CHECK(0);
 		return( HRES_INTERNAL_ERROR );
