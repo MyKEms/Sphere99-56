@@ -119,12 +119,13 @@ void CClient::DeleteThis()
 	}
 
 	xFlush();
-	m_Socket.Close();	// close socket to release fd
+
+	// Clean up chat before destruction — CChatClient destructor would
+	// access already-destroyed CClient members via GetClient() cast.
+	Chat_Quit();
 
 	RemoveSelf();	// remove myself from my parent list.
-	// CClient is intentionally leaked. delete causes heap corruption
-	// due to multiple inheritance destructor chain issues.
-	// Memory leak is ~2KB per client, acceptable for game server.
+	delete this;	// destructor calls m_Socket.Close() + StatDec
 }
 
 bool CClient::CanInstantLogOut() const
