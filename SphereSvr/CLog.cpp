@@ -74,7 +74,9 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 #endif
 
 	// Write out to log file.
+#ifdef _WIN32
 	WriteString( pszMsg );
+#endif
 
 	// print to all client consoles.
 	g_Serv.Event_PrintClient( pszMsg );	// echo out to admin telnets.

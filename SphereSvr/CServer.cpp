@@ -1502,12 +1502,15 @@ void CServer::OnTick()
 	// Protect entire server tick from SEGV — server must not die.
 	extern volatile sig_atomic_t g_fSEGV_catch;
 	extern sigjmp_buf g_SEGV_jmpbuf;
+	// SEGV recovery wraps the main processing but NOT the network flush.
+	// This ensures client data is always sent even if game logic crashes.
+	volatile bool fSegvRecovery = false;
 	g_fSEGV_catch = 1;
 	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
 	{
-		g_fSEGV_catch = 0;
-		SPHERE_LOG_ERR("SEGV in OnTick — recovered, continuing server loop");
-		return; // skip rest of this tick
+		fSegvRecovery = true;
+		// Fall through to SocketsFlush below — don't return.
+		goto do_flush;
 	}
 #endif
 	static int s_iTickDbg = 0;
@@ -1562,8 +1565,11 @@ void CServer::OnTick()
 	}
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase2 ok (tick=%d)", s_iTickDbg); }
+do_flush:
+	g_fSEGV_catch = 0;
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
 	try { SocketsFlush(); } catch (...) {}
+	if ( fSegvRecovery ) return;
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
