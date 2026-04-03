@@ -1,6 +1,6 @@
 CXX = g++
 BASEDIR = $(CURDIR)
-CXXFLAGS = -std=c++14 -m32 -fpermissive -Wno-endif-labels -Wno-write-strings \
+CXXFLAGS = -g -std=c++14 -m32 -fpermissive -Wno-endif-labels -Wno-write-strings \
            -Wno-narrowing -Wno-unused-result -Wno-format-security \
            -DSPHERE_SVR -D_CONSOLE -D_MT \
            -I$(BASEDIR) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereCommon \

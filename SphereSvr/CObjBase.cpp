@@ -70,8 +70,10 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 
 	if ( ! g_Serv.IsLoading())
 	{
-		// Find a free UID slot for this.
-		g_World.AllocUID( this, dwUIDMask );
+		// Find a free UID slot and store the assigned UID on the object.
+		DWORD dwAssigned = g_World.AllocUID( this, dwUIDMask );
+		if ( dwAssigned )
+			SetUIDIndex( dwAssigned | (dwUIDMask & (UID_F_ITEM|RID_F_RESOURCE)) );
 	}
 
 	// Put in the idle list by default. (til placed in the world)
@@ -653,6 +655,7 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			}
 			if ( g_World.LoadUID( dwUID, this ) == 0 )
 				return HRES_INVALID_INDEX;
+			SetUIDIndex( dwUID );  // register the UID on the object so IsValidUID() passes
 		}
 		break;
 	default:
