@@ -122,13 +122,18 @@ bool CClient::addRelay( const CServerDef* pServ )
 
 	if ( ipAddr.IsLocalAddr())
 	{
-		ipAddr = m_Socket.GetSockName();
-	}
-
-	CSocketAddress PeerName = m_Socket.GetPeerName();
-	if ( PeerName.IsLocalAddr() || PeerName.IsSameIP( ipAddr ))
-	{
+		// SERVIP is 0.0.0.0 or 127.0.0.1 — use localhost for relay.
+		// This works for Docker/container port forwarding where the
+		// client connects via host:2593 forwarded to container:2593.
 		ipAddr.SetAddrIP( SOCKET_LOCAL_ADDRESS );
+	}
+	else
+	{
+		CSocketAddress PeerName = m_Socket.GetPeerName();
+		if ( PeerName.IsLocalAddr() || PeerName.IsSameIP( ipAddr ))
+		{
+			ipAddr.SetAddrIP( SOCKET_LOCAL_ADDRESS );
+		}
 	}
 
 	DWORD dwAddr = ipAddr.GetAddrIP();
