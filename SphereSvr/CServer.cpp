@@ -4,6 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 #ifndef _WIN32
 #include <signal.h>
 #include <cstring>
@@ -1215,7 +1216,7 @@ CClientPtr CServer::SocketsAccept( CGSocket& socket, bool fGod ) // Check for me
 		return NULL;
 	}
 
-	fprintf(stderr, "DBG: New client from %s (ip_count=%d)\n", (LPCTSTR) client_addr.GetAddrStr(), iClientsOnIPCount); fflush(stderr);
+	SPHERE_LOG_NET("SocketsAccept: new client from %s (ip_count=%d)", (LPCTSTR) client_addr.GetAddrStr(), iClientsOnIPCount);
 	return( new CClient( socknew.Detach()));
 }
 
@@ -1408,7 +1409,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
 			{
 				g_fSEGV_catch = 0;
-				fprintf(stderr, "DBG: SEGV in xRecvData — dropping client\n"); fflush(stderr);
+				SPHERE_LOG_ERR("SEGV in xRecvData — dropping client");
 				try { pClient->DeleteThis(); } catch (...) {}
 				continue;
 			}

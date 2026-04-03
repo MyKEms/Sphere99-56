@@ -4,6 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 #ifndef _WIN32
 #include <dirent.h>
 #include <signal.h>
@@ -276,6 +277,13 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_HearAll:
 		g_Log.SetLogGroupMask( vVal.GetDWORDMask( g_Log.GetLogGroupMask(), LOG_GROUP_PLAYER_SPEAK ));
 		break;
+	case P_DebugLevel:
+		{
+			extern int g_iDebugLevel;
+			g_iDebugLevel = vVal.GetInt();
+			SPHERE_LOG_ERR("DebugLevel set to %d", g_iDebugLevel);
+		}
+		break;
 	case P_Log:
 		g_Log.OpenLog( vVal.GetPSTR());
 		break;
@@ -448,6 +456,12 @@ HRESULT CSphereResourceMgr::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScri
 		break;
 	case P_HearAll:
 		vValRet.SetBool( g_Log.IsLoggedGroupMask( LOG_GROUP_PLAYER_SPEAK ));
+		break;
+	case P_DebugLevel:
+		{
+			extern int g_iDebugLevel;
+			vValRet.SetInt( g_iDebugLevel );
+		}
 		break;
 	case P_Log:
 		vValRet = g_Log.GetLogDir();
