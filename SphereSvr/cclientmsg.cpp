@@ -3460,14 +3460,21 @@ void CClient::Setup_CreateDialog( const CUOEvent* pEvent ) // All the character 
 		}
 	}
 
+	SPHERE_LOG_NET("Setup_CreateDialog: creating char for acct='%s'", (LPCTSTR)GetAccount()->GetName());
 	CCharPtr pChar = CChar::CreateBasic( CREID_MAN );
-	ASSERT(pChar);
+	if ( pChar == NULL )
+	{
+		SPHERE_LOG_ERR("Setup_CreateDialog: CreateBasic FAILED");
+		addLoginErr( LOGIN_ERR_OTHER );
+		return;
+	}
+	SPHERE_LOG_NET("Setup_CreateDialog: InitPlayer...");
 	pChar->InitPlayer( pEvent, this );
-
-	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Setup_CreateDialog acct='%s', char='%s'" LOG_CR,
-		m_Socket.GetSocket(), (LPCTSTR)GetAccount()->GetName(), (LPCTSTR)pChar->GetName());
+	SPHERE_LOG_NET("Setup_CreateDialog: char='%s' uid=0x%x", (LPCTSTR)pChar->GetName(), (DWORD)pChar->GetUID());
 
 	Setup_Start( pChar );
+	SPHERE_LOG_NET("Setup_CreateDialog: Setup_Start done");
+	xFlush();	// flush game entry packets immediately
 }
 
 bool CClient::Setup_Play( int iSlot ) // After hitting "Play Character" button
