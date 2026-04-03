@@ -256,6 +256,7 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 	cmd.ServerList.m_count = j;
 	cmd.ServerList.m_VerCode = 0x3d; // 0xFF;
 	xSendPkt( &cmd, iLen );
+	xFlush();	// Must flush immediately — sent during xProcessClientSetup, not dispatch cycle
 
 	SPHERE_LOG_NET("Login_ServerList: sent %d servers, %d bytes", j, iLen);
 	m_Targ.m_Mode = CLIMODE_SETUP_SERVERS;
@@ -795,7 +796,7 @@ void CClient::xFlush()
 	m_timeLastSend.InitTimeCurrent();
 
 	int iLenRet;
-	if ( m_ConnectType != CONNECT_GAME || m_Crypt.GetCryptVer() == 0 )	// login server or NoCrypt game client — send raw
+	if ( m_ConnectType != CONNECT_GAME )	// login server — send raw, game always uses Huffman
 	{
 		iLenRet = m_Socket.Send( m_bout.RemoveDataLock(), iLen );
 		if ( iLenRet != SOCKET_ERROR )
