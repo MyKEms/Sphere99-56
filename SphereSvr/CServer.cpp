@@ -1510,6 +1510,8 @@ void CServer::OnTick()
 		return; // skip rest of this tick
 	}
 #endif
+	static int s_iTickDbg = 0;
+	s_iTickDbg++;
 	m_Profile.SwitchTask( PROFILE_Overhead );	// PROFILE_Resources
 
 	OnTick_Busy();	// periodically give the console a tick.
@@ -1520,6 +1522,7 @@ void CServer::OnTick()
 	}
 
 	SetValidTime();	// we are a valid game server.
+	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase1 ok (tick=%d)", s_iTickDbg); }
 
 	// Check clients for incoming packets.
 	try
@@ -1558,8 +1561,10 @@ void CServer::OnTick()
 		}
 	}
 
+	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase2 ok (tick=%d)", s_iTickDbg); }
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
 	try { SocketsFlush(); } catch (...) {}
+	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
 	if ( m_timeShutdown.IsTimeValid())
@@ -1574,7 +1579,9 @@ void CServer::OnTick()
 		}
 	}
 
+	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase4 pre-CfgTick (tick=%d)", s_iTickDbg); }
 	g_Cfg.OnTick(false);
+	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase5 done (tick=%d)", s_iTickDbg); }
 #ifndef _WIN32
 	g_fSEGV_catch = 0;
 #endif
