@@ -1202,6 +1202,7 @@ CClientPtr CServer::SocketsAccept( CGSocket& socket, bool fGod ) // Check for me
 		return NULL;
 	}
 
+	fprintf(stderr, "DBG: New client from %s (ip_count=%d)\n", (LPCTSTR) client_addr.GetAddrStr(), iClientsOnIPCount); fflush(stderr);
 	return( new CClient( socknew.Detach()));
 }
 
