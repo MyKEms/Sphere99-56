@@ -1455,10 +1455,18 @@ void CServer::SocketsReceive() // Check for messages from the clients
 	}
 
 	// Any new connections ? what if there are several ?
+	// IMPORTANT: Must hold the returned CClientPtr to prevent premature destruction.
+	// CClient constructor adds itself to m_Clients list, but that's a raw pointer.
+	// The smart pointer returned here keeps the refcount alive until next tick.
 	if ( readfds.IsSet( m_SocketGod.GetSocket()))
 	{
-		SocketsAccept( m_SocketGod, true );
+		CClientPtr pNewGod = SocketsAccept( m_SocketGod, true );
 	}
+	if ( readfds.IsSet( m_SocketMain.GetSocket()))
+	{
+		CClientPtr pNewClient = SocketsAccept( m_SocketMain, false );
+	}
+#if 0 // disabled — siglongjmp around accept was causing more issues
 	if ( readfds.IsSet( m_SocketMain.GetSocket()))
 	{
 #ifndef _WIN32
@@ -1479,6 +1487,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 		SocketsAccept( m_SocketMain, false );
 #endif
 	}
+#endif // disabled siglongjmp
 #endif // _WIN32
 }
 
@@ -1498,21 +1507,6 @@ void CServer::SocketsFlush() // Sends ALL buffered data
 
 void CServer::OnTick()
 {
-#ifndef _WIN32
-	// Protect entire server tick from SEGV — server must not die.
-	extern volatile sig_atomic_t g_fSEGV_catch;
-	extern sigjmp_buf g_SEGV_jmpbuf;
-	// SEGV recovery wraps the main processing but NOT the network flush.
-	// This ensures client data is always sent even if game logic crashes.
-	volatile bool fSegvRecovery = false;
-	g_fSEGV_catch = 1;
-	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
-	{
-		fSegvRecovery = true;
-		// Fall through to SocketsFlush below — don't return.
-		goto do_flush;
-	}
-#endif
 	static int s_iTickDbg = 0;
 	s_iTickDbg++;
 	m_Profile.SwitchTask( PROFILE_Overhead );	// PROFILE_Resources
@@ -1565,11 +1559,10 @@ void CServer::OnTick()
 	}
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase2 ok (tick=%d)", s_iTickDbg); }
-do_flush:
-	g_fSEGV_catch = 0;
+
+	// Network flush — ALWAYS runs, never skipped by SEGV recovery.
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
 	try { SocketsFlush(); } catch (...) {}
-	if ( fSegvRecovery ) return;
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
@@ -1586,11 +1579,8 @@ do_flush:
 	}
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase4 pre-CfgTick (tick=%d)", s_iTickDbg); }
-	g_Cfg.OnTick(false);
+	try { g_Cfg.OnTick(false); } catch (...) {}
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase5 done (tick=%d)", s_iTickDbg); }
-#ifndef _WIN32
-	g_fSEGV_catch = 0;
-#endif
 }
 
 bool CServer::SocketsInit( CGSocket& socket, int iPort )
