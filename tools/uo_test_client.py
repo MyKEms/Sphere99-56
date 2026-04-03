@@ -16,12 +16,18 @@ Simulates the full login sequence:
   6. If chars exist: send CharPlay (0x5D) → receive game packets
 
 All packets are NoCrypt (encryption=0).
+Game connection responses are Huffman-compressed.
 """
 
 import socket
 import struct
 import sys
 import time
+import os
+
+# Import Huffman module from same directory
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from uo_huffman import decompress as huffman_decompress, is_compressed as huffman_is_compressed
 
 def hexdump(data, prefix=""):
     """Print hex dump of data."""
@@ -254,7 +260,16 @@ def test_login(host="localhost", port=2593, account="testuser", password="testpa
         print("  FAILED: No response (server may have crashed)")
         sock.close()
         return False
-    hexdump(resp, "  RX: ")
+    hexdump(resp, "  RX(raw): ")
+
+    # Game connection uses Huffman compression — decompress first
+    if huffman_is_compressed(resp):
+        raw = huffman_decompress(resp)
+        if raw:
+            print(f"  Huffman: {len(resp)}b compressed → {len(raw)}b decompressed")
+            resp = raw
+        else:
+            print(f"  Huffman decompression failed")
 
     if resp[0] == 0x82:
         parse_login_error(resp)
@@ -264,7 +279,7 @@ def test_login(host="localhost", port=2593, account="testuser", password="testpa
     chars = parse_char_list(resp)
     if chars is None:
         print(f"  Got packet 0x{resp[0]:02x} instead of CharList")
-        # Try to find 0xA9 in the response (might be preceded by other packets)
+        # Try to find 0xA9 in the decompressed response
         idx = resp.find(b'\xA9')
         if idx > 0:
             print(f"  Found 0xA9 at offset {idx}, retrying...")
