@@ -844,6 +844,7 @@ void CClient::xFlush()
 		// DEBUG_MSG(( "%x:Send %d bytes as %d" LOG_CR, m_Socket.GetSocket(), m_bout.GetDataQty(), iLen ));
 
 		iLenRet = m_Socket.Send( sm_xCompress_Buffer, iLenComp );
+		SPHERE_LOG_NET("xFlush GAME: sock=%d raw=%d huffman=%d sent=%d", m_Socket.GetSocket(), iLen, iLenComp, iLenRet);
 		if ( iLenRet != SOCKET_ERROR )
 		{
 			g_Serv.m_Profile.IncTaskCount( PROFILE_DataTx, iLen );
