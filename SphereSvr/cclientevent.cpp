@@ -3,6 +3,7 @@
 // Copyright 1996 - 2001 Menace Software (www.menasoft.com)
 //
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 
 static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
 	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
@@ -2824,9 +2825,12 @@ bool CClient::xDispatchMsg()
 
 	const CUOEvent* pEvent = (const CUOEvent *) m_bin.RemoveDataLock();
 
+	SPHERE_LOG_NET("xDispatchMsg: cmd=0x%02x binQty=%d connType=%d", pEvent->Default.m_Cmd, m_bin.GetDataQty(), m_ConnectType);
+
 	// check the packet size first.
 	if ( pEvent->Default.m_Cmd >= XCMD_QTY ) // bad packet type ?
 	{
+		SPHERE_LOG_ERR("xDispatchMsg: BAD cmd=0x%02x >= XCMD_QTY=%d", pEvent->Default.m_Cmd, XCMD_QTY);
 		return( false );
 	}
 	if ( pEvent->Default.m_Cmd != XCMD_Walk &&
@@ -2836,7 +2840,7 @@ bool CClient::xDispatchMsg()
 		if ( iAge < TICKS_PER_SEC/2 )
 		{
 			// not long enough !
-			// DEBUG_MSG(( "Wait client event" LOG_CR ));
+			SPHERE_LOG_NET("xDispatchMsg: THROTTLED cmd=0x%02x age=%d", pEvent->Default.m_Cmd, iAge);
 			m_bin_msg_len = 0;	// wait longer. then process this.
 			return true;
 		}

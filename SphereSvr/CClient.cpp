@@ -3,6 +3,7 @@
 // Copyright 1996 - 2001 Menace Software (www.menasoft.com)
 //
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 #ifndef _WIN32
 #include <netinet/tcp.h>
 #endif
@@ -53,6 +54,7 @@ CClient::CClient( SOCKET client ) :
 
 	m_timeLastSend.InitTimeCurrent();
 	m_timeLastEvent.InitTimeCurrent();
+	m_timeLastDispatch.InitTimeCurrent();
 
 	m_bin_PrvMsg = XCMD_QTY;
 	m_bin_msg_len = 0;
@@ -75,11 +77,7 @@ CClient::CClient( SOCKET client ) :
 	g_Serv.m_Clients.InsertHead( this );
 
 	CSocketAddress PeerName = m_Socket.GetPeerName();
-	if ( ! PeerName.IsSameIP( g_Cfg.m_RegisterServer ))
-	{
-		g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Client connected [Total:%i] from '%s'." LOG_CR,
-			m_Socket.GetSocket(), g_Serv.StatGet( SERV_STAT_CLIENTS ), (LPCTSTR) PeerName.GetAddrStr());
-	}
+	SPHERE_LOG_NET("CClient::CClient constructed sock=%d peer=%s total=%d", m_Socket.GetSocket(), (LPCTSTR) PeerName.GetAddrStr(), g_Serv.StatGet( SERV_STAT_CLIENTS ));
 
 #ifdef _WIN32
 	DWORD lVal = 1;	// 0 =  block
