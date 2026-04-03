@@ -37,6 +37,10 @@ void CWorldThread::CloseAllUIDs()
 int CWorldThread::FixObjTry( CObjBase* pObj, int iUID )
 {
 	// RETURN: 0 = success.
+	if ( pObj == NULL )
+		return 0x7100;
+	if ( ! pObj->IsValidUID())
+		return 0x7102;
 	if ( iUID )
 	{
 		if (( pObj->GetUID() & UID_INDEX_MASK ) != iUID )
@@ -646,11 +650,41 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 		}
 	}
 
-	// Skip full GarbageCollection during initial load — objects are still being placed.
-	// Just clean up the ObjNew list without deleting objects.
-	while (m_ObjNew.GetHead())
+	// Clean up objects still in m_ObjNew after loading.
+	// Objects that were successfully placed in sectors/containers have already been
+	// removed from m_ObjNew. Anything still here is orphaned (e.g., item whose
+	// container wasn't loaded). Delete orphans and free their UID table entries.
 	{
-		m_ObjNew.GetHead()->RemoveSelf();
+		CObjBase::sm_fDeleteReal = true;
+		int iOrphaned = 0;
+		while ( m_ObjNew.GetHead() )
+		{
+			CObjBase* pObj = STATIC_CAST(CObjBase, m_ObjNew.GetHead());
+			if ( pObj )
+			{
+				try
+				{
+					DWORD uid = pObj->GetUID();
+					FreeUID( pObj );
+					pObj->DeleteThis();
+					iOrphaned++;
+				}
+				catch (...)
+				{
+					m_ObjNew.GetHead()->RemoveSelf();
+					iOrphaned++;
+				}
+			}
+			else
+			{
+				m_ObjNew.GetHead()->RemoveSelf();
+			}
+		}
+		CObjBase::sm_fDeleteReal = false;
+		if ( iOrphaned )
+		{
+			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN, "%d orphaned objects deleted during load cleanup" LOG_CR, iOrphaned );
+		}
 	}
 
 	// Set the current version now.
