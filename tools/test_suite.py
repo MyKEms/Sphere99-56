@@ -286,20 +286,38 @@ def test_login_after_stress(host, port, result):
 def main():
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 2593
+    quick = "--quick" in sys.argv
 
-    print(f"Sphere99 Test Suite — {host}:{port}")
+    print(f"Sphere99 Test Suite — {host}:{port}" + (" (quick mode)" if quick else ""))
     print(f"{'='*60}")
+
+    # Pre-flight: check if server is reachable
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3.0)
+        s.connect((host, port))
+        s.close()
+    except Exception:
+        print(f"\nERROR: Server not reachable at {host}:{port}")
+        print("Start server first: tools/start_server.sh /path/to/sphere")
+        sys.exit(2)
 
     result = TestResult()
 
     test_tcp_connect(host, port, result)
     test_single_login(host, port, result)
-    test_sequential_logins(host, port, 3, result)
-    test_rapid_reconnect(host, port, result)
-    test_bad_packets(host, port, result)
+
+    if not quick:
+        test_sequential_logins(host, port, 3, result)
+        test_rapid_reconnect(host, port, result)
+        test_bad_packets(host, port, result)
+
     test_char_create(host, port, result)
     test_game_entry_validation(host, port, result)
-    test_wrong_password(host, port, result)
+
+    if not quick:
+        test_wrong_password(host, port, result)
+
     test_login_after_stress(host, port, result)
 
     success = result.summary()
