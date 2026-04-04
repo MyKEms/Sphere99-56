@@ -756,9 +756,7 @@ void CChar::InitPlayer( const CUOEvent* pBin, CClient* pClient )
 	ASSERT(pClient);
 	ASSERT(pBin);
 
-	fprintf(stderr, "[NET] InitPlayer: SetID...\n"); fflush(stderr);
 	SetID( (CREID_TYPE) g_Cfg.ResourceGetIndexType( RES_CharDef, ( pBin->Create.m_sex == 0 ) ? "c_MAN" : "c_WOMAN" ));
-	fprintf(stderr, "[NET] InitPlayer: SetID done\n"); fflush(stderr);
 
 	TCHAR szName[ MAX_NAME_SIZE+1 ];
 	int ilen = NameStrip( szName, pBin->Create.m_charname, MAX_NAME_SIZE );
@@ -797,7 +795,6 @@ void CChar::InitPlayer( const CUOEvent* pBin, CClient* pClient )
 		DEBUG_ERR(( "Invalid start location for character!" LOG_CR ));
 	}
 
-	fprintf(stderr, "[NET] InitPlayer: home=%d,%d startloc=%d\n", m_ptHome.m_x, m_ptHome.m_y, iStartLoc); fflush(stderr);
 	SetUnkPoint( m_ptHome );	// Don't actaully put me in the world yet.
 
 	// randomize the skills first.
@@ -890,15 +887,11 @@ void CChar::InitPlayer( const CUOEvent* pBin, CClient* pClient )
 		}
 	}
 
-	fprintf(stderr, "[NET] InitPlayer: stats done, creating bank...\n"); fflush(stderr);
 	// Create the bank box.
 	CItemContainerPtr pBankBox = GetBank( LAYER_BANKBOX );
-	fprintf(stderr, "[NET] InitPlayer: bank done, creating pack...\n"); fflush(stderr);
 	// Create the pack.
 	CItemContainerPtr pPack = GetPackSafe();
-	fprintf(stderr, "[NET] InitPlayer: pack done\n"); fflush(stderr);
 
-	fprintf(stderr, "[NET] InitPlayer: bank/pack done, loading newbie items...\n"); fflush(stderr);
 	// Get special equip for the starting skills.
 	for ( i=0; i<4; i++ )
 	{

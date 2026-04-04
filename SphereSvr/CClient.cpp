@@ -98,11 +98,8 @@ CClient::CClient( SOCKET client ) :
 
 CClient::~CClient()
 {
-	fprintf(stderr, "[NET] ~CClient destructor\n"); fflush(stderr);
 	m_Socket.Close();
-	fprintf(stderr, "[NET] ~CClient socket closed\n"); fflush(stderr);
 	g_Serv.StatDec( SERV_STAT_CLIENTS );
-	fprintf(stderr, "[NET] ~CClient done\n"); fflush(stderr);
 }
 
 void CClient::DeleteThis()
