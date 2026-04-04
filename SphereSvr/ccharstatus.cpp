@@ -119,7 +119,8 @@ CItemContainerPtr CChar::GetBank( LAYER_TYPE layer )
 		}
 		fprintf(stderr, "[NET] GetBank: LayerAdd layer=%d...\n", layer); fflush(stderr);
 		pBankBox->SetAttr(ATTR_NEWBIE | ATTR_MOVE_NEVER);
-		LayerAdd( pBankBox, layer );
+		pBankBox->SetEquipLayer(layer);
+		CGObList::InsertHead( pBankBox );	// add without triggers to avoid recursion
 		fprintf(stderr, "[NET] GetBank: LayerAdd done\n"); fflush(stderr);
 		if ( layer != LAYER_PACK )
 		{
