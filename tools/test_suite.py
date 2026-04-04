@@ -22,7 +22,8 @@ import os
 
 # Add tools dir to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from uo_test_client import test_login, recv_all, make_login_packet, make_server_select
+from uo_test_client import test_login, recv_all, make_login_packet, make_server_select, make_char_create, game_connect
+from uo_huffman import decompress as huffman_decompress, is_compressed as huffman_is_compressed
 
 class TestResult:
     def __init__(self):
@@ -145,9 +146,49 @@ def test_bad_packets(host, port, result):
         result.fail("Bad packets", "Server crashed on garbage data")
 
 
+def test_char_create(host, port, result):
+    """Test 6: Create a character and verify game entry response."""
+    print("\n[Test 6] Character Creation")
+    try:
+        sock, auth_id = game_connect(host, port, "createtest", "cpass")
+        if sock is None:
+            result.fail("Character creation", "Could not reach charlist")
+            return
+
+        # Send Create packet
+        create_pkt = make_char_create(name="AutoTest", sex=0, start_loc=1)
+        sock.sendall(create_pkt)
+
+        # Wait for game entry response (XCMD_Start = 0x1B)
+        time.sleep(2.0)
+        resp = recv_all(sock, timeout=5.0)
+        sock.close()
+
+        if not resp:
+            result.fail("Character creation", "No response after create packet")
+            return
+
+        # Decompress Huffman
+        if huffman_is_compressed(resp):
+            raw = huffman_decompress(resp)
+            if raw:
+                resp = raw
+
+        # Check for XCMD_Start (0x1B) in response
+        if resp[0] == 0x1B:
+            result.ok("Character created, game entry received (0x1B)")
+        elif b'\x1b' in resp:
+            idx = resp.index(b'\x1b')
+            result.ok(f"Character created, XCMD_Start at offset {idx}")
+        else:
+            result.fail("Character creation", f"Got 0x{resp[0]:02x} instead of 0x1B (XCMD_Start)")
+    except Exception as e:
+        result.fail("Character creation", str(e))
+
+
 def test_login_after_stress(host, port, result):
-    """Test 6: Login still works after all previous tests."""
-    print("\n[Test 6] Login After Stress")
+    """Test 7: Login still works after all previous tests."""
+    print("\n[Test 7] Login After Stress")
     if test_login(host, port, "finaltest", "finalpass"):
         result.ok("Login works after stress testing")
     else:
@@ -168,6 +209,7 @@ def main():
     test_sequential_logins(host, port, 3, result)
     test_rapid_reconnect(host, port, result)
     test_bad_packets(host, port, result)
+    test_char_create(host, port, result)
     test_login_after_stress(host, port, result)
 
     success = result.summary()

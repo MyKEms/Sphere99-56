@@ -84,6 +84,113 @@ def make_char_play(slot=0):
     struct.pack_into('>I', pkt, 69, 0x7f000001)
     return bytes(pkt)
 
+def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25, int_val=25,
+                     skill1=0, val1=50, skill2=1, val2=50, skill3=17, val3=1):
+    """Build XCMD_Create (0x00) — 104 bytes. Creates a new character.
+
+    Args:
+        name: character name (max 30 chars)
+        sex: 0=male, 1=female
+        start_loc: starting location index (1-based)
+        str_val, dex_val, int_val: base stats (must sum to ≤80)
+        skill1/2/3: skill indices, val1/2/3: skill values (must sum to ≤100)
+    """
+    pkt = bytearray(104)
+    pkt[0] = 0x00  # XCMD_Create
+    # Pattern (4 bytes)
+    struct.pack_into('>I', pkt, 1, 0xEDEDEDED)
+    # Character name (30 bytes)
+    name_bytes = name.encode('ascii')[:29]
+    pkt[5:5+len(name_bytes)] = name_bytes
+    # Password (30 bytes) — empty
+    # Sex
+    pkt[70] = sex
+    # Stats
+    pkt[71] = str_val
+    pkt[72] = dex_val
+    pkt[73] = int_val
+    # Skills
+    pkt[74] = skill1
+    pkt[75] = val1
+    pkt[76] = skill2
+    pkt[77] = val2
+    pkt[78] = skill3
+    pkt[79] = val3
+    # Start location (1-based)
+    pkt[80] = start_loc
+    # Skin hue
+    struct.pack_into('>H', pkt, 81, 0x03EA)  # default skin hue
+    # Hair
+    struct.pack_into('>H', pkt, 83, 0x203B)  # hair ID
+    struct.pack_into('>H', pkt, 85, 0x044E)  # hair hue
+    # Beard (0 = none)
+    struct.pack_into('>H', pkt, 87, 0x0000)
+    struct.pack_into('>H', pkt, 89, 0x0000)
+    return bytes(pkt)
+
+
+def game_connect(host, port, account, password):
+    """Full login sequence, return (socket, auth_id) on game connection or (None, None)."""
+    import time as _time
+
+    # Phase 1: Login
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(5.0)
+    try:
+        sock.connect((host, port))
+    except Exception:
+        return None, None
+
+    seed = struct.pack('>I', 0x01000001)
+    sock.sendall(seed + make_login_packet(account, password))
+    resp = recv_all(sock, timeout=3.0)
+    if not resp or resp[0] != 0xA8:
+        sock.close()
+        return None, None
+
+    # Phase 2: Server Select
+    sock.sendall(make_server_select(0))
+    resp = recv_all(sock, timeout=3.0)
+    if not resp or resp[0] != 0x8C:
+        sock.close()
+        return None, None
+
+    relay_port = struct.unpack_from('>H', resp, 5)[0]
+    auth_id = struct.unpack_from('>I', resp, 7)[0]
+    sock.close()
+    _time.sleep(0.3)
+
+    # Phase 3: Game connection
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(10.0)
+    try:
+        sock.connect((host, relay_port))
+    except Exception:
+        return None, None
+
+    game_seed = struct.pack('>I', auth_id)
+    sock.sendall(game_seed + make_charlist_req(account, password, auth_id))
+
+    # Wait for charlist
+    _time.sleep(1.0)
+    resp = recv_all(sock, timeout=5.0)
+    if not resp:
+        sock.close()
+        return None, None
+
+    # Decompress Huffman if needed
+    if huffman_is_compressed(resp):
+        raw = huffman_decompress(resp)
+        if raw:
+            resp = raw
+
+    if resp[0] != 0xA9:
+        sock.close()
+        return None, None
+
+    return sock, auth_id
+
+
 def recv_all(sock, timeout=5.0):
     """Receive all available data with timeout."""
     sock.settimeout(timeout)
