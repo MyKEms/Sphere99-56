@@ -108,7 +108,18 @@ CItemPtr CItem::CreateBase( ITEMID_TYPE id )	// static
 	}
 
 	CItemPtr pItem;
-	switch ( pItemDef->GetType())
+	IT_TYPE iType = pItemDef->GetType();
+
+	// If type is unresolved (-1 or IT_NORMAL), check known container ITEMIDs.
+	// Scripts may have malformed TYPE= property that fails ResourceGetIndexType.
+	if ( iType < 0 || iType == IT_NORMAL )
+	{
+		if ( id == ITEMID_BANK_BOX ) iType = IT_EQ_BANK_BOX;
+		else if ( id == ITEMID_BACKPACK || id == ITEMID_VENDOR_BOX ) iType = IT_CONTAINER;
+		else if ( id == ITEMID_CORPSE ) iType = IT_CORPSE;
+	}
+
+	switch ( iType )
 	{
 	case IT_MAP:
 	case IT_MAP_BLANK:
@@ -207,12 +218,16 @@ CItemPtr CItem::CreateScript( ITEMID_TYPE id, CChar* pCharSrc ) // static
 		pItem->m_itShip.m_uidCreator = pCharSrc->GetUID();
 	}
 
-	// call the ON=@Create trigger
-	fprintf(stderr, "[NET] CreateScript: calling @Create trigger\n"); fflush(stderr);
-	CSphereExpContext exec( pItem, pCharSrc ? (CScriptConsole*) pCharSrc : (CScriptConsole*) &g_Serv );
-	pItem->SetChangerSrc( exec.GetSrc());
-	pItem->Item_GetDef()->OnTriggerScript( exec, CItemDef::T_Create, CItemDef::sm_Triggers[CItemDef::T_Create].m_pszName );
-	fprintf(stderr, "[NET] CreateScript: @Create done\n"); fflush(stderr);
+	// call the ON=@Create trigger — skip for internal containers (bank/pack)
+	// to avoid infinite recursion when @Create script calls GetPackSafe()
+	if ( id != ITEMID_BANK_BOX && id != ITEMID_BACKPACK && id != ITEMID_VENDOR_BOX )
+	{
+		fprintf(stderr, "[NET] CreateScript: calling @Create trigger\n"); fflush(stderr);
+		CSphereExpContext exec( pItem, pCharSrc ? (CScriptConsole*) pCharSrc : (CScriptConsole*) &g_Serv );
+		pItem->SetChangerSrc( exec.GetSrc());
+		pItem->Item_GetDef()->OnTriggerScript( exec, CItemDef::T_Create, CItemDef::sm_Triggers[CItemDef::T_Create].m_pszName );
+		fprintf(stderr, "[NET] CreateScript: @Create done\n"); fflush(stderr);
+	}
 
 	return( pItem );
 }
