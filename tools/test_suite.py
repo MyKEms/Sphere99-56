@@ -186,9 +186,74 @@ def test_char_create(host, port, result):
         result.fail("Character creation", str(e))
 
 
+def test_game_entry_validation(host, port, result):
+    """Test 7: Validate game entry packet (XCMD_Start 0x1B) contents."""
+    print("\n[Test 7] Game Entry Validation")
+    try:
+        sock, auth_id = game_connect(host, port, "gametest", "gpass")
+        if sock is None:
+            result.fail("Game entry", "Could not reach charlist")
+            return
+
+        # Create character
+        create_pkt = make_char_create(name="GameEntry", sex=0, start_loc=1)
+        sock.sendall(create_pkt)
+        time.sleep(2.0)
+        resp = recv_all(sock, timeout=5.0)
+
+        if not resp:
+            result.fail("Game entry", "No response after create")
+            sock.close()
+            return
+
+        # Decompress Huffman
+        if huffman_is_compressed(resp):
+            raw = huffman_decompress(resp)
+            if raw:
+                resp = raw
+
+        # Find XCMD_Start (0x1B) in response
+        start_idx = -1
+        for i in range(len(resp)):
+            if resp[i] == 0x1B and i + 37 <= len(resp):
+                start_idx = i
+                break
+
+        if start_idx < 0:
+            result.fail("Game entry", f"No XCMD_Start (0x1B) in {len(resp)}b response")
+            sock.close()
+            return
+
+        # Parse XCMD_Start: UID (4b), zero (4b), charID (2b), x (2b), y (2b), z (2b), dir (1b)
+        pkt = resp[start_idx:]
+        uid = struct.unpack_from('>I', pkt, 1)[0]
+        char_id = struct.unpack_from('>H', pkt, 9)[0]
+        x = struct.unpack_from('>H', pkt, 11)[0]
+        y = struct.unpack_from('>H', pkt, 13)[0]
+
+        if uid == 0:
+            result.fail("Game entry", "UID is 0 in XCMD_Start")
+        elif x == 0 and y == 0:
+            result.fail("Game entry", "Position (0,0) in XCMD_Start")
+        else:
+            result.ok(f"Game entry: UID=0x{uid:x} pos=({x},{y}) charID=0x{char_id:x}")
+
+        # Send a walk packet (0x02) and verify server doesn't crash
+        walk_pkt = struct.pack('>BBBB', 0x02, 0x01, 0x00, 0x00)  # walk north
+        try:
+            sock.sendall(walk_pkt)
+            time.sleep(0.5)
+        except:
+            pass
+
+        sock.close()
+    except Exception as e:
+        result.fail("Game entry", str(e))
+
+
 def test_login_after_stress(host, port, result):
-    """Test 7: Login still works after all previous tests."""
-    print("\n[Test 7] Login After Stress")
+    """Test 8: Login still works after all previous tests."""
+    print("\n[Test 8] Login After Stress")
     if test_login(host, port, "finaltest", "finalpass"):
         result.ok("Login works after stress testing")
     else:
@@ -210,6 +275,7 @@ def main():
     test_rapid_reconnect(host, port, result)
     test_bad_packets(host, port, result)
     test_char_create(host, port, result)
+    test_game_entry_validation(host, port, result)
     test_login_after_stress(host, port, result)
 
     success = result.summary()
