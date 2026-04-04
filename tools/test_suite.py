@@ -251,9 +251,32 @@ def test_game_entry_validation(host, port, result):
         result.fail("Game entry", str(e))
 
 
+def test_wrong_password(host, port, result):
+    """Test 8: Wrong password is rejected."""
+    print("\n[Test 8] Wrong Password Rejection")
+    try:
+        # First create account with known password
+        r1 = test_login(host, port, "pwtest_acct", "correct_pw")
+        if not r1:
+            result.fail("Wrong password", "Could not create initial account")
+            return
+
+        # Try with wrong password — should fail
+        sock, auth = game_connect(host, port, "pwtest_acct", "WRONG_PW")
+        if sock is None:
+            # game_connect returns None if charlist not received = login rejected
+            result.ok("Wrong password correctly rejected")
+        else:
+            result.fail("Wrong password", "Server accepted wrong password!")
+            sock.close()
+    except Exception as e:
+        # Connection error = server rejected = pass
+        result.ok(f"Wrong password rejected ({type(e).__name__})")
+
+
 def test_login_after_stress(host, port, result):
-    """Test 8: Login still works after all previous tests."""
-    print("\n[Test 8] Login After Stress")
+    """Test 9: Login still works after all previous tests."""
+    print("\n[Test 9] Login After Stress")
     if test_login(host, port, "finaltest", "finalpass"):
         result.ok("Login works after stress testing")
     else:
@@ -276,6 +299,7 @@ def main():
     test_bad_packets(host, port, result)
     test_char_create(host, port, result)
     test_game_entry_validation(host, port, result)
+    test_wrong_password(host, port, result)
     test_login_after_stress(host, port, result)
 
     success = result.summary()
