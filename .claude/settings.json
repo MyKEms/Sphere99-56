@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "command": "cd /workspace/Erebor/Migrace/Sphere99-56 && make -j4 2>&1 | tail -1 | grep -q 'sphere99svr' && echo 'BUILD OK' || echo 'BUILD SKIPPED (no changes)'"
+          }
+        ]
+      }
+    ]
+  }
+}
