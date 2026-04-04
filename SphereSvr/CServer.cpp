@@ -1510,6 +1510,15 @@ void CServer::OnTick()
 #ifndef _WIN32
 	extern volatile sig_atomic_t g_fSEGV_catch;
 	extern sigjmp_buf g_SEGV_jmpbuf;
+	// Wrap ENTIRE tick with SEGV recovery — server must never die from a single tick failure
+	g_fSEGV_catch = 1;
+	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
+	{
+		g_fSEGV_catch = 0;
+		// Recovered — still try to flush client data
+		try { SocketsFlush(); } catch (...) {}
+		return;
+	}
 #endif
 	static int s_iTickDbg = 0;
 	s_iTickDbg++;
@@ -1597,6 +1606,9 @@ do_flush:
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase4 pre-CfgTick (tick=%d)", s_iTickDbg); }
 	try { g_Cfg.OnTick(false); } catch (...) {}
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase5 done (tick=%d)", s_iTickDbg); }
+#ifndef _WIN32
+	g_fSEGV_catch = 0;
+#endif
 }
 
 bool CServer::SocketsInit( CGSocket& socket, int iPort )
