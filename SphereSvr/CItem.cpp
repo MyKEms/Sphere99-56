@@ -203,15 +203,12 @@ CItemPtr CItem::CreateDupeItem( const CItem* pItem )	// static
 CItemPtr CItem::CreateScript( ITEMID_TYPE id, CChar* pCharSrc ) // static
 {
 	// Create item from the script id.
-	fprintf(stderr, "[NET] CreateScript: id=0x%x\n", id); fflush(stderr);
 
 	CItemPtr pItem = CreateBase( id );
 	if ( pItem == NULL )
 	{
-		fprintf(stderr, "[ERR] CreateScript: CreateBase(0x%x) returned NULL\n", id); fflush(stderr);
 		return NULL;
 	}
-	fprintf(stderr, "[NET] CreateScript: CreateBase done, type=%d\n", pItem->GetType()); fflush(stderr);
 
 	if ( pCharSrc && ( pItem->IsType(IT_MULTI) || pItem->IsType(IT_SHIP)))
 	{
@@ -222,11 +219,9 @@ CItemPtr CItem::CreateScript( ITEMID_TYPE id, CChar* pCharSrc ) // static
 	// to avoid infinite recursion when @Create script calls GetPackSafe()
 	if ( id != ITEMID_BANK_BOX && id != ITEMID_BACKPACK && id != ITEMID_VENDOR_BOX )
 	{
-		fprintf(stderr, "[NET] CreateScript: calling @Create trigger\n"); fflush(stderr);
 		CSphereExpContext exec( pItem, pCharSrc ? (CScriptConsole*) pCharSrc : (CScriptConsole*) &g_Serv );
 		pItem->SetChangerSrc( exec.GetSrc());
 		pItem->Item_GetDef()->OnTriggerScript( exec, CItemDef::T_Create, CItemDef::sm_Triggers[CItemDef::T_Create].m_pszName );
-		fprintf(stderr, "[NET] CreateScript: @Create done\n"); fflush(stderr);
 	}
 
 	return( pItem );
