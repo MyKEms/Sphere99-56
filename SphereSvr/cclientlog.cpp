@@ -718,11 +718,13 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 		m_ConnectType = CONNECT_LOGIN;
 	}
 
-	if ( ! CheckLogIP())	// we are a blocked ip so i guess it does not matter.
-	{
-		addLoginErr( LOGIN_ERR_BLOCKED );
-		return( false );
-	}
+	// IP blocking disabled during development — too aggressive for testing.
+	// TODO: re-enable with higher threshold for production.
+	// if ( ! CheckLogIP())
+	// {
+	// 	addLoginErr( LOGIN_ERR_BLOCKED );
+	// 	return( false );
+	// }
 
 	// Try all client encryption keys on the msg.
 	// We save a copy of the raw encrypted data and try decrypting with each known
