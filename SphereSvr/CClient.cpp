@@ -120,17 +120,13 @@ void CClient::DeleteThis()
 
 	xFlush();
 
-	// Clean up chat before destruction — CChatClient destructor would
-	// access already-destroyed CClient members via GetClient() cast.
+	// Clean up chat before destruction
 	Chat_Quit();
 
 	RemoveSelf();	// remove myself from my parent list.
-	// CClient leak: delete this corrupts heap due to multiple inheritance.
-	// munmap_chunk(): invalid pointer on Ubuntu 20.04 GLIBC 2.31.
-	// Leak is ~2KB per connection, acceptable for game server.
-	// TODO: investigate proper destructor chain or use custom allocator.
 	m_Socket.Close();
 	g_Serv.StatDec( SERV_STAT_CLIENTS );
+	// Leak CClient memory — delete/free cause heap corruption.
 }
 
 bool CClient::CanInstantLogOut() const
