@@ -191,7 +191,7 @@ def game_connect(host, port, account, password):
     return sock, auth_id
 
 
-def recv_all(sock, timeout=5.0):
+def recv_all(sock, timeout=10.0):
     """Receive all available data with timeout."""
     sock.settimeout(timeout)
     data = bytearray()
@@ -201,7 +201,7 @@ def recv_all(sock, timeout=5.0):
             if not chunk:
                 break
             data.extend(chunk)
-            sock.settimeout(0.5)  # Short timeout for additional data
+            sock.settimeout(2.0)  # Followup timeout for additional data
     except socket.timeout:
         pass
     return bytes(data)

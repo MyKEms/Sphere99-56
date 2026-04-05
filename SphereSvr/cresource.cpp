@@ -1018,7 +1018,9 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		// Create a new index for the block.
 		// NOTE: rid is not created for all types.
 		// NOTE: GetArgRaw() is not always the DEFNAME
-		rid = ResourceGetNewID( restype, s.GetArgRaw(), pVarNum );
+		LPCTSTR pszArg = s.GetArgRaw();
+		if ( pszArg == NULL ) pszArg = "";
+		rid = ResourceGetNewID( restype, pszArg, pVarNum );
 	}
 
 	if ( ! rid.IsValidRID())
@@ -1634,9 +1636,8 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 	//  pszName = MAy or may not be the DEFNAME depending on type.
 
 	const CSphereUID ridinvalid;	// LINUX wants this for some reason.
-	if ( pszName == NULL )
+	if ( pszName == NULL || pszName[0] == '\0' )
 	{
-		ASSERT(0);
 		return ridinvalid;
 	}
 
