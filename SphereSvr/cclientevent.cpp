@@ -696,6 +696,7 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 	cmd.WalkAck.m_flag = ( m_pChar->IsStatFlag( STATF_Insubstantial | STATF_Invisible | STATF_Hidden | STATF_Sleeping )) ?
 		0 : 0x41;
 	xSendPkt( &cmd, sizeof( cmd.WalkAck ));
+	xFlush();	// Walk acks must be sent immediately — client rubber-bands otherwise
 
 	if ( ! fMove )
 	{
@@ -2967,11 +2968,13 @@ bool CClient::xDispatchMsg()
 	switch ( pEvent->Default.m_Cmd )
 	{
 	case XCMD_Walk: // Walk
-		if ( m_ProtoVer.GetCryptVer() >= 0x126000 )
+		// Modern clients (ClassicUO, etc.) always send v26 (7 bytes) regardless
+		// of encryption. Use v26 if we have enough data, v25 as fallback.
+		if ( m_bin.GetDataQty() >= (int)sizeof( pEvent->Walk_v26 ) )
 		{
 			if ( ! xCheckMsgSize( sizeof( pEvent->Walk_v26 )))
 				return(false);
-			Event_Walking( (DIR_TYPE)( pEvent->Walk_v26.m_dir & 0x0F ), 
+			Event_Walking( (DIR_TYPE)( pEvent->Walk_v26.m_dir & 0x0F ),
 				(bool)( pEvent->Walk_v26.m_dir & 0x80 ),
 				pEvent->Walk_v26.m_count, pEvent->Walk_v26.m_cryptcode );
 		}
@@ -2980,7 +2983,7 @@ bool CClient::xDispatchMsg()
 			if ( ! xCheckMsgSize( sizeof( pEvent->Walk_v25 )))
 				return(false);
 			Event_Walking( (DIR_TYPE)( pEvent->Walk_v25.m_dir & 0x0F ),
-				(bool)( pEvent->Walk_v26.m_dir & 0x80 ),
+				(bool)( pEvent->Walk_v25.m_dir & 0x80 ),
 				pEvent->Walk_v25.m_count, 0 );
 		}
 		break;
