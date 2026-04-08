@@ -38,6 +38,13 @@ Login sequence working end-to-end:
 - NoCrypt + 17 encrypted client key versions supported
 - Huffman compression active in game mode
 
+Walking and collision fully functional:
+- Server-side collision detection (GetHeightPoint/CheckValidMove)
+- Region mapplane 255 wildcard support
+- DEFNAME expression evaluator (resolves MT_WALK|MT_EQUIP|... in CAN= properties)
+- Walk sub-features: stealth reveal, weather transitions, teleporters, visibility updates
+- Client disconnect cleanup (no more zombie socket loops)
+
 ## Source Directories
 
 ```
@@ -69,7 +76,8 @@ The server accepts clients and can enter the game. Primary areas needing work:
 | Character creation | Done | New character creation and game entry working |
 | World load | Done | 509K items + 22K chars loaded from .scp save files |
 | UID system | Done | `SetUIDIndex()` fix ensures objects survive load and CharFind works |
-| Walk/move | Done | Event_Walking → WalkAck, collision detection |
+| Walk/move | Done | Server-side collision, stealth, weather, teleporters, visibility |
+| DEFNAME evaluator | Done | Expression resolver for CAN=MT_WALK\|MT_EQUIP etc. |
 | World view | Done | addPlayerSee, addItem_OnGround, addChar all implemented |
 | World save | Done | SaveStage/SaveForce write items/chars/accounts |
 | `<?...?>` escaped macros | Not started | Deferred expression evaluation in dialogs |
