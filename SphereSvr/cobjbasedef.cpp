@@ -76,7 +76,8 @@ HRESULT CObjBaseDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_BaseId:
 		return( HRES_WRITE_FAULT );
 	case P_Can:
-		m_CanFlags = vVal.GetInt() | ( m_CanFlags & ( CAN_C_INDOORS|CAN_C_EQUIP|CAN_C_USEHANDS|CAN_C_NONHUMANOID ));
+		// Evaluate expression (e.g. "MT_EQUIP|MT_WALK|MT_RUN|MT_USEHANDS") via expression evaluator
+		m_CanFlags = Exp_GetValue((LPCTSTR)vVal) | ( m_CanFlags & ( CAN_C_INDOORS|CAN_C_EQUIP|CAN_C_USEHANDS|CAN_C_NONHUMANOID ));
 		break;
 	case P_Name:
 		SetTypeName(vVal);

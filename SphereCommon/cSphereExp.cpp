@@ -7,6 +7,18 @@
 
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
+// DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values
+static int ResolveDefName(LPCTSTR pszName)
+{
+	CVarDef* pVar = g_Cfg.m_Const.FindKeyPtr(pszName);
+	if (pVar)
+		return pVar->GetValNum();
+	return 0;
+}
+
+// Initialize the static member
+CExpression::DEFNAME_RESOLVER CExpression::sm_fnResolveDefName = &ResolveDefName;
+
 CExpression* Exp_GetContext()
 {
 	// Accesses the globals,locals and the current context current 'this' object.

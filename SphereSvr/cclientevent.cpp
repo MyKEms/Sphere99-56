@@ -659,19 +659,15 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 
 		// Check the z height here.
 		// The client already knows this but doesn't tell us.
-		// NOTE: CheckMoveWalkDir already calls ptDst.Move(dir) internally,
-		// so pt is modified even if the check fails.
 		if ( ! m_pChar->CheckMoveWalkDir( pt, dir, true ))
 		{
-			// Collision check failed — trust the client's movement.
-			// pt was already moved 1 tile by CheckMoveWalkDir internally.
-			// TODO: fix GetHeightPoint/CheckValidMove for proper server-side validation
+			// Server says we can't walk there.
+			addPlayerWalkCancel();
+			return;
 		}
 
 		// Move the character
 		try { m_pChar->MoveToChar( pt ); } catch (...) {}
-		// Skip CheckRevealOnMove, weather, CheckLocation — they crash on unloaded data
-		// TODO: re-enable after fixing map/region handling
 	}
 	else
 	{

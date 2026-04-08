@@ -293,9 +293,11 @@ public:
 				LPCTSTR psz = (LPCTSTR)m_str;
 				if ( !psz || !*psz )
 					return 0;
-				// Support hex (0x...) and decimal
+				// Support hex (0x...) and Sphere convention (leading 0 + hex digit = hex)
 				if ( psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X') )
 					return (int) strtoul(psz, NULL, 16);
+				if ( psz[0] == '0' && isxdigit(psz[1]) )
+					return (int) strtol(psz, NULL, 16);
 				return atoi(psz);
 			}
 		default:          return 0;
@@ -659,7 +661,16 @@ class CVarDefStr : public CVarDef
 public:
 	CVarDefStr(LPCTSTR pszKey, LPCTSTR pszVal) : CVarDef(pszKey), m_sVal(pszVal) {}
 	LPCTSTR GetValStr() const { return m_sVal; }
-	int GetValNum() const { return atoi(m_sVal); }
+	int GetValNum() const {
+		LPCTSTR psz = (LPCTSTR)m_sVal;
+		if (!psz || !*psz) return 0;
+		// Sphere 0.99 convention: values starting with 0 followed by hex digit are hex
+		if (psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X'))
+			return (int)strtol(psz, NULL, 16);
+		if (psz[0] == '0' && isxdigit(psz[1]))
+			return (int)strtol(psz, NULL, 16);
+		return atoi(psz);
+	}
 	void SetValStr(LPCTSTR pszVal) { m_sVal = pszVal; }
 	CVarDef* CopySelf() const { return new CVarDefStr(GetKey(), m_sVal); }
 };
@@ -887,12 +898,18 @@ public:
 class CExpression
 {
 public:
-	// Basic number parsing - handles decimal, hex (0x), octal (0)
+	// Function pointer for resolving DEFNAME identifiers (set by server at startup)
+	typedef int (*DEFNAME_RESOLVER)(LPCTSTR pszName);
+	static DEFNAME_RESOLVER sm_fnResolveDefName;
+
+	// Basic number parsing - handles decimal, hex (0x), octal (0), and DEFNAME identifiers
 	static int GetSingle(LPCTSTR& pStr)
 	{
 		if (!pStr || !*pStr) return 0;
 		// Skip whitespace
 		while (ISWHITESPACE(*pStr)) pStr++;
+		if (!*pStr) return 0;
+
 		// Handle hex
 		if (pStr[0] == '0' && (pStr[1] == 'x' || pStr[1] == 'X'))
 			return (int)strtol(pStr, (char**)&pStr, 16);
@@ -903,6 +920,24 @@ public:
 		// Handle hex without 0x prefix — Sphere 0.99 convention: 0xxx values are hex
 		if (*pStr == '0' && isxdigit(pStr[1]))
 			return (int)strtol(pStr, (char**)&pStr, 16);
+		// Handle DEFNAME identifiers (starts with letter or underscore)
+		if (isalpha(*pStr) || *pStr == '_')
+		{
+			// Extract the identifier
+			LPCTSTR pStart = pStr;
+			while (isalnum(*pStr) || *pStr == '_') pStr++;
+			if (sm_fnResolveDefName && pStr > pStart)
+			{
+				char szName[256];
+				int iLen = pStr - pStart;
+				if (iLen >= (int)sizeof(szName)) iLen = sizeof(szName)-1;
+				memcpy(szName, pStart, iLen);
+				szName[iLen] = '\0';
+				int val = sm_fnResolveDefName(szName);
+				return fNeg ? -val : val;
+			}
+			return 0;
+		}
 		int val = (int)strtol(pStr, (char**)&pStr, 10);
 		return fNeg ? -val : val;
 	}
