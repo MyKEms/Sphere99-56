@@ -2381,7 +2381,15 @@ CRegionPtr CChar::CheckMoveWalkDir( CPointMapBase& ptDst, DIR_TYPE dir, bool fCh
 	CMulMapBlockState block;
 	CRegionPtr pArea = CheckValidMove( ptDst, block );
 	if ( pArea == NULL )
-		return( NULL );
+	{
+		// Height check failed — try with the current z as fallback.
+		// This handles cases where map height data returns invalid values.
+		PNT_Z_TYPE zOld = GetTopPoint().m_z;
+		ptDst.m_z = zOld;
+		pArea = ptDst.GetRegion( REGION_TYPE_MULTI | REGION_TYPE_AREA );
+		if ( pArea == NULL )
+			return( NULL );
+	}
 
 	if ( ! m_pPlayer )
 	{
