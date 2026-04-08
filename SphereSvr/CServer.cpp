@@ -1255,7 +1255,9 @@ void CServer::SocketsReceive() // Check for messages from the clients
 		pClientNext = pClient->GetNext();
 		if ( ! pClient->m_Socket.IsOpen())
 		{
-			pClient->DeleteThis();
+			// Socket already closed — remove from list. Use RemoveSelf directly
+			// rather than DeleteThis to avoid re-entrancy issues with ref counting.
+			pClient->RemoveSelf();
 			continue;
 		}
 		if ( nfds < MAX_POLL_FDS )
@@ -1309,6 +1311,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			}
 			if ( ! pClient->xRecvData())
 			{
+				pClient->m_Socket.Close();
 				try { pClient->DeleteThis(); } catch (...) {}
 				continue;
 			}
