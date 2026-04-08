@@ -405,6 +405,52 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 	s_FixExtendedProp( pszKey, "ArgChk", vArgs );
 	s_FixExtendedProp( pszKey, "ArgTxt", vArgs );
 
+	// Hardcoded dispatch for critical functions (table is not populated).
+	// argv(n) / argvcount — script function arguments
+	if ( !_stricmp(pszKey, "argv") || !_stricmp(pszKey, "argV") )
+	{
+		if ( vArgs.IsEmpty())
+			vValRet = m_vVal;
+		else
+			vValRet = m_vVal.GetArrayElement( vArgs.GetInt());
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "argvcount") )
+	{
+		vValRet.SetInt( m_vVal.MakeArraySize());
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "args") || !_stricmp(pszKey, "argS") || !_stricmp(pszKey, "args1") )
+	{
+		if ( m_s1.IsEmpty())
+			vValRet = m_vVal;
+		else
+			vValRet = m_s1;
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "argn") || !_stricmp(pszKey, "argn1") )
+	{
+		vValRet.SetInt( m_iN1 );
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "argn2") )
+	{
+		vValRet.SetInt( m_iN2 );
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "argn3") )
+	{
+		vValRet.SetInt( m_iN3 );
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "argo") || !_stricmp(pszKey, "argo1") )
+	{
+		if ( m_pO1 == NULL )
+			return HRES_INVALID_HANDLE;
+		vValRet.SetRef( m_pO1 );
+		return NO_ERROR;
+	}
+
 	F_TYPE_ iProp = (F_TYPE_) s_FindKeyInTable( pszKey, sm_Functions );
 	if ( iProp < 0 )
 	{
