@@ -666,8 +666,26 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 			return;
 		}
 
+		// Are we going to reveal ourselves by moving?
+		try { m_pChar->CheckRevealOnMove(); } catch (...) {}
+
 		// Move the character
 		try { m_pChar->MoveToChar( pt ); } catch (...) {}
+
+		// Should i update the weather?
+		if ( fRoof != m_pChar->IsStatFlag( STATF_InDoors ))
+		{
+			try { addWeather( WEATHER_DEFAULT ); } catch (...) {}
+		}
+
+		// Did i step on a telepad, trap, etc?
+		try {
+			if ( m_pChar->CheckLocation())
+			{
+				// We stepped on teleporter — don't send walk ack
+				return;
+			}
+		} catch (...) {}
 	}
 	else
 	{
@@ -690,10 +708,16 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 
 	if ( ! fMove )
 	{
+		// Show others I have turned
+		try { m_pChar->UpdateMode( this ); } catch (...) {}
 		return;
 	}
-	// Skip UpdateMove/addPlayerSee for now — single player test doesn't need them
-	// TODO: re-enable for multiplayer visibility updates
+
+	// Who now sees me?
+	try { m_pChar->UpdateMove( ptold, this ); } catch (...) {}
+
+	// What new stuff do I now see?
+	try { addPlayerSee( ptold ); } catch (...) {}
 }
 
 void CClient::Event_CombatMode( bool fWar ) // Only for switching to combat mode
