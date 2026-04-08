@@ -611,8 +611,6 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 	CPointMap ptold = pt;
 	bool fMove = true;
 
-	fprintf(stderr, "[WALK] dir=%d face=%d pos=%d,%d,%d seq=%d wc=%d\n", dir, m_pChar->m_dirFace, pt.m_x, pt.m_y, pt.m_z, bWalkCount, m_wWalkCount); fflush(stderr);
-
 	if ( dir == m_pChar->m_dirFace )
 	{
 		// Move in this dir.
@@ -691,17 +689,6 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 	// Not really sure what this does.
 	cmd.WalkAck.m_flag = ( m_pChar->IsStatFlag( STATF_Insubstantial | STATF_Invisible | STATF_Hidden | STATF_Sleeping )) ?
 		0 : 0x41;
-	{
-		static int s_walkDbg = 0;
-		if ( s_walkDbg < 10 ) {
-			const BYTE* raw = cmd.m_Raw;
-			fprintf(stderr, "[WALKACK] cmd=0x%02x count=%d flag=0x%02x sizeof=%zu pos=%d,%d,%d\n",
-				raw[0], raw[1], raw[2], sizeof(cmd.WalkAck),
-				m_pChar->GetTopPoint().m_x, m_pChar->GetTopPoint().m_y, m_pChar->GetTopPoint().m_z);
-			fflush(stderr);
-			s_walkDbg++;
-		}
-	}
 	xSendPkt( &cmd, sizeof( cmd.WalkAck ));
 	xFlush();	// Walk acks must be sent immediately — client rubber-bands otherwise
 
@@ -2971,11 +2958,6 @@ bool CClient::xDispatchMsg()
 	case XCMD_Walk: // Walk
 		// Modern clients (ClassicUO, etc.) always send v26 (7 bytes) regardless
 		// of encryption. Use v26 if we have enough data, v25 as fallback.
-		{
-			const BYTE* raw = pEvent->m_Raw;
-			fprintf(stderr, "[WALK-RAW] binQty=%d bytes: %02x %02x %02x %02x %02x %02x %02x\n",
-				m_bin.GetDataQty(), raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6]); fflush(stderr);
-		}
 		if ( m_bin.GetDataQty() >= (int)sizeof( pEvent->Walk_v26 ) )
 		{
 			if ( ! xCheckMsgSize( sizeof( pEvent->Walk_v26 )))
