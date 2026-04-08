@@ -54,22 +54,43 @@ SphereAccount/      Account management — functional
 SphereSvr/          Main server logic — loads, accepts clients, game logic implemented
 ```
 
-## Next Priority: Game Testing & Combat
+## Known Bugs (2026-04-08, client-tested)
 
-The server accepts clients, enters the game, and the script engine supports
-argv/argvcount, safe(), eval(), <?...?> macros, argo.dialog API, and object
-reference chaining. Primary areas needing work:
+### Critical
+- **Death crashes server** — `.kill` or any death triggers SEGV in main loop
+  (not caught by try/catch). Death handling, ghost state, resurrection need debugging.
+- **Re-login stuck** — logging off and back in with existing character freezes at
+  "Entering Britannia". Only new characters work. Game entry for existing chars
+  sends incomplete/wrong packets.
+- **Stair Z-height crash** — walking up stairs and back triggers SEGV in walk
+  handler (collision detection crash on Z-level transitions). Causes 55K+ crash
+  loop since walk buffer isn't consumed after SEGV.
 
-1. **Combat system** — @BeforeSwing/@AfterSwing triggers defined but combat
-   pipeline (damage calc, hit/miss, effects) needs testing with real scripts
+### Major
+- **CSCRIPT_PROPX_IMP disabled** — function dispatch tables (Eval, Safe, Serv,
+  Account, FindUID etc.) cause SEGV when enabled. Reverted to empty. Only
+  argv/argvcount/args/argn/argo work via hardcoded dispatch. Need to debug
+  each table entry individually.
+- **Gump button responses** — `.add` gump menu appears but clicking buttons
+  does nothing. Event_GumpDialogRet context/mode matching fails silently.
+- **`.go` with no args** — teleports to default fallback point instead of error.
+- **ObjMessage not visible** — `addBark` with TALKMODE_OBJ not rendered by
+  ClassicUO. Use `addSysMessage` for GM command responses instead.
 
-2. **`src.` reference resolution** — `<src.name>`, `<src.tag(x)>` need the same
-   object chaining treatment as `<argo.tag(x)>` (src = source player/console)
+### Minor
+- **`.clients` no output** — text list display not reaching client
+- **`.bank` targeting** — target cursor appears but bank box doesn't open after click
+- **718/755 area defs** — throw exceptions during loading (non-critical)
 
-3. **`var()` globals** — basic CVarDefArray works but complex var() patterns
-   (var.name, var.name=value) may need additional dispatch
+## Next Priority: Core Game Features
 
-4. **CResourceLock** — may leak file handles (opens script files for lazy loading)
+1. **Re-login fix** — game entry for existing characters (most critical for testing)
+2. **Death system** — fix SEGV in death handling
+3. **Double-click / item use** — backpacks, containers, usable items
+4. **`src.` reference resolution** — `<src.name>`, `<src.tag(x)>` chaining
+5. **Function dispatch tables** — debug CSCRIPT_PROPX_IMP entries one by one
+6. **NPC interaction** — speech triggers, vendor buy/sell
+7. **CResourceLock** — may leak file handles
 
 ## Key 0.99-Specific Features
 
