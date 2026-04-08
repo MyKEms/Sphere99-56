@@ -1706,8 +1706,9 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 			TCHAR* pArg1 = Str_GetTemp();
 			strcpy( pArg1, pszName );
 			pszName = pArg1;
-			TCHAR* pArg2;
-			Str_Parse( pArg1, pArg2 );
+			TCHAR* pArg2 = NULL;
+			Str_Parse( pArg1, &pArg2 );
+			if ( pArg2 == NULL ) pArg2 = const_cast<TCHAR*>("");
 
 			if ( ! _stricmp( pArg2, "TEXT" ))
 				iPage = RES_DIALOG_TEXT;
@@ -2343,7 +2344,11 @@ void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
 	while (script.FindNextSection())
 	{
 		CSphereResourceMgr* pMgr = static_cast<CSphereResourceMgr*>(this);
-		pMgr->LoadScriptSection(script);
+		try {
+			pMgr->LoadScriptSection(script);
+		} catch (...) {
+			SPHERE_LOG_ERR("Exception loading section '%s' in '%s'", script.GetSection(), (LPCTSTR)script.GetFilePath());
+		}
 		nSections++;
 	}
 }
@@ -2685,12 +2690,14 @@ bool CSphereResourceMgr::Load( bool fResync )
 			break;
 
 		// Debug_CheckPoint();
+		SPHERE_LOG_NET("Loading script[%d]: '%s'", j, (LPCTSTR)pResFile->GetFilePath());
 		bool fRetRes;
 		try {
 			fRetRes = LoadResources( pResFile );	// load or resync
 		}
 		catch (...)
 		{
+			SPHERE_LOG_ERR("EXCEPTION loading script[%d]: '%s'", j, (LPCTSTR)pResFile->GetFilePath());
 			fRet = false;
 		}
 		if (!fRetRes)

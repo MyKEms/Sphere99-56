@@ -1290,7 +1290,7 @@ void CChar::NPC_Food_Search()
 
 
 
-		Str_Parse(pFoodString, pTmp, " ");
+		Str_Parse(pFoodString, &pTmp, " ");
 
 		strcpy( szFoodType, pFoodString );
 
@@ -1306,7 +1306,7 @@ void CChar::NPC_Food_Search()
 
 		{
 
-			Str_Parse(pFoodString, pTmp, " ");
+			Str_Parse(pFoodString, &pTmp, " ");
 
 			iAmount = atoi(pFoodString);
 
