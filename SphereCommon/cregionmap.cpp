@@ -128,7 +128,8 @@ bool CRegionBasic::IsPointInside( const CPointMap& pt ) const
 {
 	if ( ! PtInRegion( pt ))
 		return false;
-	if ( ! m_pt.IsSameMapPlane( pt.m_mapplane ))
+	// mapplane 255 = region applies to all map planes (Sphere 0.99 convention)
+	if ( m_pt.m_mapplane != 255 && ! m_pt.IsSameMapPlane( pt.m_mapplane ))
 		return false;
 	// Have a z component ?
 	if ( IsMatchType(REGION_TYPE_MULTI))

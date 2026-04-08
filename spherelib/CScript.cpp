@@ -294,9 +294,18 @@ int CScript::GetArgInt()
 
 CGVariant& CScript::GetArgVar()
 {
-	// Return a variant wrapping the current arg
+	// Return a variant wrapping the current arg as a string.
+	// The string will be resolved to numeric values when needed via expression evaluation.
 	static CGVariant s_vArg;
-	// TODO: proper variant initialization when CGVariant is implemented
+	LPCTSTR pszArg = GetArgRaw();
+	if ( pszArg && *pszArg )
+	{
+		s_vArg = CGVariant( pszArg );
+	}
+	else
+	{
+		s_vArg = CGVariant();
+	}
 	return s_vArg;
 }
 
