@@ -394,6 +394,8 @@ public:
 	{
 		if (bVal)
 			m_iPingBlocks++;
+		else if (m_iPingBlocks > 0)
+			m_iPingBlocks--; // Decay on successful login
 		// Block if too many pings in a short time
 		return (m_iPingBlocks > 100);
 	}

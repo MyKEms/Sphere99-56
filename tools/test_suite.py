@@ -426,11 +426,15 @@ def main():
         test_bad_packets(host, port, result)
 
     test_char_create(host, port, result)
+    time.sleep(2)  # Let server process game entry before next connection
     test_game_entry_validation(host, port, result)
+    time.sleep(2)
     test_walking(host, port, result)
+    time.sleep(2)
 
     if not quick:
         test_wrong_password(host, port, result)
+        time.sleep(2)
 
     test_login_after_stress(host, port, result)
 
