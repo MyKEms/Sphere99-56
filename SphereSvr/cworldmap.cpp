@@ -408,14 +408,16 @@ void CWorld::GetHeightPoint( const CPointMap& pt, CMulMapBlockState& block, cons
 	}
 
 	static int s_dbgCount = 0;
-	if ( s_dbgCount < 20 )
+	if ( s_dbgCount < 50 )
 	{
 		const CMulMapMeter* pDbgMeter = pMapBlock->GetTerrain( SPHEREMAP_BLOCK_OFFSET(pt.m_x), SPHEREMAP_BLOCK_OFFSET(pt.m_y));
-		fprintf(stderr, "[HEIGHT] pt=%d,%d,%d terrain_z=%d terrain_id=0x%x bottom_z=%d bottom_flags=0x%x blocked=%d\n",
+		fprintf(stderr, "[HEIGHT] pt=%d,%d,%d terrain_z=%d terrain_id=0x%x usable=%d bottom_z=%d bottom_flags=0x%x canflags=0x%x blocked=%d\n",
 			pt.m_x, pt.m_y, pt.m_z,
 			pDbgMeter ? pDbgMeter->m_z : -999,
 			pDbgMeter ? pDbgMeter->m_wTerrainIndex : 0,
+			pDbgMeter ? block.IsUsableZ(pDbgMeter->m_z, 0) : -1,
 			block.m_Bottom.m_z, block.m_Bottom.m_BlockFlags,
+			block.m_CanFlags,
 			block.IsResultBlocked()); fflush(stderr);
 		s_dbgCount++;
 	}
