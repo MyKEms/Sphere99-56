@@ -32,7 +32,7 @@
 #define CSCRIPT_CLASS_IMP0(a,b,c)
 #define DECLARE_LISTREC_TYPE(a)
 #define CSCRIPT_PROP_IMP(a,b,c) { #a, b, c },
-#define CSCRIPT_PROPX_IMP(a,b,c)
+#define CSCRIPT_PROPX_IMP(a,b,c) CScriptPropX(#a, b, c),
 #define CSCRIPT_METHOD_IMP(a,b,c) { #a, b, c },
 
 #define CSCRIPT_CLASS_DEF1(...) \

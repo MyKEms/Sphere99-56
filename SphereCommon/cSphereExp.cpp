@@ -470,6 +470,9 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 			vValRet = m_vVal.GetArrayElement( vArgs.GetInt());
 		}
 		break;
+	case F_ArgVCount:
+		vValRet.SetInt( m_vVal.MakeArraySize());
+		break;
 	default:
 		DEBUG_CHECK(0);
 		return HRES_INTERNAL_ERROR;

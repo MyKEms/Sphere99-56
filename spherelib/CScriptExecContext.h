@@ -40,7 +40,30 @@ private:
 	static LPCTSTR const sm_szScriptKeys[];
 
 public:
+	// Gump command table for dialog construction.
+	static LPCTSTR const sm_szGumpCmds[];
+
+	static bool IsGumpCommand(LPCTSTR pszKey)
+	{
+		for ( int i = 0; sm_szGumpCmds[i]; i++ )
+		{
+			size_t len = strlen(sm_szGumpCmds[i]);
+			if ( !_strnicmp(pszKey, sm_szGumpCmds[i], len) )
+			{
+				char ch = pszKey[len];
+				if ( ch == '\0' || ch == ' ' || ch == '(' || ch == '\t' )
+					return true;
+			}
+		}
+		return false;
+	}
+
+public:
 	static CScriptPropArray sm_FunctionsAll;
+
+	// Gump accumulator — set during dialog construction (single-threaded safe).
+	static CGStringArray* sm_pGumpControls;
+	static CGStringArray* sm_pGumpTexts;
 
 	static void InitFunctions()
 	{
@@ -107,9 +130,190 @@ public:
 			if ( pszBuf[i] != chBegin )
 				continue;
 
-			// Check for <?...?> deferred macros — pass through for now.
+			// Handle <?...?> expression macros — alternative delimiters for nesting.
 			if ( pszBuf[i+1] == '?' )
+			{
+				int iBegin = i;
+				int iDepth = 1;
+				int iEnd = -1;
+				for ( int j = i + 2; pszBuf[j]; j++ )
+				{
+					if ( pszBuf[j] == '<' && pszBuf[j+1] == '?' )
+					{
+						iDepth++;
+						j++;
+					}
+					else if ( pszBuf[j] == '?' && pszBuf[j+1] == '>' )
+					{
+						iDepth--;
+						if ( iDepth <= 0 )
+						{
+							iEnd = j + 1; // position of '>'
+							break;
+						}
+						j++;
+					}
+				}
+				if ( iEnd < 0 )
+				{
+					i++; // skip past '?' to avoid infinite loop
+					continue;
+				}
+
+				// Extract content between <? and ?>
+				pszBuf[iEnd - 1] = '\0'; // null-terminate at '?' of '?>'
+				TCHAR* pszExpr = pszBuf + iBegin + 2; // skip '<? '
+
+				// Recursively resolve inner <...> and <?...?> tags.
+				s_ParseEscapes(pszExpr, dwFlags);
+
+				// Check for "safe" prefix.
+				bool fSafe = false;
+				if ( !_strnicmp(pszExpr, "safe", 4) )
+				{
+					TCHAR ch5 = pszExpr[4];
+					if ( ch5 == ' ' || ch5 == '.' || ch5 == '(' || ch5 == '\0' )
+					{
+						fSafe = true;
+						pszExpr += 4;
+						if ( *pszExpr == ' ' || *pszExpr == '.' )
+							pszExpr++;
+					}
+				}
+
+				// Evaluate the expression (same as <...> evaluation).
+				CGString sResult;
+				bool fResolved = false;
+				try
+				{
+					TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+					strncpy(szKey, pszExpr, sizeof(szKey)-1);
+					szKey[sizeof(szKey)-1] = '\0';
+
+					TCHAR* pszArgs = szKey;
+					while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
+						pszArgs++;
+
+					CGVariant vArgs;
+					CGVariant vValRet;
+
+					if ( *pszArgs == '(' )
+					{
+						*pszArgs++ = '\0';
+						int len = strlen(pszArgs);
+						if ( len > 0 && pszArgs[len-1] == ')' )
+							pszArgs[len-1] = '\0';
+						vArgs = pszArgs;
+					}
+					else if ( *pszArgs == ' ' )
+					{
+						*pszArgs++ = '\0';
+						while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
+						vArgs = pszArgs;
+					}
+
+					HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
+					if ( hRes == NO_ERROR )
+					{
+						CScriptObj* pRef = vValRet.GetRef();
+						if ( pRef != NULL )
+						{
+							TCHAR* pDot = strchr(szKey, '.');
+							if ( pDot )
+							{
+								LPCTSTR pszSubKey = pDot + 1;
+								CResourceObj* pRefObj = dynamic_cast<CResourceObj*>(pRef);
+								if ( pRefObj )
+								{
+									CGVariant vSubRet;
+									hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
+									if ( hRes != NO_ERROR )
+										hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
+									if ( hRes != NO_ERROR )
+									{
+										CScriptObj* pOldBase = GetBaseObject();
+										SetBaseObject(pRefObj);
+										hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
+										SetBaseObject(pOldBase);
+									}
+									if ( hRes == NO_ERROR )
+									{
+										sResult = vSubRet.IsEmpty() ? "" : vSubRet.GetPSTR();
+										fResolved = true;
+									}
+								}
+							}
+							else
+							{
+								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+								fResolved = true;
+							}
+						}
+						else
+						{
+							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+							fResolved = true;
+						}
+					}
+
+					if ( !fResolved )
+					{
+						CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+						if ( pObj )
+						{
+							hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
+							if ( hRes == NO_ERROR )
+							{
+								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+								fResolved = true;
+							}
+						}
+					}
+
+					if ( !fResolved && szKey[0] )
+					{
+						CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+						if ( pObj )
+						{
+							hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
+							if ( hRes == NO_ERROR )
+							{
+								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+								fResolved = true;
+							}
+						}
+					}
+				}
+				catch (...)
+				{
+					fResolved = fSafe;
+				}
+
+				if ( !fResolved )
+				{
+					if ( fSafe )
+					{
+						sResult = "";
+						fResolved = true;
+					}
+					else
+					{
+						pszBuf[iEnd - 1] = '?'; // restore
+						i++; // skip past '?'
+						continue;
+					}
+				}
+
+				// Replace <?...?> with result, shifting buffer.
+				int iExprLen = iEnd - iBegin + 1;
+				int iResultLen = sResult.GetLength();
+				int iTrailLen = strlen(pszBuf + iEnd + 1);
+				// pszBuf[iEnd-1] is '\0', pszBuf[iEnd] is '>', trailing starts at iEnd+1
+				memmove(pszBuf + iBegin + iResultLen, pszBuf + iEnd + 1, iTrailLen + 1);
+				memcpy(pszBuf + iBegin, (LPCTSTR)sResult, iResultLen);
+				i = iBegin + iResultLen - 1;
 				continue;
+			}
 
 			// Must start with an alphanumeric or '<' (nested).
 			if ( !isalnum(pszBuf[i+1]) && pszBuf[i+1] != '<' )
@@ -199,8 +403,48 @@ public:
 				HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
 				if ( hRes == NO_ERROR )
 				{
-					sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-					fResolved = true;
+					// Object reference chaining: <argo.tag(name)>, <argo.uid>, etc.
+					CScriptObj* pRef = vValRet.GetRef();
+					if ( pRef != NULL )
+					{
+						TCHAR* pDot = strchr(szKey, '.');
+						if ( pDot )
+						{
+							// Dispatch sub-key on the referenced object.
+							LPCTSTR pszSubKey = pDot + 1;
+							CResourceObj* pRefObj = dynamic_cast<CResourceObj*>(pRef);
+							if ( pRefObj )
+							{
+								CGVariant vSubRet;
+								hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
+								if ( hRes != NO_ERROR )
+									hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
+								if ( hRes != NO_ERROR )
+								{
+									// Try as function call with ref as base object.
+									CScriptObj* pOldBase = GetBaseObject();
+									SetBaseObject(pRefObj);
+									hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
+									SetBaseObject(pOldBase);
+								}
+								if ( hRes == NO_ERROR )
+								{
+									sResult = vSubRet.IsEmpty() ? "" : vSubRet.GetPSTR();
+									fResolved = true;
+								}
+							}
+						}
+						else
+						{
+							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+							fResolved = true;
+						}
+					}
+					else
+					{
+						sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+						fResolved = true;
+					}
 				}
 
 				// Try object property access (SRC.NAME, OBJ.PROP, etc.)
@@ -339,6 +583,94 @@ public:
 			hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
 			if ( hRes == NO_ERROR )
 				return NO_ERROR;
+		}
+
+		// Try as a global function/method dispatch (script [FUNCTION] calls).
+		{
+			CGVariant vArgs(pszArg);
+			CGVariant vValRet;
+			HRESULT hRes = Function_Dispatch(pszKey, vArgs, vValRet);
+			if ( hRes == NO_ERROR )
+				return NO_ERROR;
+		}
+
+		// During dialog construction, intercept gump commands and settext.
+		if ( sm_pGumpControls != NULL )
+		{
+			// Handle settext(id, text) / setText(id, text)
+			if ( !_strnicmp(pszKey, "settext", 7) )
+			{
+				LPCTSTR pArgs = pszKey + 7;
+				if ( *pArgs == '(' ) pArgs++;
+				else if ( *pArgs == ' ' ) pArgs++;
+				else pArgs = pszArg;
+				// Parse: id,text
+				int iTextID = atoi(pArgs);
+				while ( *pArgs && *pArgs != ',' ) pArgs++;
+				if ( *pArgs == ',' ) pArgs++;
+				// Strip trailing ')'
+				TCHAR szText[SCRIPT_MAX_LINE_LEN];
+				strncpy(szText, pArgs, sizeof(szText)-1);
+				szText[sizeof(szText)-1] = '\0';
+				int len = strlen(szText);
+				if ( len > 0 && szText[len-1] == ')' )
+					szText[len-1] = '\0';
+				// Ensure text array is large enough
+				if ( sm_pGumpTexts )
+				{
+					while ( sm_pGumpTexts->GetSize() <= iTextID )
+						sm_pGumpTexts->Add( "" );
+					sm_pGumpTexts->SetAt( iTextID, szText );
+				}
+				return NO_ERROR;
+			}
+
+			// Handle gump commands: resizepic, text, button, etc.
+			// Check both with and without parentheses: "text(x,y,c,id)" or "text x y c id"
+			TCHAR szGumpKey[128];
+			strncpy(szGumpKey, pszKey, sizeof(szGumpKey)-1);
+			szGumpKey[sizeof(szGumpKey)-1] = '\0';
+			// Strip trailing '(' from key if present
+			TCHAR* pParen = strchr(szGumpKey, '(');
+			LPCTSTR pGumpArgs = pszArg;
+			if ( pParen )
+			{
+				*pParen = '\0';
+				pGumpArgs = pParen + 1;
+				// Strip trailing ')' from args
+				int len2 = strlen(pGumpArgs);
+				// pGumpArgs might point into pszKey, make a copy
+				static TCHAR s_szGA[SCRIPT_MAX_LINE_LEN];
+				strncpy(s_szGA, pGumpArgs, sizeof(s_szGA)-1);
+				s_szGA[sizeof(s_szGA)-1] = '\0';
+				len2 = strlen(s_szGA);
+				if ( len2 > 0 && s_szGA[len2-1] == ')' )
+					s_szGA[len2-1] = '\0';
+				pGumpArgs = s_szGA;
+			}
+
+			if ( IsGumpCommand(szGumpKey) )
+			{
+				// Convert comma-separated args to space-separated for gump protocol.
+				TCHAR szGump[SCRIPT_MAX_LINE_LEN];
+				if ( pGumpArgs && *pGumpArgs )
+				{
+					snprintf(szGump, sizeof(szGump), "%s %s", szGumpKey, pGumpArgs);
+					// Replace commas with spaces in the args portion
+					TCHAR* pComma = szGump + strlen(szGumpKey) + 1;
+					for ( ; *pComma; pComma++ )
+					{
+						if ( *pComma == ',' )
+							*pComma = ' ';
+					}
+				}
+				else
+				{
+					strncpy(szGump, szGumpKey, sizeof(szGump)-1);
+				}
+				sm_pGumpControls->Add(szGump);
+				return NO_ERROR;
+			}
 		}
 
 		// Unknown command -- not an error for now, just ignore.
@@ -678,5 +1010,20 @@ inline LPCTSTR const CScriptExecContext::sm_szScriptKeys[] =
 	"WHILE",
 	NULL
 };
+
+// Gump command names recognized during dialog construction.
+inline LPCTSTR const CScriptExecContext::sm_szGumpCmds[] =
+{
+	"resizepic", "gumppic", "tilepic", "text", "texta", "croppedtext",
+	"htmlgump", "htmlgumpa", "xmfhtmlgump", "button", "radio", "checkbox",
+	"textentry", "textentrya", "page", "group", "nomove", "noclose",
+	"nodispose", "gumppictiled", "checkertrans", "xmfhtmlgumpcolor",
+	"tilepichue",
+	NULL
+};
+
+// Static gump accumulator pointers (single-threaded safe).
+inline CGStringArray* CScriptExecContext::sm_pGumpControls = NULL;
+inline CGStringArray* CScriptExecContext::sm_pGumpTexts = NULL;
 
 #endif // _INC_CSCRIPTEXECCONTEXT_H

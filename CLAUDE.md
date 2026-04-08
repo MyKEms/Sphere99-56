@@ -54,16 +54,20 @@ SphereAccount/      Account management — functional
 SphereSvr/          Main server logic — loads, accepts clients, game logic implemented
 ```
 
-## Next Priority: Game Testing & Script Support
+## Next Priority: Game Testing & Combat
 
-The server accepts clients and can enter the game. Primary areas needing work:
+The server accepts clients, enters the game, and the script engine supports
+argv/argvcount, safe(), eval(), <?...?> macros, argo.dialog API, and object
+reference chaining. Primary areas needing work:
 
-1. **Script triggers** — basic trigger system works but shard scripts may fail on
-   unimplemented features (safe(), argo.dialog API, <?...?> macros)
+1. **Combat system** — @BeforeSwing/@AfterSwing triggers defined but combat
+   pipeline (damage calc, hit/miss, effects) needs testing with real scripts
 
-2. **`argo.` dialog API** — 15K+ calls in Erebor scripts; not yet implemented
+2. **`src.` reference resolution** — `<src.name>`, `<src.tag(x)>` need the same
+   object chaining treatment as `<argo.tag(x)>` (src = source player/console)
 
-3. **`safe()` expression** — error-safe wrapper; not yet implemented
+3. **`var()` globals** — basic CVarDefArray works but complex var() patterns
+   (var.name, var.name=value) may need additional dispatch
 
 4. **CResourceLock** — may leak file handles (opens script files for lazy loading)
 
@@ -80,10 +84,14 @@ The server accepts clients and can enter the game. Primary areas needing work:
 | DEFNAME evaluator | Done | Expression resolver for CAN=MT_WALK\|MT_EQUIP etc. |
 | World view | Done | addPlayerSee, addItem_OnGround, addChar all implemented |
 | World save | Done | SaveStage/SaveForce write items/chars/accounts |
-| `<?...?>` escaped macros | Not started | Deferred expression evaluation in dialogs |
-| `argo.` dialog API | Not started | Dialog construction (15K+ calls in Erebor scripts) |
+| Function dispatch tables | Done | CSCRIPT_PROPX_IMP fix — Eval, Safe, ArgV etc. resolve |
+| `argv()/argvcount` | Done | Function argument access (4,377 uses in Erebor scripts) |
+| `<?...?>` escaped macros | Done | Alternative expression delimiters for nesting |
+| `argo.` dialog API | Done | Dialog construction with gump accumulation |
+| Object ref chaining | Done | `<argo.tag(name)>`, `<argo.uid>` etc. resolve |
 | `var()` globals | Partial | Server-wide variables — basic CVarDefArray works |
-| `safe()` | Not started | Error-safe expression wrapper |
+| `safe()` | Done | Error-safe expression wrapper |
+| `eval()` | Done | Numeric expression evaluation |
 | Right-to-left eval | Done | `<eval 3*2+1>` = 9, not 7 |
 | Extended triggers | Done | @BeforeSwing, @AfterSwing, @finalBlow etc. |
 
@@ -155,6 +163,10 @@ breaks silently — the base class stub gets called instead of the derived overr
 - After build: always `cp sphere99svr /workspace/Erebor/sphere/` then restart
 
 ### Notable Bug Fixes
+- **CSCRIPT_PROPX_IMP was empty**: The `CSCRIPT_PROPX_IMP` macro was defined as empty,
+  meaning ALL function dispatch tables (Eval, Safe, ArgV, Serv, etc.) had NULL entries
+  and never matched. Fixed to `CScriptPropX(#a, b, c),` which populates the tables.
+  This was the root cause of function dispatch being completely non-functional.
 - **IsValidRID fix for single-instance resource types**: Resource types that have only
   a single instance (e.g., WEBPAGE) need special handling in IsValidRID — the index
   can be 0 and still be valid.
