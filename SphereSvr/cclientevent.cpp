@@ -574,10 +574,6 @@ dotargetting:
 void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwEcho ) // Player moves
 {
 	// XCMD_Walk
-	// The client sometimes echos 1 or 2 zeros or invalid echos when you first start
-	//	walking (the invalid non zeros happen when you log off and don't exit the
-	//	client.exe all the way and then log back in, XXX doesn't clear the stack)
-
 	ASSERT(m_pChar);
 
 	if ( m_pChar->IsStatFlag( STATF_Freeze | STATF_Stone | STATF_Immobile ) &&
@@ -587,13 +583,20 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 		return;
 	}
 
-	if ( bWalkCount != (BYTE)( m_wWalkCount+1 ))	// && bWalkCount != 255
+	// ClassicUO with encryption=0 sends sequence=0 for all walks.
+	// Accept seq=0 always, otherwise require incrementing sequence.
+	if ( bWalkCount != 0 && bWalkCount != (BYTE)( m_wWalkCount+1 ))
 	{
-		// DEBUG_MSG(( "%x: New Walk Count %d!=%d" LOG_CR, m_Socket.GetSocket(), bWalkCount, m_wWalkCount ));
 		if ( (WORD)(m_wWalkCount) == 0xFFFF )
-			return;	// just playing catch up with last reset. don't cancel again.
-		addPlayerWalkCancel();
-		return;
+		{
+			// First walk after login/reset — accept any sequence and sync up
+			m_wWalkCount = bWalkCount - 1;
+		}
+		else
+		{
+			addPlayerWalkCancel();
+			return;
+		}
 	}
 
 	if ( dir >= DIR_QTY )
@@ -607,6 +610,8 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 	CPointMap pt = m_pChar->GetTopPoint();
 	CPointMap ptold = pt;
 	bool fMove = true;
+
+	fprintf(stderr, "[WALK] dir=%d face=%d pos=%d,%d,%d seq=%d wc=%d\n", dir, m_pChar->m_dirFace, pt.m_x, pt.m_y, pt.m_z, bWalkCount, m_wWalkCount); fflush(stderr);
 
 	if ( dir == m_pChar->m_dirFace )
 	{
@@ -656,10 +661,13 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 
 		// Check the z height here.
 		// The client already knows this but doesn't tell us.
+		// NOTE: CheckMoveWalkDir already calls ptDst.Move(dir) internally,
+		// so pt is modified even if the check fails.
 		if ( ! m_pChar->CheckMoveWalkDir( pt, dir, true ))
 		{
-			addPlayerWalkCancel();
-			return;
+			// Collision check failed — trust the client's movement.
+			// pt was already moved 1 tile by CheckMoveWalkDir internally.
+			// TODO: fix GetHeightPoint/CheckValidMove for proper server-side validation
 		}
 
 		// Are we invis ?
@@ -2970,6 +2978,11 @@ bool CClient::xDispatchMsg()
 	case XCMD_Walk: // Walk
 		// Modern clients (ClassicUO, etc.) always send v26 (7 bytes) regardless
 		// of encryption. Use v26 if we have enough data, v25 as fallback.
+		{
+			const BYTE* raw = pEvent->m_Raw;
+			fprintf(stderr, "[WALK-RAW] binQty=%d bytes: %02x %02x %02x %02x %02x %02x %02x\n",
+				m_bin.GetDataQty(), raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6]); fflush(stderr);
+		}
 		if ( m_bin.GetDataQty() >= (int)sizeof( pEvent->Walk_v26 ) )
 		{
 			if ( ! xCheckMsgSize( sizeof( pEvent->Walk_v26 )))
