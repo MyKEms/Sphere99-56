@@ -124,9 +124,7 @@ void CClient::DeleteThis()
 	Chat_Quit();
 
 	RemoveSelf();	// remove myself from my parent list.
-	m_Socket.Close();
-	g_Serv.StatDec( SERV_STAT_CLIENTS );
-	// Leak CClient memory — delete/free cause heap corruption.
+	delete this;
 }
 
 bool CClient::CanInstantLogOut() const

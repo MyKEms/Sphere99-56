@@ -133,10 +133,6 @@ void CVarDefArray::s_WriteTags(CScript& script, LPCTSTR pszName)
 bool CResourceObj::s_LoadProps(CScript& s)
 {
 	// Read key=value pairs and dispatch via s_PropSet.
-	// NOTE: Due to multiple inheritance, CChar/CItem override s_PropSet
-	// on the CResourceDef chain, not the CResourceObj chain.
-	// We must avoid calling this->s_PropSet() which goes through
-	// the CResourceObj vtable. Instead, use s_LoadProps_Default.
 	while (s.ReadKeyParse())
 	{
 		CGVariant vArg;

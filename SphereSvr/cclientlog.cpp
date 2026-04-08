@@ -660,7 +660,8 @@ void CClient::xFinishProcessMsg( bool fGood )
 
 	if ( ! fGood )	// toss all.
 	{
-		DEBUG_ERR(( "%x:Bad Msg %x Eat %d bytes, prv=0%x" LOG_CR, m_Socket.GetSocket(), pEvent->Default.m_Cmd, m_bin.GetDataQty(), m_bin_PrvMsg ));
+		BYTE badCmd = pEvent ? pEvent->Default.m_Cmd : 0xFF;
+		DEBUG_ERR(( "%x:Bad Msg %x Eat %d bytes, prv=0%x" LOG_CR, m_Socket.GetSocket(), badCmd, m_bin.GetDataQty(), m_bin_PrvMsg ));
 		m_bin.RemoveDataAmount( m_bin_msg_len );	// eat the buffer.
 		if ( m_ConnectType == CONNECT_LOGIN )	// tell them about it.
 		{
@@ -755,7 +756,7 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 		{
 			if ( iLen < (int)sizeof( pEvent->CharListReq ))
 				return(false);
-			lErr = Setup_CharListReq( pEvent->CharListReq.m_acctname, pEvent->CharListReq.m_acctpass, 0 );
+			lErr = Setup_CharListReq( pEvent->CharListReq.m_acctname, pEvent->CharListReq.m_acctpass, pEvent->CharListReq.m_Account );
 		}
 		if ( lErr != LOGIN_ERR_OTHER )
 			break;
@@ -992,7 +993,11 @@ bool CClient::xRecvData() // Receive message from client
 	case CONNECT_GAME:
 		// Decrypt the client data.
 		// TCP = no missed packets ! If we miss a packet we are screwed !
-		ASSERT( m_Crypt.IsInitCrypt());
+		if ( ! m_Crypt.IsInitCrypt())
+		{
+			SPHERE_LOG_ERR("xRecvData: crypt not initialized for connType=%d", m_ConnectType);
+			return false;
+		}
 		if ( m_bin.GetDataQty() + iCountNew >= UO_MAX_EVENT_BUFFER )
 			return false;
 		m_Crypt.Decrypt( m_bin.AddNewDataLock(iCountNew), Event.m_Raw, iCountNew );

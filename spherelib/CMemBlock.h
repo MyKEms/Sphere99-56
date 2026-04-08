@@ -24,7 +24,7 @@ public:
             ASSERT(IsValidDebug());
             m_pData -= (2 * 4);
 #endif
-            delete  m_pData;
+            delete[] m_pData;
             m_pData = NULL;
         }
     }
@@ -56,7 +56,7 @@ protected:
 #if 0 // def _DEBUG
         dwSize += 3 * 4;
 #endif
-        BYTE* pData = new BYTE;
+        BYTE* pData = new BYTE[dwSize];
         ASSERT(pData);
 #if 0 // def _DEBUG
 #define CMEMBLOCK_SIGNATURE 0xBADD00D
