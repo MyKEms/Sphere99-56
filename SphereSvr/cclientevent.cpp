@@ -2065,51 +2065,71 @@ void CClient::Event_TalkUNICODE( const CUOEvent* pEvent )
 	// store the default language of choice. CLanguageID
 	pAccount->m_lang.Set( pEvent->TalkUNICODE.m_lang );
 
-	int iLen = pEvent->TalkUNICODE.m_len - sizeof(pEvent->TalkUNICODE);
+	int iPktLen = UNPACKWORD(&pEvent->TalkUNICODE.m_len);
+	int iLen = iPktLen - sizeof(pEvent->TalkUNICODE);
+	if ( iLen < 0 ) iLen = 0;
 
 	HUE_TYPE wHue = pEvent->TalkUNICODE.m_wHue;
 	BYTE mode = pEvent->TalkUNICODE.m_mode;
 
 	if ( mode >= TALKMODE_TOKENIZED )
 	{
-		// A really odd client "feature" in v2.0.7 .
-		// This is not really UNICODE !!! odd tokenized normal text.
-		// skip 3 or more bytes of junk,
-		// 00 10 01 = I want the balance
-		// 00 10 02 = bank
-		// 00 11 71 = buy
-		// 00 30 03 00 40 04 = check join member
-		// 00 20 02 00 20 = buy bank sdfsdf
-		// 00 40 01 00 20 07 00 20 = bank guards balance
-		// 00 40 01 00 20 07 00 20 = sdf bank bbb guards ccc balance ddd
-		// 00 40 01 00 20 07 00 20 = balance guards bank
-		// 00 10 07 = guards sdf sdf
-		// 00 30 36 04 f1 61 = stop (this pattern makes no sense)
-		// 00 20 07 15 c0 = .add c_h_guard
-		// and skill
-
+		// Tokenized speech from modern clients (ClassicUO, etc.)
+		// Format: token_header_bytes + null-terminated ASCII text
+		// The text follows the token prefix. Find it by scanning for the
+		// null terminator of the text (which is the actual spoken text).
 		mode -= TALKMODE_TOKENIZED;
-		LPCTSTR pszText = (LPCTSTR)(pEvent->TalkUNICODE.m_utext);
+		const char* pRaw = (const char*)(pEvent->TalkUNICODE.m_utext);
 
-		int i;
-		for ( i=0; i<iLen; i++ )
+		// Skip token prefix: scan for the actual text after tokens.
+		// Token bytes are typically non-printable or in specific patterns.
+		// The text starts after the last non-text byte sequence.
+		// Find the null-terminated text by looking for the console cmd char
+		// or the first sequence of printable ASCII that ends with null.
+		int iRawLen = iPktLen - 12; // 12 = header size (cmd+len+mode+hue+font+lang)
+		if ( iRawLen < 0 ) iRawLen = 0;
+		if ( iRawLen > SCRIPT_MAX_LINE_LEN ) iRawLen = SCRIPT_MAX_LINE_LEN;
+
+		// Find the actual text: look for '.' or '/' (console cmd) or a
+		// sequence starting with a printable char followed by a null terminator.
+		int iTextStart = -1;
+		for ( int i = 0; i < iRawLen - 1; i++ )
 		{
-			TCHAR ch = pszText[i];
-			if ( ch >= 0x20 )
-				break;
-			i++;
-			ch = pszText[i];
-			if ( ((BYTE) ch ) > 0xc0 )
+			// Look for console command prefix (., /, =)
+			if ( pRaw[i] == '.' || pRaw[i] == '/' || pRaw[i] == '=' )
 			{
-				i++;
-				continue;
+				iTextStart = i;
+				break;
 			}
-			ch = pszText[i+1];
-			if ( i <= 2 || ch < 0x20 || ch >= 0x80 )
-				i++;
+		}
+		if ( iTextStart < 0 )
+		{
+			// No console command found — find first printable string.
+			// Skip initial token bytes (typically < 0x20 or > 0x7F)
+			for ( int i = 0; i < iRawLen; i++ )
+			{
+				unsigned char ch = (unsigned char)pRaw[i];
+				if ( ch >= 0x20 && ch < 0x80 )
+				{
+					// Check if this looks like start of text (next chars also printable or null)
+					iTextStart = i;
+					break;
+				}
+			}
 		}
 
-		Event_Talk( pszText+i, wHue, (TALKMODE_TYPE) mode );
+		if ( iTextStart >= 0 && iTextStart < iRawLen )
+		{
+			TCHAR szTokenText[MAX_TALK_BUFFER];
+			int j = 0;
+			for ( int i = iTextStart; i < iRawLen && j < (int)sizeof(szTokenText)-1; i++ )
+			{
+				if ( pRaw[i] == '\0' ) break;
+				szTokenText[j++] = pRaw[i];
+			}
+			szTokenText[j] = '\0';
+			Event_Talk( szTokenText, wHue, (TALKMODE_TYPE) mode );
+		}
 		return;
 	}
 

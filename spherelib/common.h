@@ -284,10 +284,10 @@ public:
 	}
 };
 
-inline int CvtUNICODEToSystem(TCHAR* pOut, int iSizeOutBytes, WCHAR* pwChar, int iSizeInBytes)
+inline int CvtUNICODEToSystem(TCHAR* pOut, int iSizeOutBytes, WCHAR* pwChar, int iSizeInChars)
 {
 	// Convert UNICODE (wide) string to system (ASCII/Latin-1) string.
-	int iLen = iSizeInBytes / sizeof(WCHAR);
+	int iLen = iSizeInChars;
 	int iOutMax = iSizeOutBytes - 1;
 	int i;
 	for ( i = 0; i < iLen && i < iOutMax; i++ )
