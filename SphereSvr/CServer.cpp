@@ -1455,16 +1455,18 @@ void CServer::SocketsReceive() // Check for messages from the clients
 	}
 
 	// Any new connections ? what if there are several ?
-	// IMPORTANT: Must hold the returned CClientPtr to prevent premature destruction.
-	// CClient constructor adds itself to m_Clients list, but that's a raw pointer.
-	// The smart pointer returned here keeps the refcount alive until next tick.
+	// CClient constructor adds itself to m_Clients list (raw pointer).
+	// IncRefCount ensures the object survives after this function returns —
+	// the m_Clients list iteration will use it as a raw pointer.
 	if ( readfds.IsSet( m_SocketGod.GetSocket()))
 	{
-		CClientPtr pNewGod = SocketsAccept( m_SocketGod, true );
+		CClient* pNewGod = SocketsAccept( m_SocketGod, true );
+		if (pNewGod) pNewGod->IncRefCount(); // prevent premature deletion
 	}
 	if ( readfds.IsSet( m_SocketMain.GetSocket()))
 	{
-		CClientPtr pNewClient = SocketsAccept( m_SocketMain, false );
+		CClient* pNewClient = SocketsAccept( m_SocketMain, false );
+		if (pNewClient) pNewClient->IncRefCount(); // prevent premature deletion
 	}
 #if 0 // disabled — siglongjmp around accept was causing more issues
 	if ( readfds.IsSet( m_SocketMain.GetSocket()))
@@ -1552,16 +1554,25 @@ void CServer::OnTick()
 	{
 	}
 #ifndef _WIN32
-	g_fSEGV_catch = 0;
+	// Re-enable SEGV catch for dispatch phase
+	g_fSEGV_catch = 1;
+	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
+	{
+		g_fSEGV_catch = 0;
+		SPHERE_LOG_ERR("SEGV in client dispatch — skipping to flush");
+		goto do_flush;
+	}
 #endif
 
 	if ( ! IsLoading())
 	{
 		m_Profile.SwitchTask( PROFILE_Clients );
 
-		for ( CClientPtr pClient = GetClientHead(); pClient!=NULL; pClient = pClient->GetNext())
+		for ( CClient* pClient = (CClient*) m_Clients.GetHead(); pClient!=NULL; pClient = (CClient*) pClient->GetNext())
 		{
-			if ( ! pClient->xHasData())
+			bool hasData = false;
+			try { hasData = pClient->xHasData(); } catch (...) { continue; }
+			if ( ! hasData)
 				continue;
 
 			bool fRet = false;
@@ -1581,6 +1592,9 @@ void CServer::OnTick()
 			}
 		}
 	}
+#ifndef _WIN32
+	g_fSEGV_catch = 0;
+#endif
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase2 ok (tick=%d)", s_iTickDbg); }
 
@@ -1776,7 +1790,9 @@ bool CServer::Load()
 	Debug_CheckPoint();
 
 	if ( ! g_Cfg.Load(false))
+	{
 		return( false );
+	}
 
 	Debug_CheckPoint();
 

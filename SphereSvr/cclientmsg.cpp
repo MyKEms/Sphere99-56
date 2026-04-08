@@ -3761,7 +3761,7 @@ badformat:
 	}
 
 	bool fAdminCreate = ( ! _stricmp( szAccountName, "Administrator" )) && ( g_Accounts.Account_GetCount() == 0 );
-	bool fAutoCreate = ( g_Serv.m_eAccApp == ACCAPP_Free || g_Serv.m_eAccApp == ACCAPP_GuestAuto || g_Serv.m_eAccApp == ACCAPP_GuestTrial || g_Serv.m_eAccApp == ACCAPP_XGM );
+	bool fAutoCreate = ( g_Serv.m_eAccApp == ACCAPP_Free || g_Serv.m_eAccApp == ACCAPP_GuestAuto || g_Serv.m_eAccApp == ACCAPP_GuestTrial || g_Serv.m_eAccApp == ACCAPP_XGM || g_Serv.m_eAccApp == ACCAPP_Unspecified );
 
 	CAccountPtr pAccount = g_Accounts.Account_FindNameChecked( szAccountName );
 	if ( ! pAccount )

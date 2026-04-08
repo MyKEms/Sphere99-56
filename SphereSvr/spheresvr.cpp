@@ -521,10 +521,7 @@ CSphereThread* CSphereThread::GetCurrentThread() // static
 
 SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 {
-	fprintf(stderr, "DBG64: sizeof(void*)=%d DWORD=%d CUOItemTypeRec=%d\n", (int)sizeof(void*), (int)sizeof(DWORD), (int)sizeof(CUOItemTypeRec)); fflush(stderr);
 	// Do some sanity checks right off.
-	// Skip 32-bit-only assertions on 64-bit
-	fprintf(stderr, "DBG64: assertions start\n"); fflush(stderr);
 	ASSERT( UO_MAX_EVENT_BUFFER >= sizeof( CUOCommand ));
 	ASSERT( UO_MAX_EVENT_BUFFER >= sizeof( CUOEvent ));
 	ASSERT( sizeof( int ) == sizeof( DWORD ));	// make this assumption often.
@@ -541,26 +538,19 @@ SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 #ifdef _DEBUG
 	// _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF|(16*_CRTDBG_CHECK_EVERY_1024_DF));
 #endif
-	fprintf(stderr, "DBG64: Debug_CheckPoint\n"); fflush(stderr);
 	Debug_CheckPoint();
 
-	fprintf(stderr, "DBG64: InitFunctions\n"); fflush(stderr);
 	// g_ScriptClassMgr.InitClasses();	// make sure all scripting ability is setup. (not available)
 	CSphereExpArgs::InitFunctions();
-	fprintf(stderr, "DBG64: InitFunctions done\n"); fflush(stderr);
 #ifdef USE_JSCRIPT
 	g_JScriptEngine.Init(NULL);
 #endif
 
 	// The caller of this function is now the main task.
-	fprintf(stderr, "DBG64: MainTask.InitInstance\n"); fflush(stderr);
 	g_MainTask.InitInstance();
-	fprintf(stderr, "DBG64: opening log, m_pStream=%p\n", g_Log.m_pStream); fflush(stderr);
 	if (!g_Log.IsFileOpen()) {
 		g_Log.Open(SPHERE_FILE "log.log", OF_WRITE|OF_TEXT|OF_CREATE);
-		fprintf(stderr, "DBG64: log opened, m_pStream=%p\n", g_Log.m_pStream); fflush(stderr);
 	}
-	fprintf(stderr, "DBG64: g_Log.WriteString IsFileOpen=%d\n", g_Log.IsFileOpen()); fflush(stderr);
 	if (g_Log.IsFileOpen())
 		g_Log.WriteString( LOG_CR );		// blank space in log.
 	g_Log.Event( LOG_GROUP_INIT, LOGL_TRACE, "%s" LOG_CR
@@ -689,7 +679,6 @@ SPHEREERR_TYPE Sphere_OnTick()
 
 SPHEREERR_TYPE Sphere_MainEntryPoint( int argc, char *argv[] )
 {
-	fprintf(stderr, "DBG64: Sphere_MainEntryPoint entered\n"); fflush(stderr);
 	// Enable memory stats tracking now that g_Serv is fully constructed.
 	s_fServReady = true;
 

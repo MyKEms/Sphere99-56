@@ -2821,7 +2821,12 @@ bool CClient::xDispatchMsg()
 		return( false );
 	}
 
-	ASSERT( m_Crypt.IsInitCrypt());
+	if ( ! m_Crypt.IsInitCrypt())
+	{
+		SPHERE_LOG_ERR("xDispatchMsg: crypt not initialized, dropping data");
+		m_bin.RemoveDataAmount( m_bin.GetDataQty());
+		return false;
+	}
 
 	const CUOEvent* pEvent = (const CUOEvent *) m_bin.RemoveDataLock();
 

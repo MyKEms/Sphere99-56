@@ -2329,10 +2329,12 @@ bool CResourceMgr::LoadResources(CResourceScript* pResScript)
 
 void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
 {
+	int nSections = 0;
 	while (script.FindNextSection())
 	{
 		CSphereResourceMgr* pMgr = static_cast<CSphereResourceMgr*>(this);
 		pMgr->LoadScriptSection(script);
+		nSections++;
 	}
 }
 
@@ -2347,7 +2349,9 @@ bool CResourceMgr::OpenScriptFind(CScript& s, LPCTSTR pszName)
 
 	// Try opening the file directly
 	if (s.Open(pszName))
+	{
 		return true;
+	}
 
 	// Try with the base directory prefix
 	if (m_sSCPBaseDir.GetLength() > 0)
@@ -2615,7 +2619,6 @@ bool CSphereResourceMgr::Load( bool fResync )
 		g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL, "MUL File '%s' not found..." LOG_CR, (LPCTSTR) g_MulInstall.GetBaseFileName(i));
 		return( false );
 	}
-
 	Debug_CheckPoint();
 
 	// Optional files.
@@ -2673,15 +2676,15 @@ bool CSphereResourceMgr::Load( bool fResync )
 			break;
 
 		// Debug_CheckPoint();
-		bool fRet;
+		bool fRetRes;
 		try {
-			fRet = LoadResources( pResFile );	// load or resync
+			fRetRes = LoadResources( pResFile );	// load or resync
 		}
 		catch (...)
 		{
 			fRet = false;
 		}
-		if (!fRet)
+		if (!fRetRes)
 		{
 			continue;
 		}

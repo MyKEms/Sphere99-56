@@ -10,6 +10,8 @@ private:
 	size_t m_iDataQty;  ///< Item count of the data queue.
 
 public:
+	CGQueueBytes() : m_iDataQty(0) {}
+
 	// Peak into/read from the Queue's data.
 	int GetDataQty() const
 	{
@@ -21,7 +23,10 @@ public:
 		// Append data to the end of the queue.
 		if ( iLen <= 0 || pBuf == NULL ) return;
 		int iOldQty = m_iDataQty;
-		m_Mem.Alloc( iOldQty + iLen );
+		if ( iOldQty > 0 && m_Mem.GetData() )
+			m_Mem.Resize( iOldQty + iLen );
+		else
+			m_Mem.Alloc( iOldQty + iLen );
 		memcpy( m_Mem.GetData() + iOldQty, pBuf, iLen );
 		m_iDataQty += iLen;
 	}
@@ -29,7 +34,10 @@ public:
 	{
 		// Get space to write new data.
 		int iOldQty = m_iDataQty;
-		m_Mem.Alloc( iOldQty + iLen );
+		if ( iOldQty > 0 && m_Mem.GetData() )
+			m_Mem.Resize( iOldQty + iLen );
+		else
+			m_Mem.Alloc( iOldQty + iLen );
 		return m_Mem.GetData() + iOldQty;
 	}
 	void AddNewDataFinish(int iLen)
