@@ -1930,36 +1930,14 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 	case M_Unequip:	// uid
 		return ItemBounce( g_World.ItemFind( vArgs.GetUID()));
 	case M_Where:
-		if ( pCharSrc )
 		{
-			// pCharSrc->Skill_UseQuick( SKILL_CARTOGRAPHY, 10 );
-
 			CGString sMsg;
 			if ( m_pArea )
-			{
-				if ( m_pArea->IsMultiRegion())
-				{
-					// house region.
-				basicform:
-					sMsg.Format( "I am in %s (%s)",
-						(LPCTSTR) m_pArea->GetName(), (LPCTSTR) GetTopPoint().v_Get());
-				}
-				else
-				{
-					CRegionPtr pRoom = GetTopRegion( REGION_TYPE_ROOM );
-					if ( ! pRoom )
-						goto basicform;
-
-					sMsg.Format( "I am in %s in %s (%s)",
-						(LPCTSTR) m_pArea->GetName(), (LPCTSTR) pRoom->GetName(), (LPCTSTR) GetTopPoint().v_Get());
-				}
-			}
+				sMsg.Format( "%s (%s)", (LPCTSTR) m_pArea->GetName(), (LPCTSTR) GetTopPoint().v_Get());
 			else
-			{
-				// This should not happen.
-				sMsg.Format( "I am at %s.", (LPCTSTR) GetTopPoint().v_Get());
-			}
-			pCharSrc->ObjMessage( sMsg, this );
+				sMsg.Format( "%s", (LPCTSTR) GetTopPoint().v_Get());
+			if ( IsClient() )
+				GetClient()->addSysMessage( sMsg );
 		}
 		break;
 
