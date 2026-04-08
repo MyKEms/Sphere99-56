@@ -18,13 +18,13 @@ Prerequisites: `gcc-multilib g++-multilib make`
 
 ## Current State
 
-**Server loads world and accepts UO client connections.** Phase 7 (client connection)
-is complete. The server is ready for game testing.
+**Server is fully functional — login, character creation, and game entry all work
+with a real ClassicUO client.** The server loads 304 script files and runs stable.
 
 Startup sequence working:
 1. Parse sphere.ini — all properties applied via virtual s_PropSet dispatch
 2. Open MUL files (map0, statics, tiledata, multi)
-3. Load 300+ .scp script files — 18,498 DEFNAMEs registered
+3. Load 304 .scp script files — 18,498 DEFNAMEs registered
 4. Load world save — 509,594 items + 22,665 chars (3,152 player chars linked to accounts)
 5. Load accounts — 1,702 accounts with char UIDs
 6. Initialize network socket (port 2593)
@@ -34,6 +34,7 @@ Login sequence working end-to-end:
 - TCP connect → seed → Login (0x80) → ServerList (0xA8) → ServerSelect (0xA0)
 - Relay (0x8C) → CharListReq (0x91) → CharList (0xA9) with real char names
 - CharPlay (0x5D) → game entry (XCMD_Start, map, view, items, light, weather)
+- Character creation and game entry working
 - NoCrypt + 17 encrypted client key versions supported
 - Huffman compression active in game mode
 
@@ -64,6 +65,8 @@ The server accepts clients and can enter the game. Primary areas needing work:
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Login protocol | Done | Full login → charlist → game entry works |
+| CharDef/ItemDef loading | Done | 304 script files loaded, DEFNAMEs registered |
+| Character creation | Done | New character creation and game entry working |
 | World load | Done | 509K items + 22K chars loaded from .scp save files |
 | UID system | Done | `SetUIDIndex()` fix ensures objects survive load and CharFind works |
 | Walk/move | Done | Event_Walking → WalkAck, collision detection |
@@ -138,7 +141,17 @@ breaks silently — the base class stub gets called instead of the derived overr
 
 ### Test Tools (tools/)
 - `tools/uo_test_client.py` — single login flow test (needs Huffman decompress)
-- `tools/test_suite.py` — 6-test quality suite
+- `tools/test_suite.py` — 9-test quality suite (9/9 passing)
 - Run `python3 tools/test_suite.py` after every significant code change
 - Add new test for each milestone (char create, game entry, walk, combat)
 - After build: always `cp sphere99svr /workspace/Erebor/sphere/` then restart
+
+### Notable Bug Fixes
+- **IsValidRID fix for single-instance resource types**: Resource types that have only
+  a single instance (e.g., WEBPAGE) need special handling in IsValidRID — the index
+  can be 0 and still be valid.
+- **Str_Parse stub fix**: Str_Parse was stubbed out incorrectly, causing script argument
+  parsing failures. Proper implementation splits strings on the given separator.
+- **Password quote-stripping in accounts**: Account passwords stored with surrounding
+  quotes (e.g., `"password"`) must have quotes stripped during login comparison,
+  otherwise authentication fails for accounts saved in quoted format.

@@ -7,17 +7,20 @@ a fully functional 0.99-compatible server from available partial sources.
 
 ## Current Status
 
-**The server loads the world, accepts UO client connections, and runs the game loop.**
+**The server is fully functional — login, character creation, and game entry all work
+with a real ClassicUO client (tested with ClassicUO 3.0.6.0).**
 
 | Metric | Value |
 |--------|-------|
 | Compile errors | **0** |
 | Link errors | **0** |
+| Test suite | **9/9 passing** |
+| Script files loaded | **304** |
 | Remaining stubs | **9** (Windows-only: registry + GUI, N/A on Linux) |
 | Binary | `sphere99svr` — ~2.0 MB, 32-bit ELF (Linux x86) |
 | Source files | 148 (.cpp + .h), ~101,500 lines |
 | World load | 509K items, 22K chars, 3K player chars linked to 1.7K accounts |
-| Network | Login → ServerList → CharList → Game entry works |
+| Network | Login → CharList → Character creation → Game entry works |
 | Encryption | NoCrypt + 17 client key versions (XOR rotation) |
 
 ## Building
@@ -30,6 +33,24 @@ sudo apt-get install -y gcc-multilib g++-multilib make
 make            # produces sphere99svr (32-bit ELF binary)
 make clean      # removes build artifacts
 ```
+
+## Getting Started
+
+```bash
+# Prerequisites (Ubuntu/Debian)
+sudo apt-get install -y gcc-multilib g++-multilib make python3
+
+# Build
+make -j$(nproc)          # produces sphere99svr (32-bit ELF binary)
+
+# Deploy
+cp sphere99svr /path/to/your-shard/
+
+# Test (with server running)
+python3 tools/test_suite.py localhost 2593    # 9/9 tests passing
+```
+
+Tested with ClassicUO 3.0.6.0 client. The server loads 304 script files at startup.
 
 ## Running
 
@@ -143,6 +164,7 @@ CLAUDE.md           Technical documentation and development instructions
 - [x] UO client login encryption (seed, keys, handshake)
 - [x] Login → ServerList → ServerSelect → Relay flow
 - [x] Character list with real char names from world save
+- [x] Character creation (new characters)
 - [x] Character selection → game world entry
 - [x] Game entry packets (XCMD_Start, view, items, light, weather)
 - [x] Walk/movement event handling
