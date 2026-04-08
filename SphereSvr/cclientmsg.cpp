@@ -3461,18 +3461,40 @@ void CClient::Setup_CreateDialog( const CUOEvent* pEvent ) // All the character 
 	}
 
 	SPHERE_LOG_NET("Setup_CreateDialog: creating char for acct='%s'", (LPCTSTR)GetAccount()->GetName());
-	CCharPtr pChar = CChar::CreateBasic( CREID_MAN );
+	{
+		CCharDefPtr pTestDef = g_Cfg.FindCharDef( CREID_MAN );
+		SPHERE_LOG_NET("Setup_CreateDialog: FindCharDef(0x190)=%p", (void*)(CCharDef*)pTestDef);
+	}
+	CCharPtr pChar;
+	try {
+		pChar = CChar::CreateBasic( CREID_MAN );
+	} catch (...) {
+		SPHERE_LOG_ERR("Setup_CreateDialog: CreateBasic EXCEPTION");
+		addLoginErr( LOGIN_ERR_OTHER );
+		return;
+	}
 	if ( pChar == NULL )
 	{
 		SPHERE_LOG_ERR("Setup_CreateDialog: CreateBasic FAILED");
 		addLoginErr( LOGIN_ERR_OTHER );
 		return;
 	}
-	SPHERE_LOG_NET("Setup_CreateDialog: InitPlayer...");
-	pChar->InitPlayer( pEvent, this );
+	SPHERE_LOG_NET("Setup_CreateDialog: char created uid=0x%x, calling InitPlayer", (DWORD)pChar->GetUID());
+	try {
+		pChar->InitPlayer( pEvent, this );
+	} catch (...) {
+		SPHERE_LOG_ERR("Setup_CreateDialog: InitPlayer EXCEPTION");
+		addLoginErr( LOGIN_ERR_OTHER );
+		return;
+	}
 	SPHERE_LOG_NET("Setup_CreateDialog: char='%s' uid=0x%x", (LPCTSTR)pChar->GetName(), (DWORD)pChar->GetUID());
 
-	Setup_Start( pChar );
+	try {
+		Setup_Start( pChar );
+	} catch (...) {
+		SPHERE_LOG_ERR("Setup_CreateDialog: Setup_Start EXCEPTION");
+		return;
+	}
 	SPHERE_LOG_NET("Setup_CreateDialog: Setup_Start done");
 	xFlush();	// flush game entry packets immediately
 }
@@ -3561,8 +3583,10 @@ LOGIN_ERR_TYPE CClient::Setup_CharListReq( const char* pszAccName, const char* p
 	}
 
 	LOGIN_ERR_TYPE lErr = LogIn( pszAccName, pszPassword );
+	SPHERE_LOG_NET("Setup_CharListReq: LogIn result=%d dwAccount=0x%x", lErr, dwAccount);
 	if ( lErr != LOGIN_SUCCESS )
 	{
+		SPHERE_LOG_NET("Setup_CharListReq: LogIn FAILED, sending error");
 		if ( ! dwAccount && lErr != LOGIN_ERR_OTHER )
 		{
 			addLoginErr(lErr);
@@ -3573,6 +3597,7 @@ LOGIN_ERR_TYPE CClient::Setup_CharListReq( const char* pszAccName, const char* p
 	ASSERT( pAccount);
 
 	CCharPtr pCharLast = g_World.CharFind(pAccount->m_uidLastChar);
+	SPHERE_LOG_NET("Setup_CharListReq: acct=%s lastChar=0x%x charLast=%p starts=%d", (LPCTSTR)pAccount->GetName(), pAccount->m_uidLastChar.IsValidUID() ? (DWORD)pAccount->m_uidLastChar : 0, (void*)(CChar*)pCharLast, g_Cfg.m_StartDefs.GetSize());
 	if ( pCharLast &&
 		pCharLast->GetAccount() == pAccount &&
 		pAccount->GetPrivLevel() <= PLEVEL_GM &&

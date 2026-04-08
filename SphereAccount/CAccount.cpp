@@ -217,9 +217,23 @@ CGString CAccount::GetPassword() const
 void CAccount::SetPassword( LPCTSTR pszPassword )
 {
 	// limit to 16 chars.
-	char szPassword[ MAX_ACCOUNT_PASSWORD_ENTER+2 ];
-	strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER );
-	m_sCurPassword = szPassword;
+	// Strip surrounding quotes if present (save files quote passwords).
+	if ( pszPassword && pszPassword[0] == '"' )
+	{
+		pszPassword++;
+		char szPassword[ MAX_ACCOUNT_PASSWORD_ENTER+2 ];
+		strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER );
+		int len = strlen(szPassword);
+		if ( len > 0 && szPassword[len-1] == '"' )
+			szPassword[len-1] = '\0';
+		m_sCurPassword = szPassword;
+	}
+	else
+	{
+		char szPassword[ MAX_ACCOUNT_PASSWORD_ENTER+2 ];
+		strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER );
+		m_sCurPassword = szPassword;
+	}
 }
 
 CGString CAccount::GetXPassword() const

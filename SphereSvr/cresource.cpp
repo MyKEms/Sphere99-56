@@ -1023,10 +1023,20 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 		rid = ResourceGetNewID( restype, pszArg, pVarNum );
 	}
 
-	if ( ! rid.IsValidRID())
+	if ( ! rid.IsValidRID() )
 	{
-		DEBUG_ERR(( "Invalid %s block index '%s'" LOG_CR, (LPCTSTR) s.GetSection(), (LPCTSTR) s.GetArgRaw()));
-		return( false );
+		// Single-instance resource types (RESOURCES, SPHERE, STARTS, etc.) have
+		// valid RID with just the type and no index. Allow these through.
+		if ( restype != RES_Resources && restype != RES_Sphere && restype != RES_Starts &&
+			 restype != RES_Runes && restype != RES_Servers && restype != RES_NotoTitles &&
+			 restype != RES_Obscene && restype != RES_DefNames && restype != RES_VarNames &&
+			 restype != RES_BlockIP && restype != RES_Comment && restype != RES_MoonGates &&
+			 restype != RES_Teleporters && restype != RES_TypeDefs && restype != RES_PLevel &&
+			 restype != RES_Map && restype != RES_RaceClass && restype != RES_BlockEMail )
+		{
+			DEBUG_ERR(( "Invalid %s block index '%s'" LOG_CR, (LPCTSTR) s.GetSection(), (LPCTSTR) s.GetArgRaw()));
+			return( false );
+		}
 	}
 
 	// NOTE: It is possible to be replacing an existing entry !!! Check for this.
@@ -2668,7 +2678,6 @@ bool CSphereResourceMgr::Load( bool fResync )
 	}
 
 	// open and index all my script files i'm going to use.
-
 	for ( int j=0;; j++ )
 	{
 		CResourceFilePtr pResFile = GetResourceFile(j);
