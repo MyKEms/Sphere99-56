@@ -26,6 +26,15 @@ The hook and CI reject credentials, private keys, runtime logs, archives, MULs,
 `.scp` files, `save/`, `accounts/`, and shard script directories. Never bypass
 them with `--no-verify`.
 
+Deployments may add private, machine-local identifiers without putting them in
+this repository. Set `SPHERE_PRIVATE_DENYLIST` to a file outside the worktree,
+or create `.git/info/private-denylist`. Each non-empty line is a
+case-insensitive regular expression; use `literal:value` for a literal string
+and `regex:value` when the intent should be explicit. The pre-commit scan
+checks staged additions, `--all` checks all tracked files, and the versioned
+commit-message hook checks commit messages too. Denylist matches are redacted
+from diagnostics.
+
 ## Building
 
 ```bash

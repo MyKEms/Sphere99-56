@@ -10,6 +10,7 @@ if somebody force-adds it.
 from __future__ import print_function
 
 import re
+import os
 import subprocess
 import sys
 
@@ -98,6 +99,143 @@ def staged_blob(root, path):
     return b""
 
 
+def _is_within(path, parent):
+    try:
+        return os.path.commonpath([path, parent]) == parent
+    except ValueError:
+        return False
+
+
+def external_denylist_path(root):
+    """Return the configured machine-local denylist, if one exists."""
+    configured = os.environ.get("SPHERE_PRIVATE_DENYLIST")
+    if configured:
+        path = os.path.realpath(os.path.abspath(os.path.expanduser(configured)))
+        if not os.path.isfile(path):
+            raise ValueError("configured external denylist does not exist")
+    else:
+        info_dir = git(root, "rev-parse", "--git-path", "info").decode().strip()
+        if not os.path.isabs(info_dir):
+            info_dir = os.path.join(root, info_dir)
+        path = os.path.realpath(os.path.join(info_dir, "private-denylist"))
+        if not os.path.isfile(path):
+            return None
+
+    root_real = os.path.realpath(root)
+    git_dir = git(root, "rev-parse", "--git-dir").decode().strip()
+    if not os.path.isabs(git_dir):
+        git_dir = os.path.join(root, git_dir)
+    git_dir = os.path.realpath(git_dir)
+    if _is_within(path, root_real) and not _is_within(path, git_dir):
+        raise ValueError("external denylist must be outside the worktree")
+    return path
+
+
+def compile_denylist(lines):
+    """Compile non-empty denylist lines as case-insensitive patterns.
+
+    Bare lines are regular expressions.  Use ``literal:...`` for an exact
+    literal and ``regex:...`` when the intent should be explicit.
+    """
+    patterns = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        mode, separator, value = line.partition(":")
+        if separator and mode.lower() in ("literal", "regex"):
+            line = value.strip()
+            if mode.lower() == "literal":
+                line = re.escape(line)
+        if not line:
+            raise ValueError("external denylist contains an empty pattern")
+        try:
+            patterns.append(re.compile(line, re.IGNORECASE))
+        except re.error:
+            raise ValueError("external denylist contains an invalid regex")
+    return patterns
+
+
+def load_external_denylist(root):
+    path = external_denylist_path(root)
+    if path is None:
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as denylist:
+            return compile_denylist(denylist)
+    except (OSError, UnicodeError):
+        raise ValueError("cannot read external denylist")
+
+
+def staged_added_lines(root):
+    """Yield (path, line number, line) for added text lines."""
+    raw = git(
+        root,
+        "diff",
+        "--cached",
+        "--unified=0",
+        "--no-color",
+        "--no-ext-diff",
+        "--diff-filter=ACMR",
+        "--",
+    )
+    current_path = None
+    new_line_number = None
+    for raw_line in raw.decode("utf-8", "replace").splitlines():
+        if raw_line.startswith("+++ b/"):
+            current_path = raw_line[6:]
+            continue
+        if raw_line.startswith("+++ /dev/null"):
+            current_path = None
+            continue
+        if raw_line.startswith("@@ "):
+            match = re.search(r" \+(\d+)(?:,\d+)? ", raw_line)
+            new_line_number = int(match.group(1)) if match else None
+            continue
+        if current_path is None or new_line_number is None:
+            continue
+        if raw_line.startswith("+"):
+            yield current_path, new_line_number, raw_line[1:]
+            new_line_number += 1
+        elif not raw_line.startswith("\\"):
+            new_line_number += 1
+
+
+def scan_external_content(path, text, patterns):
+    findings = []
+    for line_number, line in enumerate(text.splitlines(), 1):
+        if any(pattern.search(line) for pattern in patterns):
+            # Never echo a private identifier or the rest of its line.
+            findings.append(
+                (line_number, "external denylist", "[redacted denylist match]")
+            )
+    return findings
+
+
+def scan_external_staged(root, patterns, all_files):
+    violations = []
+    if not patterns:
+        return violations
+
+    if all_files:
+        paths = staged_paths(root, all_files=True)
+        for path in paths:
+            blob = staged_blob(root, path)
+            for line_number, label, excerpt in scan_external_content(
+                path, blob.decode("utf-8", "replace"), patterns
+            ):
+                violations.append((path, label, (line_number, excerpt)))
+        return violations
+
+    for path, line_number, line in staged_added_lines(root):
+        if any(pattern.search(line) for pattern in patterns):
+            violations.append(
+                (path, "external denylist", (line_number, "[redacted denylist match]"))
+            )
+    return violations
+
+
 def path_reason(path):
     lowered = path.lower()
     parts = lowered.split("/")
@@ -130,12 +268,24 @@ def scan_content(path, blob):
 
 
 def main():
-    all_files = "--all" in sys.argv[1:]
+    args = sys.argv[1:]
+    all_files = "--all" in args
+    commit_msg_path = None
+    if "--commit-msg" in args:
+        index = args.index("--commit-msg")
+        if index + 1 >= len(args):
+            print("ERROR: --commit-msg requires a message-file path", file=sys.stderr)
+            return 1
+        commit_msg_path = args[index + 1]
     try:
         root = git(".", "rev-parse", "--show-toplevel").decode().strip()
         paths = staged_paths(root, all_files=all_files)
+        denylist_patterns = load_external_denylist(root)
     except (OSError, subprocess.CalledProcessError) as exc:
         print("ERROR: cannot inspect the Git index (fail-closed): %s" % exc, file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print("ERROR: %s" % exc, file=sys.stderr)
         return 1
 
     violations = []
@@ -151,6 +301,26 @@ def main():
             return 1
         for line_number, label, excerpt in scan_content(path, blob):
             violations.append((path, label, (line_number, excerpt)))
+
+    try:
+        violations.extend(scan_external_staged(root, denylist_patterns, all_files))
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print("ERROR: cannot inspect staged additions (fail-closed): %s" % exc, file=sys.stderr)
+        return 1
+
+    if commit_msg_path:
+        try:
+            with open(commit_msg_path, "rb") as message_file:
+                message = message_file.read()
+        except OSError as exc:
+            print("ERROR: cannot read commit message (fail-closed): %s" % exc, file=sys.stderr)
+            return 1
+        for line_number, label, excerpt in scan_content("COMMIT_MESSAGE", message):
+            violations.append(("COMMIT_MESSAGE", label, (line_number, excerpt)))
+        for line_number, label, excerpt in scan_external_content(
+            "COMMIT_MESSAGE", message.decode("utf-8", "replace"), denylist_patterns
+        ):
+            violations.append(("COMMIT_MESSAGE", label, (line_number, excerpt)))
 
     if violations:
         print("ERROR: commit blocked by the public/private secret boundary.", file=sys.stderr)

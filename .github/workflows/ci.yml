@@ -95,5 +95,8 @@ jobs:
       - name: Offline protocol fixtures
         run: python3 tools/test_protocol.py
 
+      - name: External denylist unit checks
+        run: python3 tools/test_secret_denylist.py
+
       - name: shellcheck
         run: shellcheck tools/*.sh
