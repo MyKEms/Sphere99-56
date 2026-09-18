@@ -211,7 +211,8 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 	// Make sure the first server matches the GetSockName here
 	if ( g_Log.IsLogged( LOGL_TRACE ))
 	{
-		DEBUG_MSG(( "%x:Login_ServerList to '%s','%s'" LOG_CR, m_Socket.GetSocket(), pszAccount, pszPassword ));
+		// Never write client passwords to the trace log.
+		DEBUG_MSG(( "%x:Login_ServerList account '%s'" LOG_CR, m_Socket.GetSocket(), pszAccount ));
 	}
 
 	// don't bother logging in yet.
@@ -331,7 +332,7 @@ REGRES_TYPE CClient::OnRxAutoServerRegister( const BYTE* pData, int iLen )
 	if ( ! pServName->IsSame( pServNew ) &&
 		! PeerName.IsSameIP( pServName->m_ip ))
 	{
-		g_Log.Event( LOG_GROUP_ACCOUNTS, LOGL_WARN, "%x:Bad regpass '%s'!='%s' for server '%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) pServNew->m_sRegisterPassword, (LPCTSTR) pServName->m_sRegisterPassword, (LPCTSTR) pServName->GetName());
+		g_Log.Event( LOG_GROUP_ACCOUNTS, LOGL_WARN, "%x:Registration password mismatch for server '%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) pServName->GetName());
 		g_Cfg.m_Servers.RemoveArg( pServNew );
 		return REGRES_RET_BAD_PASS;
 	}
@@ -1023,4 +1024,3 @@ bool CClient::xRecvData() // Receive message from client
 
 	return( false );	// No idea what this junk is.
 }
-

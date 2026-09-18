@@ -16,7 +16,6 @@ import sys
 
 SENSITIVE_DIRS = {
     "accounts",
-    "private-scripts",
     "muls",
     "save",
     "scripts",
@@ -103,7 +102,7 @@ def path_reason(path):
     lowered = path.lower()
     parts = lowered.split("/")
     name = parts[-1]
-    if any(part in SENSITIVE_DIRS for part in parts):
+    if any(part in SENSITIVE_DIRS or part.endswith("-scripts") for part in parts):
         return "private runtime/script directory"
     if name in SENSITIVE_NAMES:
         return "private runtime/config file"

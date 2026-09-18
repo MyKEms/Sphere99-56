@@ -3795,11 +3795,7 @@ badformat:
 		{
 			// No account by this name.
 			g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE,
-#ifdef _DEBUG
-				"%x:ERR Login NO Account '%s', pass='%s'" LOG_CR, m_Socket.GetSocket(), szAccountName, pszPassword );
-#else
 				"%x:ERR Login NO Account '%s'" LOG_CR, m_Socket.GetSocket(), szAccountName );
-#endif
 			Printf( "Unknown account name '%s'. Try using a 'guest' account.", (LPCTSTR) szAccountName );
 			return( LOGIN_ERR_NONE );
 		}
@@ -3821,12 +3817,8 @@ badformat:
 	{
 		if ( ! pAccount->CheckPassword(pszPassword))
 		{
-			g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, 
-#ifdef _DEBUG
-			"%x: '%s' bad pass '%s' != '%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) pAccount->GetName(), (LPCTSTR) pszPassword, (LPCTSTR) pAccount->GetPassword());
-#else
-			"%x: '%s' bad password" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) pAccount->GetName());
-#endif
+			g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE,
+				"%x: '%s' bad password" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) pAccount->GetName());
 			WriteString( "Bad password for this account." );
 
 			// Attempt to block the connection if this is an account attack.
@@ -3843,4 +3835,3 @@ badformat:
 
 	return LogIn( pAccount );
 }
-

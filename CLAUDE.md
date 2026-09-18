@@ -3,7 +3,7 @@
 ## Public repository boundary — absolute rule
 
 This directory is the public GitHub engine repository. Never copy, import,
-commit, push, upload, or quote private shard scripts, shard-specific
+commit, push, upload, or quote private GitLab shard scripts, shard-specific
 configuration, `save/`, `accounts/`, world backups, production-derived data,
 or credentials here. If a change cannot be proven generic and public-safe,
 keep it out of this repository.
@@ -16,14 +16,6 @@ git config core.hooksPath .githooks
 ```
 
 Never bypass the guard with `--no-verify`.
-
-For deployment-specific identifiers, keep a machine-local denylist outside the
-worktree and set `SPHERE_PRIVATE_DENYLIST`, or use `.git/info/private-denylist`.
-Its non-empty lines are case-insensitive regexes; `literal:` forces literal
-matching and `regex:` makes regex intent explicit. The pre-commit path scans
-staged additions, `--all` scans tracked files, and `.githooks/commit-msg` also
-checks commit messages. Never put private identifiers into the repository just
-to test the denylist.
 
 ## Project goal
 
@@ -49,12 +41,9 @@ replacement for the i386 build.
 
 - The public CI builds the engine with GCC multilib and checks the ELF type.
 - `tools/test_protocol.py` is the dependency-free offline packet-fixture test.
-- `tools/test_suite.py` runs 14 scenarios / 15 result assertions. CI generates
-  a synthetic disposable runtime fixture locally, including sparse map data,
-  generic resources, and custom trigger hooks. It creates accounts and
-  characters, so never point it at a world you intend to keep. For imported
-  scripts without those fixture hooks, `--skip-fixture-tests` skips only the
-  final two fixture-specific assertions.
+- `tools/test_suite.py` contains twelve integration checks for an externally
+  supplied disposable runtime fixture. It creates accounts and characters;
+  never point it at a world you intend to keep.
 - A real ClassicUO/TazUO client and a representative world remain separate
   compatibility tests. The public repository does not claim production
   compatibility from the headless suite alone.
@@ -111,23 +100,8 @@ tools/              headless protocol client and test utilities
 python3 -m py_compile tools/*.py
 python3 tools/test_protocol.py
 python3 tools/test_suite.py localhost 2593 --quick
-python3 tools/test_suite.py localhost 2593 --skip-fixture-tests
 python3 tools/check_secrets.py --all
 ```
-
-The public CI path can be reproduced locally on Linux with:
-
-```bash
-python3 tools/fixtures/make_fixture.py /tmp/sphere99-fixture
-python3 tools/fixtures/run_suite.py \
-  /tmp/sphere99-fixture \
-  --binary "$PWD/sphere99svr" \
-  --repo "$PWD"
-```
-
-The fixture is synthetic and generated outside the repository; it must never
-be replaced with client MULs, shard scripts, saves, accounts, or production
-logs.
 
 The integration suite must run against a disposable world. On Apple Silicon,
 run the i386 binary in a Linux/amd64 VM or container for compatibility checks;

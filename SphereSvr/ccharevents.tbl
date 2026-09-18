@@ -55,4 +55,3 @@ CCHAREVENT(UserButton,		0, "someone pressed one of the many gump buttons associa
 CCHAREVENT(UserClick,		0, "I got clicked on by someone")
 CCHAREVENT(UserDClick,		0, "someone has dclicked on me")
 CCHAREVENT(UserToolTip,		0, "someone did tool tips on me")
-
