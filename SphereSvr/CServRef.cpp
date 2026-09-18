@@ -886,5 +886,6 @@ THREAD_ENTRY_RET _cdecl CServerDef::MoveCharEntryProc( void* lpThreadParameter )
 {
 	CServerLock pServ = (CServerDef *) lpThreadParameter;
 	pServ->MoveCharsToServer();
+	THREAD_ENTRY_RETURN;
 }
 

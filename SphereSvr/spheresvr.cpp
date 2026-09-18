@@ -394,6 +394,7 @@ THREAD_ENTRY_RET _cdecl CServTask::EntryProc( void* lpThreadParameter ) // stati
 #endif
 	}
 	g_ServTask.ExitInstance();
+	THREAD_ENTRY_RETURN;
 }
 
 void CServTask::CreateThread()
@@ -490,6 +491,7 @@ THREAD_ENTRY_RET _cdecl CMainTask::EntryProc( void* lpThreadParameter ) // stati
 	}
 
 	g_MainTask.ExitInstance(); // ?? main task runs til process ends.
+	THREAD_ENTRY_RETURN;
 }
 
 void CMainTask::CreateThread()

@@ -193,6 +193,7 @@ void CBackTask::EntryTask()
 THREAD_ENTRY_RET _cdecl CBackTask::EntryProc( void* lpThreadParameter ) // static
 {
 	g_BackTask.EntryTask();
+	THREAD_ENTRY_RETURN;
 }
 
 void CBackTask::CreateThread()
