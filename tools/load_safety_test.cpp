@@ -35,8 +35,31 @@ static int CountDirectoryEntries( const char* pszDir )
 	return iCount;
 }
 
+static bool TestUIDReset()
+{
+	CUIDArray uids;
+	CResourceObj first( 1 );
+	CResourceObj second( 2 );
+
+	if ( uids.AllocUID( &first, 0 ) != 1 || uids.FindUIDObj( 0 ) != NULL )
+		return false;
+
+	uids.DeleteAllUIDs();
+	if ( uids.GetUIDCount() != 1 || uids.FindUIDObj( 0 ) != NULL )
+		return false;
+
+	return uids.AllocUID( &second, 0 ) == 1;
+}
+
 int main()
 {
+	if ( !TestUIDReset() )
+	{
+		std::fprintf( stderr, "UID reset did not preserve the reserved slot 0\n" );
+		return 1;
+	}
+	std::printf( "UID reset: reserved slot 0 preserved\n" );
+
 	char szTempDir[] = "/tmp/sphere-load-safety-XXXXXX";
 	if ( mkdtemp( szTempDir ) == NULL )
 	{
