@@ -87,18 +87,33 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 
 int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
 {
-	if ( ! IsLogged( dwGroupMask, level ))
-		return( 0 );
 	if ( pszMsg == NULL || *pszMsg == '\0' )
 		return( 0 );
 
 #ifndef _WIN32
 	// Linux: skip file I/O entirely. SPHERE_LOG_* macros handle stderr output.
-	// g_Log.Event is called thousands of times during script loading — writing
-	// to stderr here blocks when output is piped/redirected.
+	// g_Log.Event is called thousands of times during script loading, so only
+	// problems (FATAL/CRITICAL/ERROR) go to stderr — and always, whatever
+	// LOGMASK says: EventError()/DEBUG_ERR pass group 0, which never matches
+	// the mask, and dropping these hid why the server exits (e.g. "No previous
+	// backup available ?" on an empty save/).
+	if ( level <= LOGL_ERROR )
+	{
+		LPCTSTR pszLabel = ( level == LOGL_FATAL ) ? "FATAL" : ( level == LOGL_CRIT ) ? "CRITICAL" : "ERROR";
+		fprintf( stderr, "[%s] %s", pszLabel, pszMsg );
+		size_t iLen = strlen( pszMsg );
+		if ( iLen == 0 || pszMsg[iLen - 1] != '\n' )
+			fputc( '\n', stderr );
+		fflush( stderr );
+	}
+	if ( ! IsLogged( dwGroupMask, level ))
+		return( 0 );
 	try { g_Serv.Event_PrintClient( pszMsg ); } catch (...) {}
 	return 1;
 #else
+	if ( ! IsLogged( dwGroupMask, level ))
+		return( 0 );
+
 	int iRet = 0;
 	try
 	{
