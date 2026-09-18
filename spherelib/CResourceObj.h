@@ -116,6 +116,11 @@ struct CUIDArray
 		}
 		return dwIndex;
 	}
-	void DeleteAllUIDs() { m_UIDs.RemoveAll(); }
+	void DeleteAllUIDs()
+	{
+		m_UIDs.RemoveAll();
+		// Keep UID 0 reserved after a reset just as the constructors do.
+		m_UIDs.SetAtGrow(0, NULL);
+	}
 };
 #endif // _INC_CRESOURCEOBJ_H
