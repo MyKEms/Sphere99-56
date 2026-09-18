@@ -37,6 +37,36 @@ make clean
 
 The supported target is a 32-bit i386 ELF binary named `sphere99svr`.
 
+### Debug and sanitizer builds
+
+Use native x86-64 Linux for debugging memory safety. The debug and sanitizer
+targets use separate object trees, so they cannot mix objects with the legacy
+i386 build:
+
+```bash
+make clean
+make debug                         # build/debug/sphere99svr
+
+make clean
+make asan                          # build/asan/sphere99svr
+ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+  ./build/asan/sphere99svr
+```
+
+`make debug` uses `-O0 -g3 -D_GLIBCXX_ASSERTIONS -fno-omit-frame-pointer`.
+`make asan` uses AddressSanitizer plus UndefinedBehaviorSanitizer with
+`-O1 -g -fno-omit-frame-pointer`. Both targets disable the server's legacy
+`siglongjmp` crash recovery so GDB and sanitizers receive the original fault;
+the custom allocator continues to use `malloc`, which ASan tracks normally.
+
+The sanitizer target is a build-only CI check. Run it against a disposable
+fixture when adding runtime coverage, never against production `save/` or
+`accounts/` data. The i386 runtime and its `-m32` default build are not valid
+ASan/GDB environments under qemu user emulation. On Apple Silicon, use a
+native x86-64 Linux host or an x86-64 Linux VM/container for sanitizer work;
+the ARM host and emulated i386 runtime are useful for ordinary protocol tests,
+not reliable sanitizer diagnostics.
+
 ## Testing
 
 Offline packet and helper checks need no server:

@@ -14,13 +14,15 @@
 #ifndef _WIN32
 #include <dirent.h>
 #include <signal.h>
+#ifndef SPHERE_DISABLE_CRASH_RECOVERY
 #include <setjmp.h>
 #include <execinfo.h>
+#endif
 #endif
 
 // Signal handler: if siglongjmp recovery is enabled, use it.
 // Otherwise print backtrace and crash.
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 #include <setjmp.h>
 extern volatile sig_atomic_t g_fSEGV_catch;
 extern sigjmp_buf g_SEGV_jmpbuf;
@@ -2662,7 +2664,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 	// ARGS:
 	//  fResync = just look for changes.
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	// Install crash handler for backtrace on segfault
 	struct sigaction sa;
 	sa.sa_handler = CrashHandler;
@@ -2843,4 +2845,3 @@ bool CSphereResourceMgr::Load( bool fResync )
 	Debug_CheckPoint();
 	return true;
 }
-

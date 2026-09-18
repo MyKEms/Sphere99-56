@@ -1,12 +1,22 @@
-CXX = g++
-BASEDIR = $(CURDIR)
-CXXFLAGS = -g -std=c++14 -m32 -fpermissive -Wno-endif-labels -Wno-write-strings \
-           -Wno-narrowing -Wno-unused-result -Wno-format-security \
-           -DSPHERE_SVR -D_CONSOLE -D_MT \
-           -I$(BASEDIR) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereCommon \
-           -I$(BASEDIR)/SphereAccount -I$(BASEDIR)/SphereSvr
-LDFLAGS = -m32 -lpthread
-TARGET = sphere99svr
+CXX ?= g++
+BASEDIR := $(CURDIR)
+
+# Keep the historical default target as a 32-bit i386 binary.  Debug and
+# sanitizer targets below deliberately omit -m32 and use their own object
+# directories, because ASan/gdb are not reliable under i386 qemu emulation.
+COMMON_CXXFLAGS = -std=c++14 -fpermissive -Wno-endif-labels -Wno-write-strings \
+                  -Wno-narrowing -Wno-unused-result -Wno-format-security \
+                  -DSPHERE_SVR -D_CONSOLE -D_MT \
+                  -I$(BASEDIR) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereCommon \
+                  -I$(BASEDIR)/SphereAccount -I$(BASEDIR)/SphereSvr \
+                  -Werror=return-type
+DEFAULT_CXXFLAGS = -g -m32 $(COMMON_CXXFLAGS)
+DEFAULT_LDFLAGS = -m32 -lpthread
+
+CXXFLAGS ?= $(DEFAULT_CXXFLAGS)
+LDFLAGS ?= $(DEFAULT_LDFLAGS)
+BUILD_DIR ?= .
+TARGET ?= sphere99svr
 
 # Source files - excluding Windows-only files
 SPHERELIB_SRC = \
@@ -101,24 +111,47 @@ SPHERESVR_SRC = \
 #           StdAfx.cpp files (empty precompiled header stubs)
 
 ALL_SRC = $(SPHERELIB_SRC) $(SPHERECOMMON_SRC) $(SPHEREACCOUNT_SRC) $(SPHERESVR_SRC)
+ifeq ($(BUILD_DIR),.)
 ALL_OBJ = $(ALL_SRC:.cpp=.o)
+else
+ALL_OBJ = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(ALL_SRC))
+endif
 ALL_DEP = $(ALL_OBJ:.o=.d)
-
-# Falling off the end of a non-void function is UB — never let it back in.
-CXXFLAGS += -Werror=return-type
 
 all: $(TARGET)
 
 $(TARGET): $(ALL_OBJ)
+	@mkdir -p $(dir $@)
 	$(CXX) $(ALL_OBJ) -o $@ $(LDFLAGS)
 
 # -MMD -MP: track header dependencies, so editing a .h rebuilds its users
+ifeq ($(BUILD_DIR),.)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+else
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+endif
+
+# These targets are intentionally recursive: command-line CXXFLAGS/LDFLAGS
+# replace the legacy -m32 flags while the recursive invocation reuses the same
+# source list and dependency rules.  Each variant has an independent object
+# tree, so target switching can never reuse incompatible .o files.
+debug:
+	$(MAKE) BUILD_DIR=build/debug TARGET=build/debug/sphere99svr \
+		CXXFLAGS="$(COMMON_CXXFLAGS) -O0 -g3 -D_DEBUG -D_GLIBCXX_ASSERTIONS -fno-omit-frame-pointer -DSPHERE_DISABLE_CRASH_RECOVERY" \
+		LDFLAGS="-lpthread" all
+
+asan:
+	$(MAKE) BUILD_DIR=build/asan TARGET=build/asan/sphere99svr \
+		CXXFLAGS="$(COMMON_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -DSPHERE_DISABLE_CRASH_RECOVERY" \
+		LDFLAGS="-fsanitize=address,undefined -lpthread" all
 
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
+	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all clean
+.PHONY: all debug asan clean

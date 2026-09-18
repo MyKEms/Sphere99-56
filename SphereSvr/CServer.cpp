@@ -80,9 +80,11 @@ void _cdecl Signal_Terminate(int x=0) // If shutdown is initialized
 
 static volatile int s_nSEGV = 0;
 #ifndef _WIN32
+#ifndef SPHERE_DISABLE_CRASH_RECOVERY
 #include <setjmp.h>
 volatile sig_atomic_t g_fSEGV_catch = 0;  // 1 = longjmp recovery enabled
 sigjmp_buf g_SEGV_jmpbuf;
+#endif
 #endif
 
 void _cdecl Signal_Illegal_Instruction(int x=0)
@@ -91,7 +93,7 @@ void _cdecl Signal_Illegal_Instruction(int x=0)
 	fprintf(stderr, "SEGV/ILL signal %d caught (count=%d)\n", x, s_nSEGV);
 	fflush(stderr);
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	if ( g_fSEGV_catch )
 	{
 		// Jump back to the recovery point (skips the faulting code).
@@ -1405,7 +1407,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 				// Only do this if the connection is logged in ?
 				pClient->m_timeLastEvent.InitTimeCurrent();	// We should always get pinged every couple minutes or so
 			}
-#ifndef _WIN32
+		#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 			extern volatile sig_atomic_t g_fSEGV_catch;
 			extern sigjmp_buf g_SEGV_jmpbuf;
 			g_fSEGV_catch = 1;
@@ -1420,14 +1422,14 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			if ( ! pClient->xRecvData())
 			{
 				try { pClient->DeleteThis(); } catch (...) {}
-#ifndef _WIN32
+			#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 				g_fSEGV_catch = 0;
-#endif
+			#endif
 				continue;
 			}
-#ifndef _WIN32
+		#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 			g_fSEGV_catch = 0;
-#endif
+		#endif
 		}
 		else
 		{
@@ -1512,7 +1514,7 @@ void CServer::SocketsFlush() // Sends ALL buffered data
 
 void CServer::OnTick()
 {
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	extern volatile sig_atomic_t g_fSEGV_catch;
 	extern sigjmp_buf g_SEGV_jmpbuf;
 	// Wrap ENTIRE tick with SEGV recovery — server must never die from a single tick failure
@@ -1540,7 +1542,7 @@ void CServer::OnTick()
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase1 ok (tick=%d)", s_iTickDbg); }
 
 	// Check clients for incoming packets.
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	g_fSEGV_catch = 1;
 	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
 	{
@@ -1556,7 +1558,7 @@ void CServer::OnTick()
 	catch (...)
 	{
 	}
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	// Re-enable SEGV catch for dispatch phase
 	g_fSEGV_catch = 1;
 	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
@@ -1595,7 +1597,7 @@ void CServer::OnTick()
 			}
 		}
 	}
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	g_fSEGV_catch = 0;
 #endif
 
@@ -1623,7 +1625,7 @@ do_flush:
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase4 pre-CfgTick (tick=%d)", s_iTickDbg); }
 	try { g_Cfg.OnTick(false); } catch (...) {}
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase5 done (tick=%d)", s_iTickDbg); }
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 	g_fSEGV_catch = 0;
 #endif
 }
@@ -1869,4 +1871,3 @@ bool CServTimeMaster::AdvanceTime()
 	InitTime( Clock_New );
 	return( true );
 }
-
