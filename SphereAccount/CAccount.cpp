@@ -1196,7 +1196,7 @@ HRESULT CAccount::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 		{
 			SetPassword( vArgs.GetStr());
 			pSrc->Printf( "Password for '%s' has been set" LOG_CR, (LPCTSTR) GetName());
-			g_pLog->Event( LOG_GROUP_ACCOUNTS, LOGL_EVENT, "Account '%s', password set to '%s'" LOG_CR, (LPCTSTR) GetName(), (LPCTSTR) vArgs.GetStr());
+			g_pLog->Event( LOG_GROUP_ACCOUNTS, LOGL_EVENT, "Account '%s', password changed" LOG_CR, (LPCTSTR) GetName());
 		}
 		break;
 
@@ -1207,4 +1207,3 @@ HRESULT CAccount::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 
 	return( NO_ERROR );
 }
-

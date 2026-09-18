@@ -34,8 +34,17 @@ struct CUIDArray
 {
 	CGRefArray<CResourceObj> m_UIDs;	// all the UID's in the World. CChar and CItem.
 
-	CUIDArray() {}
-	CUIDArray(DWORD dwMaxSize) { /* stub - set initial capacity */ }
+	CUIDArray()
+	{
+		// UID 0 is reserved as the invalid/clear value.  Keep a real slot at
+		// index 0 so the first runtime object is allocated UID 1, not UID 0.
+		m_UIDs.SetAtGrow(0, NULL);
+	}
+	CUIDArray(DWORD dwMaxSize)
+	{
+		// Preserve the same invariant for callers that provide an initial size.
+		m_UIDs.SetCount(dwMaxSize > 0 ? dwMaxSize : 1);
+	}
 
 	DWORD GetUIDCount() const
 	{

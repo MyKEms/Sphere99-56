@@ -2899,7 +2899,11 @@ bool CClient::xDispatchMsg()
 
 	// NOTE: What about client version differences ! 
 	// none so far since 2.0
-	if ( m_ProtoVer.GetCryptVer() >= 0x126000 )
+	// Crypt version 0 = NoCrypt client: its version is unknown, treat it as a
+	// current one (>= 1.26) like the rest of the code does, or 3.x packets
+	// are parsed with 2.5 layouts (e.g. 0x00 as 100 bytes instead of 104).
+	const bool fProtoV126 = ( ! m_ProtoVer.GetCryptVer() || m_ProtoVer.GetCryptVer() >= 0x126000 );
+	if ( fProtoV126 )
 	{
 		if ( ! xCheckMsgSize( g_Packet_Lengths[pEvent->Default.m_Cmd] ))
 			return(false);
@@ -2952,7 +2956,7 @@ bool CClient::xDispatchMsg()
 				return(false);
 			return( true );
 		}
-		if ( m_ProtoVer.GetCryptVer() >= 0x126000 )
+		if ( fProtoV126 )
 		{
 			if ( ! xCheckMsgSize( sizeof( pEvent->Create )))
 				return(false);
@@ -3165,7 +3169,7 @@ bool CClient::xDispatchMsg()
 			pEvent->MenuChoice.m_select );
 		break;
 	case XCMD_BookOpen:	// Change a books title/author.
-		if ( m_ProtoVer.GetCryptVer() < 0x126000 )
+		if ( ! fProtoV126 )
 		{
 			if ( ! xCheckMsgSize( sizeof( pEvent->BookOpen_v25 )))
 				return(false);

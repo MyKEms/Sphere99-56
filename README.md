@@ -1,205 +1,101 @@
-# Sphere99-56 — SphereServer 0.99 Reconstruction
+# Sphere99-56 — SphereServer 0.99 reconstruction
 
-Reconstructed source code for **SphereServer 0.99** — a game server emulator for
-Ultima Online 2D, originally developed by Menasoft (Dennis Robinson). The 0.99 branch
-was proprietary and never officially open-sourced. This project aims to reconstruct
-a fully functional 0.99-compatible server from available partial sources.
+This repository contains a generic Linux port and reconstruction of the
+SphereServer 0.99 engine for Ultima Online 2D. It contains source code and
+developer tools only. Shard scripts, world saves, account databases, MUL data,
+private configuration, and production logs are deliberately excluded.
 
-## Current Status
+## Status
 
-**The server is fully functional — login, character creation, and game entry all work
-with a real ClassicUO client (tested with ClassicUO 3.0.6.0).**
+The project is under active reconstruction and is not a production-ready
+server distribution. The public CI verifies a 32-bit Linux build and a
+dependency-free packet-fixture test. The integration harness exercises login,
+character creation, game entry, and stability against a disposable external
+runtime fixture; real-client and representative-world compatibility still
+need to be tested separately.
 
-| Metric | Value |
-|--------|-------|
-| Compile errors | **0** |
-| Link errors | **0** |
-| Test suite | **9/9 passing** |
-| Script files loaded | **304** |
-| Remaining stubs | **9** (Windows-only: registry + GUI, N/A on Linux) |
-| Binary | `sphere99svr` — ~2.0 MB, 32-bit ELF (Linux x86) |
-| Source files | 148 (.cpp + .h), ~101,500 lines |
-| World load | 509K items, 22K chars, 3K player chars linked to 1.7K accounts |
-| Network | Login → CharList → Character creation → Game entry works |
-| Encryption | NoCrypt + 17 client key versions (XOR rotation) |
+## Public safety boundary
+
+Before contributing, activate the versioned fail-closed hook:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook and CI reject credentials, private keys, runtime logs, archives, MULs,
+`.scp` files, `save/`, `accounts/`, and shard script directories. Never bypass
+them with `--no-verify`.
 
 ## Building
 
 ```bash
-# Prerequisites (Ubuntu/Debian)
-sudo apt-get install -y gcc-multilib g++-multilib make
-
-# Build
-make            # produces sphere99svr (32-bit ELF binary)
-make clean      # removes build artifacts
-```
-
-## Getting Started
-
-```bash
-# Prerequisites (Ubuntu/Debian)
+# Debian/Ubuntu
 sudo apt-get install -y gcc-multilib g++-multilib make python3
-
-# Build
-make -j$(nproc)          # produces sphere99svr (32-bit ELF binary)
-
-# Deploy
-cp sphere99svr /path/to/your-shard/
-
-# Test (with server running)
-python3 tools/test_suite.py localhost 2593    # 9/9 tests passing
+make -j"$(nproc)"
+make clean
 ```
 
-Tested with ClassicUO 3.0.6.0 client. The server loads 304 script files at startup.
+The supported target is a 32-bit i386 ELF binary named `sphere99svr`.
 
-## Running
+## Testing
 
-The server needs UO data files and scripts to run (not included in this repo):
+Offline packet and helper checks need no server:
 
 ```bash
-# Directory structure expected:
-your-shard/
-├── sphere99svr          # compiled binary
-├── sphere.ini           # server configuration
-├── spheretables.scp     # script loading order
-├── muls/                # UO MUL data files (map0.mul, tiledata.mul, etc.)
-├── scripts/             # .scp script files
-├── save/                # world save data
-└── accounts/            # player accounts
-
-cd your-shard && ./sphere99svr
-# Output: "Press '?' for console commands"
+python3 -m py_compile tools/*.py
+python3 tools/test_protocol.py
 ```
 
-Note: paths in sphere.ini and spheretables.scp must use forward slashes (`/`) on Linux.
+The integration suite needs an external disposable runtime directory containing
+the server configuration, scripts, UO MUL files, empty/save fixture, and
+accounts fixture. It creates test accounts and characters, so never run it
+against a world you intend to keep:
+
+```bash
+python3 tools/test_suite.py localhost 2593 --quick
+python3 tools/test_suite.py localhost 2593
+```
+
+## Layout
+
+```
+spherelib/          base library
+SphereCommon/       UO protocol and world-data structures
+SphereAccount/      account management
+SphereSvr/          server and game logic
+tools/              headless protocol client, fixtures, and checks
+Makefile            GNU Make build
+```
+
+At runtime, paths such as `scripts/`, `save/`, `accounts/`, and `muls/` are
+provided by the deployment environment, not committed here.
 
 ## Background
 
-SphereServer had two parallel development branches that are **not sequential versions**:
+SphereServer had separate 0.56 and proprietary 0.99 development lines. The
+0.99 source was not officially open-sourced; this project combines available
+historical material with a Linux/GCC port and compatibility work. The 0.99
+script language, triggers, dialogs, and persistence formats are not assumed to
+be interchangeable with 0.56.
 
-```
-1998  GrayWorld (Dennis Robinson / Menasoft)
-        │
-        ├─→ 0.55 → 0.56a → 0.56b → 0.56d    (community, open-source)
-        │
-        └─→ 0.99a → 0.99f → 0.99z8 → 0.99zl  (Menasoft, proprietary, closed)
-```
+## Roadmap
 
-Scripts between 0.99 and 0.56 are **fundamentally incompatible** — different expression
-syntax (`<?...?>` vs `<...>`), trigger systems, dialog APIs, and variable mechanisms.
-
-This project reconstructs the 0.99 source from:
-- Partial 0.99f source from [Sphereserver/Source-Archive](https://github.com/Sphereserver/Source-Archive)
-- Gap-filling with compatible code from [JakubLinhart/Sphere99-56](https://github.com/JakubLinhart/Sphere99-56)
-- Linux/GCC port and implementations (this fork)
-
-## Project Structure
-
-```
-spherelib/          Base library (strings, files, arrays, sockets, threads, expressions)
-SphereCommon/       Shared UO data structures (maps, tiles, crypto, regions)
-SphereAccount/      Account management
-SphereSvr/          Main server (game logic: characters, items, clients, world)
-Makefile            GNU Make build system (Linux/GCC)
-CLAUDE.md           Technical documentation and development instructions
-```
-
-## Development Roadmap
-
-### Phase 1 — Script Infrastructure
-- [x] CScript parser (ReadLine, FindSection, ReadKeyParse, WriteKey)
-- [x] CGVariant (tagged union: string/int/DWORD/UID/ref/array)
-- [x] CExpression evaluator (right-to-left, no precedence — 0.99 behavior)
-- [x] CVarDefArray (key-value variable storage with CVarDefStr/CVarDefNum)
-- [x] CAtomRef (reference-counted atom strings)
-- [x] Str_Parse, Str_Match, Str_ParseCmds and other string utilities
-
-### Phase 2 — Resource Loading
-- [x] CLog (configurable level and group mask logging)
-- [x] CResourceDef / CResourceLink / CResourceScript
-- [x] CResourceMgr (AddResourceFile, LoadResources, OpenScriptFind, AddResourceDir)
-- [x] CGFile helpers (ExtractPath, GetFileNameTitle, GetFileNameExt)
-- [x] sphere.ini property dispatch (s_PropSet virtual chain fix)
-- [x] Script path resolution (SCPFILES base dir, backslash normalization)
-
-### Phase 3 — Script Execution & Triggers
-- [x] CScriptExecContext (ExecuteScript with IF/ELSE/WHILE/FOR/RETURN control flow)
-- [x] CResourceLock (open resource sections for reading)
-- [x] CResourceTriggered::OnTriggerScript (trigger dispatch)
-- [x] Table lookup functions (FindTable, FindTableHead, s_FindKeyInTable)
-- [x] CScriptPropArray::AddProps (merged function tables)
-- [x] 11 extended combat triggers (@BeforeSwing, @AfterSwing, @finalBlow, etc.)
-
-### Phase 4 — Networking & Crypto
-- [x] CGSocket (full POSIX TCP socket: create, bind, listen, accept, send/recv)
-- [x] CSocketAddress / CSocketNamedAddr (address parsing, DNS resolution)
-- [x] CGSocketSet (fd_set wrapper for select() multiplexing)
-- [x] CLogIP / CLogIPArray (connection tracking, flood protection)
-- [x] CCryptBase (passthrough crypto — real UO encryption TBD)
-- [x] Real UO client encryption (17 key versions, XOR rotation cipher)
-- [x] Huffman compression for game-mode packets
-
-### Phase 5 — World Persistence
-- [x] CVarDefArray tag persistence (s_PropSetTags, s_WriteTags)
-- [x] s_FixExtendedProp (compound property keys: Tag.xyz, Attr_xxx)
-- [x] String utilities (Str_ahextou, Str_GetBare, Str_Match, etc.)
-- [x] Unicode conversion (CvtUNICODEToSystem, CvtSystemToUNICODE)
-- [x] World save loading (sphereworld.scp, spherechars.scp)
-- [x] World save writing (SaveStage/SaveForce — staged sector-by-sector save)
-
-### Phase 6 — Server Stability & Runtime
-- [x] Fix static init crash (custom operator new/delete with malloc/free)
-- [x] Fix AddSortKey argument order (21 call sites)
-- [x] Fix FOR_HASH macro (proper iteration)
-- [x] Fix s_PropSet vtable dispatch (const/non-const signature mismatch)
-- [x] Fix script path double-prefix (scripts/scripts/ → scripts/)
-- [x] Single-threaded mode on Linux (avoids QEMU threading issues)
-- [x] CServTimeMaster first-tick time delta fix
-- [x] Fix UID system — SetUIDIndex after AllocUID/LoadUID (objects survive loading)
-- [x] Fix hex number parsing (strtol base 16 for 0-prefixed values)
-- [x] SIGSEGV crash handler with backtrace
-- [ ] Multi-threaded mode (native Linux, not under QEMU)
-
-### Phase 7 — Client Connection
-- [x] UO client login encryption (seed, keys, handshake)
-- [x] Login → ServerList → ServerSelect → Relay flow
-- [x] Character list with real char names from world save
-- [x] Character creation (new characters)
-- [x] Character selection → game world entry
-- [x] Game entry packets (XCMD_Start, view, items, light, weather)
-- [x] Walk/movement event handling
-- [x] Item display, click, pickup, drop, equip packets
-
-### Phase 8 — Game Logic & Script Support (current)
-- [ ] `<?...?>` escaped macro evaluation (0.99-specific)
-- [ ] `argo.` dialog construction API (15K+ calls in Erebor scripts)
-- [ ] Full `var()` global variable system
-- [ ] `safe()` error-safe expression wrapper
-- [ ] Complete trigger dispatch for all game events
-- [ ] NPC AI and pathfinding
-- [ ] Combat calculations
-- [ ] Skill and spell systems
-
-## Contributing
-
-Contributions welcome! All changes go through Pull Requests with code review.
-
-When implementing features, use [SphereServer 0.56d source](https://github.com/SphereServer/Source)
-as reference, but adapt to the 0.99 class interfaces (they differ significantly).
+- complete differential coverage for 0.99 expression and script semantics;
+- improve object references, triggers, dialogs, combat, and re-login paths;
+- add packet-level regression fixtures for client-facing behavior;
+- validate world loading and saving with disposable representative fixtures;
+- move crash debugging to native x86-64 Linux while keeping i386 runtime CI.
 
 ## References
 
 | Resource | Description |
-|----------|-------------|
-| [Sphereserver/Source-Archive](https://github.com/Sphereserver/Source-Archive) | Partial 0.99f source code |
-| [JakubLinhart/Sphere99-56](https://github.com/JakubLinhart/Sphere99-56) | Original reconstruction effort |
-| [SphereServer Source-X](https://github.com/Sphereserver/Source-X) | Active 0.56d+ development (reference only) |
-| [SphereCommunity](https://www.sphereserver.com/) | Community forums and documentation |
-| [Sphere99.VsCode](https://github.com/uoinfusion/Sphere99.VsCode) | VS Code extension for 0.99 script editing |
+|---|---|
+| [SphereServer/Source-Archive](https://github.com/Sphereserver/Source-Archive) | Partial historical source material |
+| [SphereServer/Source](https://github.com/SphereServer/Source) | 0.56 reference implementation |
+| [SphereServer/Source-X](https://github.com/Sphereserver/Source-X) | Active community reference |
+| [ModernUO packet documentation](https://modernuo.com/packets.html) | UO protocol reference |
 
 ## License
 
-Server engine code derived from sources published under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
-by the [Sphereserver](https://github.com/Sphereserver) organization.
-
-Original code copyright Menace Software (www.menasoft.com).
+See [LICENSE](LICENSE). Preserve the original copyright and license notices
+when modifying reconstructed source.

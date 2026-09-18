@@ -80,7 +80,7 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	int y = piArgs[1];
 
 	// Create execution context with argo support.
-	// In Erebor-style dialogs, pObj is both the base object and argo.
+	// In Sphere 0.99-style dialogs, pObj is both the base object and argo.
 	CSphereExpArgs exec( pObj, m_pChar, pObj );
 
 	CGStringArray asControls;
@@ -104,7 +104,7 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 		// Resolve <...> and <?...?> expressions.
 		exec.s_ParseEscapes( pszCmd, 0 );
 
-		// Handle argo. prefix (Erebor-style dialog commands).
+		// Handle argo. prefix (Sphere 0.99-style dialog commands).
 		if ( !_strnicmp(pszCmd, "argo.", 5) )
 		{
 			TCHAR* pszSub = pszCmd + 5;
@@ -559,4 +559,3 @@ void CClient::addGumpDialogAdmin( int iAdPage, int iSortType )
 
 	addGumpDialog( CLIMODE_DIALOG_ADMIN, asControls, asText, 0x05, 0x46, NULL );
 }
-
