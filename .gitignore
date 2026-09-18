@@ -1,6 +1,7 @@
 ## Linux/GCC build artifacts
 *.o
 *.d
+build/
 # Linux build output (exact binary names, not directories)
 sphere99svr
 !SphereSvr/

@@ -64,6 +64,22 @@ jobs:
             exit 1
           fi
 
+  load-safety:
+    name: World-load save guard
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-multilib make
+
+      - name: Run disposable broken-world regression
+        run: |
+          make load-safety-test
+          build/load-safety/load_safety_test
+
   lint:
     name: Lint tools
     runs-on: ubuntu-24.04
