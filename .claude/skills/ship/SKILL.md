@@ -28,7 +28,7 @@ Stage explicit paths, run `.githooks/pre-commit`, and verify that no credentials
 The repository owner has authorized bypassing the required-review policy for their own shipping requests. After the expected PR base/head are verified and every technical check is green, merge with:
 
 ```sh
-gh pr merge <number> --repo MyKEms/Sphere99-56 --admin --merge
+gh pr merge <number> --repo MyKEms/Sphere99-56 --admin --rebase
 ```
 
-Use this admin bypass when the owner invokes shipping, even if the PR is blocked only by required review. It bypasses review only; never bypass CI, lint, secret/sensitive-data checks, hooks, conflicts, a changed/unexpected head, or an unreviewed diff. Prefer a merge commit, verify the merged SHA, and report the resulting commit and checks.
+Use this admin bypass when the owner invokes shipping, even if the PR is blocked only by required review. It bypasses review only; never bypass CI, lint, secret/sensitive-data checks, hooks, conflicts, a changed/unexpected head, or an unreviewed diff. Use rebase merges, not merge commits: a merge commit is authored with the GitHub account's primary e-mail, while a rebase merge keeps only the PR's commits (which must all be authored with the noreply address — check `git log --format='%ae %ce' origin/master..<head>` before merging). Verify the merged SHAs, and report the resulting commits and checks.
