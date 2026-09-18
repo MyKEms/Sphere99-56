@@ -22,8 +22,16 @@ import os
 
 # Add tools dir to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from uo_test_client import test_login, recv_all, make_login_packet, make_server_select, make_char_create, game_connect
-from uo_huffman import decompress as huffman_decompress, is_compressed as huffman_is_compressed
+from uo_test_client import (
+    test_login,
+    recv_all,
+    make_login_packet,
+    make_server_select,
+    make_char_create,
+    game_connect,
+    decode_game_response,
+    find_start_packet,
+)
 
 class TestResult:
     def __init__(self):
@@ -168,20 +176,12 @@ def test_char_create(host, port, result):
             result.fail("Character creation", "No response after create packet")
             return
 
-        # Decompress Huffman
-        if huffman_is_compressed(resp):
-            raw = huffman_decompress(resp)
-            if raw:
-                resp = raw
-
-        # Check for XCMD_Start (0x1B) in response
-        if resp[0] == 0x1B:
-            result.ok("Character created, game entry received (0x1B)")
-        elif b'\x1b' in resp:
-            idx = resp.index(b'\x1b')
-            result.ok(f"Character created, XCMD_Start at offset {idx}")
+        resp = decode_game_response(resp)
+        start = find_start_packet(resp)
+        if start is None:
+            result.fail("Character creation", "No structurally valid XCMD_Start packet")
         else:
-            result.fail("Character creation", f"Got 0x{resp[0]:02x} instead of 0x1B (XCMD_Start)")
+            result.ok(f"Character created, XCMD_Start at offset {start[0]}")
     except Exception as e:
         result.fail("Character creation", str(e))
 
@@ -206,26 +206,15 @@ def test_game_entry_validation(host, port, result):
             sock.close()
             return
 
-        # Decompress Huffman
-        if huffman_is_compressed(resp):
-            raw = huffman_decompress(resp)
-            if raw:
-                resp = raw
-
-        # Find XCMD_Start (0x1B) in response
-        start_idx = -1
-        for i in range(len(resp)):
-            if resp[i] == 0x1B and i + 37 <= len(resp):
-                start_idx = i
-                break
-
-        if start_idx < 0:
+        resp = decode_game_response(resp)
+        start = find_start_packet(resp)
+        if start is None:
             result.fail("Game entry", f"No XCMD_Start (0x1B) in {len(resp)}b response")
             sock.close()
             return
 
         # Parse XCMD_Start: UID (4b), zero (4b), charID (2b), x (2b), y (2b), z (2b), dir (1b)
-        pkt = resp[start_idx:]
+        start_idx, pkt = start
         uid = struct.unpack_from('>I', pkt, 1)[0]
         char_id = struct.unpack_from('>H', pkt, 9)[0]
         x = struct.unpack_from('>H', pkt, 11)[0]
@@ -319,31 +308,10 @@ def test_walking(host, port, result):
         sock.close()
 
         if not resp:
-            # No response might mean server processes walks but response is
-            # buffered in Huffman blocks. Check server is still alive.
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(3.0)
-                s.connect((host, port))
-                s.close()
-                result.ok("Walking — server stable after 5 walk packets (no crash)")
-            except Exception:
-                result.fail("Walking", "Server crashed during walk processing")
+            result.fail("Walking", "No response after five walk packets")
             return
 
-        # Try to decompress concatenated Huffman blocks
-        decompressed = b''
-        pos = 0
-        while pos < len(resp):
-            chunk = resp[pos:]
-            if huffman_is_compressed(chunk):
-                raw = huffman_decompress(chunk)
-                if raw:
-                    decompressed += raw
-            pos += len(resp)  # consumed all
-
-        if not decompressed:
-            decompressed = resp
+        decompressed = decode_game_response(resp)
 
         # Count WalkAck (0x22) packets in decompressed data
         ack_count = 0
@@ -356,9 +324,7 @@ def test_walking(host, port, result):
         elif ack_count > 0:
             result.ok(f"Walking partial — {ack_count} WalkAcks (server responds to walks)")
         else:
-            # Server survived but we couldn't parse WalkAcks from Huffman data
-            # This is OK — real client handles Huffman properly
-            result.ok(f"Walking — server stable, {len(resp)}b response received")
+            result.fail("Walking", f"No WalkAck packet in {len(decompressed)}b response")
 
     except Exception as e:
         result.fail("Walking", str(e))
@@ -419,23 +385,12 @@ def test_script_engine_stability(host, port, result):
             acct = f"script_test_{i}"
             sock, auth = game_connect(host, port, acct, acct)
             if sock:
-                # Send CharPlay to enter the game world — this exercises
-                # script triggers, expression evaluation, and object dispatch
-                char_play = struct.pack('>B', 0x5D) + b'\x00' * 72
-                char_play = char_play[:73]
                 try:
-                    sock.sendall(char_play)
-                    time.sleep(0.5)
-                    # Drain response to check server doesn't crash
-                    sock.setblocking(False)
-                    try:
-                        while True:
-                            chunk = sock.recv(65536)
-                            if not chunk:
-                                break
-                    except BlockingIOError:
-                        pass
-                    success_count += 1
+                    sock.sendall(make_char_create(name=f"ScriptEntry{i}"))
+                    time.sleep(2.0)
+                    response = decode_game_response(recv_all(sock, timeout=5.0))
+                    if find_start_packet(response) is not None:
+                        success_count += 1
                 except Exception:
                     pass
                 finally:
@@ -448,7 +403,10 @@ def test_script_engine_stability(host, port, result):
             s.settimeout(3.0)
             s.connect((host, port))
             s.close()
-            result.ok(f"Script engine stable — {success_count}/3 game entries, server alive")
+            if success_count == 3:
+                result.ok("Script engine stable — 3/3 structurally valid game entries")
+            else:
+                result.fail("Script engine", f"Only {success_count}/3 game entries were valid")
         except Exception:
             result.fail("Script engine", "Server crashed during multi-client game entry")
 
@@ -481,15 +439,24 @@ def test_expression_eval_proxy(host, port, result):
         sock.sendall(char_create)
         time.sleep(2)
 
-        # Drain game entry data
+        # Drain and validate game entry data before stressing movement.
         sock.setblocking(False)
+        entry_resp = b""
         try:
             while True:
-                sock.recv(65536)
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                entry_resp += chunk
         except BlockingIOError:
             pass
         sock.setblocking(True)
         sock.settimeout(5.0)
+
+        if find_start_packet(decode_game_response(entry_resp)) is None:
+            result.fail("Expression eval proxy", "No structurally valid game entry")
+            sock.close()
+            return
 
         # Send 10 rapid walk packets in the same direction
         # This stress-tests: GetRegion, CheckValidMove, CAN flag eval, GetHeightPoint
