@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Scan the commit message as well as the staged index.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+if [ "$#" -ne 1 ]; then
+	printf 'commit-msg hook requires the commit message path\n' >&2
+	exit 1
+fi
+python3 "$ROOT/tools/check_secrets.py" --commit-msg "$1"

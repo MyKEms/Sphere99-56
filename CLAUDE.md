@@ -17,6 +17,14 @@ git config core.hooksPath .githooks
 
 Never bypass the guard with `--no-verify`.
 
+For deployment-specific identifiers, keep a machine-local denylist outside the
+worktree and set `SPHERE_PRIVATE_DENYLIST`, or use `.git/info/private-denylist`.
+Its non-empty lines are case-insensitive regexes; `literal:` forces literal
+matching and `regex:` makes regex intent explicit. The pre-commit path scans
+staged additions, `--all` scans tracked files, and `.githooks/commit-msg` also
+checks commit messages. Never put private identifiers into the repository just
+to test the denylist.
+
 ## Project goal
 
 Reconstruct a usable, generic SphereServer 0.99 engine from the available
