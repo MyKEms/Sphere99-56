@@ -4,7 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 #include <setjmp.h>
 #include <signal.h>
 #endif
@@ -519,7 +519,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 
 		try
 		{
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 			// Set up SEGV recovery point — if a section causes a segfault,
 			// we skip it and continue loading the next section.
 			extern volatile sig_atomic_t g_fSEGV_catch;
@@ -535,7 +535,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			}
 #endif
 			g_Cfg.LoadScriptSection(s);
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
 			g_fSEGV_catch = 0;
 #endif
 		}
@@ -1361,4 +1361,3 @@ void CWorld::OnTick()
 		RespawnDeadNPCs();
 	}
 }
-
