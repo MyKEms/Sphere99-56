@@ -49,9 +49,10 @@ replacement for the i386 build.
 
 - The public CI builds the engine with GCC multilib and checks the ELF type.
 - `tools/test_protocol.py` is the dependency-free offline packet-fixture test.
-- `tools/test_suite.py` contains twelve integration checks for an externally
-  supplied disposable runtime fixture. It creates accounts and characters;
-  never point it at a world you intend to keep.
+- `tools/test_suite.py` contains thirteen integration checks. CI generates a
+  synthetic disposable runtime fixture locally, including sparse map data and
+  generic resource definitions; it creates accounts and characters, so never
+  point it at a world you intend to keep.
 - A real ClassicUO/TazUO client and a representative world remain separate
   compatibility tests. The public repository does not claim production
   compatibility from the headless suite alone.
@@ -110,6 +111,20 @@ python3 tools/test_protocol.py
 python3 tools/test_suite.py localhost 2593 --quick
 python3 tools/check_secrets.py --all
 ```
+
+The public CI path can be reproduced locally on Linux with:
+
+```bash
+python3 tools/fixtures/make_fixture.py /tmp/sphere99-fixture
+python3 tools/fixtures/run_suite.py \
+  /tmp/sphere99-fixture \
+  --binary "$PWD/sphere99svr" \
+  --repo "$PWD"
+```
+
+The fixture is synthetic and generated outside the repository; it must never
+be replaced with client MULs, shard scripts, saves, accounts, or production
+logs.
 
 The integration suite must run against a disposable world. On Apple Silicon,
 run the i386 binary in a Linux/amd64 VM or container for compatibility checks;

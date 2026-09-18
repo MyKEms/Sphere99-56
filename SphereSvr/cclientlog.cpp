@@ -792,10 +792,13 @@ void CClient::xFlush()
 
 	m_timeLastSend.InitTimeCurrent();
 
+	const BYTE* pData = NULL;
 	int iLenRet;
 	if ( m_ConnectType != CONNECT_GAME )	// login server — send raw, game always uses Huffman
 	{
-		iLenRet = m_Socket.Send( m_bout.RemoveDataLock(), iLen );
+		pData = m_bout.RemoveDataLock();
+		iLenRet = m_Socket.Send( pData, iLen );
+		SPHERE_LOG_NET("xFlush RAW: sock=%d connType=%d queued=%d sent=%d cmd=0x%02x", m_Socket.GetSocket(), m_ConnectType, iLen, iLenRet, pData ? pData[0] : 0xff);
 		if ( iLenRet != SOCKET_ERROR )
 		{
 			// Tx overflow may be handled gracefully.
