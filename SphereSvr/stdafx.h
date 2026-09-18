@@ -23,6 +23,13 @@
 #define DEBUG_VALIDATE_ALLOC	// slows us down but checks memory often
 #endif
 
+// Crash recovery is deliberately opt-in.  Developer/sanitizer builds omit
+// SPHERE_SEGV_RECOVERY so faults reach GDB/ASan normally.  Keep the negative
+// define as a compatibility escape hatch for older build scripts.
+#if defined(SPHERE_SEGV_RECOVERY) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#define SPHERE_CRASH_RECOVERY_ENABLED 1
+#endif
+
 #ifdef _WIN32
 // NOTE: If we want a max number of sockets we must compile for it !
 #undef FD_SETSIZE		// This shuts off a warning

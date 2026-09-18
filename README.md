@@ -59,6 +59,13 @@ ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on
 `siglongjmp` crash recovery so GDB and sanitizers receive the original fault;
 the custom allocator continues to use `malloc`, which ASan tracks normally.
 
+Crash recovery is opt-in everywhere: normal builds leave SIGSEGV, SIGBUS, and
+SIGABRT with the operating system, debugger, or sanitizer. To build the
+legacy guarded recovery mode explicitly, use `make recover`; it produces
+`build/recover/sphere99svr` with `SPHERE_SEGV_RECOVERY`. That mode only guards
+SIGSEGV/SIGBUS and never intercepts SIGABRT. Do not use it while debugging a
+fault you need GDB or ASan to report at the original instruction.
+
 The sanitizer target is a build-only CI check. Run it against a disposable
 fixture when adding runtime coverage, never against production `save/` or
 `accounts/` data. The i386 runtime and its `-m32` default build are not valid

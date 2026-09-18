@@ -57,6 +57,13 @@ jobs:
       - name: Check binary
         run: file build/asan/sphere99svr | grep -q 'ELF 64-bit'
 
+      - name: Verify crash recovery is opt-in
+        run: |
+          if nm -a build/asan/sphere99svr | grep -Eq 'sig(long)?jmp|CrashHandler'; then
+            echo 'ASan build unexpectedly contains legacy crash recovery'
+            exit 1
+          fi
+
   lint:
     name: Lint tools
     runs-on: ubuntu-24.04
