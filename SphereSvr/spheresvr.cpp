@@ -679,6 +679,7 @@ SPHEREERR_TYPE Sphere_OnTick()
 
 //******************************************************
 
+#ifndef _LIB
 SPHEREERR_TYPE Sphere_MainEntryPoint( int argc, char *argv[] )
 {
 	// Enable memory stats tracking now that g_Serv is fully constructed.
@@ -710,6 +711,7 @@ SPHEREERR_TYPE Sphere_MainEntryPoint( int argc, char *argv[] )
 	Sphere_ExitServer();
 	return( g_Serv.m_iExitFlag );
 }
+#endif // _LIB
 
 /////////////////////////////////////////////////////////////////////////////////////
 //

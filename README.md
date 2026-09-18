@@ -93,6 +93,17 @@ python3 tools/test_suite.py localhost 2593 --quick
 python3 tools/test_suite.py localhost 2593
 ```
 
+The loader has a fail-closed save guard. If a world, chars, or statics file
+skips a section or fails to parse, the server logs a critical summary and
+refuses autosave and plain `SAVE`. Review the source first; an administrator
+may explicitly acknowledge the risk with `SAVE FORCE`. The regression test
+uses a temporary broken world file and verifies that no save file is created:
+
+```bash
+make load-safety-test
+build/load-safety/load_safety_test
+```
+
 ## Layout
 
 ```

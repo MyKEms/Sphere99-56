@@ -197,6 +197,7 @@ CWorld::CWorld()
 {
 	m_iSaveCountID = 0;
 	m_iSaveStage = 0;
+	ResetLoadIntegrity();
 }
 
 CWorld::~CWorld()
@@ -206,6 +207,37 @@ CWorld::~CWorld()
 
 ///////////////////////////////////////////////
 // Loading and Saving.
+
+void CWorld::ResetLoadIntegrity()
+{
+	m_iLoadSkippedSections = 0;
+	m_iLoadSkippedObjects = 0;
+	m_iLoadFailedParses = 0;
+	m_fSaveBlockedByLoad = false;
+	m_fLoadIntegrityReported = false;
+}
+
+void CWorld::MarkLoadIssue( bool fObjectSection )
+{
+	m_iLoadSkippedSections++;
+	if ( fObjectSection )
+		m_iLoadSkippedObjects++;
+	m_iLoadFailedParses++;
+	m_fSaveBlockedByLoad = true;
+}
+
+void CWorld::ReportLoadIntegrity()
+{
+	if ( !m_fSaveBlockedByLoad || m_fLoadIntegrityReported )
+		return;
+
+	g_Log.Event( LOG_GROUP_INIT, LOGL_CRIT,
+		"CRITICAL: world load skipped %d sections (%d objects) with %d failed parses; "
+		"autosave and plain SAVE are disabled. Review the source and use explicit admin "
+		"SAVE FORCE only if accepting the loss is intentional." LOG_CR,
+		m_iLoadSkippedSections, m_iLoadSkippedObjects, m_iLoadFailedParses );
+	m_fLoadIntegrityReported = true;
+}
 
 void CWorld::GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int iSaveCount ) // static
 {
@@ -467,6 +499,27 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 
 void CWorld::Save( bool fForceImmediate ) // Save world state
 {
+	Save( fForceImmediate, false );
+}
+
+void CWorld::Save( bool fForceImmediate, bool fAllowDamagedWorld ) // Save world state
+{
+	if ( m_fSaveBlockedByLoad && !fAllowDamagedWorld )
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save refused: the last world load skipped %d sections (%d objects) and had %d failed parses. "
+			"Use explicit admin SAVE FORCE only after reviewing the load failure." LOG_CR,
+			m_iLoadSkippedSections, m_iLoadSkippedObjects, m_iLoadFailedParses );
+		Broadcast( "Save refused: world load was incomplete; use admin SAVE FORCE only after review." );
+		return;
+	}
+	if ( m_fSaveBlockedByLoad && fAllowDamagedWorld )
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_WARN,
+			"WARNING: forcing a save after an incomplete world load (%d skipped sections, %d objects, %d failed parses)." LOG_CR,
+			m_iLoadSkippedSections, m_iLoadSkippedObjects, m_iLoadFailedParses );
+	}
+
 	bool fRet = false;
 	try
 	{
@@ -493,6 +546,9 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 	if ( ! s.Open( pszLoadName ))
 	{
 		g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Can't Load %s" LOG_CR, (LPCTSTR) pszLoadName );
+		// A missing world/chars/statics file is also unsafe to follow with a
+		// save: the missing data would be replaced by an incomplete snapshot.
+		MarkLoadIssue( false );
 		return( false );
 	}
 
@@ -517,6 +573,10 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			g_Serv.Event_PrintPercent( SERVTRIG_LoadStatus, s.GetPosition(), lLoadSize );
 		}
 
+		bool fSectionLoaded = false;
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
+		bool fRecoveredFault = false;
+#endif
 		try
 		{
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
@@ -529,15 +589,37 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			{
 				// Returned here from SEGV handler via siglongjmp.
 				g_fSEGV_catch = 0;
-				continue; // skip this section, try next
+				fRecoveredFault = true;
 			}
+			else
 #endif
-			g_Cfg.LoadScriptSection(s);
+			{
+				fSectionLoaded = g_Cfg.LoadScriptSection(s);
+			}
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			g_fSEGV_catch = 0;
 #endif
 		}
-		SPHERE_LOG_TRY_CATCH1( "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum )
+		catch ( CGException &e )
+		{
+			g_Log.CatchEvent( &e, "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum );
+		}
+		catch (...)
+		{
+			g_Log.CatchEvent( NULL, "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum );
+		}
+
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
+		if ( fRecoveredFault )
+		{
+			MarkLoadIssue( s.IsSectionType( "WORLDCHAR" ) || s.IsSectionType( "WORLDITEM" ));
+			continue;
+		}
+#endif
+		if ( !fSectionLoaded )
+		{
+			MarkLoadIssue( s.IsSectionType( "WORLDCHAR" ) || s.IsSectionType( "WORLDITEM" ));
+		}
 	}
 
 	if ( s.IsSectionType( "EOF" ))
@@ -548,8 +630,18 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 	}
 
 	g_Log.Event( LOG_GROUP_INIT, LOGL_CRIT, "No [EOF] marker. '%s' is corrupt!" LOG_CR, (LPCTSTR) s.GetFilePath());
+	MarkLoadIssue( false );
 	return( false );
 }
+
+#ifdef SPHERE_LOAD_SAFETY_TEST
+bool CWorld::LoadFileForTest( LPCTSTR pszName )
+{
+	bool fLoaded = LoadFile( pszName );
+	ReportLoadIntegrity();
+	return fLoaded;
+}
+#endif
 
 bool CWorld::LoadWorld() // Load world from script
 {
@@ -608,6 +700,8 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	if ( GetUIDCount())	// we already loaded?
 		return( true );
 
+	ResetLoadIntegrity();
+
 	g_Serv.OnTriggerEvent( SERVTRIG_LoadBegin );
 	DEBUG_CHECK( g_Serv.IsLoading());
 
@@ -634,12 +728,16 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	{
 		// Command line load this file. g_Cfg.m_sWorldBaseDir
 		if ( ! LoadFile( pszLoadName ))
+		{
+			ReportLoadIntegrity();
 			return( false );
+		}
 	}
 	else
 	{
 		if ( ! LoadWorld())
 		{
+			ReportLoadIntegrity();
 			return( false );
 		}
 	}
@@ -649,6 +747,8 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	{
 		LoadFile( g_Cfg.m_sWorldStatics );
 	}
+
+	ReportLoadIntegrity();
 
 	m_timeStartup.InitTimeCurrent();
 	m_timeSave.InitTimeCurrent( g_Cfg.m_iSavePeriod );	// next save time.
