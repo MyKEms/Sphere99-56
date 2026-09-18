@@ -3,7 +3,7 @@
 Sphere99 Automated Test Suite
 
 Usage:
-    python3 test_suite.py [host] [port]
+    python3 test_suite.py [host] [login_port] [game_port] [--quick]
 
 Tests:
   1. Server reachability (TCP connect)
@@ -73,21 +73,21 @@ def test_tcp_connect(host, port, result):
         result.fail("TCP connect", str(e))
 
 
-def test_single_login(host, port, result):
+def test_single_login(host, port, game_port, result):
     """Test 2: Full login → charlist flow."""
     print("\n[Test 2] Single Login Flow")
-    if test_login(host, port, "test_single", "pass123"):
+    if test_login(host, port, "test_single", "pass123", game_port=game_port):
         result.ok("Login → ServerList → Relay → CharList")
     else:
         result.fail("Login flow", "Did not receive CharList")
 
 
-def test_sequential_logins(host, port, count, result):
+def test_sequential_logins(host, port, game_port, count, result):
     """Test 3: Multiple sequential logins."""
     print(f"\n[Test 3] {count} Sequential Logins")
     successes = 0
     for i in range(count):
-        if test_login(host, port, f"seqtest{i}", f"pass{i}"):
+        if test_login(host, port, f"seqtest{i}", f"pass{i}", game_port=game_port):
             successes += 1
         time.sleep(0.5)
 
@@ -154,11 +154,11 @@ def test_bad_packets(host, port, result):
         result.fail("Bad packets", "Server crashed on garbage data")
 
 
-def test_char_create(host, port, result):
+def test_char_create(host, port, game_port, result):
     """Test 6: Create a character and verify game entry response."""
     print("\n[Test 6] Character Creation")
     try:
-        sock, auth_id = game_connect(host, port, "createtest", "cpass")
+        sock, auth_id = game_connect(host, port, "createtest", "cpass", game_port=game_port)
         if sock is None:
             result.fail("Character creation", "Could not reach charlist")
             return
@@ -186,11 +186,11 @@ def test_char_create(host, port, result):
         result.fail("Character creation", str(e))
 
 
-def test_game_entry_validation(host, port, result):
+def test_game_entry_validation(host, port, game_port, result):
     """Test 7: Validate game entry packet (XCMD_Start 0x1B) contents."""
     print("\n[Test 7] Game Entry Validation")
     try:
-        sock, auth_id = game_connect(host, port, "gametest", "gpass")
+        sock, auth_id = game_connect(host, port, "gametest", "gpass", game_port=game_port)
         if sock is None:
             result.fail("Game entry", "Could not reach charlist")
             return
@@ -240,11 +240,11 @@ def test_game_entry_validation(host, port, result):
         result.fail("Game entry", str(e))
 
 
-def test_walking(host, port, result):
+def test_walking(host, port, game_port, result):
     """Test 8: Walk in multiple directions and verify WalkAck responses."""
     print("\n[Test 8] Walking")
     try:
-        sock, auth_id = game_connect(host, port, "walktest", "walkpass")
+        sock, auth_id = game_connect(host, port, "walktest", "walkpass", game_port=game_port)
         if sock is None:
             result.fail("Walking", "Could not reach charlist")
             return
@@ -330,18 +330,18 @@ def test_walking(host, port, result):
         result.fail("Walking", str(e))
 
 
-def test_wrong_password(host, port, result):
+def test_wrong_password(host, port, game_port, result):
     """Test 9: Wrong password is rejected."""
     print("\n[Test 9] Wrong Password Rejection")
     try:
         # First create account with known password
-        r1 = test_login(host, port, "pwtest_acct", "correct_pw")
+        r1 = test_login(host, port, "pwtest_acct", "correct_pw", game_port=game_port)
         if not r1:
             result.fail("Wrong password", "Could not create initial account")
             return
 
         # Try with wrong password — should fail
-        sock, auth = game_connect(host, port, "pwtest_acct", "WRONG_PW")
+        sock, auth = game_connect(host, port, "pwtest_acct", "WRONG_PW", game_port=game_port)
         if sock is None:
             # game_connect returns None if charlist not received = login rejected
             result.ok("Wrong password correctly rejected")
@@ -353,16 +353,16 @@ def test_wrong_password(host, port, result):
         result.ok(f"Wrong password rejected ({type(e).__name__})")
 
 
-def test_login_after_stress(host, port, result):
+def test_login_after_stress(host, port, game_port, result):
     """Test 10: Login still works after all previous tests."""
     print("\n[Test 10] Login After Stress")
-    if test_login(host, port, "finaltest", "finalpass"):
+    if test_login(host, port, "finaltest", "finalpass", game_port=game_port):
         result.ok("Login works after stress testing")
     else:
         result.fail("Post-stress login", "Login failed after stress tests")
 
 
-def test_script_engine_stability(host, port, result):
+def test_script_engine_stability(host, port, game_port, result):
     """Test 11: Script engine stability — function dispatch tables active.
 
     Verifies the CSCRIPT_PROPX_IMP fix and script engine features:
@@ -383,7 +383,7 @@ def test_script_engine_stability(host, port, result):
         success_count = 0
         for i in range(3):
             acct = f"script_test_{i}"
-            sock, auth = game_connect(host, port, acct, acct)
+            sock, auth = game_connect(host, port, acct, acct, game_port=game_port)
             if sock:
                 try:
                     sock.sendall(make_char_create(name=f"ScriptEntry{i}"))
@@ -414,7 +414,7 @@ def test_script_engine_stability(host, port, result):
         result.fail("Script engine stability", str(e))
 
 
-def test_expression_eval_proxy(host, port, result):
+def test_expression_eval_proxy(host, port, game_port, result):
     """Test 12: Expression evaluation proxy — DEFNAME & CAN flag resolution.
 
     The walk test (Test 8) is the primary verification that expression
@@ -429,7 +429,7 @@ def test_expression_eval_proxy(host, port, result):
     """
     print("\n[Test 12] Expression Eval Proxy (rapid walks)")
     try:
-        sock, auth = game_connect(host, port, "eval_test_acct", "eval_test_pw")
+        sock, auth = game_connect(host, port, "eval_test_acct", "eval_test_pw", game_port=game_port)
         if not sock:
             result.fail("Expression eval proxy", "Could not connect")
             return
@@ -496,9 +496,13 @@ def test_expression_eval_proxy(host, port, result):
 def main():
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 2593
-    quick = "--quick" in sys.argv
+    game_port = port
+    extra = sys.argv[3:]
+    if extra and not extra[0].startswith("--"):
+        game_port = int(extra.pop(0))
+    quick = "--quick" in extra
 
-    print(f"Sphere99 Test Suite — {host}:{port}" + (" (quick mode)" if quick else ""))
+    print(f"Sphere99 Test Suite — login {host}:{port}, game {host}:{game_port}" + (" (quick mode)" if quick else ""))
     print(f"{'='*60}")
 
     # Pre-flight: check if server is reachable
@@ -515,31 +519,31 @@ def main():
     result = TestResult()
 
     test_tcp_connect(host, port, result)
-    test_single_login(host, port, result)
+    test_single_login(host, port, game_port, result)
 
     if not quick:
-        test_sequential_logins(host, port, 3, result)
+        test_sequential_logins(host, port, game_port, 3, result)
         test_rapid_reconnect(host, port, result)
         test_bad_packets(host, port, result)
 
-    test_char_create(host, port, result)
+    test_char_create(host, port, game_port, result)
     time.sleep(2)  # Let server process game entry before next connection
-    test_game_entry_validation(host, port, result)
+    test_game_entry_validation(host, port, game_port, result)
     time.sleep(2)
-    test_walking(host, port, result)
+    test_walking(host, port, game_port, result)
     time.sleep(2)
 
     if not quick:
-        test_wrong_password(host, port, result)
+        test_wrong_password(host, port, game_port, result)
         time.sleep(2)
 
-    test_login_after_stress(host, port, result)
+    test_login_after_stress(host, port, game_port, result)
     time.sleep(2)
 
     # Script engine tests
-    test_script_engine_stability(host, port, result)
+    test_script_engine_stability(host, port, game_port, result)
     time.sleep(2)
-    test_expression_eval_proxy(host, port, result)
+    test_expression_eval_proxy(host, port, game_port, result)
 
     success = result.summary()
     sys.exit(0 if success else 1)
