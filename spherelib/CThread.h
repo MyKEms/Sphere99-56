@@ -7,8 +7,10 @@
 
 #ifdef _WIN32
 #define THREAD_ENTRY_RET void
+#define THREAD_ENTRY_RETURN return
 #else	// else LINUX
 #define THREAD_ENTRY_RET void *
+#define THREAD_ENTRY_RETURN return NULL	// falling off the end of a void* function is UB
 #endif
 
 typedef THREAD_ENTRY_RET(_cdecl* PTHREAD_ENTRY_PROC)(void*);

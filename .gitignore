@@ -407,3 +407,44 @@ spheretable_x.scp
 # Run directory (built artifacts + symlinks to data)
 run/
 run/**
+
+# Backups of world/account files (sphereb*, spherew*, spherec*, ...)
+sphere[a-z][0-9]*.scp
+sphereb*.scp
+*.scp.bak
+
+# Core dumps — a server that loaded accounts has them in memory
+core
+core.*
+vgcore.*
+*.core
+
+# Config variants and archives that may carry shard data
+*.ini
+!*.ini.example
+*.bak
+*.orig
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+nohup.out
+.env
+.env.*
+
+# Original server binaries / private shard files
+*.exe
+*.dll
+shard.settings.json
+webout/
+
+# Keys
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# Local, per-developer Claude Code files
+.claude/settings.local.json
+CLAUDE.local.md

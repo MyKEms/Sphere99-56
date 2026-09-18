@@ -6,8 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "async": true,
-            "command": "cd . && make -j4 2>&1 | tail -1 | grep -q 'sphere99svr' && echo 'BUILD OK' || echo 'BUILD SKIPPED (no changes)'"
+            "command": "[ \"$(uname -s)\" = Linux ] || exit 0; cd \"$CLAUDE_PROJECT_DIR\" && if make -j4 >/tmp/sphere99-build.log 2>&1; then echo 'BUILD OK'; else echo 'BUILD FAILED:'; grep -E ': error:|Error [0-9]' /tmp/sphere99-build.log | head -20; fi"
           }
         ]
       }

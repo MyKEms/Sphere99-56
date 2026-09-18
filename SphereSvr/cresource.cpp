@@ -3,6 +3,12 @@
 // Copyright 1996 - 2001 Menace Software (www.menasoft.com)
 //
 
+#ifndef _WIN32
+// Standard headers before stdafx.h: it defines min/max macros that break <algorithm>.
+#include <algorithm>
+#include <string>
+#include <vector>
+#endif
 #include "stdafx.h"	// predef header.
 #include "spherelog.h"
 #ifndef _WIN32
@@ -2273,6 +2279,64 @@ CResourceFilePtr CResourceMgr::FindResourceFile(LPCTSTR pszName)
 	return NULL;
 }
 
+// Resolve a relative or absolute path, matching every component that does not
+// exist verbatim case-insensitively against its directory's entries.
+// Returns false if some component has no match.
+static bool ResolvePathNoCase(LPCTSTR pszPath, CGString& sOut)
+{
+	struct stat st;
+	if (stat(pszPath, &st) == 0)
+	{
+		sOut = pszPath;
+		return true;
+	}
+#ifdef _WIN32
+	return false;
+#else
+	std::string sResolved = (pszPath[0] == '/') ? "/" : "";
+	std::string sRest = pszPath;
+	size_t iPos = 0;
+	while (iPos < sRest.size())
+	{
+		size_t iEnd = sRest.find('/', iPos);
+		if (iEnd == std::string::npos)
+			iEnd = sRest.size();
+		std::string sPart = sRest.substr(iPos, iEnd - iPos);
+		bool fTrailingSep = (iEnd < sRest.size());
+		iPos = iEnd + 1;
+		if (sPart.empty() || sPart == ".")
+			continue;
+
+		std::string sCandidate = sResolved + sPart;
+		if (stat(sCandidate.c_str(), &st) != 0)
+		{
+			DIR* pDir = opendir(sResolved.empty() ? "." : sResolved.c_str());
+			if (!pDir)
+				return false;
+			bool fFound = false;
+			struct dirent* pEntry;
+			while ((pEntry = readdir(pDir)) != NULL)
+			{
+				if (!_stricmp(pEntry->d_name, sPart.c_str()))
+				{
+					sCandidate = sResolved + pEntry->d_name;
+					fFound = true;
+					break;
+				}
+			}
+			closedir(pDir);
+			if (!fFound)
+				return false;
+		}
+		sResolved = sCandidate;
+		if (fTrailingSep)
+			sResolved += '/';
+	}
+	sOut = sResolved.c_str();
+	return true;
+#endif
+}
+
 void CResourceMgr::AddResourceFile(LPCTSTR pszFile)
 {
 	if (!pszFile || !pszFile[0])
@@ -2288,35 +2352,46 @@ void CResourceMgr::AddResourceFile(LPCTSTR pszFile)
 			*p = '/';
 	}
 
+	// A trailing separator names a directory ("scripts\quests\" in
+	// [RESOURCES]): load every .scp inside it, like the original 0.99 did.
+	size_t iLen = strlen(szPath);
+	bool fDir = (iLen > 0 && szPath[iLen - 1] == '/');
+
 	// Append .scp extension if no extension present
-	LPCTSTR pszExt = CGFile::GetFileNameExt(szPath);
-	if (!pszExt || !pszExt[0])
+	if (!fDir)
 	{
-		strncat(szPath, ".scp", sizeof(szPath) - strlen(szPath) - 1);
+		LPCTSTR pszExt = CGFile::GetFileNameExt(szPath);
+		if (!pszExt || !pszExt[0])
+			strncat(szPath, ".scp", sizeof(szPath) - strlen(szPath) - 1);
 	}
 
-	// Check for duplicate
-	if (FindResourceFile(szPath) != NULL)
-		return;
-
-	// Build full path if relative
+	// Resolve against CWD first, then SCPFILES=. Scripts come from Windows,
+	// so match each path component case-insensitively ("npcs\dragons" must
+	// find npcs/DRAGONS.SCP on a case-sensitive filesystem).
 	CGString sFullPath;
-	// Try the path as-is first (it may already be relative to CWD)
+	if (!ResolvePathNoCase(szPath, sFullPath))
 	{
-		FILE* fTest = fopen(szPath, "r");
-		if (fTest)
+		if (szPath[0] == '/' || m_sSCPBaseDir.GetLength() <= 0 ||
+			!ResolvePathNoCase(CGFile::GetMergedFileName(m_sSCPBaseDir, szPath), sFullPath))
 		{
-			fclose(fTest);
-			sFullPath = szPath;
+			g_Log.Event(LOG_GROUP_INIT, LOGL_ERROR, "Can't find resource '%s'" LOG_CR, pszFile);
+			return;
 		}
-		else if (szPath[0] != '/' && m_sSCPBaseDir.GetLength() > 0)
-		{
-			sFullPath = CGFile::GetMergedFileName(m_sSCPBaseDir, szPath);
-		}
-		else
-		{
-			sFullPath = szPath;
-		}
+	}
+
+	if (fDir)
+	{
+		AddResourceDir(sFullPath);
+		return;
+	}
+
+	// Check for duplicate. Compare full paths: two files may share a name
+	// in different directories (items/misc.scp vs npcs/misc.scp).
+	for (int i = 0; i < m_ResourceFiles.GetSize(); i++)
+	{
+		CResourceScript* pScript = m_ResourceFiles[i];
+		if (pScript && !_stricmp(pScript->GetFilePath(), sFullPath))
+			return;
 	}
 
 	CResourceScript* pNewScript = new CResourceScript;
@@ -2414,6 +2489,9 @@ void CResourceMgr::AddResourceDir(LPCTSTR pszDirName)
 		return;
 	}
 
+	// Collect first and sort: readdir() order is filesystem-dependent, and
+	// script load order must be deterministic (later defs override earlier).
+	std::vector<std::string> names;
 	struct dirent* pEntry;
 	while ((pEntry = readdir(pDir)) != NULL)
 	{
@@ -2421,11 +2499,16 @@ void CResourceMgr::AddResourceDir(LPCTSTR pszDirName)
 		LPCTSTR pszExt = CGFile::GetFileNameExt(pEntry->d_name);
 		if (!pszExt || _stricmp(pszExt, ".scp"))
 			continue;
-
-		CGString sFullPath = CGFile::GetMergedFileName(pszDirName, pEntry->d_name);
-		AddResourceFile(sFullPath);
+		names.push_back(pEntry->d_name);
 	}
 	closedir(pDir);
+	std::sort(names.begin(), names.end());
+
+	for (size_t i = 0; i < names.size(); i++)
+	{
+		CGString sFullPath = CGFile::GetMergedFileName(pszDirName, names[i].c_str());
+		AddResourceFile(sFullPath);
+	}
 #endif
 }
 

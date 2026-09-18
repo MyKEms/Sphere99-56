@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (32-bit Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-multilib make
+
+      - name: Build
+        run: make -j"$(nproc)" 2>&1 | tee build.log
+
+      - name: Check binary
+        run: file sphere99svr | grep -q 'ELF 32-bit'
+
+      - name: Warning summary
+        if: always()
+        run: |
+          {
+            echo "### Compiler warnings"
+            echo ""
+            echo "Total: $(grep -c 'warning:' build.log || true)"
+            echo ""
+            echo '| count | kind |'
+            echo '|---:|---|'
+            grep -o '\[-W[a-z0-9+=-]*\]' build.log | sort | uniq -c | sort -rn | head -15 \
+              | awk '{print "| " $1 " | `" $2 "` |"}'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    name: Lint tools
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python syntax
+        run: python3 -m py_compile tools/*.py
+
+      - name: shellcheck
+        run: shellcheck tools/*.sh
