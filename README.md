@@ -8,11 +8,10 @@ private configuration, and production logs are deliberately excluded.
 ## Status
 
 The project is under active reconstruction and is not a production-ready
-server distribution. The public CI verifies a 32-bit Linux build and a
-dependency-free packet-fixture test. The integration harness exercises login,
-character creation, game entry, and stability against a disposable external
-runtime fixture; real-client and representative-world compatibility still
-need to be tested separately.
+server distribution. The public CI verifies a 32-bit Linux build, offline
+packet fixtures, and the headless protocol suite against a generated,
+redistributable synthetic runtime. Real-client and representative-world
+compatibility still need to be tested separately.
 
 ## Public safety boundary
 
@@ -102,6 +101,22 @@ python3 tools/test_suite.py localhost 2593 --quick
 python3 tools/test_suite.py localhost 2593
 ```
 
+For a completely self-contained Linux smoke test, generate the synthetic
+fixture and run the server plus the full suite. The generated directory is
+outside the repository and contains no client or shard data:
+
+```bash
+python3 tools/fixtures/make_fixture.py /tmp/sphere99-fixture
+make -j"$(nproc)"
+python3 tools/fixtures/run_suite.py \
+  /tmp/sphere99-fixture \
+  --binary "$PWD/sphere99svr" \
+  --repo "$PWD"
+```
+
+The CI fixture job uses the same flow, polls the login socket with a bounded
+startup timeout, and uploads only the disposable server log if the test fails.
+
 The loader has a fail-closed save guard. If a world, chars, or statics file
 skips a section or fails to parse, the server logs a critical summary and
 refuses autosave and plain `SAVE`. Review the source first; an administrator
@@ -120,7 +135,7 @@ spherelib/          base library
 SphereCommon/       UO protocol and world-data structures
 SphereAccount/      account management
 SphereSvr/          server and game logic
-tools/              headless protocol client, fixtures, and checks
+tools/              headless protocol client, synthetic fixtures, and checks
 Makefile            GNU Make build
 ```
 

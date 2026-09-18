@@ -31,7 +31,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from uo_test_client import (
     test_login,
-    recv_all,
     make_login_packet,
     make_server_select,
     make_char_create,
@@ -39,6 +38,7 @@ from uo_test_client import (
     game_relogin,
     decode_game_response,
     find_start_packet,
+    recv_until_game_start,
 )
 
 TEST_RUN_ID = f"{os.getpid()}_{int(time.time())}"
@@ -184,9 +184,8 @@ def test_char_create(host, port, game_port, result):
         create_pkt = make_char_create(name="AutoTest", sex=0, start_loc=1)
         sock.sendall(create_pkt)
 
-        # Wait for game entry response (XCMD_Start = 0x1B)
-        time.sleep(2.0)
-        resp = recv_all(sock, timeout=5.0)
+        # Wait for game entry response (XCMD_Start = 0x1B).
+        resp = recv_until_game_start(sock, timeout=10.0)
         sock.close()
 
         if not resp:
@@ -215,8 +214,7 @@ def test_game_entry_validation(host, port, game_port, result):
         # Create character
         create_pkt = make_char_create(name="GameEntry", sex=0, start_loc=1)
         sock.sendall(create_pkt)
-        time.sleep(2.0)
-        resp = recv_all(sock, timeout=5.0)
+        resp = recv_until_game_start(sock, timeout=10.0)
 
         if not resp:
             result.fail("Game entry", "No response after create")
@@ -270,8 +268,7 @@ def test_quick_relogin(host, port, game_port, result):
             return
 
         old_sock.sendall(make_char_create(name="QuickRelogin", sex=0, start_loc=1))
-        time.sleep(2.0)
-        first_response = decode_game_response(recv_all(old_sock, timeout=5.0))
+        first_response = decode_game_response(recv_until_game_start(old_sock, timeout=10.0))
         if find_start_packet(first_response) is None:
             result.fail("Quick relogin", "Initial character did not enter the game")
             return
@@ -315,10 +312,9 @@ def test_walking(host, port, game_port, result):
         create_pkt = make_char_create(name="Walker", sex=0, start_loc=0)
         sock.sendall(create_pkt)
 
-        # Drain all game entry data (server sends lots of items, chars, etc.)
+        # Wait for the entry marker, then drain the remaining initial data.
+        drained = recv_until_game_start(sock, timeout=10.0)
         sock.setblocking(False)
-        time.sleep(3.0)
-        drained = b''
         while True:
             try:
                 chunk = sock.recv(65536)
@@ -450,8 +446,7 @@ def test_script_engine_stability(host, port, game_port, result):
             if sock:
                 try:
                     sock.sendall(make_char_create(name=f"ScriptEntry{i}"))
-                    time.sleep(2.0)
-                    response = decode_game_response(recv_all(sock, timeout=5.0))
+                    response = decode_game_response(recv_until_game_start(sock, timeout=10.0))
                     if find_start_packet(response) is not None:
                         success_count += 1
                 except Exception:
@@ -500,11 +495,10 @@ def test_expression_eval_proxy(host, port, game_port, result):
         # Create character and enter game
         char_create = make_char_create("evaltest")
         sock.sendall(char_create)
-        time.sleep(2)
+        entry_resp = recv_until_game_start(sock, timeout=10.0)
 
         # Drain and validate game entry data before stressing movement.
         sock.setblocking(False)
-        entry_resp = b""
         try:
             while True:
                 chunk = sock.recv(65536)
@@ -590,24 +584,17 @@ def main():
         test_bad_packets(host, port, result)
 
     test_char_create(host, port, game_port, result)
-    time.sleep(2)  # Let server process game entry before next connection
     test_quick_relogin(host, port, game_port, result)
-    time.sleep(2)
     test_game_entry_validation(host, port, game_port, result)
-    time.sleep(2)
     test_walking(host, port, game_port, result)
-    time.sleep(2)
 
     if not quick:
         test_wrong_password(host, port, game_port, result)
-        time.sleep(2)
 
     test_login_after_stress(host, port, game_port, result)
-    time.sleep(2)
 
     # Script engine tests
     test_script_engine_stability(host, port, game_port, result)
-    time.sleep(2)
     test_expression_eval_proxy(host, port, game_port, result)
 
     success = result.summary()

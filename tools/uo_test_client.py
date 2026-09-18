@@ -182,9 +182,8 @@ def game_connect(host, port, account, password, game_port=None):
     game_seed = struct.pack('>I', auth_id)
     sock.sendall(game_seed + make_charlist_req(account, password, auth_id))
 
-    # Wait for charlist
-    time.sleep(1.0)
-    resp = recv_all(sock, timeout=5.0)
+    # Wait for the decoded response rather than sleeping for a fixed interval.
+    resp = recv_until_decoded(sock, is_char_list_response, timeout=10.0)
     if not resp:
         sock.close()
         return None, None
@@ -216,8 +215,16 @@ def game_relogin(host, port, account, password, game_port=None):
     game_seed = struct.pack('>I', auth_id)
     try:
         sock.sendall(game_seed + make_charlist_req(account, password, auth_id))
-        time.sleep(1.0)
-        response = decode_game_response(recv_all(sock, timeout=5.0))
+        response = decode_game_response(
+            recv_until_decoded(
+                sock,
+                lambda data: (
+                    bool(data)
+                    and (is_char_list_response(data) or find_start_packet(data) is not None)
+                ),
+                timeout=10.0,
+            )
+        )
     except Exception:
         sock.close()
         return None, None, b""
@@ -238,6 +245,35 @@ def recv_all(sock, timeout=10.0):
     except socket.timeout:
         pass
     return bytes(data)
+
+
+def recv_until_decoded(sock, predicate, timeout=10.0):
+    """Receive a compressed game stream until *predicate* matches decoded data."""
+    deadline = time.monotonic() + timeout
+    data = bytearray()
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        sock.settimeout(min(1.0, max(0.05, remaining)))
+        try:
+            chunk = sock.recv(4096)
+        except socket.timeout:
+            continue
+        if not chunk:
+            break
+        data.extend(chunk)
+        decoded = decode_game_response(bytes(data))
+        if predicate(decoded):
+            return bytes(data)
+    return bytes(data)
+
+
+def recv_until_game_start(sock, timeout=10.0):
+    """Receive game entry data until a structurally valid XCMD_Start arrives."""
+    return recv_until_decoded(
+        sock,
+        lambda data: find_start_packet(data) is not None,
+        timeout=timeout,
+    )
 
 
 def decode_game_response(data):
@@ -265,6 +301,18 @@ def find_start_packet(data):
         if uid != 0 and char_id != 0 and (x != 0 or y != 0):
             return offset, packet
     return None
+
+
+def is_char_list_response(data):
+    """Return whether a decoded response contains a complete login result."""
+    if not data:
+        return False
+    if data[0] == 0x82:
+        return len(data) >= 2
+    if data[0] != 0xA9 or len(data) < 4:
+        return False
+    packet_length = struct.unpack_from(">H", data, 1)[0]
+    return packet_length >= 4 and len(data) >= packet_length
 
 def parse_server_list(data):
     """Parse XCMD_ServerList (0xA8) response."""
