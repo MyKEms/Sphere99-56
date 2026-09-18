@@ -135,51 +135,55 @@ def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25
     return bytes(pkt)
 
 
-def game_connect(host, port, account, password, game_port=None):
-    """Full login sequence, return (socket, auth_id) on game connection or (None, None)."""
+def _connect_game_socket(host, port, account, password, game_port=None):
+    """Complete login/relay handshake, returning an open game socket."""
     import time as _time
 
-    # Phase 1: Login
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5.0)
+    login_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    login_sock.settimeout(5.0)
     try:
-        sock.connect((host, port))
+        login_sock.connect((host, port))
+        seed = struct.pack('>I', 0x01000001)
+        login_sock.sendall(seed + make_login_packet(account, password))
+        resp = recv_all(login_sock, timeout=3.0)
+        if not resp or resp[0] != 0xA8:
+            return None, None
+
+        login_sock.sendall(make_server_select(0))
+        resp = recv_all(login_sock, timeout=3.0)
+        if not resp or resp[0] != 0x8C:
+            return None, None
+
+        relay_port = struct.unpack_from('>H', resp, 5)[0]
+        auth_id = struct.unpack_from('>I', resp, 7)[0]
     except Exception:
         return None, None
+    finally:
+        login_sock.close()
 
-    seed = struct.pack('>I', 0x01000001)
-    sock.sendall(seed + make_login_packet(account, password))
-    resp = recv_all(sock, timeout=3.0)
-    if not resp or resp[0] != 0xA8:
-        sock.close()
-        return None, None
-
-    # Phase 2: Server Select
-    sock.sendall(make_server_select(0))
-    resp = recv_all(sock, timeout=3.0)
-    if not resp or resp[0] != 0x8C:
-        sock.close()
-        return None, None
-
-    relay_port = struct.unpack_from('>H', resp, 5)[0]
-    auth_id = struct.unpack_from('>I', resp, 7)[0]
-    sock.close()
     _time.sleep(0.3)
-
-    # Phase 3: Game connection
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(10.0)
     connect_port = relay_port if game_port is None else game_port
+    game_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    game_sock.settimeout(10.0)
     try:
-        sock.connect((host, connect_port))
+        game_sock.connect((host, connect_port))
     except Exception:
+        game_sock.close()
+        return None, None
+    return game_sock, auth_id
+
+
+def game_connect(host, port, account, password, game_port=None):
+    """Full login sequence, return (socket, auth_id) on game connection or (None, None)."""
+    sock, auth_id = _connect_game_socket(host, port, account, password, game_port)
+    if sock is None:
         return None, None
 
     game_seed = struct.pack('>I', auth_id)
     sock.sendall(game_seed + make_charlist_req(account, password, auth_id))
 
     # Wait for charlist
-    _time.sleep(1.0)
+    time.sleep(1.0)
     resp = recv_all(sock, timeout=5.0)
     if not resp:
         sock.close()
@@ -196,6 +200,28 @@ def game_connect(host, port, account, password, game_port=None):
         return None, None
 
     return sock, auth_id
+
+
+def game_relogin(host, port, account, password, game_port=None):
+    """Reconnect an account and return its decoded game-entry response.
+
+    When the account's previous game client disconnected while the character
+    is still lingering, Sphere enters the last character directly instead of
+    returning a CharList packet.
+    """
+    sock, auth_id = _connect_game_socket(host, port, account, password, game_port)
+    if sock is None:
+        return None, None, b""
+
+    game_seed = struct.pack('>I', auth_id)
+    try:
+        sock.sendall(game_seed + make_charlist_req(account, password, auth_id))
+        time.sleep(1.0)
+        response = decode_game_response(recv_all(sock, timeout=5.0))
+    except Exception:
+        sock.close()
+        return None, None, b""
+    return sock, auth_id, response
 
 
 def recv_all(sock, timeout=10.0):
