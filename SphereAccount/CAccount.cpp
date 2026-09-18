@@ -222,7 +222,9 @@ void CAccount::SetPassword( LPCTSTR pszPassword )
 	{
 		pszPassword++;
 		char szPassword[ MAX_ACCOUNT_PASSWORD_ENTER+2 ];
-		strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER );
+		// strcpylen() reserves the last byte for NUL; preserve the full
+		// client-allowed password length here.
+		strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER + 1 );
 		int len = strlen(szPassword);
 		if ( len > 0 && szPassword[len-1] == '"' )
 			szPassword[len-1] = '\0';
@@ -231,7 +233,9 @@ void CAccount::SetPassword( LPCTSTR pszPassword )
 	else
 	{
 		char szPassword[ MAX_ACCOUNT_PASSWORD_ENTER+2 ];
-		strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER );
+		// strcpylen() reserves the last byte for NUL; preserve the full
+		// client-allowed password length here.
+		strcpylen( szPassword, pszPassword, MAX_ACCOUNT_PASSWORD_ENTER + 1 );
 		m_sCurPassword = szPassword;
 	}
 }

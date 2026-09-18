@@ -22,7 +22,9 @@ public:
 
     void SetRefObj(T* pObj) { m_pointer = pObj; }
     T* GetRefObj() const { return m_pointer; }
-    void ReleaseRefObj() {} // STUB
+    // The reimplementation does not own/refcount objects, but callers still
+    // rely on ReleaseRefObj() to detach the pointer (notably CChar::ClientDetach).
+    void ReleaseRefObj() { m_pointer = NULL; }
     virtual void UnLink() {} // STUB
     bool IsValidNewObj() const { return true; } // STUB
     bool IsValidRefObj() const { return m_pointer != NULL; }

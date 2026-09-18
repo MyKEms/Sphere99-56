@@ -3605,7 +3605,12 @@ LOGIN_ERR_TYPE CClient::Setup_CharListReq( const char* pszAccName, const char* p
 	{
 		// If the last char is lingering then log back into this char instantly.
 		// m_iClientLingerTime
-		return Setup_Start(pCharLast);
+		// Setup_Start() queues the game-entry packets, but does not flush them.
+		// A real client waits here for the first world packet, so flush the
+		// quick-relogin path just like the normal character-selection path.
+		LOGIN_ERR_TYPE lStartErr = Setup_Start(pCharLast);
+		xFlush();
+		return lStartErr;
 	}
 
 	// DEBUG_MSG(( "%x:Setup_ListFill" LOG_CR, m_Socket.GetSocket()));
