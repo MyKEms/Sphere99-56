@@ -1325,6 +1325,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			}
 		} catch (...) {
 			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN, "Failed to load AREA '%s'" LOG_CR, (LPCTSTR) s.GetArgStr());
+			return( false );
 		}
 		return( true );
 	case RES_Room:

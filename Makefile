@@ -111,18 +111,21 @@ SPHERESVR_SRC = \
 #           StdAfx.cpp files (empty precompiled header stubs)
 
 ALL_SRC = $(SPHERELIB_SRC) $(SPHERECOMMON_SRC) $(SPHEREACCOUNT_SRC) $(SPHERESVR_SRC)
+TEST_SRC ?=
 ifeq ($(BUILD_DIR),.)
 ALL_OBJ = $(ALL_SRC:.cpp=.o)
 else
 ALL_OBJ = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(ALL_SRC))
 endif
+TEST_OBJ = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRC))
 ALL_DEP = $(ALL_OBJ:.o=.d)
+ALL_DEP += $(TEST_OBJ:.o=.d)
 
 all: $(TARGET)
 
-$(TARGET): $(ALL_OBJ)
+$(TARGET): $(ALL_OBJ) $(TEST_OBJ)
 	@mkdir -p $(dir $@)
-	$(CXX) $(ALL_OBJ) -o $@ $(LDFLAGS)
+	$(CXX) $(ALL_OBJ) $(TEST_OBJ) -o $@ $(LDFLAGS)
 
 # -MMD -MP: track header dependencies, so editing a .h rebuilds its users
 ifeq ($(BUILD_DIR),.)
@@ -153,10 +156,18 @@ recover:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -DSPHERE_SEGV_RECOVERY" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
+# Link the real loader into a small disposable-fixture test.  _LIB excludes
+# the production main entry point; the test main lives in tools/ instead.
+load-safety-test:
+	$(MAKE) BUILD_DIR=build/load-safety TARGET=build/load-safety/load_safety_test \
+		TEST_SRC=tools/load_safety_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_LOAD_SAFETY_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover clean
+.PHONY: all debug asan recover load-safety-test clean

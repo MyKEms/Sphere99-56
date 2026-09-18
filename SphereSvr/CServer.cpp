@@ -541,6 +541,7 @@ bool CServer::OnConsoleCmd( CGString& sText, CScriptConsole* pSrc )
 		pSrc->Printf(
 			"Available Commands:" LOG_CR
 			"# = Immediate Save world" LOG_CR
+			"SAVE FORCE = Admin override for an incomplete world load" LOG_CR
 			"A = Accounts file update" LOG_CR
 			"B message = Broadcast a message" LOG_CR
 			"C = Clients List (%d)" LOG_CR
@@ -894,8 +895,27 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 		}
 		break;
 
-	case M_Save: // "SAVE" x
-		g_World.Save( vArgs.GetInt());
+	case M_Save: // "SAVE" x [FORCE]
+		{
+			bool fAllowDamagedWorld = false;
+			int iArgQty = vArgs.IsEmpty() ? 0 : vArgs.MakeArraySize();
+			for ( int i = 0; i < iArgQty; i++ )
+			{
+				if ( !_stricmp( vArgs.GetArrayPSTR(i), "FORCE" ))
+				{
+					fAllowDamagedWorld = true;
+					break;
+				}
+			}
+			if ( fAllowDamagedWorld && ( pSrc == NULL || pSrc->GetPrivLevel() < PLEVEL_Admin ))
+				return( HRES_PRIVILEGE_NOT_HELD );
+			bool fForceImmediate = ( iArgQty > 0 ) ? ( vArgs.GetArrayInt(0) != 0 ) : false;
+			if ( fAllowDamagedWorld )
+				fForceImmediate = true;
+			g_World.Save( fForceImmediate, fAllowDamagedWorld );
+			if ( g_World.IsSaveBlockedByLoad() && !fAllowDamagedWorld )
+				pSrc->WriteString( "Save refused: the world load was incomplete. Use admin SAVE FORCE after review." LOG_CR );
+		}
 		break;
 	case M_Secure:
 	case M_Safe:

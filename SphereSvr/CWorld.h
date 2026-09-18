@@ -306,6 +306,14 @@ private:
 
 	int		m_iSaveStage;	// Current stage of the background save.
 
+	// Loading a damaged world must never be followed by an automatic save that
+	// would make the data loss permanent.
+	int		m_iLoadSkippedSections;
+	int		m_iLoadSkippedObjects;
+	int		m_iLoadFailedParses;
+	bool	m_fSaveBlockedByLoad;
+	bool	m_fLoadIntegrityReported;
+
 	// World data.
 	CSector m_Sectors[ SECTOR_QTY ];
 
@@ -334,6 +342,9 @@ public:
 private:
 	bool LoadFile( LPCTSTR pszName );
 	bool LoadWorld();
+	void ResetLoadIntegrity();
+	void MarkLoadIssue( bool fObjectSection );
+	void ReportLoadIntegrity();
 
 	bool SaveTry(bool fForceImmediate); // Save world state
 	void GarbageCollection_GMPages();
@@ -447,8 +458,17 @@ public:
 	HRESULT Export( LPCTSTR pszFilename, const CChar* pSrc, WORD iModeFlags = IMPFLAGS_ITEMS, int iDist = SHRT_MAX, int dx = 0, int dy = 0 );
 	HRESULT Import( LPCTSTR pszFilename, const CChar* pSrc, WORD iModeFlags = IMPFLAGS_ITEMS, int iDist = SHRT_MAX, LPCSTR pszAgs1 = NULL, LPCSTR pszAgs2 = NULL );
 	void Save( bool fForceImmediate ); // Save world state
+	void Save( bool fForceImmediate, bool fAllowDamagedWorld ); // Explicit admin override.
+	bool IsSaveBlockedByLoad() const { return m_fSaveBlockedByLoad; }
+	int GetLoadSkippedSections() const { return m_iLoadSkippedSections; }
+	int GetLoadSkippedObjects() const { return m_iLoadSkippedObjects; }
+	int GetLoadFailedParses() const { return m_iLoadFailedParses; }
 	bool LoadAll( LPCTSTR pszLoadName = NULL );
 	void Close( bool fResources );
+
+#ifdef SPHERE_LOAD_SAFETY_TEST
+	bool LoadFileForTest( LPCTSTR pszName );
+#endif
 
 	DWORD LoadUID( DWORD dwUID, CResourceObj* pObj ) { return AllocUID(pObj, dwUID); }
 
