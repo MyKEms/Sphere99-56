@@ -108,7 +108,8 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 	}
 	if ( ! IsLogged( dwGroupMask, level ))
 		return( 0 );
-	try { g_Serv.Event_PrintClient( pszMsg ); } catch (...) {}
+	try { g_Serv.Event_PrintClient( pszMsg ); }
+	catch (...) { fprintf( stderr, "[ERROR] CLog::Event_PrintClient threw\n" ); }
 	return 1;
 #else
 	if ( ! IsLogged( dwGroupMask, level ))
@@ -242,4 +243,3 @@ void CLog::Dump( const BYTE * pData, int len )
 	}
 }
 #endif
-

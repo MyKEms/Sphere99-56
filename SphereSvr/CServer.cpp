@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <cstring>
 #include <poll.h>
+#include <unistd.h>
 #define strcmpi strcasecmp
 static DWORD GetTickCount()
 {
@@ -78,9 +79,8 @@ void _cdecl Signal_Terminate(int x=0) // If shutdown is initialized
 	g_Serv.SetExitFlag( (x == SIGTERM) ? SPHEREERR_TIMED_CLOSE : SPHEREERR_CTRLC );
 }
 
-static volatile int s_nSEGV = 0;
 #ifndef _WIN32
-#ifndef SPHERE_DISABLE_CRASH_RECOVERY
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 volatile sig_atomic_t g_fSEGV_catch = 0;  // 1 = longjmp recovery enabled
 sigjmp_buf g_SEGV_jmpbuf;
@@ -89,27 +89,20 @@ sigjmp_buf g_SEGV_jmpbuf;
 
 void _cdecl Signal_Illegal_Instruction(int x=0)
 {
-	s_nSEGV++;
-	fprintf(stderr, "SEGV/ILL signal %d caught (count=%d)\n", x, s_nSEGV);
-	fflush(stderr);
+	static const char szSignalMessage[] = "Sphere signal handler: illegal instruction\n";
+	(void)write(STDERR_FILENO, szSignalMessage, sizeof(szSignalMessage) - 1);
 
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
-	if ( g_fSEGV_catch )
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
+	if ( g_fSEGV_catch && (x == SIGSEGV || x == SIGBUS) )
 	{
 		// Jump back to the recovery point (skips the faulting code).
-		signal(x, &Signal_Illegal_Instruction);
+		g_fSEGV_catch = 0;
 		siglongjmp(g_SEGV_jmpbuf, 1);
 		return; // not reached
 	}
 #endif
 
-	if ( s_nSEGV > 10 )
-	{
-		signal(x, SIG_DFL);
-		raise(x);
-		return;
-	}
-	signal(x, &Signal_Illegal_Instruction);
+	_exit(128 + x);
 }
 #endif
 
@@ -126,7 +119,8 @@ void CServer::SetSignals()
 		signal(SIGTERM, &Signal_Terminate);
 		signal(SIGINT, &Signal_Terminate);
 		signal(SIGILL, &Signal_Terminate);
-		// SIGSEGV handled by CrashHandler in cresource.cpp (supports siglongjmp recovery)
+		// SIGSEGV/SIGBUS recovery is installed only with SPHERE_SEGV_RECOVERY.
+		// SIGABRT is deliberately never intercepted.
 	}
 	else
 	{
@@ -134,7 +128,7 @@ void CServer::SetSignals()
 		signal(SIGQUIT, SIG_DFL );
 		signal(SIGINT, SIG_DFL );
 		signal(SIGILL, SIG_DFL);
-		// SIGSEGV handled by CrashHandler
+		// SIGSEGV/SIGBUS retain the normal fatal disposition.
 	}
 #endif
 
@@ -1314,7 +1308,8 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			if ( ! pClient->xRecvData())
 			{
 				pClient->m_Socket.Close();
-				try { pClient->DeleteThis(); } catch (...) {}
+				try { pClient->DeleteThis(); }
+				catch (...) { SPHERE_LOG_ERR("SocketsReceive: client cleanup threw"); }
 				continue;
 			}
 		}
@@ -1407,7 +1402,7 @@ void CServer::SocketsReceive() // Check for messages from the clients
 				// Only do this if the connection is logged in ?
 				pClient->m_timeLastEvent.InitTimeCurrent();	// We should always get pinged every couple minutes or so
 			}
-		#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+		#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			extern volatile sig_atomic_t g_fSEGV_catch;
 			extern sigjmp_buf g_SEGV_jmpbuf;
 			g_fSEGV_catch = 1;
@@ -1415,19 +1410,21 @@ void CServer::SocketsReceive() // Check for messages from the clients
 			{
 				g_fSEGV_catch = 0;
 				SPHERE_LOG_ERR("SEGV in xRecvData — dropping client");
-				try { pClient->DeleteThis(); } catch (...) {}
+				try { pClient->DeleteThis(); }
+				catch (...) { SPHERE_LOG_ERR("SocketsReceive: recovered client cleanup threw"); }
 				continue;
 			}
 #endif
 			if ( ! pClient->xRecvData())
 			{
-				try { pClient->DeleteThis(); } catch (...) {}
-			#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+				try { pClient->DeleteThis(); }
+				catch (...) { SPHERE_LOG_ERR("SocketsReceive: client cleanup threw"); }
+			#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 				g_fSEGV_catch = 0;
 			#endif
 				continue;
 			}
-		#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+		#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			g_fSEGV_catch = 0;
 		#endif
 		}
@@ -1508,13 +1505,13 @@ void CServer::SocketsFlush() // Sends ALL buffered data
 			pClient->addPause( false );	// always turn off pause here if it is on.
 			pClient->xFlush();
 		}
-		catch (...) {}
+		catch (...) { SPHERE_LOG_ERR("SocketsFlush: client flush threw"); }
 	}
 }
 
 void CServer::OnTick()
 {
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 	extern volatile sig_atomic_t g_fSEGV_catch;
 	extern sigjmp_buf g_SEGV_jmpbuf;
 	// Wrap ENTIRE tick with SEGV recovery — server must never die from a single tick failure
@@ -1523,7 +1520,8 @@ void CServer::OnTick()
 	{
 		g_fSEGV_catch = 0;
 		// Recovered — still try to flush client data
-		try { SocketsFlush(); } catch (...) {}
+		try { SocketsFlush(); }
+		catch (...) { SPHERE_LOG_ERR("OnTick: recovered flush threw"); }
 		return;
 	}
 #endif
@@ -1542,7 +1540,7 @@ void CServer::OnTick()
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase1 ok (tick=%d)", s_iTickDbg); }
 
 	// Check clients for incoming packets.
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 	g_fSEGV_catch = 1;
 	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
 	{
@@ -1557,8 +1555,9 @@ void CServer::OnTick()
 	}
 	catch (...)
 	{
+		SPHERE_LOG_ERR("OnTick: SocketsReceive threw");
 	}
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 	// Re-enable SEGV catch for dispatch phase
 	g_fSEGV_catch = 1;
 	if ( sigsetjmp(g_SEGV_jmpbuf, 1) != 0 )
@@ -1576,7 +1575,8 @@ void CServer::OnTick()
 		for ( CClient* pClient = (CClient*) m_Clients.GetHead(); pClient!=NULL; pClient = (CClient*) pClient->GetNext())
 		{
 			bool hasData = false;
-			try { hasData = pClient->xHasData(); } catch (...) { continue; }
+			try { hasData = pClient->xHasData(); }
+			catch (...) { SPHERE_LOG_ERR("OnTick: xHasData threw"); continue; }
 			if ( ! hasData)
 				continue;
 
@@ -1593,11 +1593,11 @@ void CServer::OnTick()
 			}
 			catch (...)
 			{
-				// Client cleanup failed
+				SPHERE_LOG_ERR("OnTick: client cleanup failed");
 			}
 		}
 	}
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 	g_fSEGV_catch = 0;
 #endif
 
@@ -1606,7 +1606,8 @@ void CServer::OnTick()
 do_flush:
 	// Network flush — ALWAYS runs, even after SEGV recovery.
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
-	try { SocketsFlush(); } catch (...) {}
+	try { SocketsFlush(); }
+	catch (...) { SPHERE_LOG_ERR("OnTick: network flush threw"); }
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
@@ -1623,9 +1624,10 @@ do_flush:
 	}
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase4 pre-CfgTick (tick=%d)", s_iTickDbg); }
-	try { g_Cfg.OnTick(false); } catch (...) {}
+	try { g_Cfg.OnTick(false); }
+	catch (...) { SPHERE_LOG_ERR("OnTick: configuration tick threw"); }
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase5 done (tick=%d)", s_iTickDbg); }
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 	g_fSEGV_catch = 0;
 #endif
 }

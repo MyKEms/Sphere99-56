@@ -4,7 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 #include <signal.h>
 #endif
@@ -519,7 +519,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 
 		try
 		{
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			// Set up SEGV recovery point — if a section causes a segfault,
 			// we skip it and continue loading the next section.
 			extern volatile sig_atomic_t g_fSEGV_catch;
@@ -529,13 +529,11 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			{
 				// Returned here from SEGV handler via siglongjmp.
 				g_fSEGV_catch = 0;
-				fprintf(stderr, "DBG: SEGV recovery — skipped section at line %d\n", s.GetContext().m_iLineNum);
-				fflush(stderr);
 				continue; // skip this section, try next
 			}
 #endif
 			g_Cfg.LoadScriptSection(s);
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			g_fSEGV_catch = 0;
 #endif
 		}
