@@ -667,15 +667,18 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 		}
 
 		// Are we going to reveal ourselves by moving?
-		try { m_pChar->CheckRevealOnMove(); } catch (...) {}
+		try { m_pChar->CheckRevealOnMove(); }
+		catch (...) { SPHERE_LOG_ERR("Event_Walk: reveal-on-move threw"); }
 
 		// Move the character
-		try { m_pChar->MoveToChar( pt ); } catch (...) {}
+		try { m_pChar->MoveToChar( pt ); }
+		catch (...) { SPHERE_LOG_ERR("Event_Walk: MoveToChar threw"); }
 
 		// Should i update the weather?
 		if ( fRoof != m_pChar->IsStatFlag( STATF_InDoors ))
 		{
-			try { addWeather( WEATHER_DEFAULT ); } catch (...) {}
+			try { addWeather( WEATHER_DEFAULT ); }
+			catch (...) { SPHERE_LOG_ERR("Event_Walk: weather update threw"); }
 		}
 
 		// Did i step on a telepad, trap, etc?
@@ -685,7 +688,7 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 				// We stepped on teleporter — don't send walk ack
 				return;
 			}
-		} catch (...) {}
+		} catch (...) { SPHERE_LOG_ERR("Event_Walk: location check threw"); }
 	}
 	else
 	{
@@ -709,15 +712,18 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 	if ( ! fMove )
 	{
 		// Show others I have turned
-		try { m_pChar->UpdateMode( this ); } catch (...) {}
+		try { m_pChar->UpdateMode( this ); }
+		catch (...) { SPHERE_LOG_ERR("Event_Walk: UpdateMode threw"); }
 		return;
 	}
 
 	// Who now sees me?
-	try { m_pChar->UpdateMove( ptold, this ); } catch (...) {}
+	try { m_pChar->UpdateMove( ptold, this ); }
+	catch (...) { SPHERE_LOG_ERR("Event_Walk: UpdateMove threw"); }
 
 	// What new stuff do I now see?
-	try { addPlayerSee( ptold ); } catch (...) {}
+	try { addPlayerSee( ptold ); }
+	catch (...) { SPHERE_LOG_ERR("Event_Walk: addPlayerSee threw"); }
 }
 
 void CClient::Event_CombatMode( bool fWar ) // Only for switching to combat mode
@@ -3282,4 +3288,3 @@ bool CClient::xDispatchMsg()
 
 	return( true );
 }
-

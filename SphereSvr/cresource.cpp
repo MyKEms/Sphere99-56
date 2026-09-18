@@ -14,37 +14,33 @@
 #ifndef _WIN32
 #include <dirent.h>
 #include <signal.h>
-#ifndef SPHERE_DISABLE_CRASH_RECOVERY
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 #include <execinfo.h>
 #endif
 #endif
 
-// Signal handler: if siglongjmp recovery is enabled, use it.
-// Otherwise print backtrace and crash.
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+// Signal handler: compiled only for the explicit recovery build.  Normal and
+// sanitizer builds leave SIGSEGV/SIGBUS/SIGABRT to the OS or sanitizer.
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
+#include <unistd.h>
 extern volatile sig_atomic_t g_fSEGV_catch;
 extern sigjmp_buf g_SEGV_jmpbuf;
 
 static void CrashHandler(int sig)
 {
-	if ( g_fSEGV_catch )
+	static const char szRecoveryMessage[] = "Sphere crash recovery: skipped guarded operation\n";
+	(void)write(STDERR_FILENO, szRecoveryMessage, sizeof(szRecoveryMessage) - 1);
+	if ( g_fSEGV_catch && (sig == SIGSEGV || sig == SIGBUS) )
 	{
-		// Recovery enabled — jump back to safe point.
+		// Recovery is explicitly opt-in and never handles SIGABRT.
 		g_fSEGV_catch = 0;
-		signal(sig, CrashHandler); // re-install (SA_RESETHAND cleared it)
 		siglongjmp(g_SEGV_jmpbuf, 1);
 		return; // not reached
 	}
-	// No recovery — print backtrace and crash.
-	fprintf(stderr, "\n=== CRASH: signal %d ===\n", sig);
-	void* bt[30];
-	int n = backtrace(bt, 30);
-	backtrace_symbols_fd(bt, n, 2);
-	fflush(stderr);
-	signal(sig, SIG_DFL);
-	raise(sig);
+	// A fault outside a guarded region is fatal; do not attempt recovery.
+	_exit(128 + sig);
 }
 #endif
 
@@ -2664,15 +2660,14 @@ bool CSphereResourceMgr::Load( bool fResync )
 	// ARGS:
 	//  fResync = just look for changes.
 
-#if !defined(_WIN32) && !defined(SPHERE_DISABLE_CRASH_RECOVERY)
+#if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 	// Install crash handler for backtrace on segfault
 	struct sigaction sa;
 	sa.sa_handler = CrashHandler;
 	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0; // persistent — CrashHandler checks g_fSEGV_catch for recovery
+	sa.sa_flags = 0; // persistent while explicit recovery mode is enabled
 	sigaction(SIGSEGV, &sa, NULL);
 	sigaction(SIGBUS, &sa, NULL);
-	sigaction(SIGABRT, &sa, NULL);
 #endif
 
 	if ( ! fResync )
