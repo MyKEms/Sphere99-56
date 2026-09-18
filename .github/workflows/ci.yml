@@ -40,6 +40,23 @@ jobs:
               | awk '{print "| " $1 " | `" $2 "` |"}'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  asan:
+    name: Build (ASan/UBSan x86-64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++ make
+
+      - name: Build sanitizer target
+        run: make asan 2>&1 | tee asan-build.log
+
+      - name: Check binary
+        run: file build/asan/sphere99svr | grep -q 'ELF 64-bit'
+
   lint:
     name: Lint tools
     runs-on: ubuntu-24.04
