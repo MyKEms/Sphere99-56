@@ -97,12 +97,16 @@ def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25
     """
     pkt = bytearray(104)
     pkt[0] = 0x00  # XCMD_Create
-    # Pattern (4 bytes)
+    # The modern 104-byte packet has three pattern bytes/words before the
+    # fixed-width name and password fields.  Keep this in sync with
+    # CUOEvent::Create in SphereCommon/sphereproto.h.
     struct.pack_into('>I', pkt, 1, 0xEDEDEDED)
-    # Character name (30 bytes)
+    struct.pack_into('>I', pkt, 5, 0xFFFFFFFF)
+    pkt[9] = 0x00
+    # Character name (30 bytes, offset 10)
     name_bytes = name.encode('ascii')[:29]
-    pkt[5:5+len(name_bytes)] = name_bytes
-    # Password (30 bytes) — empty
+    pkt[10:10+len(name_bytes)] = name_bytes
+    # Password (30 bytes, offset 40) — empty
     # Sex
     pkt[70] = sex
     # Stats
@@ -116,16 +120,18 @@ def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25
     pkt[77] = val2
     pkt[78] = skill3
     pkt[79] = val3
-    # Start location (1-based)
-    pkt[80] = start_loc
-    # Skin hue
-    struct.pack_into('>H', pkt, 81, 0x03EA)  # default skin hue
-    # Hair
-    struct.pack_into('>H', pkt, 83, 0x203B)  # hair ID
-    struct.pack_into('>H', pkt, 85, 0x044E)  # hair hue
-    # Beard (0 = none)
-    struct.pack_into('>H', pkt, 87, 0x0000)
-    struct.pack_into('>H', pkt, 89, 0x0000)
+    # Modern packet uses network-order words for appearance/location fields.
+    struct.pack_into('>H', pkt, 80, 0x03EA)  # default skin hue
+    struct.pack_into('>H', pkt, 82, 0x203B)  # hair ID
+    struct.pack_into('>H', pkt, 84, 0x044E)  # hair hue
+    struct.pack_into('>H', pkt, 86, 0x0000)  # beard (none)
+    struct.pack_into('>H', pkt, 88, 0x0000)  # beard hue
+    struct.pack_into('>H', pkt, 90, start_loc)
+    struct.pack_into('>H', pkt, 92, 0x0000)
+    struct.pack_into('>H', pkt, 94, 0x0000)  # character slot
+    struct.pack_into('>I', pkt, 96, 0x7F000001)  # client IP
+    struct.pack_into('>H', pkt, 100, 0x0000)  # shirt hue
+    struct.pack_into('>H', pkt, 102, 0x0000)  # pants hue
     return bytes(pkt)
 
 
@@ -205,6 +211,33 @@ def recv_all(sock, timeout=10.0):
     except socket.timeout:
         pass
     return bytes(data)
+
+
+def decode_game_response(data):
+    """Decode one or more server response bytes when Huffman-compressed."""
+    if not data:
+        return b""
+    if huffman_is_compressed(data):
+        raw = huffman_decompress(data)
+        if raw:
+            return raw
+    return data
+
+
+def find_start_packet(data):
+    """Return (offset, packet) for a structurally valid XCMD_Start packet."""
+    packet_len = 37  # XCMD_Start, fixed length 0x25
+    for offset in range(max(0, len(data) - packet_len + 1)):
+        if data[offset] != 0x1B:
+            continue
+        packet = data[offset:offset + packet_len]
+        uid = struct.unpack_from(">I", packet, 1)[0]
+        char_id = struct.unpack_from(">H", packet, 9)[0]
+        x = struct.unpack_from(">H", packet, 11)[0]
+        y = struct.unpack_from(">H", packet, 13)[0]
+        if uid != 0 and char_id != 0 and (x != 0 or y != 0):
+            return offset, packet
+    return None
 
 def parse_server_list(data):
     """Parse XCMD_ServerList (0xA8) response."""

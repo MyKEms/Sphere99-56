@@ -14,7 +14,7 @@ CCHAREVENT(Hit,				0, "I just hit someone (TARG)")
 CCHAREVENT(HitMiss,			0, "I just missed")
 CCHAREVENT(HitTry,			0, "I am trying to hit someone. starting swing")
 
-// Erebor extended combat triggers
+// Extended combat triggers
 CCHAREVENT(BeforeSwing,		0, "Before I swing at someone")
 CCHAREVENT(AfterSwing,		0, "After I swing at someone")
 CCHAREVENT(beforeGetSwing,	0, "Before I get swung at")
@@ -55,4 +55,3 @@ CCHAREVENT(UserButton,		0, "someone pressed one of the many gump buttons associa
 CCHAREVENT(UserClick,		0, "I got clicked on by someone")
 CCHAREVENT(UserDClick,		0, "someone has dclicked on me")
 CCHAREVENT(UserToolTip,		0, "someone did tool tips on me")
-
