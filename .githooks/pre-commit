@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fail-closed repository boundary. Never bypass with --no-verify.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+git diff --cached --check
+python3 "$ROOT/tools/check_secrets.py"
