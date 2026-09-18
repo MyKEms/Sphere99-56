@@ -750,7 +750,9 @@ void CServer::s_WriteProps( CScript &s )
 
 HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc )
 {
-	ASSERT(pSrc);
+	// SAVE can be issued by an internal/timer context without a console
+	// source; all other console commands still require one.
+	ASSERT( pSrc || iProp == M_Save );
 	switch (iProp)
 	{
 	case M_ProfileGet:
@@ -914,7 +916,10 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 				fForceImmediate = true;
 			g_World.Save( fForceImmediate, fAllowDamagedWorld );
 			if ( g_World.IsSaveBlockedByLoad() && !fAllowDamagedWorld )
-				pSrc->WriteString( "Save refused: the world load was incomplete. Use admin SAVE FORCE after review." LOG_CR );
+			{
+				if ( pSrc )
+					pSrc->WriteString( "Save refused: the world load was incomplete. Use admin SAVE FORCE after review." LOG_CR );
+			}
 		}
 		break;
 	case M_Secure:

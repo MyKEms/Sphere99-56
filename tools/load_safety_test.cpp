@@ -106,20 +106,25 @@ int main()
 		return 1;
 	}
 
-	// This must return before opening or renaming any world file.
-	g_World.Save( false );
+	// This must return before opening or renaming any world file, including
+	// when an internal caller has no console/source object to notify.
+	CGVariant vArgs;
+	CGVariant vValRet;
+	const HRESULT hSave = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL );
 	const int iRemainingEntries = CountDirectoryEntries( szTempDir );
-	const bool fSafe = g_World.m_iSaveCountID == iSaveCountBefore && iRemainingEntries == 1;
+	const bool fSafe = hSave == NO_ERROR &&
+		g_World.m_iSaveCountID == iSaveCountBefore && iRemainingEntries == 1;
 
 	unlink( sWorldPath.c_str() );
 	rmdir( szTempDir );
 	if ( !fSafe )
 	{
-		std::fprintf( stderr, "save guard allowed a save: savecount=%d entries=%d\n",
-			g_World.m_iSaveCountID, iRemainingEntries );
+		std::fprintf( stderr,
+			"NULL-source SAVE was not safely refused: hresult=%ld savecount=%d entries=%d\n",
+			(long) hSave, g_World.m_iSaveCountID, iRemainingEntries );
 		return 1;
 	}
 
-	std::printf( "load safety: broken object counted and save refused\n" );
+	std::printf( "load safety: broken object counted and NULL-source save refused\n" );
 	return 0;
 }
