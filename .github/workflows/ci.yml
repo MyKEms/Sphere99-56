@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Python syntax
-        run: python3 -m py_compile tools/*.py
+        run: python3 -m py_compile tools/*.py tools/fixtures/*.py
 
       - name: Public boundary and secret scan
         run: python3 tools/check_secrets.py --all
@@ -100,3 +100,34 @@ jobs:
 
       - name: shellcheck
         run: shellcheck tools/*.sh
+
+  fixture:
+    name: Headless synthetic fixture (32-bit Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-multilib make python3
+
+      - name: Build i386 server
+        run: make -j"$(nproc)"
+
+      - name: Generate fixture and run protocol suite
+        run: |
+          python3 tools/fixtures/make_fixture.py "$RUNNER_TEMP/sphere-fixture"
+          python3 tools/fixtures/run_suite.py \
+            "$RUNNER_TEMP/sphere-fixture" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --repo "$GITHUB_WORKSPACE" \
+            --port 2593
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-fixture-server-log
+          path: ${{ runner.temp }}/sphere-fixture/server.log
+          if-no-files-found: warn
