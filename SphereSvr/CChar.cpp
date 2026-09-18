@@ -50,6 +50,7 @@ void CScriptClassTemplate<CChar>::InitScriptClass()
 	CScriptClass::InitScriptClass();
 }
 
+
 CChar::CChar( CREID_TYPE baseID ) : CObjBase(UID_INDEX_CLEAR)
 {
 	g_Serv.StatInc( SERV_STAT_CHARS );	// Count created CChars.
@@ -2111,4 +2112,3 @@ bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 
 	return( true );
 }
-
