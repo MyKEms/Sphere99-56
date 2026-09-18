@@ -3,7 +3,7 @@
 UO Test Client — simulates ClassicUO login flow for automated testing.
 
 Usage:
-    python3 uo_test_client.py [host] [port] [account] [password]
+    python3 uo_test_client.py [host] [login_port] [account] [password] [game_port]
 
 Defaults: localhost 2593 testuser testpass
 
@@ -135,7 +135,7 @@ def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25
     return bytes(pkt)
 
 
-def game_connect(host, port, account, password):
+def game_connect(host, port, account, password, game_port=None):
     """Full login sequence, return (socket, auth_id) on game connection or (None, None)."""
     import time as _time
 
@@ -169,8 +169,9 @@ def game_connect(host, port, account, password):
     # Phase 3: Game connection
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(10.0)
+    connect_port = relay_port if game_port is None else game_port
     try:
-        sock.connect((host, relay_port))
+        sock.connect((host, connect_port))
     except Exception:
         return None, None
 
@@ -304,7 +305,7 @@ def parse_login_error(data):
     print(f"  LoginError: code={code} ({errors.get(code, 'unknown')})")
     return code
 
-def test_login(host="localhost", port=2593, account="testuser", password="testpass"):
+def test_login(host="localhost", port=2593, account="testuser", password="testpass", game_port=None):
     """Run full login test sequence."""
     print(f"\n{'='*60}")
     print(f"UO Test Client — {host}:{port} account='{account}'")
@@ -376,11 +377,12 @@ def test_login(host="localhost", port=2593, account="testuser", password="testpa
     # Phase 3: Reconnect to game server
     # Use localhost instead of relay IP (Docker)
     game_host = host
-    print(f"\n[6] Reconnecting to {game_host}:{relay_port} (game)...")
+    connect_port = relay_port if game_port is None else game_port
+    print(f"\n[6] Reconnecting to {game_host}:{connect_port} (game; relay advertised {relay_port})...")
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5.0)
     try:
-        sock.connect((game_host, relay_port))
+        sock.connect((game_host, connect_port))
     except Exception as e:
         print(f"  FAILED: {e}")
         return False
@@ -443,6 +445,7 @@ if __name__ == "__main__":
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 2593
     account = sys.argv[3] if len(sys.argv) > 3 else "testuser"
     password = sys.argv[4] if len(sys.argv) > 4 else "testpass"
+    game_port = int(sys.argv[5]) if len(sys.argv) > 5 else None
 
-    success = test_login(host, port, account, password)
+    success = test_login(host, port, account, password, game_port=game_port)
     sys.exit(0 if success else 1)
