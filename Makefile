@@ -102,16 +102,23 @@ SPHERESVR_SRC = \
 
 ALL_SRC = $(SPHERELIB_SRC) $(SPHERECOMMON_SRC) $(SPHEREACCOUNT_SRC) $(SPHERESVR_SRC)
 ALL_OBJ = $(ALL_SRC:.cpp=.o)
+ALL_DEP = $(ALL_OBJ:.o=.d)
+
+# Falling off the end of a non-void function is UB — never let it back in.
+CXXFLAGS += -Werror=return-type
 
 all: $(TARGET)
 
 $(TARGET): $(ALL_OBJ)
 	$(CXX) $(ALL_OBJ) -o $@ $(LDFLAGS)
 
+# -MMD -MP: track header dependencies, so editing a .h rebuilds its users
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 clean:
-	rm -f $(ALL_OBJ) $(TARGET)
+	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
+
+-include $(ALL_DEP)
 
 .PHONY: all clean

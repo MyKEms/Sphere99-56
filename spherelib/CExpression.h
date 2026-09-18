@@ -938,21 +938,40 @@ public:
 			}
 			return 0;
 		}
-		int val = (int)strtol(pStr, (char**)&pStr, 10);
+		// Decimal number. A '.' is skipped, not a fraction: skill values are
+		// tenths, so "30.0" is 300 and "30.5" is 305 (same as stock Sphere).
+		int val = 0;
+		for (;; pStr++)
+		{
+			if (*pStr == '.')
+				continue;
+			if (!isdigit(*pStr))
+				break;
+			val = val * 10 + (*pStr - '0');
+		}
 		return fNeg ? -val : val;
 	}
 
 	// Evaluate a simple numeric expression (right-to-left, no precedence - 0.99 behavior!)
-	int GetComplex(LPCTSTR pStr)
+	// and leave pStr at the first character that is not part of it.
+	int GetComplexAdvance(LPCTSTR& pStr)
 	{
 		if (!pStr || !*pStr) return 0;
-		LPCTSTR p = pStr;
-		int val = GetSingle(p);
-		while (*p)
+		int val = GetSingle(pStr);
+		while (*pStr)
 		{
-			while (ISWHITESPACE(*p)) p++;
-			if (!*p) break;
-			char op = *p; p++;
+			LPCTSTR pOp = pStr;
+			while (ISWHITESPACE(*pOp)) pOp++;
+			if (!*pOp) { pStr = pOp; break; }
+			char op = *pOp;
+			if (!strchr("+-*/%|&^<>!=", op) || (op == '!' && pOp[1] != '='))
+			{
+				pStr = pOp;	// not an operator: the expression ends here
+				break;
+			}
+			LPCTSTR p = pOp + 1;
+			if ((op == '>' || op == '<') && *p == op) p++;
+			else if ((op == '!' || op == '=') && *p == '=') p++;
 			int val2 = GetSingle(p);
 			switch (op)
 			{
@@ -964,24 +983,39 @@ public:
 			case '|': val = val | val2; break;
 			case '&': val = val & val2; break;
 			case '^': val = val ^ val2; break;
-			case '>': if (*p == '>') { p++; val = val >> val2; } else { val = (val > val2); } break;
-			case '<': if (*p == '<') { p++; val = val << val2; } else { val = (val < val2); } break;
-			case '!': if (*p == '=') { p++; val = (val != val2); } break;
-			case '=': if (*p == '=') { p++; } val = (val == val2); break;
-			default: return val; // unknown operator, stop
+			case '>': val = (pOp[1] == '>') ? (val >> val2) : (val > val2); break;
+			case '<': val = (pOp[1] == '<') ? (val << val2) : (val < val2); break;
+			case '!': val = (val != val2); break;
+			case '=': val = (val == val2); break;
 			}
+			pStr = p;
 		}
 		return val;
 	}
 
-	int GetComplexRef(LPCTSTR pStr) { return GetComplex(pStr); }
-	int GetValue(LPCTSTR pStr) { return GetComplex(pStr); }
-	int GetValueRef(LPCTSTR pStr) { return GetComplex(pStr); }
+	int GetComplex(LPCTSTR pStr) { return GetComplexAdvance(pStr); }
 
-	int GetIdentifierString(LPCTSTR pStr1, LPCTSTR pStr2)
+	// The *Ref variants advance the caller's pointer past the parsed
+	// expression, so "7 i_gold" yields 7 and leaves "i_gold" to parse next.
+	int GetComplexRef(LPCTSTR& pStr) { return GetComplexAdvance(pStr); }
+	int GetValue(LPCTSTR pStr) { return GetComplex(pStr); }
+	int GetValueRef(LPCTSTR& pStr) { return GetComplexAdvance(pStr); }
+
+	// Copy the identifier at the start of pszArgs into szTag; return its length.
+	int GetIdentifierString(TCHAR* szTag, LPCTSTR pszArgs)
 	{
-		if (!pStr1 || !pStr2) return 0;
-		return _stricmp(pStr1, pStr2);
+		int i = 0;
+		if (pszArgs)
+		{
+			for (; pszArgs[i] && (isalnum((unsigned char)pszArgs[i]) || pszArgs[i] == '_'); i++)
+			{
+				if (i >= EXPRESSION_MAX_KEY_LEN - 1)
+					break;
+				szTag[i] = pszArgs[i];
+			}
+		}
+		szTag[i] = '\0';
+		return i;
 	}
 
 	bool IsSimpleNumberString(LPCTSTR pStr)
