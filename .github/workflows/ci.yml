@@ -74,7 +74,8 @@ jobs:
             "$RUNNER_TEMP/sphere-asan-fixture" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --repo "$GITHUB_WORKSPACE" \
-            --port 2593
+            --port 2593 \
+            --lifetime-soak 25
 
       - name: Upload ASan fixture server log on failure
         if: failure()

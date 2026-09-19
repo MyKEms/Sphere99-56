@@ -494,6 +494,7 @@ public:
 public:
 	CONNECT_TYPE m_ConnectType;	// what sort of a connection is this ?
 	CGSocket m_Socket;			// unique socket id number
+	bool m_fDeleteQueued;		// true after DeleteThis() detached this client for end-of-tick destruction
 
 	CServTime m_timeLogin;		// World clock of login time. "LASTCONNECTTIME"
 	CServTime m_timeLastEvent;	// Last time we got event from client.
@@ -1003,6 +1004,7 @@ public:
 	int m_nClientsAreGuests;			// How many of the current clients are "guests". Not accurate !
 	int m_nClientsAreAdminTelnets;		// how many of my clients are admin consoles ?
 	CGObListType<CClient> m_Clients;		// Current list of clients (CClient)
+	CGObListType<CClient> m_ClientsPendingDelete;	// Clients detached during the current tick
 
 #ifdef _WIN32
 	CProfilerPerfMon m_Profile;	// the current active statistical profile.
@@ -1032,6 +1034,12 @@ public:
 	CClientPtr SocketsAccept( CGSocket& socket, bool fGod );
 	void SocketsFlush();
 	void SocketsClose();
+	void QueueClientForDelete( CClient* pClient );
+	void DestroyPendingClients();
+	int GetClientCount() const
+	{
+		return m_Clients.GetCount() + m_ClientsPendingDelete.GetCount();
+	}
 
 	bool Load();
 
