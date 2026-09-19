@@ -159,7 +159,7 @@ public:
 			m_LineContext = pLink->m_LineContext;
 		}
 	}
-	void SetLinkSection(CResourceScript* pScript, CScriptLineContext context)
+	virtual void SetLinkSection(CResourceScript* pScript, CScriptLineContext context)
 	{
 		m_pScript = pScript;
 		m_LineContext = context;
@@ -173,8 +173,23 @@ typedef CRefPtr<CResourceLink> CResourceLinkPtr;
 
 class CResourceTriggered : public CResourceLink
 {
+private:
+	CGStringArray m_TriggerNames;
+
 public:
 	CResourceTriggered(CSphereUID rid);
+	void CopyLink(const CResourceLink* pLink)
+	{
+		CResourceLink::CopyLink(pLink);
+		m_TriggerNames.RemoveAll();
+		const CResourceTriggered* pTrigLink = dynamic_cast<const CResourceTriggered*>(pLink);
+		if ( pTrigLink == NULL )
+			return;
+		for ( size_t i = 0; i < pTrigLink->m_TriggerNames.GetCount(); i++ )
+			m_TriggerNames.Add(pTrigLink->m_TriggerNames.GetAt(i));
+	}
+	void SetLinkSection(CResourceScript* pScript, CScriptLineContext context);
+	bool HasTriggerName(LPCTSTR pszName) const;
 
 	// Execute a trigger script from this resource.
 	// Declaration only -- implementation after CResourceLock is defined.
@@ -476,6 +491,11 @@ public:
 // Placed after CResourceLock is fully defined.
 inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& context, int iNum, LPCTSTR pszName)
 {
+	// Unknown ON=@ names are collected when the linked resource is loaded.
+	// Avoid reopening resources for names that were not present in the section.
+	if ( !HasTriggerName(pszName) )
+		return TRIGRET_RET_FALSE;
+
 	// Open the resource section for reading.
 	CResourceLock s(this);
 	if ( !s.IsFileOpen() )
@@ -506,6 +526,55 @@ inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& cont
 
 	// Execute the trigger's script block.
 	return context.ExecuteScript(s, TRIGRUN_SECTION_TRUE);
+}
+
+inline void CResourceTriggered::SetLinkSection(CResourceScript* pScript, CScriptLineContext context)
+{
+	CResourceLink::SetLinkSection(pScript, context);
+	m_TriggerNames.RemoveAll();
+
+	CResourceLock s(this);
+	if ( !s.IsFileOpen() )
+		return;
+
+	while ( s.ReadKeyParse() )
+	{
+		if ( !s.IsLineTrigger() )
+			continue;
+
+		LPCTSTR pszName = s.GetArgRaw();
+		if ( !pszName || !*pszName )
+			continue;
+		if ( *pszName == '@' )
+			pszName++;
+
+		bool fAlreadyStored = false;
+		for ( size_t i = 0; i < m_TriggerNames.GetCount(); i++ )
+		{
+			if ( !_stricmp(m_TriggerNames.GetAt(i), pszName) )
+			{
+				fAlreadyStored = true;
+				break;
+			}
+		}
+		if ( !fAlreadyStored )
+			m_TriggerNames.Add(CGString(pszName));
+	}
+}
+
+inline bool CResourceTriggered::HasTriggerName(LPCTSTR pszName) const
+{
+	if ( !pszName || !*pszName )
+		return false;
+	if ( *pszName == '@' )
+		pszName++;
+
+	for ( size_t i = 0; i < m_TriggerNames.GetCount(); i++ )
+	{
+		if ( !_stricmp(m_TriggerNames.GetAt(i), pszName) )
+			return true;
+	}
+	return false;
 }
 
 #endif // _INC_CRESOURCEBASE_H

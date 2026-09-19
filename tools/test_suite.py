@@ -607,6 +607,45 @@ def test_script_function_tables(host, port, game_port, result):
                 f"expected {expected!r}, got {actual!r} in {len(decoded)} decoded bytes",
             )
 
+        char_trigger = _find_system_message(decoded, "SPHERE_CHAR_TRIGGER ")
+        expected_char_trigger = "SPHERE_CHAR_TRIGGER TableSmoke|42|fixture-char|TableSmoke"
+        if char_trigger == expected_char_trigger:
+            result.ok("Arbitrary character trigger received SRC, ARGN, ARGS, and ARGO")
+        else:
+            result.fail(
+                "Generic character trigger",
+                f"expected {expected_char_trigger!r}, got {char_trigger!r}",
+            )
+
+        chardef_trigger = _find_system_message(decoded, "SPHERE_CHARDEF_TRIGGER ")
+        expected_chardef_trigger = "SPHERE_CHARDEF_TRIGGER TableSmoke|21|fixture-typedef|TableSmoke"
+        if chardef_trigger == expected_chardef_trigger:
+            result.ok("Arbitrary character definition trigger received SRC, ARGN, ARGS, and ARGO")
+        else:
+            result.fail(
+                "Generic character definition trigger",
+                f"expected {expected_chardef_trigger!r}, got {chardef_trigger!r}",
+            )
+
+        item_trigger = _find_system_message(decoded, "SPHERE_ITEM_TRIGGER ")
+        expected_item_trigger = "SPHERE_ITEM_TRIGGER TableSmoke|7|fixture-item|TableSmoke"
+        if item_trigger == expected_item_trigger:
+            result.ok("Arbitrary item trigger received SRC, ARGN, ARGS, and ARGO")
+        else:
+            result.fail(
+                "Generic item trigger",
+                f"expected {expected_item_trigger!r}, got {item_trigger!r}",
+            )
+
+        trigger_return = _find_system_message(decoded, "SPHERE_TRIGGER_RETURN ")
+        if trigger_return == "SPHERE_TRIGGER_RETURN 73":
+            result.ok("TRIGGER exposes the nested trigger's explicit return value")
+        else:
+            result.fail(
+                "Generic trigger return",
+                f"expected 'SPHERE_TRIGGER_RETURN 73', got {trigger_return!r}",
+            )
+
         range_message = _find_system_message(decoded, "SPHERE_RANGE_ARMOR ")
         if range_message == "SPHERE_RANGE_ARMOR 95":
             result.ok("Spawned player used CHARDEF ARMOR=5,5 for deterministic damage")

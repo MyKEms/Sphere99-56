@@ -112,6 +112,19 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 
 	// Access globals methods
 	// Get a global var ref - A key name that just links to another object.
+	// SRC is the source console's attached script object (normally its character).
+	// Returning the ref lets s_ParseEscapes resolve SRC.NAME, SRC.SERIAL, etc.
+	if ( !_stricmp(pszKey, "SRC") ||
+		(!_strnicmp(pszKey, "SRC.", 4) && pszKey[4]) )
+	{
+		CScriptConsole* pSrc = GetSrc();
+		CScriptObj* pSrcObj = pSrc ? pSrc->GetAttachedObj() : NULL;
+		if ( pSrcObj )
+		{
+			vValRet.SetRef(pSrcObj);
+			return NO_ERROR;
+		}
+	}
 
 	int iProp = s_FindKeyInTable( pszKey, sm_Functions );
 	if ( iProp < 0 )

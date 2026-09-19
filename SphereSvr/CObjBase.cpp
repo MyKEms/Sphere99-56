@@ -729,6 +729,68 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 			vValRet.SetBool( g_World.IsItemTypeNear( GetTopLevelObj()->GetTopPoint(), (IT_TYPE) vArgs.GetArrayInt(0), vArgs.GetArrayInt(1)));
 		}
 		break;
+	case M_Trigger:
+		{
+			int iArgQty = vArgs.MakeArraySize();
+			if ( iArgQty < 1 || !vArgs.GetArrayPSTR(0)[0] )
+				return HRES_BAD_ARG_QTY;
+
+			// Preserve the caller's trigger arguments unless TRIGGER overrides them.
+			CSphereThread* pThread = CSphereThread::GetCurrentThread();
+			CSphereExpArgs* pParentArgs = pThread
+				? dynamic_cast<CSphereExpArgs*>(pThread->m_pExecContext)
+				: NULL;
+			CSphereExpArgs exec(this, pSrc);
+			exec.m_iN1 = 0;
+			exec.m_iN2 = 0;
+			exec.m_iN3 = 0;
+			exec.m_pO1 = NULL;
+			exec.m_s1.Empty();
+			exec.m_vVal.SetVoid();
+			if ( pParentArgs )
+			{
+				exec.m_iN1 = pParentArgs->m_iN1;
+				exec.m_iN2 = pParentArgs->m_iN2;
+				exec.m_iN3 = pParentArgs->m_iN3;
+				exec.m_pO1 = pParentArgs->m_pO1;
+				exec.m_s1 = pParentArgs->m_s1;
+				exec.m_vVal = pParentArgs->m_vVal;
+				exec.m_ArgArray = pParentArgs->m_ArgArray;
+			}
+
+			if ( iArgQty > 1 )
+			{
+				exec.m_iN1 = vArgs.GetArrayInt(1);
+
+				// ARGV remains available as the positional arguments after the name.
+				CGVariant vTriggerArgs(vArgs);
+				vTriggerArgs.RemoveArrayElement(0);
+				exec.m_vVal = vTriggerArgs;
+			}
+			if ( iArgQty > 2 )
+				exec.m_s1 = vArgs.GetArrayPSTR(2);
+			if ( iArgQty > 3 )
+			{
+				CGVariant& vArgObj = vArgs.GetArrayElement(3);
+				CResourceObj* pArgObj = dynamic_cast<CResourceObj*>(vArgObj.GetRef());
+				CObjBasePtr pObj;
+				if ( pArgObj == NULL && !vArgObj.IsEmpty() )
+				{
+					pObj = g_World.ObjFind((UID_INDEX) vArgObj.GetInt());
+					pArgObj = dynamic_cast<CResourceObj*>((CObjBase*) pObj);
+					if ( pArgObj == NULL )
+						return HRES_INVALID_INDEX;
+				}
+				exec.m_pO1 = pArgObj;
+			}
+
+			TRIGRET_TYPE iRet = OnTrigger(vArgs.GetArrayPSTR(0), exec);
+			if ( iRet == TRIGRET_RET_VAL && !exec.m_vValRet.IsEmpty() )
+				vValRet = exec.m_vValRet;
+			else
+				vValRet.SetInt((int) iRet);
+		}
+		break;
 	case M_Hit:	//	"Amount,SourceFlags,SourceCharUid" = do me some damage.
 		{
 			int iArgQty = vArgs.MakeArraySize();
@@ -1131,4 +1193,3 @@ void CObjBase::DeleteThis()
 		g_World.m_ObjDelete.InsertHead(this); // just get added to the list of stuff to delete later.
 	}
 }
-
