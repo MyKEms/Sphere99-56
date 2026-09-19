@@ -663,6 +663,12 @@ void Sphere_ExitServer()
 	WSACleanup();
 #endif
 #endif
+
+#if !defined(_MFC_VER) && ! defined(_LIB)
+	// The explicit shutdown is complete. Keep global delete operators from
+	// updating g_Serv statistics while the singleton itself is being destroyed.
+	s_fServReady = false;
+#endif
 }
 
 SPHEREERR_TYPE Sphere_OnTick()
@@ -751,7 +757,10 @@ SPHEREERR_TYPE Sphere_MainEntryPoint( int argc, char *argv[] )
 #ifndef _WIN32
 int _cdecl main( int argc, char* argv[] )
 {
-	return Sphere_MainEntryPoint(argc, argv);
+	SPHEREERR_TYPE iExitFlag = Sphere_MainEntryPoint(argc, argv);
+	// SIGTERM requests an orderly close, not a process failure. Keep other
+	// server error statuses visible to the operating system and supervisors.
+	return ( iExitFlag == SPHEREERR_TIMED_CLOSE ) ? SPHEREERR_OK : iExitFlag;
 }
 #endif // _WIN32
 
