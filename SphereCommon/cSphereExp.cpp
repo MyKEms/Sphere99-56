@@ -3,7 +3,29 @@
 // Copyright 1996 - 2001 Menace Software (www.menasoft.com)
 //
 
-#include "stdafx.h"	// predef header.
+#include "stdafx.h"
+
+#pragma push_macro("min")
+#pragma push_macro("max")
+#undef min
+#undef max
+
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <fstream>
+#include <mutex>
+#include <string>
+#include <typeinfo>
+#include <unordered_map>
+#include <vector>
+
+#ifdef __GNUG__
+#include <cxxabi.h>
+#endif
+
+#pragma pop_macro("max")
+#pragma pop_macro("min")
 
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
@@ -29,6 +51,343 @@ CExpression* Exp_GetContext()
 		return pTask->m_pExecContext;
 	}
 	return &g_Exp;
+}
+
+namespace
+{
+	const size_t UNKNOWN_KEYWORD_REPORT_LIMIT = 1024;
+	const size_t UNKNOWN_KEYWORD_MAX_NAME = 128;
+	const size_t UNKNOWN_KEYWORD_MAX_SOURCE = 256;
+	const size_t UNKNOWN_KEYWORD_MAX_OBJECT_TYPE = 96;
+
+	struct UnknownKeywordEntry
+	{
+		std::string kind;
+		std::string keyword;
+		uint64_t count;
+		std::string firstFile;
+		int firstLine;
+		std::string firstObjectType;
+
+		UnknownKeywordEntry()
+			: count(0), firstLine(0)
+		{
+		}
+	};
+
+	struct UnknownKeywordReporter
+	{
+		std::mutex mutex;
+		std::string path;
+		std::unordered_map<std::string, UnknownKeywordEntry> entries;
+		uint64_t total;
+		uint64_t overflow;
+
+		UnknownKeywordReporter()
+			: total(0), overflow(0)
+		{
+		}
+	};
+
+	UnknownKeywordReporter g_UnknownKeywordReporter;
+	std::atomic<bool> g_UnknownKeywordReportEnabled(false);
+
+	LPCTSTR UnknownKeywordKindName(SCRIPT_UNKNOWN_KIND kind)
+	{
+		switch ( kind )
+		{
+		case SCRIPT_UNKNOWN_GET: return "get";
+		case SCRIPT_UNKNOWN_SET: return "set";
+		case SCRIPT_UNKNOWN_METHOD: return "method";
+		case SCRIPT_UNKNOWN_FUNCTION: return "function";
+		case SCRIPT_UNKNOWN_TRIGGER: return "trigger";
+		case SCRIPT_UNKNOWN_REJECTED: return "rejected";
+		default: return "unknown";
+		}
+	}
+
+	std::string NormalizeUnknownKeyword(LPCTSTR pszKeyword)
+	{
+		std::string result;
+		if ( !pszKeyword )
+			return "<EMPTY>";
+
+		for ( LPCTSTR p = pszKeyword; *p && result.size() < UNKNOWN_KEYWORD_MAX_NAME; )
+		{
+			if ( ISWHITESPACE(*p) || *p == '(' || *p == '=' )
+				break;
+
+			if ( *p == '.' )
+			{
+				result += ".*";
+				break;
+			}
+
+			if ( *p == '[' )
+			{
+				LPCTSTR pEnd = strchr(p + 1, ']');
+				if ( pEnd )
+				{
+					bool fNumericIndex = pEnd > p + 1;
+					for ( LPCTSTR pIndex = p + 1; pIndex < pEnd; ++pIndex )
+					{
+						if ( !isdigit(static_cast<unsigned char>(*pIndex)) )
+							fNumericIndex = false;
+					}
+					if ( fNumericIndex )
+					{
+						result += "[]";
+						p = pEnd + 1;
+						continue;
+					}
+				}
+			}
+
+			result += static_cast<char>(toupper(static_cast<unsigned char>(*p)));
+			++p;
+		}
+
+		if ( result.empty() )
+			return "<EMPTY>";
+		if ( result.size() > UNKNOWN_KEYWORD_MAX_NAME )
+			result.resize(UNKNOWN_KEYWORD_MAX_NAME);
+		return result;
+	}
+
+	std::string UnknownObjectType(const CScriptObj* pObj)
+	{
+		if ( !pObj )
+			return "none";
+
+		const char* pszName = typeid(*pObj).name();
+#ifdef __GNUG__
+		int iStatus = 0;
+		char* pszDemangled = abi::__cxa_demangle(pszName, NULL, NULL, &iStatus);
+		if ( iStatus == 0 && pszDemangled )
+		{
+			std::string result(pszDemangled);
+			free(pszDemangled);
+			return result.substr(0, UNKNOWN_KEYWORD_MAX_OBJECT_TYPE);
+		}
+		free(pszDemangled);
+#endif
+		return std::string(pszName ? pszName : "CScriptObj").substr(0, UNKNOWN_KEYWORD_MAX_OBJECT_TYPE);
+	}
+
+	std::string JsonEscape(const std::string& value)
+	{
+		std::string result;
+		for ( size_t i = 0; i < value.size(); ++i )
+		{
+			unsigned char ch = static_cast<unsigned char>(value[i]);
+			switch ( ch )
+			{
+			case '"': result += "\\\""; break;
+			case '\\': result += "\\\\"; break;
+			case '\b': result += "\\b"; break;
+			case '\f': result += "\\f"; break;
+			case '\n': result += "\\n"; break;
+			case '\r': result += "\\r"; break;
+			case '\t': result += "\\t"; break;
+			default:
+				if ( ch < 0x20 )
+				{
+					static const char hex[] = "0123456789abcdef";
+					result += "\\u00";
+					result += hex[(ch >> 4) & 0x0f];
+					result += hex[ch & 0x0f];
+				}
+				else
+				{
+					result += static_cast<char>(ch);
+				}
+				break;
+			}
+		}
+		return result;
+	}
+
+	std::string CsvEscape(const std::string& value)
+	{
+		if ( value.find_first_of(",\"\r\n") == std::string::npos )
+			return value;
+		std::string result = "\"";
+		for ( size_t i = 0; i < value.size(); ++i )
+		{
+			if ( value[i] == '"' )
+				result += '"';
+			result += value[i];
+		}
+		result += '"';
+		return result;
+	}
+
+	void WriteUnknownKeywordJson(
+		std::ofstream& output,
+		const std::vector<UnknownKeywordEntry>& entries,
+		uint64_t total,
+		uint64_t overflow)
+	{
+		output << "{\n  \"distinct\": " << entries.size()
+			<< ",\n  \"total\": " << total
+			<< ",\n  \"overflow\": " << overflow
+			<< ",\n  \"entries\": [";
+		for ( size_t i = 0; i < entries.size(); ++i )
+		{
+			const UnknownKeywordEntry& entry = entries[i];
+			output << (i ? ",\n" : "\n")
+				<< "    {\"kind\": \"" << JsonEscape(entry.kind)
+				<< "\", \"keyword\": \"" << JsonEscape(entry.keyword)
+				<< "\", \"count\": " << entry.count
+				<< ", \"first_file\": \"" << JsonEscape(entry.firstFile)
+				<< "\", \"first_line\": " << entry.firstLine
+				<< ", \"first_object_type\": \"" << JsonEscape(entry.firstObjectType)
+				<< "\"}";
+		}
+		if ( !entries.empty() )
+			output << '\n';
+		output << "  ]\n}\n";
+	}
+
+	void WriteUnknownKeywordCsv(
+		std::ofstream& output,
+		const std::vector<UnknownKeywordEntry>& entries,
+		uint64_t total,
+		uint64_t overflow)
+	{
+		output << "kind,keyword,count,first_file,first_line,first_object_type\n";
+		for ( size_t i = 0; i < entries.size(); ++i )
+		{
+			const UnknownKeywordEntry& entry = entries[i];
+			output << CsvEscape(entry.kind) << ','
+				<< CsvEscape(entry.keyword) << ',' << entry.count << ','
+				<< CsvEscape(entry.firstFile) << ',' << entry.firstLine << ','
+				<< CsvEscape(entry.firstObjectType) << '\n';
+		}
+		output << "overflow,*," << overflow << ",,,\n";
+		output << "total,*," << total << ",,,\n";
+	}
+}
+
+const CScript* ScriptUnknownSetContext(const CScript* pScript)
+{
+	CSphereThread* pThread = CSphereThread::GetCurrentThread();
+	return pThread ? pThread->SetScriptContext(pScript) : NULL;
+}
+
+void ScriptUnknownReportSetPath(LPCTSTR pszPath)
+{
+	std::lock_guard<std::mutex> lock(g_UnknownKeywordReporter.mutex);
+	g_UnknownKeywordReporter.path = (pszPath && *pszPath) ? pszPath : "";
+	g_UnknownKeywordReportEnabled.store(!g_UnknownKeywordReporter.path.empty(), std::memory_order_release);
+}
+
+bool ScriptUnknownReportIsEnabled()
+{
+	return g_UnknownKeywordReportEnabled.load(std::memory_order_acquire);
+}
+
+bool ScriptUnknownResultIsRejected(HRESULT hRes)
+{
+	return hRes == HRES_BAD_ARG_QTY ||
+		hRes == HRES_BAD_ARGUMENTS ||
+		hRes == HRES_INVALID_HANDLE ||
+		hRes == HRES_INVALID_INDEX ||
+		hRes == HRES_INVALID_FUNCTION;
+}
+
+void ScriptUnknownRecord(SCRIPT_UNKNOWN_KIND kind, LPCTSTR pszKeyword, const CScriptObj* pObj)
+{
+	if ( !ScriptUnknownReportIsEnabled() )
+		return;
+
+	UnknownKeywordReporter& reporter = g_UnknownKeywordReporter;
+	std::lock_guard<std::mutex> lock(reporter.mutex);
+	if ( reporter.path.empty() )
+		return;
+
+	++reporter.total;
+	std::string sKind = UnknownKeywordKindName(kind);
+	std::string sKeyword = NormalizeUnknownKeyword(pszKeyword);
+	std::string sKey = sKind + '\x1f' + sKeyword;
+	std::unordered_map<std::string, UnknownKeywordEntry>::iterator it = reporter.entries.find(sKey);
+	if ( it != reporter.entries.end() )
+	{
+		++it->second.count;
+		return;
+	}
+	if ( reporter.entries.size() >= UNKNOWN_KEYWORD_REPORT_LIMIT )
+	{
+		++reporter.overflow;
+		return;
+	}
+
+	UnknownKeywordEntry entry;
+	entry.kind = sKind;
+	entry.keyword = sKeyword;
+	entry.count = 1;
+	entry.firstObjectType = UnknownObjectType(pObj);
+	entry.firstFile = "<native>";
+	if ( entry.firstObjectType.size() > UNKNOWN_KEYWORD_MAX_OBJECT_TYPE )
+		entry.firstObjectType.resize(UNKNOWN_KEYWORD_MAX_OBJECT_TYPE);
+
+	CSphereThread* pThread = CSphereThread::GetCurrentThread();
+	if ( pThread && pThread->m_pScriptContext )
+	{
+		entry.firstFile = pThread->m_pScriptContext->GetFileTitle();
+		if ( entry.firstFile.size() > UNKNOWN_KEYWORD_MAX_SOURCE )
+			entry.firstFile.resize(UNKNOWN_KEYWORD_MAX_SOURCE);
+		entry.firstLine = pThread->m_pScriptContext->GetContext().m_iLineNum;
+	}
+	reporter.entries.insert(std::make_pair(sKey, entry));
+}
+
+bool ScriptUnknownReportWrite()
+{
+	std::string path;
+	std::vector<UnknownKeywordEntry> entries;
+	uint64_t total = 0;
+	uint64_t overflow = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_UnknownKeywordReporter.mutex);
+		path = g_UnknownKeywordReporter.path;
+		if ( path.empty() )
+			return false;
+		total = g_UnknownKeywordReporter.total;
+		overflow = g_UnknownKeywordReporter.overflow;
+		entries.reserve(g_UnknownKeywordReporter.entries.size());
+		for ( std::unordered_map<std::string, UnknownKeywordEntry>::const_iterator it =
+			g_UnknownKeywordReporter.entries.begin(); it != g_UnknownKeywordReporter.entries.end(); ++it )
+		{
+			entries.push_back(it->second);
+		}
+	}
+
+	std::sort(entries.begin(), entries.end(), [](const UnknownKeywordEntry& left, const UnknownKeywordEntry& right)
+	{
+		if ( left.kind != right.kind )
+			return left.kind < right.kind;
+		return left.keyword < right.keyword;
+	});
+
+	std::ofstream output(path.c_str(), std::ios::out | std::ios::trunc);
+	if ( !output.is_open() )
+		return false;
+
+	std::string extension;
+	size_t dot = path.find_last_of('.');
+	if ( dot != std::string::npos )
+	{
+		extension = path.substr(dot);
+		for ( size_t i = 0; i < extension.size(); ++i )
+			extension[i] = static_cast<char>(tolower(static_cast<unsigned char>(extension[i])));
+	}
+	if ( extension == ".csv" )
+		WriteUnknownKeywordCsv(output, entries, total, overflow);
+	else
+		WriteUnknownKeywordJson(output, entries, total, overflow);
+	output.close();
+	return !output.fail();
 }
 
 //***************************************************************************
@@ -215,6 +574,8 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				}
 				CGVariant vInnerRet;
 				HRESULT hRes = Function_Dispatch(szKey, vInnerArgs, vInnerRet);
+				if ( ScriptUnknownResultIsRejected(hRes) )
+					ScriptUnknownRecord(SCRIPT_UNKNOWN_REJECTED, szKey, GetBaseObject());
 				if ( hRes == NO_ERROR )
 				{
 					vValRet = vInnerRet;

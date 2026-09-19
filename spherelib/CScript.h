@@ -87,6 +87,7 @@ class CScript : public CFileText
 protected:
 	int m_iLineNum;			// current line number
 	bool m_fSectionHead;	// we just read a [section] line
+	bool m_fKeyEquals;		// current parsed key used '=' rather than whitespace
 	long m_lSectionData;	// file offset of current section data (after header)
 
 	TCHAR m_szLine[SCRIPT_MAX_LINE_LEN];	// line buffer
@@ -108,6 +109,7 @@ public:
 	LPCTSTR GetArgStr();
 	LPCTSTR GetArgRaw() { return m_pszArg ? m_pszArg : ""; }
 	TCHAR* GetArgMod() { return m_pszArg; }
+	bool WasKeyValueAssignment() const { return m_fKeyEquals; }
 	CGVariant& GetArgVar();
 	int GetArgInt();
 

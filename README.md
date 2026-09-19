@@ -147,6 +147,31 @@ make load-safety-test
 build/load-safety/load_safety_test
 ```
 
+## Runtime unresolved-keyword report
+
+Reporting is disabled unless the `[SPHERE]` section of `sphere.ini` sets a
+report path:
+
+```ini
+UNKNOWNKEYWORDREPORT=logs/unknown-keywords.json
+```
+
+The server writes the report on a clean shutdown. A path ending in `.csv`
+selects CSV; any other extension selects JSON. An administrator can write the
+current snapshot on demand with `SERV.UNKNOWNREPORT`. Writing a snapshot does
+not clear the collected counts.
+
+Each entry groups a normalized keyword by kind (`get`, `set`, `method`,
+`function`, `trigger`, or `rejected`) and includes its count and first source
+file, line, and object type. `rejected` records unresolved dispatches that
+return a bad-argument or invalid-result code. Dotted suffixes and numeric
+indexes are grouped, so `TAG.name` becomes `TAG.*` and `ARGV[3]` becomes
+`ARGV[]`. Collection retains
+at most 1,024 distinct keys; later new keys increment the `overflow` counter.
+The JSON root includes `distinct`, `total`, `overflow`, and `entries` fields.
+CSV output uses the same entry columns and ends with `overflow` and `total`
+summary rows.
+
 ## Layout
 
 ```

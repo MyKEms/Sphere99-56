@@ -69,12 +69,80 @@ jobs:
           ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: |
-          python3 tools/fixtures/make_fixture.py "$RUNNER_TEMP/sphere-asan-fixture"
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-probe" \
+            --unknown-keyword-report \
+            --unknown-keyword-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-asan-probe" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2693
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-normalization" \
+            --unknown-keyword-report \
+            --unknown-keyword-normalization-probe \
+            --unknown-keyword-set-probe \
+            --unknown-keyword-admin-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-asan-normalization" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2694 \
+            --normalization \
+            --expect-set \
+            --expect-on-demand
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-rejected" \
+            --unknown-keyword-report \
+            --unknown-keyword-rejected-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-asan-rejected" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2698 \
+            --rejected
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-disabled" \
+            --unknown-keyword-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-asan-disabled" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2695 \
+            --expect-disabled
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-csv" \
+            --unknown-keyword-report \
+            --unknown-keyword-report-format csv \
+            --unknown-keyword-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-asan-csv" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2697 \
+            --csv
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-overflow" \
+            --unknown-keyword-report \
+            --unknown-keyword-overflow-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-asan-overflow" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2696 \
+            --overflow
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-fixture" \
+            --unknown-keyword-report
           python3 tools/fixtures/run_suite.py \
             "$RUNNER_TEMP/sphere-asan-fixture" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --repo "$GITHUB_WORKSPACE" \
             --port 2593 \
+            --unknown-keyword-allowlist \
+            "$GITHUB_WORKSPACE/tools/fixtures/unknown_keyword_allowlist.json"
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-lifetime"
+          python3 tools/fixtures/run_suite.py \
+            "$RUNNER_TEMP/sphere-asan-lifetime" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --repo "$GITHUB_WORKSPACE" \
+            --port 2793 \
             --lifetime-soak 25
 
       - name: Upload ASan fixture server log on failure
@@ -82,7 +150,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: asan-fixture-server-log
-          path: ${{ runner.temp }}/sphere-asan-fixture/server.log
+          path: |
+            ${{ runner.temp }}/sphere-asan-fixture/server.log
+            ${{ runner.temp }}/sphere-asan-lifetime/server.log
           if-no-files-found: warn
 
   load-safety:
@@ -158,13 +228,74 @@ jobs:
       - name: Generate fixture and run protocol suite
         run: |
           python3 tools/fixtures/make_fixture.py \
-            "$RUNNER_TEMP/sphere-fixture" --unknown-newbie
+            "$RUNNER_TEMP/sphere-probe" \
+            --unknown-keyword-report \
+            --unknown-keyword-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-probe" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2693
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-normalization" \
+            --unknown-keyword-report \
+            --unknown-keyword-normalization-probe \
+            --unknown-keyword-set-probe \
+            --unknown-keyword-admin-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-normalization" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2694 \
+            --normalization \
+            --expect-set \
+            --expect-on-demand
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-rejected" \
+            --unknown-keyword-report \
+            --unknown-keyword-rejected-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-rejected" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2698 \
+            --rejected
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-disabled" \
+            --unknown-keyword-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-disabled" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2695 \
+            --expect-disabled
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-csv" \
+            --unknown-keyword-report \
+            --unknown-keyword-report-format csv \
+            --unknown-keyword-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-csv" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2697 \
+            --csv
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-overflow" \
+            --unknown-keyword-report \
+            --unknown-keyword-overflow-probe
+          python3 tools/fixtures/test_unknown_keyword_report.py \
+            "$RUNNER_TEMP/sphere-overflow" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2696 \
+            --overflow
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-fixture" \
+            --unknown-newbie \
+            --unknown-keyword-report
           python3 tools/fixtures/run_suite.py \
             "$RUNNER_TEMP/sphere-fixture" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --repo "$GITHUB_WORKSPACE" \
             --port 2593 \
-            --expect-invalid-newbie SYNTHETIC_UNKNOWN_SKILL
+            --expect-invalid-newbie SYNTHETIC_UNKNOWN_SKILL \
+            --unknown-keyword-allowlist \
+            "$GITHUB_WORKSPACE/tools/fixtures/unknown_keyword_allowlist.json"
 
       - name: Upload server log on failure
         if: failure()

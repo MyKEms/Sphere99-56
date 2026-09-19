@@ -126,10 +126,67 @@ def skill_sections() -> str:
     return "\n".join(sections)
 
 
-def write_scripts(root: Path, *, unknown_newbie: bool = False) -> None:
+def write_scripts(
+    root: Path,
+    *,
+    unknown_newbie: bool = False,
+    unknown_keyword_probe: bool = False,
+    unknown_keyword_set_probe: bool = False,
+    unknown_keyword_normalization_probe: bool = False,
+    unknown_keyword_overflow_probe: bool = False,
+    unknown_keyword_admin_probe: bool = False,
+    unknown_keyword_rejected_probe: bool = False,
+) -> None:
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
         if unknown_newbie
+        else ""
+    )
+    unknown_keyword_probe_lines = []
+    if (
+        unknown_keyword_probe
+        or unknown_keyword_set_probe
+        or unknown_keyword_normalization_probe
+        or unknown_keyword_admin_probe
+    ):
+        unknown_keyword_probe_lines.extend(
+            [
+                "UNKNOWN_REPORT_PROBE_COMMAND",
+                "SYSMESSAGE SPHERE_UNKNOWN_PROBE_PROPERTY <UNKNOWN_REPORT_PROBE_PROPERTY>",
+                "SYSMESSAGE SPHERE_UNKNOWN_PROBE_FUNCTION <UNKNOWN_REPORT_PROBE_FUNCTION()>",
+                "TRIGGER @UnknownReportProbe",
+            ]
+        )
+    if unknown_keyword_normalization_probe:
+        unknown_keyword_probe_lines.extend(
+            [
+                "SYSMESSAGE SPHERE_UNKNOWN_NORMALIZED_DOTTED <UNKNOWN_REPORT_DOTTED_TAG.name>",
+                "SYSMESSAGE SPHERE_UNKNOWN_NORMALIZED_INDEX <UNKNOWN_REPORT_INDEX_ARGV[3]>",
+            ]
+        )
+    if unknown_keyword_set_probe:
+        unknown_keyword_probe_lines.append("UNKNOWN_REPORT_PROBE_SET=1")
+    if unknown_keyword_admin_probe:
+        unknown_keyword_probe_lines.append("SERV.UNKNOWNREPORT")
+    if unknown_keyword_rejected_probe:
+        unknown_keyword_probe_lines.extend(
+            [
+                "ARG(unknown_report_bad_qty,one,two)",
+                "ARG(,unknown_report_bad_arguments)",
+            ]
+        )
+    if unknown_keyword_probe_lines:
+        unknown_keyword_probe_lines.append("SYSMESSAGE SPHERE_UNKNOWN_PROBE_KNOWN <EVAL 1+2>")
+    unknown_keyword_probe_script = "\n".join(unknown_keyword_probe_lines)
+    if unknown_keyword_probe_script:
+        unknown_keyword_probe_script += "\n"
+    unknown_keyword_overflow_script = (
+        "".join(
+            "SYSMESSAGE SPHERE_UNKNOWN_OVERFLOW "
+            f"<UNKNOWN_REPORT_OVERFLOW_{index:04d}>\n"
+            for index in range(1025)
+        )
+        if unknown_keyword_overflow_probe
         else ""
     )
     write_text(
@@ -211,6 +268,11 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 NEWITEM SYNTHETIC_HAIR
+""" + unknown_keyword_probe_script + unknown_keyword_overflow_script + """
+ON=@EnvironChange
+RETURN
+ON=@Logout
+RETURN 0
 ON=@FixtureCustom
 SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
@@ -257,7 +319,17 @@ ITEMNEWBIE=0x0E73
     )
 
 
-def write_runtime_files(root: Path) -> None:
+def write_runtime_files(
+    root: Path,
+    *,
+    unknown_keyword_report: bool = False,
+    unknown_keyword_report_format: str = "json",
+) -> None:
+    unknown_keyword_report_setting = (
+        f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
+        if unknown_keyword_report
+        else ""
+    )
     write_text(
         root / "sphere.ini",
         """; Disposable synthetic runtime configuration.
@@ -280,6 +352,7 @@ SAVEPERIOD=1440
 SAVEBACKGROUND=0
 CLIENTLINGER=60
 SECURE=1
+""" + unknown_keyword_report_setting + """
 
 [STARTS]
 Synthetic land
@@ -301,6 +374,47 @@ def main() -> int:
         action="store_true",
         help="include a section keyed by a nonexistent skill",
     )
+    parser.add_argument(
+        "--unknown-keyword-report",
+        action="store_true",
+        help="enable the configured runtime unknown-keyword report",
+    )
+    parser.add_argument(
+        "--unknown-keyword-report-format",
+        choices=("json", "csv"),
+        default="json",
+        help="select the report extension and output format",
+    )
+    parser.add_argument(
+        "--unknown-keyword-probe",
+        action="store_true",
+        help="include one login hook with four intentional unknown keywords",
+    )
+    parser.add_argument(
+        "--unknown-keyword-normalization-probe",
+        action="store_true",
+        help="include dotted-property and numeric-index normalization cases",
+    )
+    parser.add_argument(
+        "--unknown-keyword-set-probe",
+        action="store_true",
+        help="include one unresolved property assignment",
+    )
+    parser.add_argument(
+        "--unknown-keyword-overflow-probe",
+        action="store_true",
+        help="include 1,025 unique unresolved properties to exercise the cap",
+    )
+    parser.add_argument(
+        "--unknown-keyword-admin-probe",
+        action="store_true",
+        help="invoke SERV.UNKNOWNREPORT from the admin test account",
+    )
+    parser.add_argument(
+        "--unknown-keyword-rejected-probe",
+        action="store_true",
+        help="include bad-quantity and bad-arguments dispatch results",
+    )
     args = parser.parse_args()
 
     root = args.output.resolve()
@@ -308,8 +422,21 @@ def main() -> int:
     if any(root.iterdir()):
         parser.error(f"output directory is not empty: {root}")
 
-    write_runtime_files(root)
-    write_scripts(root, unknown_newbie=args.unknown_newbie)
+    write_runtime_files(
+        root,
+        unknown_keyword_report=args.unknown_keyword_report,
+        unknown_keyword_report_format=args.unknown_keyword_report_format,
+    )
+    write_scripts(
+        root,
+        unknown_newbie=args.unknown_newbie,
+        unknown_keyword_probe=args.unknown_keyword_probe,
+        unknown_keyword_set_probe=args.unknown_keyword_set_probe,
+        unknown_keyword_normalization_probe=args.unknown_keyword_normalization_probe,
+        unknown_keyword_overflow_probe=args.unknown_keyword_overflow_probe,
+        unknown_keyword_admin_probe=args.unknown_keyword_admin_probe,
+        unknown_keyword_rejected_probe=args.unknown_keyword_rejected_probe,
+    )
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0

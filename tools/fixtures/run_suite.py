@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import socket
 import subprocess
@@ -103,6 +104,145 @@ def newbie_load_failures(
     return failures
 
 
+def unknown_keyword_failures(report: dict, allowlist: dict) -> list[str]:
+    """Require a valid report containing only explicitly allowlisted hits."""
+
+    if not isinstance(report, dict):
+        return ["unknown-keyword report root must be an object"]
+    if not isinstance(allowlist, dict):
+        return ["unknown-keyword allowlist root must be an object"]
+
+    failures = []
+    report_entries = report.get("entries")
+    allowed_entries = allowlist.get("entries")
+    if not isinstance(report_entries, list):
+        return ["unknown-keyword report has no entries array"]
+    if not isinstance(allowed_entries, list):
+        return ["unknown-keyword allowlist has no entries array"]
+
+    observed = {}
+    for entry in report_entries:
+        if not isinstance(entry, dict):
+            failures.append(f"invalid unknown-keyword report entry: {entry!r}")
+            continue
+        key = (entry.get("kind"), entry.get("keyword"))
+        if not isinstance(key[0], str) or not isinstance(key[1], str):
+            failures.append(f"invalid key in unknown-keyword report: {key!r}")
+            continue
+        if key in observed:
+            failures.append(f"duplicate unknown-keyword report key: {key!r}")
+        count = entry.get("count")
+        if type(count) is not int or count < 1:
+            failures.append(f"invalid count for unknown-keyword report key {key!r}: {count!r}")
+        observed[key] = entry
+
+    allowed = {}
+    for entry in allowed_entries:
+        if not isinstance(entry, dict):
+            failures.append(f"invalid unknown-keyword allowlist entry: {entry!r}")
+            continue
+        key = (entry.get("kind"), entry.get("keyword"))
+        if not isinstance(key[0], str) or not isinstance(key[1], str):
+            failures.append(f"invalid key in unknown-keyword allowlist: {key!r}")
+            continue
+        if not isinstance(entry.get("optional", False), bool):
+            failures.append(f"invalid optional flag for allowlisted key {key!r}")
+        count = entry.get("count")
+        count_range = entry.get("count_range")
+        if count is not None:
+            if type(count) is not int or count < 1:
+                failures.append(f"invalid allowlisted count for {key!r}: {count!r}")
+        elif (
+            not isinstance(count_range, list)
+            or len(count_range) != 2
+            or type(count_range[0]) is not int
+            or type(count_range[1]) is not int
+            or count_range[0] < 1
+            or count_range[1] < count_range[0]
+        ):
+            failures.append(
+                f"invalid allowlisted count range for {key!r}: {count_range!r}"
+            )
+        if count is None and count_range is None:
+            failures.append(
+                f"allowlisted key {key!r} requires count or count_range"
+            )
+        elif count is not None and count_range is not None:
+            failures.append(
+                f"allowlisted key {key!r} cannot set both count and count_range"
+            )
+        if key in allowed:
+            failures.append(f"duplicate unknown-keyword allowlist key: {key!r}")
+        allowed[key] = entry
+
+    unexpected = sorted(set(observed) - set(allowed), key=repr)
+    missing = sorted(
+        (
+            key
+            for key in set(allowed) - set(observed)
+            if not allowed[key].get("optional", False)
+        ),
+        key=repr,
+    )
+    if unexpected:
+        failures.append(f"unexpected unknown-keyword keys: {unexpected!r}")
+    if missing:
+        failures.append(f"allowlisted unknown-keyword keys were not observed: {missing!r}")
+    for key in sorted(set(observed) & set(allowed), key=repr):
+        actual = observed[key].get("count")
+        expected = allowed[key].get("count")
+        if expected is not None and actual != expected:
+            failures.append(
+                f"unknown-keyword count for {key!r} was {actual!r}; expected {expected!r}"
+            )
+        elif expected is None:
+            count_range = allowed[key].get("count_range")
+            if (
+                isinstance(count_range, list)
+                and len(count_range) == 2
+                and type(count_range[0]) is int
+                and type(count_range[1]) is int
+                and type(actual) is int
+                and (actual < count_range[0] or actual > count_range[1])
+            ):
+                failures.append(
+                    f"unknown-keyword count for {key!r} was {actual!r}; "
+                    f"expected count {count_range[0]}..{count_range[1]}"
+                )
+
+    overflow = report.get("overflow")
+    if type(overflow) is not int or overflow < 0:
+        failures.append(f"invalid unknown-keyword overflow counter: {overflow!r}")
+    elif overflow:
+        failures.append(f"unknown-keyword report overflowed by {overflow} hit(s)")
+
+    distinct = report.get("distinct")
+    if type(distinct) is not int or distinct < 0:
+        failures.append(f"invalid unknown-keyword distinct counter: {distinct!r}")
+    elif distinct != len(report_entries):
+        failures.append(
+            f"unknown-keyword distinct count was {distinct!r}; "
+            f"expected {len(report_entries)}"
+        )
+    total = report.get("total")
+    entry_total = sum(
+        entry.get("count", 0)
+        for entry in report_entries
+        if isinstance(entry, dict) and type(entry.get("count")) is int
+    )
+    expected_total = entry_total + (
+        overflow if type(overflow) is int and overflow >= 0 else 0
+    )
+    if type(total) is not int or total < 0:
+        failures.append(f"invalid unknown-keyword total counter: {total!r}")
+    elif total != expected_total:
+        failures.append(
+            f"unknown-keyword total was {total!r}; "
+            f"entries and overflow add to {expected_total}"
+        )
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -117,6 +257,12 @@ def main() -> int:
         default=[],
         metavar="SECTION",
         help="expect this exact invalid NEWBIE section name in the server log",
+    )
+    parser.add_argument(
+        "--unknown-keyword-allowlist",
+        type=Path,
+        metavar="JSON",
+        help="fail on any runtime unresolved keyword outside this checked-in allowlist",
     )
     parser.add_argument(
         "--lifetime-soak",
@@ -220,6 +366,26 @@ def main() -> int:
         failures.append(f"server shutdown check failed: {shutdown_error}")
     failures.extend(shutdown_failures(server_returncode, log_contents))
     failures.extend(newbie_load_failures(log_contents, tuple(args.expect_invalid_newbie)))
+
+    if args.unknown_keyword_allowlist:
+        report_path = fixture / "logs" / "unknown-keywords.json"
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except OSError as error:
+            failures.append(f"unknown-keyword report is missing or unreadable: {error}")
+        except json.JSONDecodeError as error:
+            failures.append(f"unknown-keyword report is not valid JSON: {error}")
+        else:
+            try:
+                allowlist = json.loads(
+                    args.unknown_keyword_allowlist.resolve().read_text(encoding="utf-8")
+                )
+            except OSError as error:
+                failures.append(f"unknown-keyword allowlist is missing or unreadable: {error}")
+            except json.JSONDecodeError as error:
+                failures.append(f"unknown-keyword allowlist is not valid JSON: {error}")
+            else:
+                failures.extend(unknown_keyword_failures(report, allowlist))
 
     if failures:
         print("synthetic fixture run failed:", file=sys.stderr)
