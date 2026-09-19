@@ -479,7 +479,7 @@ inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& cont
 	// Open the resource section for reading.
 	CResourceLock s(this);
 	if ( !s.IsFileOpen() )
-		return TRIGRET_RET_DEFAULT;
+		return TRIGRET_RET_FALSE;
 
 	// Try to find the trigger in this section.
 	// First try by name if we have one.
@@ -502,7 +502,7 @@ inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& cont
 	}
 
 	if ( !fFound )
-		return TRIGRET_RET_DEFAULT;
+		return TRIGRET_RET_FALSE;
 
 	// Execute the trigger's script block.
 	return context.ExecuteScript(s, TRIGRUN_SECTION_TRUE);
