@@ -31,6 +31,18 @@ enum SK_TYPE
 	SK_QTY
 };
 
+// CVarDefArray stores allocated CVarDef values but does not own them. ARG
+// locals are context-owned, so release them with the execution context.
+class CScriptLocalArgs : public CVarDefArray
+{
+public:
+	~CScriptLocalArgs()
+	{
+		for ( int i = 0; i < GetSize(); ++i )
+			delete GetAt(i);
+	}
+};
+
 class CScriptExecContext : public CExpression
 {
 private:
@@ -74,6 +86,9 @@ public:
 public:
 	CGVariant m_vValRet;
 	CVarDefArray m_ArgArray;
+	// Named ARG variables belong to this function/trigger execution context.
+	// Nested contexts get fresh storage and discard it on return.
+	CScriptLocalArgs m_LocalArgs;
 
 	CScriptExecContext(CScriptObj* pObj, CScriptConsole* pConsole)
 		: m_pBaseObj(pObj), m_pSrc(pConsole)
@@ -83,9 +98,85 @@ public:
 public:
 	virtual HRESULT Function_Dispatch(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet)
 	{
-		// Base exec context has no special function table.
-		// Subclasses override this for global methods (CSphereExpContext).
+		if ( !_stricmp(pszKey, "ARG") )
+		{
+			int iArgQty = vArgs.MakeArraySize();
+			if ( iArgQty < 1 || iArgQty > 2 )
+				return HRES_BAD_ARG_QTY;
+
+			LPCTSTR pszName = vArgs.GetArrayPSTR(0);
+			if ( !pszName || !*pszName )
+				return HRES_BAD_ARGUMENTS;
+
+			if ( iArgQty == 2 )
+			{
+				LPCTSTR pszValue = vArgs.GetArrayPSTR(1);
+				m_LocalArgs.SetKeyStr(pszName, pszValue ? pszValue : "");
+			}
+			if ( !m_LocalArgs.FindKeyVar(pszName, vValRet) )
+				vValRet.SetStr("");
+			return NO_ERROR;
+		}
+		if ( !_strnicmp(pszKey, "ARG.", 4) )
+		{
+			LPCTSTR pszName = pszKey + 4;
+			if ( !*pszName )
+				return HRES_BAD_ARGUMENTS;
+			if ( !m_LocalArgs.FindKeyVar(pszName, vValRet) )
+				vValRet.SetStr("");
+			return NO_ERROR;
+		}
+
+		// Subclasses override this for additional functions.
 		return HRES_UNKNOWN_PROPERTY;
+	}
+
+	int GetScriptExpression(TCHAR* pszArg)
+	{
+		if ( !pszArg || !*pszArg )
+			return 0;
+
+		// Control-flow expressions and RETURN values need the same macro
+		// expansion as ordinary command arguments.
+		s_ParseEscapes(pszArg, 0);
+
+		TCHAR* pszExpr = pszArg;
+		while ( ISWHITESPACE(*pszExpr) ) pszExpr++;
+		TCHAR* pszEnd = pszExpr + strlen(pszExpr);
+		while ( pszEnd > pszExpr && ISWHITESPACE(pszEnd[-1]) )
+			*--pszEnd = '\0';
+
+		// Sphere conditions are commonly wrapped in one pair of parentheses.
+		// The numeric expression reader accepts the expression inside them.
+		if ( pszExpr < pszEnd && *pszExpr == '(' && pszEnd[-1] == ')' )
+		{
+			int iDepth = 0;
+			bool fOuterParens = true;
+			for ( TCHAR* p = pszExpr; p < pszEnd; ++p )
+			{
+				if ( *p == '(' )
+					++iDepth;
+				else if ( *p == ')' )
+				{
+					if ( --iDepth == 0 && p != pszEnd - 1 )
+					{
+						fOuterParens = false;
+						break;
+					}
+					if ( iDepth < 0 )
+					{
+						fOuterParens = false;
+						break;
+					}
+				}
+			}
+			if ( fOuterParens && iDepth == 0 )
+			{
+				pszEnd[-1] = '\0';
+				++pszExpr;
+			}
+		}
+		return GetComplex(pszExpr);
 	}
 
 	void SetBaseObject(CScriptObj* pObj)
@@ -528,6 +619,34 @@ public:
 		if ( !*pszCmd || *pszCmd == '/' )
 			return NO_ERROR; // blank or comment
 
+		// ARG(name,value) is a statement as well as an expression.  The usual
+		// command splitter treats its whole parenthesized form as the key, so
+		// route this one function-style statement through the active context.
+		if ( !_strnicmp(pszCmd, "ARG(", 4) )
+		{
+			LPCTSTR pszClose = strrchr(pszCmd, ')');
+			if ( pszClose )
+			{
+				LPCTSTR pszTail = pszClose + 1;
+				while ( ISWHITESPACE(*pszTail) ) pszTail++;
+				if ( !*pszTail )
+				{
+					size_t iArgsLen = pszClose - (pszCmd + 4);
+					TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+					if ( iArgsLen >= sizeof(szArgs) )
+						return HRES_BAD_ARGUMENTS;
+					memcpy(szArgs, pszCmd + 4, iArgsLen);
+					szArgs[iArgsLen] = '\0';
+					s_ParseEscapes(szArgs, 0);
+					CGVariant vArgs(szArgs);
+					CGVariant vValRet;
+					HRESULT hRes = Function_Dispatch("ARG", vArgs, vValRet);
+					if ( hRes != HRES_UNKNOWN_PROPERTY )
+						return hRes;
+				}
+			}
+		}
+
 		// Split into key and arg at first space or '='
 		TCHAR szLine[SCRIPT_MAX_LINE_LEN];
 		strncpy(szLine, pszCmd, sizeof(szLine) - 1);
@@ -824,7 +943,7 @@ public:
 					LPCTSTR pszArg = script.GetArgRaw();
 					if ( pszArg && *pszArg )
 					{
-						int iVal = GetComplex(pszArg);
+						int iVal = GetScriptExpression(script.GetArgMod());
 						m_vValRet.SetInt(iVal);
 						return (TRIGRET_TYPE) iVal;
 					}
@@ -837,7 +956,7 @@ public:
 					LPCTSTR pszArg = script.GetArgRaw();
 					int fCondition = 0;
 					if ( pszArg && *pszArg )
-						fCondition = GetComplex(pszArg);
+						fCondition = GetScriptExpression(script.GetArgMod());
 					bool fBeenTrue = false;
 
 					for (;;)
@@ -855,7 +974,7 @@ public:
 						else if ( iRet == TRIGRET_ELSEIF )
 						{
 							LPCTSTR pszElseArg = script.GetArgRaw();
-							fCondition = (pszElseArg && *pszElseArg) ? GetComplex(pszElseArg) : 0;
+							fCondition = (pszElseArg && *pszElseArg) ? GetScriptExpression(script.GetArgMod()) : 0;
 						}
 					}
 				}
@@ -865,21 +984,25 @@ public:
 				{
 					// WHILE <condition>
 					CScriptLineContext ctxStart = script.GetContext();
+					TCHAR szCondition[SCRIPT_MAX_LINE_LEN];
+					strncpy(szCondition, script.GetArgRaw(), sizeof(szCondition)-1);
+					szCondition[sizeof(szCondition)-1] = '\0';
 					int iLoops = 0;
 					for (;;)
 					{
 						if ( ++iLoops > 10000 )
 							break; // safety limit
 
-						// Re-evaluate condition each iteration.
-						// The condition is in the arg of the WHILE line.
-						// We need to seek back to re-read it each time.
-						// For now, use a simplified approach: first iteration uses current arg,
-						// subsequent iterations re-seek and re-read.
-						LPCTSTR pszArg = script.GetArgRaw();
-						int fCond = (pszArg && *pszArg) ? GetComplex(pszArg) : 0;
+						// Re-expand the original condition so changed local values are seen.
+						TCHAR szConditionEval[SCRIPT_MAX_LINE_LEN];
+						strncpy(szConditionEval, szCondition, sizeof(szConditionEval)-1);
+						szConditionEval[sizeof(szConditionEval)-1] = '\0';
+						int fCond = GetScriptExpression(szConditionEval);
 						if ( !fCond )
+						{
+							iRet = TRIGRET_ENDIF;
 							break;
+						}
 
 						iRet = ExecuteScript(script, TRIGRUN_SECTION_TRUE);
 						if ( iRet == TRIGRET_BREAK )
@@ -889,12 +1012,10 @@ public:
 						script.SeekContext(ctxStart);
 					}
 					// Skip past the ENDWHILE if we didn't enter / broke out.
-					if ( iLoops <= 1 || iRet == TRIGRET_BREAK )
+					if ( iRet == TRIGRET_BREAK || script.GetContext().m_lOffset <= ctxStart.m_lOffset )
 					{
 						// Need to skip the block.
-						CScriptLineContext ctxNow = script.GetContext();
-						if ( ctxNow.m_lOffset <= ctxStart.m_lOffset )
-							ExecuteScript(script, TRIGRUN_SECTION_FALSE);
+						ExecuteScript(script, TRIGRUN_SECTION_FALSE);
 					}
 				}
 				break;

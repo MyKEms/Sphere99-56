@@ -681,6 +681,22 @@ def test_script_function_tables(host, port, game_port, result):
                 "CHARDEF range on spawned player",
                 f"expected 'SPHERE_RANGE_ARMOR 95', got {range_message!r}",
             )
+
+        arg_local_expectations = (
+            ("SPHERE_ARG_SET ", "SPHERE_ARG_SET 30|30|5", "ARG(name,value) expression setter"),
+            ("SPHERE_ARG_MACRO ", "SPHERE_ARG_MACRO 31|31", "ARG setter in deferred macro"),
+            ("SPHERE_ARG_FUNCTION ", "SPHERE_ARG_FUNCTION 10|5", "Function locals do not leak into trigger scope"),
+            ("SPHERE_ARG_NESTED ", "SPHERE_ARG_NESTED 20|10|END", "Nested function locals shadow without leaking"),
+            ("SPHERE_ARG_FLOW ", "SPHERE_ARG_FLOW 1|1", "ARG locals work in IF and WHILE"),
+            ("SPHERE_ARG_LENGTH ", "SPHERE_ARG_LENGTH 5", "ARG property works as another function argument"),
+            ("SPHERE_ARG_DEFAULT ", "SPHERE_ARG_DEFAULT []", "Unset ARG locals default to an empty value"),
+        )
+        for prefix, expected_arg, test_name in arg_local_expectations:
+            actual_arg = _find_system_message(decoded, prefix)
+            if actual_arg == expected_arg:
+                result.ok(test_name)
+            else:
+                result.fail(test_name, f"expected {expected_arg!r}, got {actual_arg!r}")
     except Exception as error:
         result.fail("Script function tables", str(error))
     finally:
