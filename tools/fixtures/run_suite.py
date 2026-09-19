@@ -75,6 +75,34 @@ def shutdown_failures(returncode: Optional[int], log_contents: str) -> list[str]
     return failures
 
 
+def newbie_load_failures(
+    log_contents: str, expected_sections: tuple[str, ...] = ()
+) -> list[str]:
+    invalid_sections = [
+        line for line in log_contents.splitlines()
+        if "Invalid NEWBIE block index" in line
+    ]
+    invalid_names = []
+    unparsed_lines = []
+    for line in invalid_sections:
+        match = re.search(r"Invalid NEWBIE block index '([^']+)'", line)
+        if match:
+            invalid_names.append(match.group(1))
+        else:
+            unparsed_lines.append(line)
+    if invalid_names == list(expected_sections) and not unparsed_lines:
+        return []
+    failures = [
+        f"server log contains {len(invalid_sections)} invalid NEWBIE block index "
+        f"error(s) with names {invalid_names!r}; "
+        f"expected {list(expected_sections)!r}"
+    ]
+    failures.extend(f"  {line}" for line in invalid_sections[:20])
+    if len(invalid_sections) > 20:
+        failures.append(f"  ... {len(invalid_sections) - 20} more error(s)")
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -83,6 +111,13 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2593)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--expect-invalid-newbie",
+        action="append",
+        default=[],
+        metavar="SECTION",
+        help="expect this exact invalid NEWBIE section name in the server log",
+    )
     parser.add_argument(
         "--lifetime-soak",
         type=int,
@@ -184,6 +219,7 @@ def main() -> int:
     if shutdown_error:
         failures.append(f"server shutdown check failed: {shutdown_error}")
     failures.extend(shutdown_failures(server_returncode, log_contents))
+    failures.extend(newbie_load_failures(log_contents, tuple(args.expect_invalid_newbie)))
 
     if failures:
         print("synthetic fixture run failed:", file=sys.stderr)
