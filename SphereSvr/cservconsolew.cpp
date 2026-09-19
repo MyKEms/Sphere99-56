@@ -959,7 +959,7 @@ void CServConsole::Exit()
 	theApp.m_wndMain.DestroyWindow();
 }
 
-void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg2 )
+void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, uintptr_t dwArg1, uintptr_t dwArg2 )
 {
 	// set the title to reflect mode.
 	if ( theApp.m_wndMain.m_hWnd == NULL )
@@ -970,8 +970,8 @@ void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg
 	{
 	case SERVTRIG_ServerMsg:
 	case SERVTRIG_Startup:
-		SetMessageColorType( dwArg2 );
-		WriteString( (LPCSTR) dwArg1 );
+		SetMessageColorType( static_cast<int>(dwArg2) );
+		WriteString( reinterpret_cast<LPCSTR>(dwArg1) );
 		return;
 	case SERVTRIG_ClientAttach:
 	case SERVTRIG_ClientChange:
@@ -986,7 +986,7 @@ void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg
 	case SERVTRIG_GarbageStatus:
 	case SERVTRIG_SaveStatus:
 	case SERVTRIG_TestStatus:
-		sStatus.Format( "%d%%", MulDiv( dwArg1, 100, dwArg2 ));
+		sStatus.Format( "%d%%", MulDiv( static_cast<int>(dwArg1), 100, static_cast<int>(dwArg2) ));
 		// fall thru...
 
 	case SERVTRIG_ModeChange:

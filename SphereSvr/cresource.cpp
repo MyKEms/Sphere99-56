@@ -2393,7 +2393,11 @@ void CResourceMgr::AddResourceFile(LPCTSTR pszFile)
 			return;
 	}
 
-	CResourceScript* pNewScript = new CResourceScript;
+	// The collection is stored as CResourceScript pointers for shared
+	// ownership, but its public accessors return CResourceFile pointers.  Keep
+	// the concrete type consistent with that API; allocating the base class
+	// here makes the old static_cast in GetResourceFile undefined behaviour.
+	CResourceScript* pNewScript = new CResourceFile;
 	ASSERT(pNewScript);
 	pNewScript->SetFilePath(sFullPath);
 	m_ResourceFiles.Add(pNewScript);

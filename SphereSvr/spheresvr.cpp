@@ -125,11 +125,14 @@ SPHERE_TITLE " TEST Version " SPHERE_VERSION " "
 #endif
 " by " SPHERE_URL;
 
-// game servers stuff.
+// game servers stuff.  The resource manager must be constructed before the
+// singleton server: CServerDef::SetName() consults g_Cfg while g_Serv is
+// being initialized, and ASan/UBSan correctly reject the old order.
+CServConsole g_ServConsole;
+CSphereResourceMgr g_Cfg;
 CWorld		g_World;	// the world. (we save this stuff)
 CServer		g_Serv;	// current state stuff not saved.
 CServerDef*	g_pServ = &g_Serv;
-CSphereResourceMgr g_Cfg;
 CResourceMgr* g_pCfg = &g_Cfg;
 CServTask	g_ServTask;
 CBackTask	g_BackTask;
@@ -137,7 +140,6 @@ CMainTask	g_MainTask;
 CLog		g_Log;
 CLogBase*	g_pLog = &g_Log;
 CAccountMgr	g_Accounts;	// All the player accounts. name sorted CAccount
-CServConsole g_ServConsole;
 
 #if defined(_WIN32) && ! defined(_LIB)
 CSphereService g_NTService;
@@ -250,14 +252,14 @@ extern "C"
 		// id = 0xc0000094 for divide by zero.
 		// STATUS_ACCESS_VIOLATION is 0xC0000005.
 
-		DWORD dwCodeStart = (DWORD)(BYTE *) &globalstartsymbol;	// sync up to my MAP file.
+	uintptr_t dwCodeStart = reinterpret_cast<uintptr_t>(&globalstartsymbol);	// sync up to my MAP file.
 #ifdef _DEBUG
 		// NOTE: This value is not accurate for some stupid reason. (only in debug versions)
 		//dwCodeStart += 0x06d40;	// no idea why i have to do this.
 #endif
 		//	_asm mov dwCodeStart, CODE
 
-		DWORD dwAddr = (DWORD)( pData->ExceptionRecord->ExceptionAddress );
+		uintptr_t dwAddr = reinterpret_cast<uintptr_t>(pData->ExceptionRecord->ExceptionAddress);
 		dwAddr -= dwCodeStart;
 #ifdef _DEBUG
 		dwAddr += 0x0a450;	// so it will match the most recent map file. DEBUG only !
@@ -349,6 +351,20 @@ void _cdecl operator delete[]( void* pThis ) noexcept
 	{
 		g_Serv.StatDec(SERV_STAT_ALLOCS);
 	}
+}
+
+// C++14 and later may select the sized delete overload for objects allocated
+// by the global operator new.  Keep it paired with the malloc-backed
+// overloads above; otherwise libstdc++'s default sized delete would receive a
+// pointer that was not allocated by its matching operator new.
+void _cdecl operator delete( void* pThis, size_t ) noexcept
+{
+	operator delete( pThis );
+}
+
+void _cdecl operator delete[]( void* pThis, size_t ) noexcept
+{
+	operator delete[]( pThis );
 }
 
 #endif	// _MFC_VER
@@ -608,7 +624,7 @@ SPHEREERR_TYPE Sphere_InitServer( int argc, char *argv[] )
 	g_Log.Event( LOG_GROUP_INIT, LOGL_TRACE, g_Serv.GetStatusString( 0x24 ));
 	g_Log.Event( LOG_GROUP_INIT, LOGL_TRACE, _TEXT("Startup complete. items=%d, chars=%d" LOG_CR), g_Serv.StatGet(SERV_STAT_ITEMS), g_Serv.StatGet(SERV_STAT_CHARS));
 
-	g_Serv.OnTriggerEvent( SERVTRIG_Startup, (DWORD) ( "Press '?' for console commands" LOG_CR ), 0 );
+	g_Serv.OnTriggerEvent( SERVTRIG_Startup, reinterpret_cast<uintptr_t>("Press '?' for console commands" LOG_CR), 0 );
 
 	return( SPHEREERR_OK );
 }

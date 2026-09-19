@@ -185,7 +185,7 @@ bool CServConsole::OnTick( int iWaitmSec )
 	return true;
 }
 
-void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg2 )
+void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, uintptr_t dwArg1, uintptr_t dwArg2 )
 {
 	CGString sStatus;
 
@@ -193,14 +193,14 @@ void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg
 	{
 	case SERVTRIG_ServerMsg:
 	case SERVTRIG_Startup:
-		SetMessageColorType( dwArg2 );
-		WriteString( (LPCSTR) dwArg1 );
+		SetMessageColorType( static_cast<int>(dwArg2) );
+		WriteString( reinterpret_cast<LPCSTR>(dwArg1) );
 		return;
 	case SERVTRIG_LoadStatus:
 	case SERVTRIG_TestStatus:
 	case SERVTRIG_GarbageStatus:
 	case SERVTRIG_SaveStatus:
-		sStatus.Format( "%d%%", MulDiv( dwArg1, 100, dwArg2 ));
+		sStatus.Format( "%d%%", MulDiv( static_cast<int>(dwArg1), 100, static_cast<int>(dwArg2) ));
 
 	case SERVTRIG_ModeChange:
 #ifdef _WIN32
@@ -218,4 +218,3 @@ void CServConsole::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg
 }
 
 #endif	// _CONSOLE
-

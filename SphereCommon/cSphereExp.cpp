@@ -128,7 +128,7 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( ! sFunction.IsFileOpen())
 				return( HRES_INVALID_HANDLE );
 			// create a new sub-context with new args.
-			CSphereExpArgs exec( GetBaseObject(), GetSrc(), vArgs );
+			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs );
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
 			vValRet = exec.m_vValRet;
 			return( NO_ERROR );
