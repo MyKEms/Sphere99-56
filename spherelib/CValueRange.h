@@ -80,7 +80,7 @@ public:
 	}
 	BYTE GetAvg() const
 	{
-		return (m_iHi - m_iLo) / 2;
+		return static_cast<BYTE>(m_iLo + (m_iHi - m_iLo) / 2);
 	}
 	BYTE GetMin() const { return m_iLo; }
 	BYTE GetMax() const { return m_iHi; }

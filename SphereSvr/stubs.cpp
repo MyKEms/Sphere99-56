@@ -16,14 +16,15 @@ CScriptClass CContainer::sm_ScriptClass;
 CScriptClass CSphereResourceMgr::sm_ScriptClass;
 CScriptClass CWorld::sm_ScriptClass;
 
-// CContainer::s_FindMyMethodKey - not implemented via CSCRIPT_CLASS_IMP
+// CContainer's method table is registered manually because it has no property
+// table; keep the lookup in sync with the table used by CScript dispatch.
 int CContainer::s_FindMyMethodKey(LPCTSTR pszKey)
 {
-	return -1; // STUB: no methods found
+	return pszKey ? s_FindKeyInTable(pszKey, CContainer::sm_Methods) : -1;
 }
 
-// CWorld::s_FindMyPropKey
+// CWorld's property table is likewise registered manually.
 int CWorld::s_FindMyPropKey(LPCTSTR pszKey)
 {
-	return -1; // STUB: no props found
+	return pszKey ? s_FindKeyInTable(pszKey, CWorld::sm_Props) : -1;
 }

@@ -176,10 +176,16 @@ load-safety-test:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_LOAD_SAFETY_TEST" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
+value-range-test:
+	$(MAKE) BUILD_DIR=build/value-range TARGET=build/value-range/value_range_test \
+		TEST_SRC=tools/value_range_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_VALUE_RANGE_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test clean
