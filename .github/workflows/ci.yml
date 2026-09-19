@@ -157,12 +157,14 @@ jobs:
 
       - name: Generate fixture and run protocol suite
         run: |
-          python3 tools/fixtures/make_fixture.py "$RUNNER_TEMP/sphere-fixture"
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-fixture" --unknown-newbie
           python3 tools/fixtures/run_suite.py \
             "$RUNNER_TEMP/sphere-fixture" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --repo "$GITHUB_WORKSPACE" \
-            --port 2593
+            --port 2593 \
+            --expect-invalid-newbie SYNTHETIC_UNKNOWN_SKILL
 
       - name: Upload server log on failure
         if: failure()
