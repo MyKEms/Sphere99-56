@@ -11,10 +11,10 @@
 | crash debugging, sanitizers | `README.md` (debug and ASan sections), `make debug`, `make asan` |
 | CI-equivalent local run | `tools/fixtures/make_fixture.py` + `tools/fixtures/run_suite.py` (see `CLAUDE.md`) |
 
-## Coordination
+## Contributing workflow
 
-- Work items are GitHub issues in this repository. The pinned issue **#5** holds the working agreement and the current priority queue. Read it, including its latest comments, before choosing work.
-- One issue → one new branch (`fix/<issue>-<slug>`) → one PR. Never add commits to a branch whose PR is already merged.
-- Every PR body states the root cause, the fix and the test evidence: exact commands, pass counts and fixture type. A client-facing fix needs a test that fails without it.
-- Merge with `gh pr merge <n> --rebase` after CI is green. Commit authors and committers must use the noreply address; do not add `Co-Authored-By` trailers.
+- One change → one branch → one pull request. Never add commits to a branch whose PR is already merged.
+- The PR body states the root cause, the fix and the test evidence (exact commands, pass counts, fixture type). A client-facing fix needs a test that fails without it.
+- PR titles, bodies, commit messages and code comments describe the technical change only; they never reference external trackers, deployments or data.
+- Merge with `gh pr merge <n> --rebase` after CI is green. Commit authors and committers use the noreply address; do not add `Co-Authored-By` trailers.
 - Crash-safety and sanitizer findings come before new features.
