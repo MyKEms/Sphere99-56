@@ -197,6 +197,10 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
+ARG(trigger_value,5)
+SYSMESSAGE SPHERE_ARG_SET <ARG(value,30)>|<ARG.value>|<ARG.trigger_value>
+SYSMESSAGE SPHERE_ARG_MACRO <?ARG(macro_value,31)?>|<ARG.macro_value>
+SYSMESSAGE SPHERE_ARG_FUNCTION <f_arg_local_outer>|<ARG.trigger_value>
 SYSMESSAGE SPHERE_TABLE_SMOKE <EVAL 1+2>|<STRLEN abc>|<RAND 1>|<ISNUM 123>|<STRCMP abc,abc>
 SYSMESSAGE SPHERE_NEWBIE_MAGERY <RESCOUNT(0x0E72)>
 SYSMESSAGE SPHERE_NEWBIE_RESIST <RESCOUNT(0x0E73)>
@@ -212,6 +216,29 @@ SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
 ON=@FixtureReturn
 RETURN 73
+
+[FUNCTION f_arg_local_inner]
+ARG(value,20)
+ARG(child_only,99)
+RETURN <ARG.value>
+
+[FUNCTION f_arg_local_outer]
+ARG(value,10)
+ARG(text,alpha)
+ARG(inner_value,<f_arg_local_inner>)
+ARG(if_value,0)
+IF (<ARG.value> == 10)
+ARG(if_value,1)
+ENDIF
+ARG(while_value,0)
+WHILE (<ARG.while_value> < 1)
+ARG(while_value,1)
+ENDWHILE
+SYSMESSAGE SPHERE_ARG_NESTED <ARG.inner_value>|<ARG.value>|<ARG.child_only>END
+SYSMESSAGE SPHERE_ARG_FLOW <ARG.if_value>|<ARG.while_value>
+SYSMESSAGE SPHERE_ARG_LENGTH <?STRLEN(<ARG.text>)?>
+SYSMESSAGE SPHERE_ARG_DEFAULT [<ARG.unset_value>]
+RETURN 10
 
 [SPEECH spk_AllPlayers]
 
