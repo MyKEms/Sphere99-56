@@ -168,6 +168,8 @@ STR=100
 DEX=100
 
 [EVENTS e_AllPlayers]
+ON=@LogIn
+SYSMESSAGE SPHERE_TABLE_SMOKE <EVAL 1+2>|<STRLEN abc>|<RAND 1>|<ISNUM 123>|<STRCMP abc,abc>
 
 [SPEECH spk_AllPlayers]
 
