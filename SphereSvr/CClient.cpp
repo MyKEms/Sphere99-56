@@ -48,6 +48,7 @@ CClient::CClient( SOCKET client ) :
 	// This may be a web connection or Telnet ?
 
 	m_Socket.Attach( client );
+	m_fDeleteQueued = false;
 	m_ConnectType = CONNECT_UNK;	// don't know what sort of connect this is yet.
 	m_Crypt.SetCryptVerEnum( g_Serv.m_ClientVersion.GetCryptVer() );
 	m_ProtoVer = m_Crypt;
@@ -94,7 +95,7 @@ CClient::CClient( SOCKET client ) :
 	BOOL nbool=TRUE;
 	m_Socket.SetSockOpt( TCP_NODELAY, &nbool, sizeof(BOOL), IPPROTO_TCP );
 
-	DEBUG_CHECK( g_Serv.StatGet( SERV_STAT_CLIENTS ) == g_Serv.m_Clients.GetCount());
+	DEBUG_CHECK( g_Serv.StatGet( SERV_STAT_CLIENTS ) == g_Serv.GetClientCount());
 }
 
 CClient::~CClient()
@@ -105,6 +106,13 @@ CClient::~CClient()
 
 void CClient::DeleteThis()
 {
+	// Client iteration is performed over raw intrusive-list records.  Keep the
+	// object alive until the receive/dispatch/flush phases have all completed;
+	// this also makes repeated cleanup requests harmless.
+	if ( m_fDeleteQueued )
+		return;
+	m_fDeleteQueued = true;
+
 	SPHERE_LOG_NET("CClient::DeleteThis sock=%d total=%d", m_Socket.GetSocket(), g_Serv.StatGet(SERV_STAT_CLIENTS)-1);
 
 	CharDisconnect();	// am i a char in game ?
@@ -124,8 +132,7 @@ void CClient::DeleteThis()
 	// Clean up chat before destruction
 	Chat_Quit();
 
-	RemoveSelf();	// remove myself from my parent list.
-	delete this;
+	g_Serv.QueueClientForDelete( this );
 }
 
 bool CClient::CanInstantLogOut() const

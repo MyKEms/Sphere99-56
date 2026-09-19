@@ -51,6 +51,13 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2593)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--lifetime-soak",
+        type=int,
+        default=0,
+        metavar="CYCLES",
+        help="run the bounded client lifetime soak after the protocol suite",
+    )
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
@@ -91,6 +98,20 @@ def main() -> int:
                 str(game_port),
             ]
             result = subprocess.run(command, cwd=repo, check=False)
+            if result.returncode == 0 and args.lifetime_soak:
+                soak = repo / "tools" / "fixtures" / "lifetime_soak.py"
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(soak),
+                        args.host,
+                        str(args.port),
+                        str(game_port),
+                        str(args.lifetime_soak),
+                    ],
+                    cwd=repo,
+                    check=False,
+                )
             if result.returncode:
                 print("\n--- synthetic fixture server log (tail) ---", file=sys.stderr)
                 print(tail(log_path), file=sys.stderr)
