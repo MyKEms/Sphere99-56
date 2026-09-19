@@ -3,6 +3,7 @@
 
 #ifndef _WIN32
 #include <pthread.h>
+#include <type_traits>
 #endif
 
 #ifdef _WIN32
@@ -30,9 +31,26 @@ class CThread	// basic multi tasking functionality.
 {
 private:
 #ifndef _WIN32
+	template <typename T>
+	static uintptr_t PthreadToUint(T thread, std::true_type)
+	{
+		return reinterpret_cast<uintptr_t>(thread);
+	}
+
+	template <typename T>
+	static uintptr_t PthreadToUint(T thread, std::false_type)
+	{
+		return static_cast<uintptr_t>(thread);
+	}
+
+	static uintptr_t PthreadToUint(pthread_t thread)
+	{
+		return PthreadToUint(thread, typename std::is_pointer<pthread_t>::type());
+	}
+
 	pthread_t m_thread;
 	bool m_fActive;
-	DWORD m_dwThreadID;
+	uintptr_t m_dwThreadID;
 #endif
 
 public:
@@ -45,12 +63,12 @@ public:
 #endif
 	}
 
-	static DWORD GetCurrentThreadId()
+	static uintptr_t GetCurrentThreadId()
 	{
 #ifdef _WIN32
-		return ::GetCurrentThreadId();
+		return static_cast<uintptr_t>(::GetCurrentThreadId());
 #else
-		return (DWORD)pthread_self();
+		return PthreadToUint(pthread_self());
 #endif
 	}
 
@@ -68,7 +86,7 @@ public:
 		if (ret == 0)
 		{
 			m_fActive = true;
-			m_dwThreadID = (DWORD)m_thread;
+			m_dwThreadID = PthreadToUint(m_thread);
 		}
 #endif
 	}
@@ -97,7 +115,7 @@ public:
 #endif
 	}
 
-	DWORD GetThreadID() const
+	uintptr_t GetThreadID() const
 	{
 #ifndef _WIN32
 		return m_dwThreadID;

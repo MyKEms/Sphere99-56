@@ -33,7 +33,7 @@ public:
 
 public:
 	void InitPoint();
-	virtual void ZeroPoint()
+	void ZeroPoint()
 	{
 		m_x = 0;
 		m_y = 0;

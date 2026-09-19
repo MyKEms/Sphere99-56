@@ -1,6 +1,7 @@
 #ifndef _INC_COMMON_H
 #define _INC_COMMON_H
 
+#include <stdint.h>
 #include <cstdio>
 #include <cstdarg>
 #include <climits>
@@ -18,7 +19,10 @@ typedef unsigned short WORD;
 typedef unsigned int UINT;
 typedef unsigned int DWORD;
 typedef int INT;
-typedef long LONG;
+// Win32 LONG is always 32-bit.  `long` is 64-bit on Linux/x86-64, which
+// silently changes file offsets and other legacy structures in sanitizer
+// builds if it is used here.
+typedef int32_t LONG;
 typedef long long LONGLONG;
 typedef const char* LPCSTR;
 typedef const char* LPCTSTR;
@@ -131,11 +135,11 @@ struct RECT { long left; long top; long right; long bottom; };
 #define HASH_COMPARE(a, b) (a>b)
 
 #ifndef _1BITMASK
-#define _1BITMASK(b)    (((size_t)1) << (b))
+#define _1BITMASK(b)    (((uint64_t)1) << (b))
 #endif
 
 #ifndef _BITMASK // xstddef.h?
-#define _BITMASK(b) 	(1<<(b))
+#define _BITMASK(b) 	(((uint64_t)1)<<(b))
 #define _ISSET(w,b) 	((w)&_BITMASK(b))
 #define _ISCLR(w,b) 	(!_ISSET(w,b))
 #endif

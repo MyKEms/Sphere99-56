@@ -303,6 +303,13 @@ enum IT_TYPE		// double click type action.
 	IT_TRIGGER		= 1000,	// Create custom new script trigger types
 };
 
+// Script input is converted to IT_TYPE in several places.  Keep the enum
+// closed for built-in values while still allowing custom trigger types.
+inline bool IsValidItemTypeValue( int iType )
+{
+	return( ( iType >= IT_NORMAL && iType < IT_QTY ) || iType >= IT_TRIGGER );
+}
+
 typedef STAT_LEVEL SKILL_LEVEL;	// fixed point decimal * 10.
 
 class CItemTypeDef : public CResourceTriggered

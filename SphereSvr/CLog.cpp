@@ -82,7 +82,7 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 	g_Serv.Event_PrintClient( pszMsg );	// echo out to admin telnets.
 
 	// Send event to the external monitors.
-	g_Serv.OnTriggerEvent( SERVTRIG_ServerMsg, (DWORD) pszMsg, iColorType );
+	g_Serv.OnTriggerEvent( SERVTRIG_ServerMsg, reinterpret_cast<uintptr_t>(pszMsg), static_cast<uintptr_t>(iColorType) );
 }
 
 int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
