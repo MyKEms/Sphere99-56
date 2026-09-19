@@ -1,8 +1,12 @@
 """
 UO Huffman compression/decompression module.
 
-Standard UO protocol uses Huffman coding for all game-mode (CONNECT_GAME) packets.
-The compression table is fixed and shared by all UO clients and servers.
+    Standard UO protocol uses Huffman coding for all game-mode (CONNECT_GAME) packets.
+    The compression table is fixed and shared by all UO clients and servers.
+
+    Sphere may flush multiple independently terminated Huffman frames to the
+    same TCP stream.  ``decompress`` therefore consumes every frame present in
+    *data*, not only the first terminator.
 """
 
 # Standard UO Huffman encode table (257 entries: 256 bytes + terminator)
@@ -85,8 +89,13 @@ def decompress(data):
         pos += 1
         if current in _decode_tree:
             val = _decode_tree[current]
-            if val == 256:  # terminator
-                break
+            if val == 256:  # frame terminator
+                # CCompressTree::Encode pads each frame to a byte boundary
+                # after its terminator.  Skip that padding before decoding a
+                # possible next frame in the same TCP read.
+                current = ""
+                pos = ((pos + 7) // 8) * 8
+                continue
             result.append(val)
             current = ""
         if len(current) > 15:  # max code length is ~11 bits
