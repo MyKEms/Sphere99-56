@@ -183,11 +183,24 @@ def test_char_create(host, port, game_port, result):
             return
 
         # Send Create packet
-        create_pkt = make_char_create(name="AutoTest", sex=0, start_loc=1)
+        create_pkt = make_char_create(
+            name="AutoTest",
+            sex=0,
+            start_loc=1,
+            skill1=25,
+            val1=40,
+            skill2=26,
+            val2=40,
+            skill3=1,
+            val3=20,
+        )
         sock.sendall(create_pkt)
 
         # Wait for game entry response (XCMD_Start = 0x1B).
-        resp = recv_until_game_start(sock, timeout=10.0)
+        resp = _drain_game_socket(
+            sock,
+            recv_until_game_start(sock, timeout=10.0),
+        )
         sock.close()
 
         if not resp:
@@ -200,6 +213,20 @@ def test_char_create(host, port, game_port, result):
             result.fail("Character creation", "No structurally valid XCMD_Start packet")
         else:
             result.ok(f"Character created, XCMD_Start at offset {start[0]}")
+
+        expected_items = (
+            ("SPHERE_NEWBIE_MAGERY ", "SPHERE_NEWBIE_MAGERY 1"),
+            ("SPHERE_NEWBIE_RESIST ", "SPHERE_NEWBIE_RESIST 1"),
+        )
+        for prefix, expected in expected_items:
+            actual = _find_system_message(resp, prefix)
+            if actual == expected:
+                result.ok(f"Character received skill-keyed starting item: {actual}")
+            else:
+                result.fail(
+                    f"Skill-keyed NEWBIE {prefix.strip()}",
+                    f"expected {expected!r}, got {actual!r}",
+                )
     except Exception as e:
         result.fail("Character creation", str(e))
 

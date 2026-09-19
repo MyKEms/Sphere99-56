@@ -1735,6 +1735,11 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 			return( CSphereUID( RES_Newbie, RES_NEWBIE_MALE_DEFAULT ));
 		if ( ! _stricmp( pszName, "FEMALE_DEFAULT" ))
 			return( CSphereUID( RES_Newbie, RES_NEWBIE_FEMALE_DEFAULT ));
+		{
+			SKILL_TYPE iSkill = FindSkillKey( pszName, false );
+			if ( iSkill != SKILL_NONE )
+				return( CSphereUID( RES_Newbie, iSkill ));
+		}
 		break;
 
 	case RES_Area:
