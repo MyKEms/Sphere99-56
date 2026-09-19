@@ -3,7 +3,7 @@
 ## Public repository boundary — absolute rule
 
 This directory is the public GitHub engine repository. Never copy, import,
-commit, push, upload, or quote private GitLab shard scripts, shard-specific
+commit, push, upload, or quote private shard scripts, shard-specific
 configuration, `save/`, `accounts/`, world backups, production-derived data,
 or credentials here. If a change cannot be proven generic and public-safe,
 keep it out of this repository.
