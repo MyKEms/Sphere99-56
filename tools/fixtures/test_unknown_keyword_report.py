@@ -312,7 +312,12 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2693)
-    parser.add_argument("--startup-timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--startup-timeout",
+        type=float,
+        default=600.0,
+        help="maximum startup wait for script trees that load for several minutes",
+    )
     expectations = parser.add_mutually_exclusive_group()
     expectations.add_argument(
         "--expect-disabled",
