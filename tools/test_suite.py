@@ -19,6 +19,7 @@ Tests:
   11. Post-stress login
   12. Script engine stability
   13. Expression evaluation proxy
+  14. Direct script function-table smoke test
 """
 
 import socket
@@ -551,6 +552,67 @@ def test_expression_eval_proxy(host, port, game_port, result):
         result.fail("Expression eval proxy", str(e))
 
 
+def _find_system_message(data, prefix):
+    """Return a classic 0x1c system-message text from a decoded stream."""
+    for packet in split_packet_stream(data):
+        if packet.command != 0x1C or len(packet.data) < 45:
+            continue
+        text = packet.data[44:].split(b"\0", 1)[0].decode("ascii", errors="replace")
+        if text.startswith(prefix):
+            return text
+    return None
+
+
+def _drain_game_socket(sock, initial=b""):
+    """Collect a bounded post-entry window without racing the server."""
+    data = bytearray(initial)
+    deadline = time.monotonic() + 2.0
+    sock.settimeout(0.2)
+    try:
+        while time.monotonic() < deadline:
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            data.extend(chunk)
+    except (ConnectionResetError, OSError):
+        pass
+    finally:
+        sock.setblocking(True)
+    return bytes(data)
+
+
+def test_script_function_tables(host, port, game_port, result):
+    """Test 14: table-backed expressions are evaluated in a trigger."""
+    print("\n[Test 14] Direct Script Function Tables")
+    sock = None
+    try:
+        sock, _ = game_connect(host, port, test_account("table"), "tablepass", game_port=game_port)
+        if sock is None:
+            result.fail("Script function tables", "Could not reach charlist")
+            return
+
+        sock.sendall(make_char_create(name="TableSmoke", sex=0, start_loc=1))
+        response = _drain_game_socket(sock, recv_until_game_start(sock, timeout=10.0))
+        decoded = decode_game_response(response)
+        expected = "SPHERE_TABLE_SMOKE 3|3|0|1|0"
+        actual = _find_system_message(decoded, "SPHERE_TABLE_SMOKE ")
+        if actual == expected:
+            result.ok(f"Table functions evaluated from trigger: {actual}")
+        else:
+            result.fail(
+                "Script function tables",
+                f"expected {expected!r}, got {actual!r} in {len(decoded)} decoded bytes",
+            )
+    except Exception as error:
+        result.fail("Script function tables", str(error))
+    finally:
+        if sock is not None:
+            sock.close()
+
+
 def main():
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 2593
@@ -597,6 +659,7 @@ def main():
     # Script engine tests
     test_script_engine_stability(host, port, game_port, result)
     test_expression_eval_proxy(host, port, game_port, result)
+    test_script_function_tables(host, port, game_port, result)
 
     success = result.summary()
     sys.exit(0 if success else 1)
