@@ -112,10 +112,22 @@ python3 tools/fixtures/run_suite.py \
   /tmp/sphere99-fixture \
   --binary "$PWD/sphere99svr" \
   --repo "$PWD"
+
+# Include the bounded client-lifetime soak (ASan/UBSan CI runs 25 cycles).
+python3 tools/fixtures/run_suite.py \
+  /tmp/sphere99-fixture \
+  --binary "$PWD/sphere99svr" \
+  --repo "$PWD" \
+  --lifetime-soak 25
 ```
 
 The CI fixture job uses the same flow, polls the login socket with a bounded
 startup timeout, and uploads only the disposable server log if the test fails.
+The lifetime soak alternates graceful and abrupt disconnects, validates the
+game-start packet, sends bounded movement traffic, and checks that the login
+socket remains available after every cycle. See
+[`docs/lifetime-model.md`](docs/lifetime-model.md) for the ownership boundary
+and its deliberate out-of-scope areas.
 
 The loader has a fail-closed save guard. If a world, chars, or statics file
 skips a section or fails to parse, the server logs a critical summary and
