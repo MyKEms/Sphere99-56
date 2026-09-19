@@ -942,6 +942,13 @@ public:
 			default:
 				// Regular command line -- dispatch it.
 				{
+					// Expand script expressions before dispatching the command.  This is
+					// the path used by server-side triggers such as SYSMESSAGE, and it
+					// is also what makes table-backed expressions (EVAL, STRLEN, etc.)
+					// observable from a fixture without a graphical client.
+					if ( script.GetArgMod() && *script.GetArgMod() )
+						s_ParseEscapes( script.GetArgMod(), 0 );
+
 					// Build the full command: "KEY VALUE"
 					TCHAR szCmd[SCRIPT_MAX_LINE_LEN];
 					LPCTSTR pszArgStr = script.GetArgRaw();
