@@ -2562,6 +2562,10 @@ bool CSphereResourceMgr::LoadIni( bool fTest )
 	// ARGS:
 	//  fTest = do not display errors.
 
+	// A missing setting in the active INI keeps reporting disabled.
+	g_Serv.m_sUnknownKeywordReport.Empty();
+	ScriptUnknownReportSetPath("");
+
 	if ( ! OpenScriptFind( m_scpIni, NULL )) // Open script file
 	{
 #ifdef _WIN32

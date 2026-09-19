@@ -13,6 +13,7 @@ CScript::CScript()
 {
 	m_iLineNum = 0;
 	m_fSectionHead = false;
+	m_fKeyEquals = false;
 	m_lSectionData = 0;
 	m_pszKey = m_szLine;
 	m_pszArg = m_szLine;
@@ -54,6 +55,7 @@ void CScript::ParseKey()
 	// Skip leading whitespace
 	GETNONWHITESPACE(m_pszKey);
 
+	m_fKeyEquals = false;
 	m_pszArg = m_pszKey;
 
 	// Find the separator: '=' or whitespace
@@ -61,6 +63,7 @@ void CScript::ParseKey()
 	{
 		if (*m_pszArg == '=')
 		{
+			m_fKeyEquals = true;
 			*m_pszArg = '\0';
 			m_pszArg++;
 			// Skip whitespace after '='

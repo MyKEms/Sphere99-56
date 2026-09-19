@@ -51,6 +51,33 @@ private:
 
 	static LPCTSTR const sm_szScriptKeys[];
 
+	static SCRIPT_UNKNOWN_KIND UnknownExpressionKind(LPCTSTR pszExpr)
+	{
+		bool fHasDot = false;
+		bool fHasCall = false;
+		bool fHasArgs = false;
+		for ( LPCTSTR p = pszExpr; p && *p; ++p )
+		{
+			if ( *p == '.' )
+				fHasDot = true;
+			else if ( *p == '(' )
+			{
+				fHasCall = true;
+				break;
+			}
+			else if ( ISWHITESPACE(*p) )
+			{
+				fHasArgs = true;
+				break;
+			}
+		}
+		if ( fHasDot && (fHasCall || fHasArgs) )
+			return SCRIPT_UNKNOWN_METHOD;
+		if ( fHasCall || fHasArgs || (pszExpr && !_strnicmp(pszExpr, "f_", 2)) )
+			return SCRIPT_UNKNOWN_FUNCTION;
+		return SCRIPT_UNKNOWN_GET;
+	}
+
 public:
 	// Gump command table for dialog construction.
 	static LPCTSTR const sm_szGumpCmds[];
@@ -275,6 +302,7 @@ public:
 				// Evaluate the expression (same as <...> evaluation).
 				CGString sResult;
 				bool fResolved = false;
+				CScriptUnknownRejectTracker rejected;
 				try
 				{
 					TCHAR szKey[SCRIPT_MAX_LINE_LEN];
@@ -304,6 +332,7 @@ public:
 					}
 
 					HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
+					rejected.Observe(hRes, szKey, m_pBaseObj);
 					if ( hRes == NO_ERROR )
 					{
 						CScriptObj* pRef = vValRet.GetRef();
@@ -318,14 +347,19 @@ public:
 								{
 									CGVariant vSubRet;
 									hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
+									rejected.Observe(hRes, pszSubKey, pRefObj);
 									if ( hRes != NO_ERROR )
+									{
 										hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
+										rejected.Observe(hRes, pszSubKey, pRefObj);
+									}
 									if ( hRes != NO_ERROR )
 									{
 										CScriptObj* pOldBase = GetBaseObject();
 										SetBaseObject(pRefObj);
 										hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
 										SetBaseObject(pOldBase);
+										rejected.Observe(hRes, pszSubKey, pRefObj);
 									}
 									if ( hRes == NO_ERROR )
 									{
@@ -353,6 +387,7 @@ public:
 						if ( pObj )
 						{
 							hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
+							rejected.Observe(hRes, pszExpr, m_pBaseObj);
 							if ( hRes == NO_ERROR )
 							{
 								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
@@ -367,6 +402,7 @@ public:
 						if ( pObj )
 						{
 							hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
+							rejected.Observe(hRes, szKey, m_pBaseObj);
 							if ( hRes == NO_ERROR )
 							{
 								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
@@ -382,6 +418,8 @@ public:
 
 				if ( !fResolved )
 				{
+					if ( !rejected.RecordIfPresent() )
+						ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 					if ( fSafe )
 					{
 						sResult = "";
@@ -456,6 +494,7 @@ public:
 			// Try to resolve the expression.
 			CGString sResult;
 			bool fResolved = false;
+			CScriptUnknownRejectTracker rejected;
 
 			try
 			{
@@ -492,6 +531,7 @@ public:
 
 				// Try global function dispatch.
 				HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
+				rejected.Observe(hRes, szKey, m_pBaseObj);
 				if ( hRes == NO_ERROR )
 				{
 					// Object reference chaining: <argo.tag(name)>, <argo.uid>, etc.
@@ -508,8 +548,12 @@ public:
 							{
 								CGVariant vSubRet;
 								hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
+								rejected.Observe(hRes, pszSubKey, pRefObj);
 								if ( hRes != NO_ERROR )
+								{
 									hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
+									rejected.Observe(hRes, pszSubKey, pRefObj);
+								}
 								if ( hRes != NO_ERROR )
 								{
 									// Try as function call with ref as base object.
@@ -517,6 +561,7 @@ public:
 									SetBaseObject(pRefObj);
 									hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
 									SetBaseObject(pOldBase);
+									rejected.Observe(hRes, pszSubKey, pRefObj);
 								}
 								if ( hRes == NO_ERROR )
 								{
@@ -545,6 +590,7 @@ public:
 					if ( pObj )
 					{
 						hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
+						rejected.Observe(hRes, pszExpr, m_pBaseObj);
 						if ( hRes == NO_ERROR )
 						{
 							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
@@ -560,6 +606,7 @@ public:
 					if ( pObj )
 					{
 						hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
+						rejected.Observe(hRes, szKey, m_pBaseObj);
 						if ( hRes == NO_ERROR )
 						{
 							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
@@ -575,6 +622,8 @@ public:
 
 			if ( !fResolved )
 			{
+				if ( !rejected.RecordIfPresent() )
+					ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 				if ( fSafe )
 				{
 					sResult = "";
@@ -608,7 +657,7 @@ public:
 	// The line is "KEY VALUE" or "KEY=VALUE" or just "METHOD args".
 	// Returns NO_ERROR on success, or an HRESULT error code.
 	//
-	HRESULT ExecuteCommand(LPCTSTR pszCmd)
+	HRESULT ExecuteCommand(LPCTSTR pszCmd, bool fScriptKeyEquals = false)
 	{
 		if ( !pszCmd || !*pszCmd )
 			return NO_ERROR;
@@ -618,6 +667,8 @@ public:
 			pszCmd++;
 		if ( !*pszCmd || *pszCmd == '/' )
 			return NO_ERROR; // blank or comment
+
+		CScriptUnknownRejectTracker rejected;
 
 		// ARG(name,value) is a statement as well as an expression.  The usual
 		// command splitter treats its whole parenthesized form as the key, so
@@ -634,15 +685,23 @@ public:
 					size_t iArgsLen = pszClose - (pszCmd + 4);
 					TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
 					if ( iArgsLen >= sizeof(szArgs) )
+					{
+						rejected.Observe(HRES_BAD_ARGUMENTS, "ARG", m_pBaseObj);
+						rejected.RecordIfPresent();
 						return HRES_BAD_ARGUMENTS;
+					}
 					memcpy(szArgs, pszCmd + 4, iArgsLen);
 					szArgs[iArgsLen] = '\0';
 					s_ParseEscapes(szArgs, 0);
 					CGVariant vArgs(szArgs);
 					CGVariant vValRet;
 					HRESULT hRes = Function_Dispatch("ARG", vArgs, vValRet);
+					rejected.Observe(hRes, "ARG", m_pBaseObj);
 					if ( hRes != HRES_UNKNOWN_PROPERTY )
+					{
+						rejected.RecordIfPresent();
 						return hRes;
+					}
 				}
 			}
 		}
@@ -654,6 +713,7 @@ public:
 
 		TCHAR* pszKey = szLine;
 		TCHAR* pszArg = NULL;
+		bool fPropertySet = fScriptKeyEquals;
 
 		// Find the split point
 		TCHAR* p = pszKey;
@@ -662,6 +722,7 @@ public:
 		if ( *p )
 		{
 			bool fHasEquals = (*p == '=');
+			fPropertySet = fPropertySet || fHasEquals;
 			*p = '\0';
 			p++;
 			if ( fHasEquals )
@@ -676,6 +737,7 @@ public:
 				// Check for '=' after whitespace
 				if ( *p == '=' )
 				{
+					fPropertySet = true;
 					p++;
 					while ( ISWHITESPACE(*p) ) p++;
 				}
@@ -693,6 +755,7 @@ public:
 			// Try as a property set (KEY=VALUE).
 			CGVariant vVal(pszArg);
 			HRESULT hRes = pObj->s_PropSet(pszKey, vVal);
+			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 				return NO_ERROR;
 
@@ -700,6 +763,7 @@ public:
 			CGVariant vArgs(pszArg);
 			CGVariant vValRet;
 			hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 				return NO_ERROR;
 		}
@@ -721,8 +785,12 @@ public:
 				CGVariant vRootArgs;
 				CGVariant vRoot;
 				HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
+				rejected.Observe(hRoot, szRoot, m_pBaseObj);
 				if ( hRoot != NO_ERROR && pObj )
+				{
 					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
+					rejected.Observe(hRoot, szRoot, m_pBaseObj);
+				}
 
 				CResourceObj* pRootObj = dynamic_cast<CResourceObj*>(vRoot.GetRef());
 				if ( hRoot == NO_ERROR && pRootObj )
@@ -730,6 +798,7 @@ public:
 					CGVariant vArgs(pszArg);
 					CGVariant vValRet;
 					HRESULT hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
+					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					if ( hRes == NO_ERROR )
 						return NO_ERROR;
 				}
@@ -741,6 +810,7 @@ public:
 			CGVariant vArgs(pszArg);
 			CGVariant vValRet;
 			HRESULT hRes = Function_Dispatch(pszKey, vArgs, vValRet);
+			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 				return NO_ERROR;
 		}
@@ -825,6 +895,14 @@ public:
 		}
 
 		// Unknown command -- not an error for now, just ignore.
+		if ( !rejected.RecordIfPresent() )
+		{
+			ScriptUnknownRecord(
+				fPropertySet ? SCRIPT_UNKNOWN_SET :
+					(strchr(pszKey, '(') ? SCRIPT_UNKNOWN_FUNCTION : SCRIPT_UNKNOWN_METHOD),
+				pszKey,
+				m_pBaseObj);
+		}
 		return HRES_UNKNOWN_PROPERTY;
 	}
 
@@ -842,6 +920,7 @@ public:
 	//
 	TRIGRET_TYPE ExecuteScript(CScript& script, TRIGRUN_TYPE type)
 	{
+		CScriptUnknownContextScope scriptContextScope(&script);
 		bool fSectionFalse = (type == TRIGRUN_SECTION_FALSE || type == TRIGRUN_SINGLE_FALSE);
 
 		LPCTSTR pszKey;
@@ -1110,7 +1189,7 @@ public:
 					else
 						strncpy(szCmd, pszKey, sizeof(szCmd) - 1);
 					szCmd[sizeof(szCmd) - 1] = '\0';
-					ExecuteCommand(szCmd);
+					ExecuteCommand(szCmd, script.WasKeyValueAssignment());
 				}
 				break;
 			}

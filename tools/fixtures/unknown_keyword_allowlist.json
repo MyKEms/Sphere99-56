@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "kind": "trigger",
+      "keyword": "@ITEMUNEQUIP",
+      "count_range": [2, 32],
+      "reason": "Synthetic character equipment cleanup has no fixture handler."
+    },
+    {
+      "kind": "trigger",
+      "keyword": "@STEP",
+      "count": 9,
+      "reason": "The headless walking scenario has no fixture step handler."
+    },
+    {
+      "kind": "trigger",
+      "keyword": "@TIMER",
+      "count_range": [1, 32],
+      "optional": true,
+      "reason": "Timer callbacks can run during slower sanitizer fixture runs."
+    },
+    {
+      "kind": "trigger",
+      "keyword": "@UNEQUIP",
+      "count_range": [2, 32],
+      "reason": "Synthetic character equipment cleanup has no fixture handler."
+    }
+  ]
+}

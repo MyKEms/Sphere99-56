@@ -2990,6 +2990,8 @@ TRIGRET_TYPE CChar::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 	exec.SetBaseObject(this);
 	CCharDefPtr pCharDef = Char_GetDef();
 	ASSERT(pCharDef);
+	bool fReportUnknown = ScriptUnknownReportIsEnabled();
+	bool fHasTriggerHandler = fReportUnknown && pCharDef->HasTriggerName(pszTrigName);
 	TRIGRET_TYPE iRet = pCharDef->OnTriggerScript( exec, iAction, pszTrigName );
 	if ( iRet != TRIGRET_RET_FALSE )
 	{
@@ -3010,6 +3012,8 @@ TRIGRET_TYPE CChar::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 			RES_GET_TYPE(pLink->GetUIDIndex()) != RES_Profession )
 			continue;
 		iRet = pLink->OnTriggerScript( exec, iAction, pszTrigName );
+		if ( fReportUnknown )
+			fHasTriggerHandler = pLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet != TRIGRET_RET_FALSE && iRet != TRIGRET_RET_DEFAULT )
 			return iRet;
 	}
@@ -3026,11 +3030,15 @@ TRIGRET_TYPE CChar::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 				RES_GET_TYPE(pLink->GetUIDIndex()) != RES_Profession )
 				continue;
 			TRIGRET_TYPE iRet = pLink->OnTriggerScript( exec, iAction, pszTrigName );
+			if ( fReportUnknown )
+				fHasTriggerHandler = pLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 			if ( iRet != TRIGRET_RET_FALSE && iRet != TRIGRET_RET_DEFAULT )
 				return iRet;
 		}
 	}
 
+	if ( fReportUnknown && !fHasTriggerHandler )
+		ScriptUnknownRecord(SCRIPT_UNKNOWN_TRIGGER, pszTrigName, this);
 	return( TRIGRET_RET_DEFAULT );
 }
 
@@ -3467,4 +3475,3 @@ restart_read:
 	// When to check here again.
 	pScriptItem->SetTimeout( pScriptItem->GetScriptTimeout());
 }
-

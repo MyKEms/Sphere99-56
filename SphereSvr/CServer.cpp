@@ -719,6 +719,13 @@ void CServer::OnTriggerEvent( SERVTRIG_TYPE type, uintptr_t dwArg1, uintptr_t dw
 
 HRESULT CServer::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	if ( !_stricmp(pszKey, "UNKNOWNKEYWORDREPORT"))
+	{
+		m_sUnknownKeywordReport = vVal.GetPSTR() ? vVal.GetPSTR() : "";
+		ScriptUnknownReportSetPath(m_sUnknownKeywordReport);
+		return NO_ERROR;
+	}
+
 	HRESULT hRes = g_Cfg.s_PropSet(pszKey, vVal);
 	if ( hRes == NO_ERROR )
 		return( NO_ERROR );
@@ -730,6 +737,12 @@ HRESULT CServer::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 
 HRESULT CServer::s_PropGet( LPCTSTR pszKey, CGVariant& vVal, CScriptConsole* pSrc )
 {
+	if ( !_stricmp(pszKey, "UNKNOWNKEYWORDREPORT"))
+	{
+		vVal = m_sUnknownKeywordReport;
+		return NO_ERROR;
+	}
+
 	// Just do stats values for now.
 	HRESULT hRes = g_Cfg.s_PropGet( pszKey, vVal, pSrc );
 	if ( hRes == NO_ERROR )
@@ -744,6 +757,8 @@ void CServer::s_WriteProps( CScript &s )
 {
 	s.WriteSection( g_Cfg.GetResourceBlockName(RES_Sphere));
 	s.WriteKey( "NAME", GetName());
+	if ( m_sUnknownKeywordReport.GetLength() > 0 )
+		s.WriteKey( "UNKNOWNKEYWORDREPORT", m_sUnknownKeywordReport );
 	s_WriteServerData( s );
 	g_Cfg.s_WriteProps(s);
 }
@@ -752,7 +767,7 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 {
 	// SAVE can be issued by an internal/timer context without a console
 	// source; all other console commands still require one.
-	ASSERT( pSrc || iProp == M_Save );
+	ASSERT( pSrc || iProp == M_Save || iProp == M_UnknownReport );
 	switch (iProp)
 	{
 	case M_ProfileGet:
@@ -952,6 +967,15 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 
 	case M_UnblockIP:
 		g_Cfg.SetLogIPBlock( vArgs, NULL, pSrc );
+		break;
+
+	case M_UnknownReport:
+		if ( pSrc == NULL || pSrc->GetPrivLevel() < PLEVEL_Admin )
+			return HRES_PRIVILEGE_NOT_HELD;
+		if ( m_sUnknownKeywordReport.GetLength() <= 0 || !ScriptUnknownReportWrite() )
+			return HRES_INVALID_HANDLE;
+		pSrc->Printf( "Unknown keyword report written to %s." LOG_CR,
+			(LPCTSTR) m_sUnknownKeywordReport );
 		break;
 
 	case M_SMsg:

@@ -2743,6 +2743,8 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 
 	ASSERT( iAction < CItemDef::T_QTY );
 	TRIGRET_TYPE iRet = TRIGRET_RET_DEFAULT;
+	bool fReportUnknown = ScriptUnknownReportIsEnabled();
+	bool fHasTriggerHandler = false;
 
 	// Is the CChar sensative to actions on all items ?
 
@@ -2780,6 +2782,8 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 		}
 
 		iRet = pResLink->OnTriggerScript( exec, iAction, pszTrigName );
+		if ( fReportUnknown )
+			fHasTriggerHandler = pResLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet == TRIGRET_RET_VAL )
 		{
 			return( TRIGRET_RET_VAL );	// Block further action.
@@ -2796,12 +2800,18 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 			RES_GET_TYPE(pLink->GetUIDIndex()) != RES_ItemDef )
 			continue;
 		iRet = pLink->OnTriggerScript( exec, iAction, pszTrigName );
+		if ( fReportUnknown )
+			fHasTriggerHandler = pLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet != TRIGRET_RET_FALSE && iRet != TRIGRET_RET_DEFAULT )
 			return iRet;
 	}
 
 	// Look up the trigger in the RES_ItemDef. (default)
 	iRet = Base_GetDef()->OnTriggerScript( exec, iAction, pszTrigName );
+	if ( fReportUnknown )
+		fHasTriggerHandler = Base_GetDef()->HasTriggerName(pszTrigName) || fHasTriggerHandler;
+	if ( fReportUnknown && !fHasTriggerHandler )
+		ScriptUnknownRecord(SCRIPT_UNKNOWN_TRIGGER, pszTrigName, this);
 	return( iRet ); // TRIGRET_RET_DEFAULT ?
 }
 
