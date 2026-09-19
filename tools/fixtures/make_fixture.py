@@ -171,7 +171,8 @@ def write_scripts(
     if unknown_keyword_rejected_probe:
         unknown_keyword_probe_lines.extend(
             [
-                "ARG(unknown_report_bad_qty,one,two)",
+                "ARG(unknown_report_comma,one,two)",
+                "SYSMESSAGE SPHERE_UNKNOWN_ARG_COMMA <ARG.unknown_report_comma>",
                 "ARG(,unknown_report_bad_arguments)",
             ]
         )
@@ -287,6 +288,7 @@ RETURN <ARG.value>
 [FUNCTION f_arg_local_outer]
 ARG(value,10)
 ARG(text,alpha)
+ARG(comma_text,first,second,third)
 ARG(inner_value,<f_arg_local_inner>)
 ARG(if_value,0)
 IF (<ARG.value> == 10)
@@ -298,6 +300,8 @@ ARG(while_value,1)
 ENDWHILE
 SYSMESSAGE SPHERE_ARG_NESTED <ARG.inner_value>|<ARG.value>|<ARG.child_only>END
 SYSMESSAGE SPHERE_ARG_FLOW <ARG.if_value>|<ARG.while_value>
+SYSMESSAGE SPHERE_ARG_COMMA_COMMAND <ARG.comma_text>
+SYSMESSAGE SPHERE_ARG_COMMA_EXPRESSION <ARG(expr_comma_text,alpha,beta,gamma)>|<ARG.expr_comma_text>
 SYSMESSAGE SPHERE_ARG_LENGTH <?STRLEN(<ARG.text>)?>
 SYSMESSAGE SPHERE_ARG_DEFAULT [<ARG.unset_value>]
 RETURN 10
@@ -413,7 +417,7 @@ def main() -> int:
     parser.add_argument(
         "--unknown-keyword-rejected-probe",
         action="store_true",
-        help="include bad-quantity and bad-arguments dispatch results",
+        help="include a valid comma-valued ARG and an invalid empty-name ARG",
     )
     args = parser.parse_args()
 

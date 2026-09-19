@@ -93,7 +93,7 @@ def probe_failures(
     script_path = fixture / "scripts" / "spheretables.scp"
     expected = (
         {
-            ("rejected", "ARG"): "ARG(unknown_report_bad_qty,one,two)",
+            ("rejected", "ARG"): "ARG(,unknown_report_bad_arguments)",
         }
         if rejected
         else {
@@ -140,7 +140,7 @@ def probe_failures(
         entry = observed.get(key)
         if entry is None:
             continue
-        expected_count = 2 if rejected and key == ("rejected", "ARG") else 1
+        expected_count = 1
         if entry.get("count") != expected_count:
             failures.append(
                 f"{key!r}: expected count {expected_count}, got {entry.get('count')!r}"
@@ -165,7 +165,7 @@ def probe_failures(
         failures.append(
             f"expected distinct={len(expected)}, got {report.get('distinct')!r}"
         )
-    expected_total = 2 if rejected else len(expected)
+    expected_total = 1 if rejected else len(expected)
     if report.get("total") != expected_total:
         failures.append(
             f"expected total={expected_total}, got {report.get('total')!r}"
@@ -337,7 +337,7 @@ def main() -> int:
     expectations.add_argument(
         "--rejected",
         action="store_true",
-        help="verify rejected bad-quantity and bad-arguments calls are reported",
+        help="verify empty-name ARG calls are rejected while comma values are accepted",
     )
     expectations.add_argument(
         "--collect-only",
