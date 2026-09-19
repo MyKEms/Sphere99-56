@@ -127,18 +127,31 @@ public:
 	{
 		if ( !_stricmp(pszKey, "ARG") )
 		{
-			int iArgQty = vArgs.MakeArraySize();
-			if ( iArgQty < 1 || iArgQty > 2 )
+			LPCTSTR pszArgs = vArgs.GetPSTR();
+			if ( !pszArgs || !*pszArgs )
 				return HRES_BAD_ARG_QTY;
 
-			LPCTSTR pszName = vArgs.GetArrayPSTR(0);
-			if ( !pszName || !*pszName )
+			// ARG(name,value) treats everything after the first comma as one value.
+			LPCTSTR pszComma = strchr(pszArgs, ',');
+			size_t iNameLen = pszComma ? static_cast<size_t>(pszComma - pszArgs) : strlen(pszArgs);
+			if ( iNameLen >= SCRIPT_MAX_LINE_LEN )
 				return HRES_BAD_ARGUMENTS;
 
-			if ( iArgQty == 2 )
+			TCHAR szName[SCRIPT_MAX_LINE_LEN];
+			memcpy(szName, pszArgs, iNameLen);
+			szName[iNameLen] = '\0';
+			TCHAR* pszName = szName;
+			while ( *pszName == ' ' || *pszName == '\t' )
+				pszName++;
+			if ( !*pszName )
+				return HRES_BAD_ARGUMENTS;
+
+			if ( pszComma )
 			{
-				LPCTSTR pszValue = vArgs.GetArrayPSTR(1);
-				m_LocalArgs.SetKeyStr(pszName, pszValue ? pszValue : "");
+				LPCTSTR pszValue = pszComma + 1;
+				while ( *pszValue == ' ' || *pszValue == '\t' )
+					pszValue++;
+				m_LocalArgs.SetKeyStr(pszName, pszValue);
 			}
 			if ( !m_LocalArgs.FindKeyVar(pszName, vValRet) )
 				vValRet.SetStr("");
