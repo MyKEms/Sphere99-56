@@ -11,26 +11,130 @@
 // CMemBlockBase
 DWORD CMemBlockBase::sm_dwAllocTotal = 0;
 
+// Parse the scalar and two-endpoint forms used by resource properties:
+//   7,12
+//   {7 12}
+// A scalar is represented as an equal-endpoint range. Keep the current value
+// unchanged when the input is malformed; callers cannot report a parse error.
+static void SkipRangeWhitespace(LPCTSTR& pszValue)
+{
+	while ( pszValue && *pszValue && ISWHITESPACE(*pszValue) )
+		++pszValue;
+}
+
+static bool ParseValueRange(CGVariant& vVal, int& iLo, int& iHi)
+{
+	LPCTSTR pszValue = vVal.GetPSTR();
+	if ( pszValue == NULL )
+		return false;
+
+	SkipRangeWhitespace(pszValue);
+	const bool fBraced = (*pszValue == '{');
+	if ( fBraced )
+		++pszValue;
+	SkipRangeWhitespace(pszValue);
+	if ( !*pszValue || ( fBraced && *pszValue == '}' ))
+		return false;
+
+	LPCTSTR pszFirst = pszValue;
+	const int iParsedLo = Exp_GetValueRef(pszValue);
+	if ( pszValue == pszFirst )
+		return false;
+
+	// GetValueRef skips whitespace before stopping at the next token. Remember
+	// whether that token was separated by whitespace so `{lo hi}` is distinct
+	// from an accidental suffix such as `12junk`.
+	const bool fWhitespaceSeparator = pszValue > pszFirst && ISWHITESPACE(pszValue[-1]);
+	SkipRangeWhitespace(pszValue);
+
+	int iParsedHi = iParsedLo;
+	bool fHasSecondValue = false;
+	if ( *pszValue == ',' )
+	{
+		++pszValue;
+		SkipRangeWhitespace(pszValue);
+		if ( !*pszValue || *pszValue == '}' || *pszValue == ',' )
+			return false;
+		const LPCTSTR pszSecond = pszValue;
+		iParsedHi = Exp_GetValueRef(pszValue);
+		if ( pszValue == pszSecond )
+			return false;
+		fHasSecondValue = true;
+	}
+	else if ( fWhitespaceSeparator && *pszValue && *pszValue != '}' && *pszValue != ';' )
+	{
+		const LPCTSTR pszSecond = pszValue;
+		iParsedHi = Exp_GetValueRef(pszValue);
+		if ( pszValue == pszSecond )
+			return false;
+		fHasSecondValue = true;
+	}
+
+	SkipRangeWhitespace(pszValue);
+	if ( fBraced )
+	{
+		if ( *pszValue != '}' )
+			return false;
+		++pszValue;
+		SkipRangeWhitespace(pszValue);
+	}
+	if ( *pszValue && *pszValue != ';' )
+		return false;
+
+	iLo = iParsedLo;
+	iHi = fHasSecondValue ? iParsedHi : iParsedLo;
+	return true;
+}
+
+static BYTE ClampRangeByte(int iValue)
+{
+	if ( iValue < 0 )
+		return 0;
+	if ( iValue > 255 )
+		return 255;
+	return static_cast<BYTE>(iValue);
+}
+
 // CValueRangeInt
 void CValueRangeInt::v_Set(CGVariant& vVal)
 {
-	// STUB
+	int iLo, iHi;
+	if ( ParseValueRange(vVal, iLo, iHi) && iLo <= iHi )
+		SetRange(iLo, iHi);
 }
 
 void CValueRangeInt::v_Get(CGVariant& vVal)
 {
-	// STUB
+	if ( IsInvalid() )
+	{
+		vVal.SetVoid();
+		return;
+	}
+	if ( m_iLo == m_iHi )
+		vVal.SetInt(m_iLo);
+	else
+		vVal.SetStrFormat("%d,%d", m_iLo, m_iHi);
 }
 
 // CValueRangeByte
 void CValueRangeByte::v_Set(CGVariant& vVal)
 {
-	// STUB
+	int iLo, iHi;
+	if ( ParseValueRange(vVal, iLo, iHi) )
+	{
+		const BYTE bLo = ClampRangeByte(iLo);
+		const BYTE bHi = ClampRangeByte(iHi);
+		if ( bLo <= bHi )
+			SetRange(bLo, bHi);
+	}
 }
 
 void CValueRangeByte::v_Get(CGVariant& vVal)
 {
-	// STUB
+	if ( m_iLo == m_iHi )
+		vVal.SetInt(m_iLo);
+	else
+		vVal.SetStrFormat("%u,%u", static_cast<unsigned int>(m_iLo), static_cast<unsigned int>(m_iHi));
 }
 
 // CValueCurveDef
