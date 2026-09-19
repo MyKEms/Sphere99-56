@@ -585,6 +585,38 @@ public:
 				return NO_ERROR;
 		}
 
+		// Allow commands to invoke methods on referenced objects, for example
+		// SRC.SYSMESSAGE inside an item trigger. Resolve the left side through
+		// the context's function table first, then through the base object's
+		// properties (ACT.TRIGGER, CONT.MESSAGE, etc.).
+		LPCTSTR pszDot = strchr(pszKey, '.');
+		if ( pszDot && pszDot != pszKey && pszDot[1] )
+		{
+			TCHAR szRoot[SCRIPT_MAX_LINE_LEN];
+			size_t iRootLen = pszDot - pszKey;
+			if ( iRootLen < sizeof(szRoot) )
+			{
+				memcpy(szRoot, pszKey, iRootLen);
+				szRoot[iRootLen] = '\0';
+
+				CGVariant vRootArgs;
+				CGVariant vRoot;
+				HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
+				if ( hRoot != NO_ERROR && pObj )
+					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
+
+				CResourceObj* pRootObj = dynamic_cast<CResourceObj*>(vRoot.GetRef());
+				if ( hRoot == NO_ERROR && pRootObj )
+				{
+					CGVariant vArgs(pszArg);
+					CGVariant vValRet;
+					HRESULT hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
+					if ( hRes == NO_ERROR )
+						return NO_ERROR;
+				}
+			}
+		}
+
 		// Try as a global function/method dispatch (script [FUNCTION] calls).
 		{
 			CGVariant vArgs(pszArg);

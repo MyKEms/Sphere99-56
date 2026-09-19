@@ -47,6 +47,7 @@ COBJBASEMETHOD(TargetG,		CSCRIPTPROP_RETNUL|CSCRIPTPROP_ARG1S, "","src targets t
 COBJBASEMETHOD(Try,			CSCRIPTPROP_ARG1S,						"","Put up dialog to modify this command")
 COBJBASEMETHOD(TryP,		CSCRIPTPROP_NARG2,						"","do something only if i have correct priv level")
 COBJBASEMETHOD(Tweak,		CSCRIPTPROP_DUPE|CSCRIPTPROP_RETNUL|CSCRIPTPROP_NARGS, "","INFO")	
+COBJBASEMETHOD(Trigger,		CSCRIPTPROP_RETVAL|CSCRIPTPROP_ARG1S, "(name[,argn[,args[,argo]]])", "Fire an object trigger by name")
 COBJBASEMETHOD(Update,		CSCRIPTPROP_RETNUL|CSCRIPTPROP_NARGS,	"","update this to all clients")
 COBJBASEMETHOD(UpdateX,		CSCRIPTPROP_RETNUL|CSCRIPTPROP_NARGS,	"","remove from clients then update")
 COBJBASEMETHOD(UseItem,		CSCRIPTPROP_RETNUL|CSCRIPTPROP_NARGS,   "","SRC use this item")

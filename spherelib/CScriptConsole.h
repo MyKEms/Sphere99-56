@@ -1,6 +1,8 @@
 #ifndef _INC_CSCRIPTCONSOLE_H
 #define _INC_CSCRIPTCONSOLE_H
 
+class CScriptObj;
+
 class CStreamText
 {
 public:
@@ -15,7 +17,7 @@ public:
 	virtual CGString GetName() const { return CGString("console"); }
 
 	void WriteString(LPCTSTR pszStr) { /* no-op for now */ }
-	CScriptObj* GetAttachedObj() const { return NULL; }
+	virtual CScriptObj* GetAttachedObj() { return NULL; }
 	int AddConsoleKey(LPCTSTR pszKey, BYTE bVal, bool bEcho) { return 0; }
 };
 
