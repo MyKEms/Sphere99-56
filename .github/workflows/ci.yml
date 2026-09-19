@@ -123,6 +123,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test fixture shutdown gate
+        run: python3 tools/fixtures/test_run_suite.py
+
       - name: Python syntax
         run: python3 -m py_compile tools/*.py tools/fixtures/*.py
 

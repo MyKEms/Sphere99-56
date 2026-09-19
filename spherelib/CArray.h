@@ -198,6 +198,10 @@ public:
 		{
 			CGObListRec* pRec = GetHead();
 			if (pRec == NULL) break;
+			// Run the typed removal hook while the record's derived type is
+			// still alive. Letting its base destructor detach it can make
+			// OnRemoveOb downcast an object that is already only CGObListRec.
+			pRec->RemoveSelf();
 			delete pRec;
 		}
 		m_iCount = 0;
