@@ -28,6 +28,7 @@ import os
 # Import Huffman module from same directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from uo_huffman import decompress as huffman_decompress, is_compressed as huffman_is_compressed
+from uo_packets import find_packet, split_packet_stream
 
 def hexdump(data, prefix=""):
     """Print hex dump of data."""
@@ -262,8 +263,21 @@ def recv_until_decoded(sock, predicate, timeout=10.0):
             break
         data.extend(chunk)
         decoded = decode_game_response(bytes(data))
+        # A live recv can end in the middle of a known packet, but it must
+        # never silently resynchronize around an unknown command.  The
+        # predicate is evaluated against the complete packets available so
+        # far; the trailing partial packet remains in the buffer for the next
+        # recv.
+        split_packet_stream(decoded, allow_truncated=True)
         if predicate(decoded):
             return bytes(data)
+
+    if data:
+        decoded = decode_game_response(bytes(data))
+        # A timeout/EOF with a partial packet is a framing failure, not a
+        # negative assertion.  Preserve the useful parser error for the test
+        # result instead of scanning bytes for a likely command marker.
+        split_packet_stream(decoded)
     return bytes(data)
 
 
@@ -289,17 +303,17 @@ def decode_game_response(data):
 
 def find_start_packet(data):
     """Return (offset, packet) for a structurally valid XCMD_Start packet."""
-    packet_len = 37  # XCMD_Start, fixed length 0x25
-    for offset in range(max(0, len(data) - packet_len + 1)):
-        if data[offset] != 0x1B:
-            continue
-        packet = data[offset:offset + packet_len]
-        uid = struct.unpack_from(">I", packet, 1)[0]
-        char_id = struct.unpack_from(">H", packet, 9)[0]
-        x = struct.unpack_from(">H", packet, 11)[0]
-        y = struct.unpack_from(">H", packet, 13)[0]
-        if uid != 0 and char_id != 0 and (x != 0 or y != 0):
-            return offset, packet
+    packet = find_packet(data, 0x1B)
+    if packet is None:
+        return None
+
+    packet_data = packet.data
+    uid = struct.unpack_from(">I", packet_data, 1)[0]
+    char_id = struct.unpack_from(">H", packet_data, 9)[0]
+    x = struct.unpack_from(">H", packet_data, 11)[0]
+    y = struct.unpack_from(">H", packet_data, 13)[0]
+    if uid != 0 and char_id != 0 and (x != 0 or y != 0):
+        return packet.offset, packet_data
     return None
 
 
@@ -307,12 +321,12 @@ def is_char_list_response(data):
     """Return whether a decoded response contains a complete login result."""
     if not data:
         return False
-    if data[0] == 0x82:
-        return len(data) >= 2
-    if data[0] != 0xA9 or len(data) < 4:
-        return False
-    packet_length = struct.unpack_from(">H", data, 1)[0]
-    return packet_length >= 4 and len(data) >= packet_length
+    packets = split_packet_stream(data, allow_truncated=True)
+    return any(
+        packet.command == 0x82 or
+        (packet.command == 0xA9 and len(packet.data) >= 4)
+        for packet in packets
+    )
 
 def parse_server_list(data):
     """Parse XCMD_ServerList (0xA8) response."""
