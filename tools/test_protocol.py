@@ -4,6 +4,7 @@
 import struct
 import unittest
 
+from uo_huffman import compress as huffman_compress, decompress as huffman_decompress
 from uo_test_client import (
     make_char_create,
     make_char_play,
@@ -11,6 +12,7 @@ from uo_test_client import (
     make_login_packet,
     make_server_select,
 )
+from uo_packets import PacketStreamError, split_packet_stream
 
 
 class ProtocolPacketTests(unittest.TestCase):
@@ -52,6 +54,44 @@ class ProtocolPacketTests(unittest.TestCase):
         self.assertEqual(packet[70:74], bytes((1, 30, 25, 25)))
         self.assertEqual(struct.unpack_from(">H", packet, 90)[0], 7)
         self.assertEqual(struct.unpack_from(">I", packet, 96)[0], 0x7F000001)
+
+    def test_packet_stream_splits_fixed_and_variable_packets(self):
+        variable = b"\x1c\x00\x07abcd"
+        fixed = b"\x22\x05\x07"
+        packets = split_packet_stream(variable + fixed)
+
+        self.assertEqual(
+            [(packet.offset, packet.command, packet.data) for packet in packets],
+            [(0, 0x1C, variable), (len(variable), 0x22, fixed)],
+        )
+
+    def test_packet_stream_rejects_unknown_commands(self):
+        with self.assertRaises(PacketStreamError):
+            split_packet_stream(b"\xfe")
+
+    def test_packet_stream_rejects_truncated_fixed_and_variable_packets(self):
+        with self.assertRaises(PacketStreamError):
+            split_packet_stream(b"\x1b" + bytes(10))
+        with self.assertRaises(PacketStreamError):
+            split_packet_stream(b"\x1c\x00")
+        with self.assertRaises(PacketStreamError):
+            split_packet_stream(b"\x1c\x00\x08abc")
+
+    def test_packet_stream_allows_only_trailing_partial_packet(self):
+        complete = b"\x22\x00\x00"
+        partial = complete + b"\x1c\x00\x08abc"
+        packets = split_packet_stream(partial, allow_truncated=True)
+
+        self.assertEqual(len(packets), 1)
+        self.assertEqual(packets[0].data, complete)
+
+    def test_huffman_decodes_concatenated_server_frames(self):
+        first = b"\x22\x01\x41"
+        second = b"\x22\x02\x41"
+
+        encoded = huffman_compress(first) + huffman_compress(second)
+
+        self.assertEqual(huffman_decompress(encoded), first + second)
 
 
 if __name__ == "__main__":

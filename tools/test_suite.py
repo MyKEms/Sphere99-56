@@ -40,6 +40,7 @@ from uo_test_client import (
     find_start_packet,
     recv_until_game_start,
 )
+from uo_packets import split_packet_stream
 
 TEST_RUN_ID = f"{os.getpid()}_{int(time.time())}"
 
@@ -371,11 +372,11 @@ def test_walking(host, port, game_port, result):
 
         decompressed = decode_game_response(resp)
 
-        # Count WalkAck (0x22) packets in decompressed data
-        ack_count = 0
-        for i in range(len(decompressed)):
-            if decompressed[i] == 0x22:
-                ack_count += 1
+        # Count WalkAck (0x22) packets after strict stream framing.  A byte
+        # scan could mistake payload data for a packet command and hide a
+        # protocol desynchronization.
+        packets = split_packet_stream(decompressed)
+        ack_count = sum(packet.command == 0x22 for packet in packets)
 
         if ack_count >= 3:
             result.ok(f"Walking works — {ack_count} WalkAcks received for 5 steps")
