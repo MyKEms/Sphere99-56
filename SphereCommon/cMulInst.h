@@ -50,7 +50,9 @@ public:
 
 public:
 	bool FindInstall();
-	VERFILE_TYPE OpenFiles( DWORD dwMask, DWORD dwMaskEx );
+	// The extended file ids start at bit 32; keep the masks wide enough on
+	// both 32-bit and 64-bit hosts.
+	VERFILE_TYPE OpenFiles( uint64_t dwMask, uint64_t dwMaskEx );
 	bool OpenFile( CGFile& file, LPCTSTR pszName, WORD wFlags );
 	bool OpenFile( VERFILE_TYPE i );
 	void CloseFiles();

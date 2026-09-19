@@ -12,10 +12,10 @@
 
 // Desguise an id as a pointer.
 #ifndef MAKEINTRESOURCE
-#define MAKEINTRESOURCE(id) ((LPCTSTR)((DWORD)((WORD)(id))))
+#define MAKEINTRESOURCE(id) (reinterpret_cast<LPCTSTR>(static_cast<uintptr_t>(static_cast<WORD>(id))))
 #endif
-#define ISINTRESOURCE(p)	(!(((DWORD)p)&0xFFFFF000))
-#define GETINTRESOURCE(p)	(((DWORD)p)&0x0FFF)
+#define ISINTRESOURCE(p)	(!((reinterpret_cast<uintptr_t>(p)) & ~static_cast<uintptr_t>(0x0FFF)))
+#define GETINTRESOURCE(p)	(static_cast<DWORD>((reinterpret_cast<uintptr_t>(p)) & static_cast<uintptr_t>(0x0FFF)))
 
 struct CResourceQty
 {

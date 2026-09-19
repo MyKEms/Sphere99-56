@@ -18,6 +18,18 @@ LDFLAGS ?= $(DEFAULT_LDFLAGS)
 BUILD_DIR ?= .
 TARGET ?= sphere99svr
 
+# GCC diagnoses pointer-to-integer truncation in C++ as a permissive warning,
+# so -fpermissive would make the 64-bit safety gate ineffective.  Debug and
+# sanitizer builds deliberately disable it.  Clang has dedicated diagnostics
+# for both directions and for narrowing; keep those strict when selected.
+ifneq (,$(findstring clang,$(CXX)))
+STRICT_CXXFLAGS = $(COMMON_CXXFLAGS) \
+	-Werror=pointer-to-int-cast -Werror=int-to-pointer-cast \
+	-Werror=shorten-64-to-32
+else
+STRICT_CXXFLAGS = $(COMMON_CXXFLAGS) -fno-permissive -Werror=int-to-pointer-cast
+endif
+
 # Source files - excluding Windows-only files
 SPHERELIB_SRC = \
 	spherelib/CPointBase.cpp \
@@ -143,12 +155,12 @@ endif
 # tree, so target switching can never reuse incompatible .o files.
 debug:
 	$(MAKE) BUILD_DIR=build/debug TARGET=build/debug/sphere99svr \
-		CXXFLAGS="$(COMMON_CXXFLAGS) -O0 -g3 -D_DEBUG -D_GLIBCXX_ASSERTIONS -fno-omit-frame-pointer" \
+		CXXFLAGS="$(STRICT_CXXFLAGS) -O0 -g3 -D_DEBUG -D_GLIBCXX_ASSERTIONS -fno-omit-frame-pointer" \
 		LDFLAGS="-lpthread" all
 
 asan:
 	$(MAKE) BUILD_DIR=build/asan TARGET=build/asan/sphere99svr \
-		CXXFLAGS="$(COMMON_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer" \
+		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer" \
 		LDFLAGS="-fsanitize=address,undefined -lpthread" all
 
 recover:

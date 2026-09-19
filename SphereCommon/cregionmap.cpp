@@ -537,8 +537,16 @@ CSectorPtr CRegionBasic::GetSector( int& i ) const
 	CSectorPtr pSector;
 	for(;;)
 	{
-		// This is really cheating i know. But it's safe enough 
-		pSector = (static_cast<const CRectMap*>(&m_rectUnion))->GetSector(i);
+		// m_rectUnion is a plain CGRect, not a CRectMap.  The old downcast
+		// happened to work because GetSector only reads the common coordinates,
+		// but it is still undefined behaviour (and UBSan catches it).  Build a
+		// real map rectangle before using the map-specific helper.
+		CRectMap rect;
+		rect.m_left = m_rectUnion.m_left;
+		rect.m_top = m_rectUnion.m_top;
+		rect.m_right = m_rectUnion.m_right;
+		rect.m_bottom = m_rectUnion.m_bottom;
+		pSector = rect.GetSector(i);
 		if ( pSector == NULL )
 			break;
 		// Does the sector rect really overlap ?
@@ -548,4 +556,3 @@ CSectorPtr CRegionBasic::GetSector( int& i ) const
 	}
 	return( pSector );
 }
-

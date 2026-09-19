@@ -42,7 +42,12 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 
 	m_itNormal.m_more1 = 0;
 	m_itNormal.m_more2 = 0;
-	m_itNormal.m_morep.ZeroPoint();
+	// m_morep is part of a raw union used by all item subtypes.  Do not call
+	// through its (non-existent) virtual object while the union is inactive.
+	m_itNormal.m_morep.m_x = 0;
+	m_itNormal.m_morep.m_y = 0;
+	m_itNormal.m_morep.m_z = 0;
+	m_itNormal.m_morep.m_mapplane = 0;
 
 	SetBase( pItemDef );
 	SetDispID( id );
@@ -527,6 +532,12 @@ static int GetTypeCode( IT_TYPE type )
 
 CItemPtr CItem::SetType( IT_TYPE type )
 {
+	if ( ! IsValidItemTypeValue( static_cast<int>(type) ))
+	{
+		DEBUG_ERR(( "Ignoring invalid item type %d" LOG_CR, static_cast<int>(type) ));
+		return this;
+	}
+
 	// We need to check this to make sure dynamic_cast won't be broken !
 	if ( GetTypeCode(m_type) != GetTypeCode(type))	// we cannot allow this.
 		return this;
@@ -4626,4 +4637,3 @@ bool CItem::OnTick()
 	DEBUG_ERR(( "Timer expired without DECAY flag '%s'?" LOG_CR, (LPCTSTR) GetName()));
 	return( true );
 }
-

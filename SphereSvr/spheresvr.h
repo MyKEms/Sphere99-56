@@ -916,7 +916,7 @@ class CProfilerPerfMon
 public:
 	void InitTasks(LPCTSTR lpszFile, int iPropCount, const CScriptPropX* pProps) { }
 	void InitTasks(int iPropCount) { }
-	int GetTaskStatusDesc(int iProp) { return 0; }
+	LPCTSTR GetTaskStatusDesc(int iProp) { return ""; }
 	int GetTaskCurrent() { return 0; }
 	void SwitchTask(int type) { }
 	void IncTaskCount(PROFILE_TYPE type, int iLenRet) { }
@@ -991,7 +991,7 @@ public:
 	SERVMODE_TYPE m_iModeCode;  // Just some error code to return to system.
 	SPHEREERR_TYPE  m_iExitFlag;	// identifies who caused the exit. <0 = error
 	bool m_fResyncPause;		// Server is temporarily halted so files can be updated.
-	DWORD m_dwParentThread;	// The thread we got Init in.
+	uintptr_t m_dwParentThread;	// The thread we got Init in.
 	DWORD m_dwTickCount;	// Last system tick count.
 
 	CGSocket m_SocketMain;	// This is the incoming monitor socket.(might be multiple ports?)
@@ -1081,7 +1081,7 @@ public:
 	}
 
 	CString GetModeDescription() const;
-	virtual void OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1=0, DWORD dwArg2=0 );
+	virtual void OnTriggerEvent( SERVTRIG_TYPE type, uintptr_t dwArg1=0, uintptr_t dwArg2=0 );
 
 	CServer();
 	~CServer();
@@ -1202,7 +1202,7 @@ public:
 #endif
 	void Exit();
 	bool OnTick( int iWaitmSec );
-	void OnTriggerEvent( SERVTRIG_TYPE iType, DWORD dwArg1, DWORD dwArg2 );
+	void OnTriggerEvent( SERVTRIG_TYPE iType, uintptr_t dwArg1, uintptr_t dwArg2 );
 
 protected:
 	CGString m_sCommand;		// local console input.

@@ -496,7 +496,7 @@ void CClient::Event_Skill_Use( SKILL_TYPE skill ) // Skill is clicked on the ski
 	SetTargMode();
 	m_Targ.m_UID.InitUID();	// This is a start point for targ more.
 
-	CSkillDef* pSkillDef = g_Cfg.GetSkillDef(skill);
+	CSkillDefPtr pSkillDef = g_Cfg.GetSkillDef(skill);
 
 	bool fCheckCrime;
 

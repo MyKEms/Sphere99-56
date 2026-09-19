@@ -674,6 +674,13 @@ long CItemDef::GetMakeValue( int iQualityPercent )
 HRESULT CItemDef::SetBaseType( IT_TYPE type, CItemDefPtr* ppItemDef )
 {
 	// Upgrade the CItemDef::pBase to the type specific class.
+	if ( ! IsValidItemTypeValue( static_cast<int>(type) ))
+	{
+		// An unknown TYPE= name must not become an invalid IT_TYPE enum value.
+		// Keep the item usable as a normal item and let the script continue.
+		DEBUG_ERR(( "Unknown item TYPE %d; using IT_NORMAL" LOG_CR, static_cast<int>(type) ));
+		type = IT_NORMAL;
+	}
 
 	if ( type == IT_CONTAINER_LOCKED )
 	{
@@ -1011,7 +1018,7 @@ CItemDefPtr CItemDef::MakeDupeReplacement( CItemDef* pBase, CGVariant& vValMaste
 	// create the dupe stub.
 	CItemDefDupe* pBaseDupe = new CItemDefDupe( id, pBaseMaster );
 	ASSERT(pBaseDupe);
-	g_Cfg.m_ResHash.AddSortKey( pBaseDupe->GetUIDIndex(), pBaseDupe );
+	g_Cfg.m_ResHash.AddSortKey( pBaseDupe, pBaseDupe->GetUIDIndex() );
 
 	return( pBaseMaster );
 }
@@ -1316,4 +1323,3 @@ CItemDefPtr CItemDef::TranslateBase( CResourceDef* pResDef ) // static
 	g_Cfg.m_ResHash.AddSortKey( (CResourceDef*)(CItemDef*)pBase, pResDef->GetHashCode() );
 	return( pBase );
 }
-

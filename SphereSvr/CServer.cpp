@@ -634,7 +634,7 @@ bool CServer::OnConsoleCmd( CGString& sText, CScriptConsole* pSrc )
 			pSrc->Printf( "Profiles %s: (%d sec total)" LOG_CR, m_Profile.IsProfilingActive() ? "ON" : "OFF", m_Profile.GetSampleWindowLen());
 			for ( int i=0; i < PROFILE_QTY; i++ )
 			{
-				pSrc->Printf( "'%s'=%s" LOG_CR, (LPCTSTR) g_ProfileProps[i].m_pszName, (LPCTSTR) m_Profile.GetTaskStatusDesc(i));
+				pSrc->Printf( "'%s'=%s" LOG_CR, (LPCTSTR) g_ProfileProps[i].m_pszName, m_Profile.GetTaskStatusDesc(i));
 			}
 		}
 		break;
@@ -707,7 +707,7 @@ CString CServer::GetModeDescription() const
 	return pszMode;
 }
 
-void CServer::OnTriggerEvent( SERVTRIG_TYPE type, DWORD dwArg1, DWORD dwArg2 )
+void CServer::OnTriggerEvent( SERVTRIG_TYPE type, uintptr_t dwArg1, uintptr_t dwArg2 )
 {
 	// CSphereExpContext triggers on the server level.
 	// use this to fire events to the COM layer stuff.
