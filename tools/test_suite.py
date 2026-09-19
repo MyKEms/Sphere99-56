@@ -3,7 +3,7 @@
 Sphere99 Automated Test Suite
 
 Usage:
-    python3 test_suite.py [host] [login_port] [game_port] [--quick]
+    python3 test_suite.py [host] [login_port] [game_port] [--quick] [--skip-fixture-tests]
 
 Tests:
   1. Server reachability (TCP connect)
@@ -585,8 +585,8 @@ def _drain_game_socket(sock, initial=b""):
 
 
 def test_script_function_tables(host, port, game_port, result):
-    """Test 14: table-backed expressions are evaluated in a trigger."""
-    print("\n[Test 14] Direct Script Function Tables")
+    """Test 14: script functions and a spawned CHARDEF combat range."""
+    print("\n[Test 14] Script Functions and Spawned CHARDEF Range")
     sock = None
     try:
         sock, _ = game_connect(host, port, test_account("table"), "tablepass", game_port=game_port)
@@ -606,6 +606,15 @@ def test_script_function_tables(host, port, game_port, result):
                 "Script function tables",
                 f"expected {expected!r}, got {actual!r} in {len(decoded)} decoded bytes",
             )
+
+        range_message = _find_system_message(decoded, "SPHERE_RANGE_ARMOR ")
+        if range_message == "SPHERE_RANGE_ARMOR 95":
+            result.ok("Spawned player used CHARDEF ARMOR=5,5 for deterministic damage")
+        else:
+            result.fail(
+                "CHARDEF range on spawned player",
+                f"expected 'SPHERE_RANGE_ARMOR 95', got {range_message!r}",
+            )
     except Exception as error:
         result.fail("Script function tables", str(error))
     finally:
@@ -621,8 +630,15 @@ def main():
     if extra and not extra[0].startswith("--"):
         game_port = int(extra.pop(0))
     quick = "--quick" in extra
+    skip_fixture_tests = "--skip-fixture-tests" in extra
 
-    print(f"Sphere99 Test Suite — login {host}:{port}, game {host}:{game_port}" + (" (quick mode)" if quick else ""))
+    modes = []
+    if quick:
+        modes.append("quick")
+    if skip_fixture_tests:
+        modes.append("fixture-specific tests skipped")
+    mode_label = f" ({', '.join(modes)})" if modes else ""
+    print(f"Sphere99 Test Suite — login {host}:{port}, game {host}:{game_port}{mode_label}")
     print(f"{'='*60}")
 
     # Pre-flight: check if server is reachable
@@ -659,7 +675,10 @@ def main():
     # Script engine tests
     test_script_engine_stability(host, port, game_port, result)
     test_expression_eval_proxy(host, port, game_port, result)
-    test_script_function_tables(host, port, game_port, result)
+    if skip_fixture_tests:
+        print("\n[Test 14] Skipped — requires the synthetic script hooks from make_fixture.py")
+    else:
+        test_script_function_tables(host, port, game_port, result)
 
     success = result.summary()
     sys.exit(0 if success else 1)

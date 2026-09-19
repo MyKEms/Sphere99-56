@@ -99,7 +99,14 @@ against a world you intend to keep:
 ```bash
 python3 tools/test_suite.py localhost 2593 --quick
 python3 tools/test_suite.py localhost 2593
+# Imported script sets lack the fixture-only trigger hooks used by the last test.
+python3 tools/test_suite.py localhost 2593 --skip-fixture-tests
 ```
+
+The full synthetic-fixture run reports 15 assertions. `--skip-fixture-tests`
+omits the two assertions that require the fixture's custom script hooks; the
+remaining protocol checks still create accounts and characters, so use only a
+disposable runtime in either mode.
 
 For a completely self-contained Linux smoke test, generate the synthetic
 fixture and run the server plus the full suite. The generated directory is

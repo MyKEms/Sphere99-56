@@ -1048,8 +1048,7 @@ HRESULT CItemDefWeapon::s_PropGet( LPCTSTR pszKey, CGVariant& vVal, CScriptConso
 	case P_Armor:
 	case P_Att:
 	case P_Dam:
-		// Full range?
-		vVal.SetInt( m_damage.GetMin());
+		m_damage.v_Get( vVal );
 		break;
 	case P_ArmorLo:
 	case P_DamageLo:
