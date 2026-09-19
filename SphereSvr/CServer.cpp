@@ -1197,6 +1197,25 @@ CClientPtr CServer::FindClientAccount( const CAccount* pAccount ) const
 	return NULL;
 }
 
+void CServer::QueueClientForDelete( CClient* pClient )
+{
+	if ( pClient == NULL || m_ClientsPendingDelete.IsMyChild( pClient ))
+		return;
+
+	// CClient can belong to only one CGObList.  Detach it from the active
+	// registry before retaining it in the deferred-destruction queue.
+	pClient->RemoveSelf();
+	m_ClientsPendingDelete.InsertTail( pClient );
+}
+
+void CServer::DestroyPendingClients()
+{
+	// DeleteAll() invokes the virtual CClient destructor while the records are
+	// still in this list.  No network iteration is allowed after this point in
+	// the current tick.
+	m_ClientsPendingDelete.DeleteAll();
+}
+
 //*********************************************************
 
 CClientPtr CServer::SocketsAccept( CGSocket& socket, bool fGod ) // Check for messages from the clients
@@ -1276,9 +1295,9 @@ void CServer::SocketsReceive() // Check for messages from the clients
 		pClientNext = pClient->GetNext();
 		if ( ! pClient->m_Socket.IsOpen())
 		{
-			// Socket already closed — remove from list. Use RemoveSelf directly
-			// rather than DeleteThis to avoid re-entrancy issues with ref counting.
-			pClient->RemoveSelf();
+			// Socket already closed — use the same deferred lifecycle as every
+			// other disconnect path.
+			pClient->DeleteThis();
 			continue;
 		}
 		if ( nfds < MAX_POLL_FDS )
@@ -1305,6 +1324,8 @@ void CServer::SocketsReceive() // Check for messages from the clients
 	for ( pClient = GetClientHead(); pClient!=NULL; pClient = pClientNext )
 	{
 		pClientNext = pClient->GetNext();
+		if ( ! m_Clients.IsMyChild( pClient ))
+			continue;
 		if ( ! pClient->m_Socket.IsOpen())
 		{
 			pClient->DeleteThis();
@@ -1413,6 +1434,8 @@ void CServer::SocketsReceive() // Check for messages from the clients
 	for ( pClient = GetClientHead(); pClient!=NULL; pClient = pClientNext )
 	{
 		pClientNext = pClient->GetNext();
+		if ( ! m_Clients.IsMyChild( pClient ))
+			continue;
 		if ( ! pClient->m_Socket.IsOpen())
 		{
 			pClient->DeleteThis();
@@ -1522,8 +1545,15 @@ void CServer::SocketsReceive() // Check for messages from the clients
 
 void CServer::SocketsFlush() // Sends ALL buffered data
 {
-	for ( CClientPtr pClient = GetClientHead(); pClient!=NULL; pClient = pClient->GetNext())
+	CClientPtr pClient = GetClientHead();
+	while ( pClient != NULL )
 	{
+		CClient* pClientNext = (CClient*) pClient->GetNext();
+		if ( ! m_Clients.IsMyChild( pClient ))
+		{
+			pClient = pClientNext;
+			continue;
+		}
 		try
 		{
 			pClient->xFlush();
@@ -1531,6 +1561,7 @@ void CServer::SocketsFlush() // Sends ALL buffered data
 			pClient->xFlush();
 		}
 		catch (...) { SPHERE_LOG_ERR("SocketsFlush: client flush threw"); }
+		pClient = pClientNext;
 	}
 }
 
@@ -1547,6 +1578,7 @@ void CServer::OnTick()
 		// Recovered — still try to flush client data
 		try { SocketsFlush(); }
 		catch (...) { SPHERE_LOG_ERR("OnTick: recovered flush threw"); }
+		DestroyPendingClients();
 		return;
 	}
 #endif
@@ -1597,13 +1629,23 @@ void CServer::OnTick()
 	{
 		m_Profile.SwitchTask( PROFILE_Clients );
 
-		for ( CClient* pClient = (CClient*) m_Clients.GetHead(); pClient!=NULL; pClient = (CClient*) pClient->GetNext())
+		CClient* pClient = (CClient*) m_Clients.GetHead();
+		while ( pClient != NULL )
 		{
+			CClient* pClientNext = (CClient*) pClient->GetNext();
+			if ( ! m_Clients.IsMyChild( pClient ))
+			{
+				pClient = pClientNext;
+				continue;
+			}
 			bool hasData = false;
 			try { hasData = pClient->xHasData(); }
-			catch (...) { SPHERE_LOG_ERR("OnTick: xHasData threw"); continue; }
+			catch (...) { SPHERE_LOG_ERR("OnTick: xHasData threw"); pClient = pClientNext; continue; }
 			if ( ! hasData)
+			{
+				pClient = pClientNext;
 				continue;
+			}
 
 			bool fRet = false;
 			try
@@ -1612,14 +1654,18 @@ void CServer::OnTick()
 			}
 			SPHERE_LOG_TRY_CATCH( "Server xDispatchMsg" )
 
-			try
+			if ( m_Clients.IsMyChild( pClient ))
 			{
-				pClient->xFinishProcessMsg(fRet);
+				try
+				{
+					pClient->xFinishProcessMsg(fRet);
+				}
+				catch (...)
+				{
+					SPHERE_LOG_ERR("OnTick: client cleanup failed");
+				}
 			}
-			catch (...)
-			{
-				SPHERE_LOG_ERR("OnTick: client cleanup failed");
-			}
+			pClient = pClientNext;
 		}
 	}
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
@@ -1628,11 +1674,12 @@ void CServer::OnTick()
 
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase2 ok (tick=%d)", s_iTickDbg); }
 
-do_flush:
+	do_flush:
 	// Network flush — ALWAYS runs, even after SEGV recovery.
 	m_Profile.SwitchTask( PROFILE_NetworkTx );
 	try { SocketsFlush(); }
 	catch (...) { SPHERE_LOG_ERR("OnTick: network flush threw"); }
+	DestroyPendingClients();
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
@@ -1779,6 +1826,7 @@ bool CServer::SocketsInit() // Initialize sockets
 void CServer::SocketsClose()
 {
 	m_Clients.DeleteAll();
+	DestroyPendingClients();
 	m_SocketMain.Close();
 	m_SocketGod.Close();
 }
