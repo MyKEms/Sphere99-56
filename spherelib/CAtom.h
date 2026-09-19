@@ -35,9 +35,9 @@ private:
         }
     }
 public:
-    DWORD GetIndex() const
+    uintptr_t GetIndex() const
     {
-        return((DWORD)(m_pDef));
+        return(reinterpret_cast<uintptr_t>(m_pDef));
     }
     LPCTSTR GetStr() const
     {

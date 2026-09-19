@@ -1108,7 +1108,7 @@ void CChat::DoCommand( LPCTSTR pszCommand, CClient* pSrc )
 {
 	ASSERT(pSrc);
 
-	char* pszArgs = strchr( pszCommand, ' ');
+	const char* pszArgs = strchr( pszCommand, ' ');
 	if ( pszArgs )
 		pszArgs ++;
 	else
@@ -1370,4 +1370,3 @@ bool CChat::JoinChannel(CClient* pClient, const char* pszChannel, const char* ps
 
 	return pNewChannel->Member_Join( pClient, pszPassword );
 }
-

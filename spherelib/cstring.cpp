@@ -126,7 +126,8 @@ int CGString::SetLength(int iNewLength)
 		ASSERT(pNewData);
 
 		int iMinLength = minimum(iNewLength, m_iLength);
-		strncpy(pNewData, m_pchData, iMinLength);
+		if ( iMinLength > 0 )
+			strncpy(pNewData, m_pchData, iMinLength);
 		pNewData[m_iLength] = 0;
 
 		if (m_pchData) delete[] m_pchData;

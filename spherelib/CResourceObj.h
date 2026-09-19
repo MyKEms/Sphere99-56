@@ -20,7 +20,7 @@ public:
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropSet(const char* pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 
-	int GetRefCount() { return 1; /* stub - always at least 1 */ }
+	int GetRefCount() const { return 1; /* stub - always at least 1 */ }
 	void IncRefCount() { /* stub */ }
 	void StaticDestruct() { /* stub */ }
 	HASH_INDEX GetUIDIndex() const { return m_dwHashIndex; }

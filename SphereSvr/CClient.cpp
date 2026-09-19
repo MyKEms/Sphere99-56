@@ -64,6 +64,7 @@ CClient::CClient( SOCKET client ) :
 	m_wWalkCount = -1;
 	m_iWalkStepCount = 0;
 	m_fPaused = false;
+	m_fUpdateStats = false;
 	m_wHueText = HUE_TEXT_DEF;
 
 	m_Targ.m_Mode = CLIMODE_SETUP_CONNECTING;
@@ -1020,4 +1021,3 @@ HRESULT CClient::s_PropSet( const char* pszKey, CGVariant& vVal )
 	}
 	return s_PropSet( iProp, vVal );
 }
-

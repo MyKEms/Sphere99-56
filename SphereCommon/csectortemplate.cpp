@@ -81,8 +81,19 @@ void CItemsList::AddItemToSector( CItemPtr pItem )
 //////////////////////////////////////////////////////////////////
 // -CSectorTemplate
 
+static int CalcSectorIndex( const void* pSector )
+{
+	CSectorPtr pSectorZero = g_World.GetSector(0);
+	int i = static_cast<int>((reinterpret_cast<const BYTE*>(pSector) -
+		reinterpret_cast<const BYTE*>(pSectorZero)) / sizeof(CSector));
+	ASSERT( i >= 0 && i < SECTOR_QTY );
+	return i;
+}
+
 CSectorTemplate::CSectorTemplate() :
-	CResourceObj( GetIndex())
+	// Do not call GetIndex() from a base-class initializer.  The derived
+	// object's vptr is not installed yet, which UBSan correctly rejects.
+	CResourceObj( CalcSectorIndex(this))
 {
 }
 
@@ -92,11 +103,7 @@ CSectorTemplate::~CSectorTemplate()
 
 int CSectorTemplate::GetIndex() const
 {
-	CSectorPtr pSectorZero = g_World.GetSector(0);
-	int i = (((BYTE*)this) - ((BYTE*)pSectorZero));
-	i /= sizeof(CSector);
-	ASSERT( i>=0 && i < SECTOR_QTY );
-	return( i );
+	return CalcSectorIndex(this);
 }
 
 CPointMap CSectorTemplate::GetBasePoint() const
@@ -253,7 +260,7 @@ bool CSectorTemplate::UnLinkRegion( CRegionBasic* pRegionOld, bool fRetestChars 
 		bool bFound = false;
 		for (int i = m_RegionLinks.GetCount() - 1; i >= 0; i--)
 		{
-			if (&m_RegionLinks.ElementAt(i) == pRegionOld)
+			if (m_RegionLinks.ElementAt(i) == pRegionOld)
 			{
 				m_RegionLinks.RemoveAt(i);
 				bFound = true;
@@ -378,4 +385,3 @@ bool CSectorTemplate::AddTeleport( CTeleport* pTeleport )
 	m_Teleports.AddSortKey( pTeleport, pTeleport->GetHashCode());
 	return( true );
 }
-

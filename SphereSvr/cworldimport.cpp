@@ -110,7 +110,7 @@ void CImportFile::ImportFix()
 	m_pCurSer = m_ListSer.GetHead();
 	for ( ; m_pCurSer != NULL; m_pCurSer = pSerNext )
 	{
-		pSerNext = m_pCurSer->GetNext();
+		pSerNext = STATIC_CAST(CImportSer, m_pCurSer->GetNext());
 		if ( m_pCurSer->m_pObj == NULL )		// NEver created correctly
 		{
 			delete m_pCurSer;
@@ -177,7 +177,7 @@ void CImportFile::ImportFix()
 		// Find it's container.
 		CImportSer* pSerCont = m_ListSer.GetHead();
 		CObjBasePtr pObjCont;
-		for ( ; pSerCont != NULL; pSerCont = pSerCont->GetNext())
+		for ( ; pSerCont != NULL; pSerCont = STATIC_CAST(CImportSer, pSerCont->GetNext()))
 		{
 			if ( pSerCont->m_pObj == NULL )
 				continue;
@@ -351,7 +351,7 @@ bool CImportFile::ImportWSC( CScript& s, WORD wModeFlags )
 			continue;
 
 		// Parse the line.
-		TCHAR* pArg = strchr( s.GetKey(), ' ' );
+		TCHAR* pArg = strchr( const_cast<TCHAR*>(s.GetKey()), ' ' );
 		if ( pArg != NULL )
 		{
 			*pArg++ = '\0';
@@ -792,4 +792,3 @@ HRESULT CWorld::Export( LPCTSTR pszFilename, const CChar* pSrc, WORD wModeFlags,
 
 	return( 0 );
 }
-

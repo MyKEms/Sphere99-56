@@ -101,7 +101,7 @@ LPCTSTR CGTime::Format(LPCTSTR pszFormat) const
     struct tm* ptmTemp = localtime(&m_time);
     if (ptmTemp == NULL)
     {
-        pszTemp = '\0';
+        *pszTemp = '\0';
         return(pszTemp);
     }
 
@@ -112,7 +112,7 @@ LPCTSTR CGTime::Format(LPCTSTR pszFormat) const
 #else
     if (!strftime(pszTemp, maxTimeBufferSize, pszFormat, ptmTemp))
     {
-        pszTemp = '\0';
+        *pszTemp = '\0';
     }
 #endif
 
@@ -130,7 +130,7 @@ LPCTSTR CGTime::FormatGmt(LPCTSTR pszFormat) const
     struct tm* ptmTemp = gmtime(&m_time);
     if (ptmTemp == NULL)
     {
-        pszTemp = '\0';
+        *pszTemp = '\0';
         return(pszTemp);
     }
 
@@ -152,7 +152,7 @@ LPCTSTR CGTime::FormatGmt(LPCTSTR pszFormat) const
 #else
     if (!strftime(pszTemp, maxTimeBufferSize, pszFormat, ptmTemp))
     {
-        pszTemp = '\0';
+        *pszTemp = '\0';
     }
 #endif
 

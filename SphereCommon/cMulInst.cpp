@@ -214,7 +214,7 @@ bool CMulInstall::OpenFile( VERFILE_TYPE i )
 	return( OpenFile( m_File[i], pszTitle, OF_READ|OF_SHARE_DENY_WRITE ));
 }
 
-VERFILE_TYPE CMulInstall::OpenFiles( DWORD dwFilesMask, DWORD dwFilesMaskEx )
+VERFILE_TYPE CMulInstall::OpenFiles( uint64_t dwFilesMask, uint64_t dwFilesMaskEx )
 {
 	// Now open all the required files.
 	// REUTRN: 
@@ -347,4 +347,3 @@ bool CMulInstall::ReadMulData( VERFILE_TYPE filedata, const CMulIndexRec& Index,
 	}
 	return( true );
 }
-
