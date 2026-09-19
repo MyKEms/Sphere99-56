@@ -7,7 +7,12 @@ import subprocess
 import unittest
 from unittest.mock import Mock
 
-from run_suite import newbie_load_failures, shutdown_failures, stop_server
+from run_suite import (
+    newbie_load_failures,
+    shutdown_failures,
+    stop_server,
+    unknown_keyword_failures,
+)
 
 
 class ShutdownFailuresTests(unittest.TestCase):
@@ -87,6 +92,98 @@ class StopServerTests(unittest.TestCase):
         process.terminate.assert_called_once_with()
         process.kill.assert_called_once_with()
         self.assertEqual(process.wait.call_count, 2)
+
+
+class UnknownKeywordGateTests(unittest.TestCase):
+    def test_empty_report_passes_empty_allowlist(self) -> None:
+        report = {"distinct": 0, "total": 0, "overflow": 0, "entries": []}
+        self.assertEqual(unknown_keyword_failures(report, {"entries": []}), [])
+
+    def test_unexpected_keyword_fails(self) -> None:
+        report = {
+            "distinct": 1,
+            "total": 1,
+            "overflow": 0,
+            "entries": [{"kind": "get", "keyword": "MISSING", "count": 1}],
+        }
+        failures = unknown_keyword_failures(report, {"entries": []})
+        self.assertTrue(any("unexpected unknown-keyword keys" in f for f in failures))
+
+    def test_allowlisted_count_must_match(self) -> None:
+        report = {
+            "distinct": 1,
+            "total": 2,
+            "overflow": 0,
+            "entries": [{"kind": "get", "keyword": "KNOWN_GAP", "count": 2}],
+        }
+        allowlist = {
+            "entries": [{"kind": "get", "keyword": "KNOWN_GAP", "count": 1}]
+        }
+        failures = unknown_keyword_failures(report, allowlist)
+        self.assertTrue(any("expected 1" in f for f in failures))
+
+    def test_allowlisted_count_range_accepts_runtime_variation(self) -> None:
+        report = {
+            "distinct": 1,
+            "total": 20,
+            "overflow": 0,
+            "entries": [{"kind": "trigger", "keyword": "@TIMER", "count": 20}],
+        }
+        allowlist = {
+            "entries": [
+                {
+                    "kind": "trigger",
+                    "keyword": "@TIMER",
+                    "count_range": [1, 32],
+                }
+            ]
+        }
+        self.assertEqual(unknown_keyword_failures(report, allowlist), [])
+
+    def test_allowlisted_count_range_rejects_out_of_range_count(self) -> None:
+        report = {
+            "distinct": 1,
+            "total": 33,
+            "overflow": 0,
+            "entries": [{"kind": "trigger", "keyword": "@TIMER", "count": 33}],
+        }
+        allowlist = {
+            "entries": [
+                {
+                    "kind": "trigger",
+                    "keyword": "@TIMER",
+                    "count_range": [1, 32],
+                }
+            ]
+        }
+        failures = unknown_keyword_failures(report, allowlist)
+        self.assertTrue(any("expected count 1..32" in f for f in failures))
+
+    def test_optional_allowlist_key_may_be_absent(self) -> None:
+        report = {"distinct": 0, "total": 0, "overflow": 0, "entries": []}
+        allowlist = {
+            "entries": [
+                {
+                    "kind": "trigger",
+                    "keyword": "@TIMER",
+                    "count_range": [1, 32],
+                    "optional": True,
+                }
+            ]
+        }
+        self.assertEqual(unknown_keyword_failures(report, allowlist), [])
+
+    def test_overflow_fails_even_when_keys_are_allowlisted(self) -> None:
+        report = {"distinct": 0, "total": 1, "overflow": 1, "entries": []}
+        failures = unknown_keyword_failures(report, {"entries": []})
+        self.assertTrue(any("overflowed" in f for f in failures))
+
+    def test_boolean_summary_counters_are_rejected(self) -> None:
+        report = {"distinct": False, "total": False, "overflow": False, "entries": []}
+        failures = unknown_keyword_failures(report, {"entries": []})
+        self.assertTrue(any("invalid unknown-keyword distinct" in f for f in failures))
+        self.assertTrue(any("invalid unknown-keyword total" in f for f in failures))
+        self.assertTrue(any("invalid unknown-keyword overflow" in f for f in failures))
 
 
 if __name__ == "__main__":

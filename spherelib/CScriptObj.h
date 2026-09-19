@@ -7,6 +7,8 @@
 #define CSCRIPT_PARSE_HTML 1
 #define CSCRIPT_PARSE_NBSP 2
 
+class CScript;
+
 enum TRIGRUN_TYPE
 {
 	TRIGRUN_SECTION_EXEC,	// Execute this section (first line already read)
@@ -43,6 +45,82 @@ public:
 		return TRIGRET_RET_DEFAULT;
 	}
 	virtual CGString GetName() const { return CGString(); }
+};
+
+enum SCRIPT_UNKNOWN_KIND
+{
+	SCRIPT_UNKNOWN_GET,
+	SCRIPT_UNKNOWN_SET,
+	SCRIPT_UNKNOWN_METHOD,
+	SCRIPT_UNKNOWN_FUNCTION,
+	SCRIPT_UNKNOWN_TRIGGER,
+	SCRIPT_UNKNOWN_REJECTED
+};
+
+void ScriptUnknownRecord(SCRIPT_UNKNOWN_KIND kind, LPCTSTR pszKeyword, const CScriptObj* pObj);
+const CScript* ScriptUnknownSetContext(const CScript* pScript);
+void ScriptUnknownReportSetPath(LPCTSTR pszPath);
+bool ScriptUnknownReportIsEnabled();
+bool ScriptUnknownResultIsRejected(HRESULT hRes);
+bool ScriptUnknownReportWrite();
+
+class CScriptUnknownRejectTracker
+{
+public:
+	CScriptUnknownRejectTracker()
+		: m_pObj(NULL), m_fEnabled(ScriptUnknownReportIsEnabled()), m_fRejected(false)
+	{
+		m_szKeyword[0] = '\0';
+	}
+
+	void Observe(HRESULT hRes, LPCTSTR pszKeyword, const CScriptObj* pObj)
+	{
+		if ( !m_fEnabled || m_fRejected || !ScriptUnknownResultIsRejected(hRes) )
+			return;
+		strncpy(m_szKeyword, pszKeyword ? pszKeyword : "", sizeof(m_szKeyword) - 1);
+		m_szKeyword[sizeof(m_szKeyword) - 1] = '\0';
+		m_pObj = pObj;
+		m_fRejected = true;
+	}
+
+	bool RecordIfPresent()
+	{
+		if ( !m_fRejected )
+			return false;
+		ScriptUnknownRecord(SCRIPT_UNKNOWN_REJECTED, m_szKeyword, m_pObj);
+		m_fRejected = false;
+		return true;
+	}
+
+private:
+	const CScriptObj* m_pObj;
+	TCHAR m_szKeyword[256];
+	bool m_fEnabled;
+	bool m_fRejected;
+};
+
+class CScriptUnknownContextScope
+{
+public:
+	explicit CScriptUnknownContextScope(const CScript* pScript)
+		: m_pPrevious(NULL), m_fActive(ScriptUnknownReportIsEnabled())
+	{
+		if ( m_fActive )
+			m_pPrevious = ScriptUnknownSetContext(pScript);
+	}
+
+	~CScriptUnknownContextScope()
+	{
+		if ( m_fActive )
+			ScriptUnknownSetContext(m_pPrevious);
+	}
+
+	CScriptUnknownContextScope(const CScriptUnknownContextScope&) = delete;
+	CScriptUnknownContextScope& operator=(const CScriptUnknownContextScope&) = delete;
+
+private:
+	const CScript* m_pPrevious;
+	bool m_fActive;
 };
 
 class CRefObjDef

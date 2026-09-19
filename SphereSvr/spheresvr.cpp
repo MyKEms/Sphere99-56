@@ -640,6 +640,13 @@ void Sphere_ExitServer()
 
 	g_Serv.SocketsClose();
 	g_World.Close(true);
+	if ( g_Serv.m_iExitFlag >= 0 && g_Serv.m_sUnknownKeywordReport.GetLength() > 0 &&
+		!ScriptUnknownReportWrite() )
+	{
+		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+			"Unable to write unresolved keyword report to %s." LOG_CR,
+			(LPCTSTR) g_Serv.m_sUnknownKeywordReport );
+	}
 
 	g_Cfg.Unload(false);
 	g_Accounts.Empty();
