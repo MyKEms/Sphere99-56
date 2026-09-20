@@ -699,6 +699,19 @@ def test_script_function_tables(host, port, game_port, result):
                 result.ok(test_name)
             else:
                 result.fail(test_name, f"expected {expected_arg!r}, got {actual_arg!r}")
+
+        dotted_expectations = (
+            ("SPHERE_DOTTED_METHOD_REACHED", "SPHERE_DOTTED_METHOD_REACHED", "Function result method call reaches the returned character"),
+            ("SPHERE_DOTTED_METHOD_COUNT ", "SPHERE_DOTTED_METHOD_COUNT 1", "Dotted method call evaluates its getter once"),
+            ("SPHERE_DOTTED_PROPERTY ", "SPHERE_DOTTED_PROPERTY TableSmoke", "Function result property lookup resolves the returned character"),
+            ("SPHERE_DOTTED_PROPERTY_COUNT ", "SPHERE_DOTTED_PROPERTY_COUNT 1", "Dotted property lookup evaluates its getter once"),
+        )
+        for prefix, expected_dotted, test_name in dotted_expectations:
+            actual_dotted = _find_system_message(decoded, prefix)
+            if actual_dotted == expected_dotted:
+                result.ok(test_name)
+            else:
+                result.fail(test_name, f"expected {expected_dotted!r}, got {actual_dotted!r}")
     except Exception as error:
         result.fail("Script function tables", str(error))
     finally:

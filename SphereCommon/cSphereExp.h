@@ -218,6 +218,10 @@ private:
 class CSphereExpContext : public CScriptExecContext
 {
 	// The base and default context. has no local arguments.
+protected:
+	virtual CResourceObj* ResolveUIDObject(UID_INDEX uid);
+	virtual bool IsScriptFunction(LPCTSTR pszKey);
+
 public:
 	CSphereExpContext( CResourceObj* pBaseObj, CScriptConsole* pSrc );
 	~CSphereExpContext();

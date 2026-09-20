@@ -259,6 +259,12 @@ ARG(trigger_value,5)
 SYSMESSAGE SPHERE_ARG_SET <ARG(value,30)>|<ARG.value>|<ARG.trigger_value>
 SYSMESSAGE SPHERE_ARG_MACRO <?ARG(macro_value,31)?>|<ARG.macro_value>
 SYSMESSAGE SPHERE_ARG_FUNCTION <f_arg_local_outer>|<ARG.trigger_value>
+VAR dotted_getter_calls,0
+f_fixture_getter.sysmessage SPHERE_DOTTED_METHOD_REACHED
+SYSMESSAGE SPHERE_DOTTED_METHOD_COUNT <VAR(dotted_getter_calls)>
+VAR dotted_getter_calls,0
+SYSMESSAGE SPHERE_DOTTED_PROPERTY <f_fixture_getter.name>
+SYSMESSAGE SPHERE_DOTTED_PROPERTY_COUNT <VAR(dotted_getter_calls)>
 SYSMESSAGE SPHERE_TABLE_SMOKE <EVAL 1+2>|<STRLEN abc>|<RAND 1>|<ISNUM 123>|<STRCMP abc,abc>
 SYSMESSAGE SPHERE_NEWBIE_MAGERY <RESCOUNT(0x0E72)>
 SYSMESSAGE SPHERE_NEWBIE_RESIST <RESCOUNT(0x0E73)>
@@ -305,6 +311,10 @@ SYSMESSAGE SPHERE_ARG_COMMA_EXPRESSION <ARG(expr_comma_text,alpha,beta,gamma)>|<
 SYSMESSAGE SPHERE_ARG_LENGTH <?STRLEN(<ARG.text>)?>
 SYSMESSAGE SPHERE_ARG_DEFAULT [<ARG.unset_value>]
 RETURN 10
+
+[FUNCTION f_fixture_getter]
+VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
+RETURN <SRC.SERIAL>
 
 [SPEECH spk_AllPlayers]
 
