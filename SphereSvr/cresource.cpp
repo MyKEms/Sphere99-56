@@ -1178,9 +1178,13 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 		while ( s.ReadKeyParse())
 		{
 			CSphereUID ridnew( RES_TypeDef, s.GetArgInt());
-			CResourceDefPtr pResDef = new CResourceDef( ridnew, s.GetKey());
+			LPCTSTR pszTypeDefName = s.GetKey();
+			CResourceDefPtr pResDef = new CResourceDef( ridnew, pszTypeDefName);
 			ASSERT(pResDef);
 			m_ResHash.AddSortKey( pResDef, ridnew );
+			// TYPEDEFS supplies built-in item type names used by TYPE=.
+			// ResourceGetIndexType resolves names through m_Const.
+			m_Const.SetKeyVar( pszTypeDefName, CGVariant( VARTYPE_UID, &ridnew ));
 		}
 		return( true );
 
