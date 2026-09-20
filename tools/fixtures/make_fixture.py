@@ -218,6 +218,12 @@ DEFNAME=T_HAIR
 DEFNAME=DEFAULTITEM
 NAME=synthetic container
 TYPE=CONTAINER
+TDATA2=1
+
+[ITEMDEF 0x0E76]
+DEFNAME=SYNTHETIC_OBJECT
+NAME=synthetic object
+TYPE=T_NORMAL
 
 [ITEMDEF 0x0E72]
 DEFNAME=SYNTHETIC_MAGERY_START
@@ -395,6 +401,7 @@ def write_world_load_counts_save(
     *,
     truncate_world_item: bool,
     unresolved_worldchar_type: bool,
+    noncontainer_reference: bool,
 ) -> None:
     """Write a known synthetic save with optional world-load failures."""
 
@@ -402,13 +409,32 @@ def write_world_load_counts_save(
         "TITLE=Sphere synthetic object-count fixture",
         "VERSION=0.99",
         "SAVECOUNT=0",
-        "[WORLDITEM SYNTHETIC_MAGERY_START]",
-        "SERIAL=1",
-        "P=128,128,0",
-        "[WORLDITEM SYNTHETIC_RESIST_START]",
-        "SERIAL=2",
-        "P=129,128,0",
     ]
+    if noncontainer_reference:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                "SERIAL=4",
+                "P=128,128,0",
+                "[WORLDITEM DEFAULTITEM]",
+                "SERIAL=5",
+                "CONT=4",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                "SERIAL=6",
+                "CONT=5",
+            ]
+        )
+    else:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_MAGERY_START]",
+                "SERIAL=1",
+                "P=128,128,0",
+                "[WORLDITEM SYNTHETIC_RESIST_START]",
+                "SERIAL=2",
+                "P=129,128,0",
+            ]
+        )
     if truncate_world_item:
         world_sections.extend(
             [
@@ -513,13 +539,21 @@ def main() -> int:
         action="store_true",
         help="use one synthetic character type with no CHARDEF",
     )
+    parser.add_argument(
+        "--noncontainer-reference",
+        action="store_true",
+        help="include a nested item that references a non-container",
+    )
     args = parser.parse_args()
 
-    if (
-        args.truncate_world_item or args.unresolved_worldchar_type
-    ) and not args.world_load_counts:
+    world_load_failure_modes = (
+        args.truncate_world_item,
+        args.unresolved_worldchar_type,
+        args.noncontainer_reference,
+    )
+    if any(world_load_failure_modes) and not args.world_load_counts:
         parser.error("world-load failure options require --world-load-counts")
-    if args.truncate_world_item and args.unresolved_worldchar_type:
+    if sum(world_load_failure_modes) > 1:
         parser.error("choose only one world-load failure option")
 
     root = args.output.resolve()
@@ -548,6 +582,7 @@ def main() -> int:
             root,
             truncate_world_item=args.truncate_world_item,
             unresolved_worldchar_type=args.unresolved_worldchar_type,
+            noncontainer_reference=args.noncontainer_reference,
         )
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")

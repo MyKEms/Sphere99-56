@@ -2294,7 +2294,35 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 		}
 	}
 
-	DEBUG_ERR(( "Non container uid=0%lx,id=%s" LOG_CR, (DWORD) uid, (LPCTSTR) pObjCont->GetResourceName()));
+	CItemPtr pParentItem = REF_CAST(CItem,pObjCont);
+	CItemDefPtr pParentDef;
+	if ( pParentItem != NULL )
+		pParentDef = pParentItem->Item_GetDef();
+	CItemDefPtr pItemDef = Item_GetDef();
+	CObjBasePtr pParentContainer;
+	if ( pParentItem != NULL )
+		pParentContainer = pParentItem->GetContainer();
+	CObjBasePtr pItemContainer = GetContainer();
+	const LPCTSTR pszParentName = pParentDef ? pParentDef->GetTypeName() : "?";
+	const LPCTSTR pszItemName = pItemDef ? pItemDef->GetTypeName() : "?";
+	const ITEMID_TYPE idParent = static_cast<ITEMID_TYPE>(pParentDef ? pParentDef->GetID()
+		: (pParentItem ? pParentItem->GetDispID() : 0));
+	const ITEMID_TYPE idItem = static_cast<ITEMID_TYPE>(pItemDef ? pItemDef->GetID() : GetDispID());
+	const DWORD dwParentContainerUID = pParentContainer ? (DWORD)pParentContainer->GetUID() : 0;
+	const DWORD dwItemContainerUID = pItemContainer ? (DWORD)pItemContainer->GetUID() : 0;
+	DEBUG_ERR(( "Non container uid=0%lx,id=0x%04x,name=%s,type=%d,is_container=%d,parent_container_uid=0x%08lx,child_uid=0%lx,child_id=0x%04x,child_name=%s,child_type=%d,child_is_container=%d,child_container_uid=0x%08lx" LOG_CR,
+		(DWORD) uid,
+		(unsigned)idParent,
+		pszParentName,
+		pParentItem ? (int)pParentItem->GetType() : -1,
+		pObjCont->IsContainer(),
+		dwParentContainerUID,
+		(DWORD)GetUID(),
+		(unsigned)idItem,
+		pszItemName,
+		(int)GetType(),
+		IsContainer(),
+		dwItemContainerUID));
 	return( HRES_INVALID_HANDLE );	// not a container.
 }
 
