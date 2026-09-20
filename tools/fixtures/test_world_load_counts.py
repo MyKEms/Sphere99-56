@@ -68,9 +68,16 @@ def main() -> int:
         action="store_true",
         help="expect one WORLDCHAR section with no matching CHARDEF",
     )
+    parser.add_argument(
+        "--noncontainer-reference",
+        action="store_true",
+        help="expect one nested item to reference a non-container",
+    )
     args = parser.parse_args()
 
-    if args.truncated and args.unresolved_worldchar_type:
+    if sum(
+        (args.truncated, args.unresolved_worldchar_type, args.noncontainer_reference)
+    ) > 1:
         parser.error("choose only one world-load failure option")
 
     fixture = args.fixture.resolve()
@@ -83,7 +90,9 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    if args.unresolved_worldchar_type:
+    if args.noncontainer_reference:
+        expected_line = "world load: items=2 chars=1 read_items=3 read_chars=1"
+    elif args.unresolved_worldchar_type:
         expected_line = "world load: items=2 chars=0 read_items=2 read_chars=1"
     elif args.truncated:
         expected_line = "world load: items=2 chars=1 read_items=3 read_chars=1"
@@ -136,6 +145,7 @@ def main() -> int:
                 if (
                     not args.truncated
                     and not args.unresolved_worldchar_type
+                    and not args.noncontainer_reference
                     and startup_errors
                 ):
                     raise RuntimeError(
@@ -173,6 +183,48 @@ def main() -> int:
                     ):
                         raise RuntimeError(
                             "read-but-not-created WORLDCHAR error diagnostic was missing its UID and reason"
+                        )
+                elif args.noncontainer_reference:
+                    diagnostics = [
+                        line
+                        for line in startup_errors
+                        if "Non container uid=" in line
+                    ]
+                    if len(diagnostics) != 1:
+                        raise RuntimeError(
+                            "nested non-container reference did not produce exactly one diagnostic"
+                    )
+                    expected_fragments = (
+                        "id=0x0e76",
+                        "name=synthetic object",
+                        "type=0",
+                        "is_container=0",
+                        "parent_container_uid=0x00000000",
+                        "child_id=0x0e75",
+                        "child_name=synthetic container",
+                        "child_type=1",
+                        "child_is_container=1",
+                        "child_container_uid=0x00000000",
+                    )
+                    missing = [
+                        fragment
+                        for fragment in expected_fragments
+                        if fragment not in diagnostics[0]
+                    ]
+                    if missing:
+                        raise RuntimeError(
+                            "nested non-container diagnostic is missing fields: "
+                            + ", ".join(missing)
+                        )
+                    unexpected_errors = [
+                        line
+                        for line in startup_errors
+                        if line not in diagnostics
+                    ]
+                    if unexpected_errors:
+                        raise RuntimeError(
+                            "nested non-container fixture logged unexpected errors: "
+                            f"{unexpected_errors!r}"
                         )
                 else:
                     sock, _ = game_connect(
@@ -237,7 +289,7 @@ def main() -> int:
         )
     expected_count_lines = (
         [expected_line]
-        if args.unresolved_worldchar_type
+        if args.unresolved_worldchar_type or args.noncontainer_reference
         else [expected_line, expected_line]
     )
     if all_count_lines != expected_count_lines:
@@ -246,7 +298,7 @@ def main() -> int:
             f"expected {expected_count_lines!r}, got {all_count_lines!r}"
         )
 
-    if not args.unresolved_worldchar_type:
+    if not args.unresolved_worldchar_type and not args.noncontainer_reference:
         admin_lines = [
             message
             for message in response_messages
