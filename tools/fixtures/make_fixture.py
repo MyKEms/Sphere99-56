@@ -81,7 +81,7 @@ def write_container_tile(path: Path, item_id: int) -> None:
         stream.write(record)
 
 
-def write_mul_fixture(root: Path) -> None:
+def write_mul_fixture(root: Path, *, extra_item_id: int = 0) -> None:
     muls = root / "muls"
     map_blocks = MAP_BLOCKS_X * MAP_BLOCKS_Y
     write_sparse(muls / "map0.mul", map_blocks * MAP_BLOCK_BYTES)
@@ -93,7 +93,10 @@ def write_mul_fixture(root: Path) -> None:
     # Include the protocol fixture's container and character-create hair IDs;
     # all terrain and other item records remain zero/default data.
     tiledata = muls / "tiledata.mul"
-    write_sparse(tiledata, tiledata_size(max(DEFAULT_ITEM_ID, SYNTHETIC_HAIR_ID)))
+    write_sparse(
+        tiledata,
+        tiledata_size(max(DEFAULT_ITEM_ID, SYNTHETIC_HAIR_ID, extra_item_id)),
+    )
     write_container_tile(tiledata, DEFAULT_ITEM_ID)
 
     # Hues are not opened by the server startup mask, but keeping a tiny valid
