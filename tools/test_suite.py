@@ -56,6 +56,7 @@ class TestResult:
     def __init__(self):
         self.passed = 0
         self.failed = 0
+        self.skipped_fixture_only = 0
         self.errors = []
 
     def ok(self, name):
@@ -67,10 +68,21 @@ class TestResult:
         self.errors.append(f"{name}: {reason}")
         print(f"  FAIL: {name} — {reason}")
 
+    def skip_fixture(self, name):
+        self.skipped_fixture_only += 1
+        print(f"  SKIP (fixture-only): {name}")
+
     def summary(self):
         total = self.passed + self.failed
         print(f"\n{'='*60}")
-        print(f"Results: {self.passed}/{total} passed, {self.failed} failed")
+        if self.skipped_fixture_only:
+            print(
+                f"Results: {self.passed}/{total} passed, "
+                f"{self.skipped_fixture_only} skipped (fixture-only), "
+                f"{self.failed} failed"
+            )
+        else:
+            print(f"Results: {self.passed}/{total} passed, {self.failed} failed")
         if self.errors:
             print("Failures:")
             for e in self.errors:
@@ -173,7 +185,7 @@ def test_bad_packets(host, port, result):
         result.fail("Bad packets", "Server crashed on garbage data")
 
 
-def test_char_create(host, port, game_port, result):
+def test_char_create(host, port, game_port, result, skip_fixture_tests=False):
     """Test 6: Create a character and verify game entry response."""
     print("\n[Test 6] Character Creation")
     try:
@@ -219,14 +231,15 @@ def test_char_create(host, port, game_port, result):
             ("SPHERE_NEWBIE_RESIST ", "SPHERE_NEWBIE_RESIST 1"),
         )
         for prefix, expected in expected_items:
+            name = f"Skill-keyed NEWBIE {prefix.strip()}"
+            if skip_fixture_tests:
+                result.skip_fixture(name)
+                continue
             actual = _find_system_message(resp, prefix)
             if actual == expected:
                 result.ok(f"Character received skill-keyed starting item: {actual}")
             else:
-                result.fail(
-                    f"Skill-keyed NEWBIE {prefix.strip()}",
-                    f"expected {expected!r}, got {actual!r}",
-                )
+                result.fail(name, f"expected {expected!r}, got {actual!r}")
     except Exception as e:
         result.fail("Character creation", str(e))
 
@@ -759,7 +772,13 @@ def main():
         test_rapid_reconnect(host, port, result)
         test_bad_packets(host, port, result)
 
-    test_char_create(host, port, game_port, result)
+    test_char_create(
+        host,
+        port,
+        game_port,
+        result,
+        skip_fixture_tests=skip_fixture_tests,
+    )
     test_quick_relogin(host, port, game_port, result)
     test_game_entry_validation(host, port, game_port, result)
     test_walking(host, port, game_port, result)

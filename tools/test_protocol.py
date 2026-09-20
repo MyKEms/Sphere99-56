@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Offline regression checks for the public headless protocol helpers."""
 
+import io
 import struct
 import unittest
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
 from uo_huffman import compress as huffman_compress, decompress as huffman_decompress
 from uo_test_client import (
@@ -13,6 +16,7 @@ from uo_test_client import (
     make_server_select,
 )
 from uo_packets import PacketStreamError, split_packet_stream
+from test_suite import TestResult, test_char_create
 
 
 class ProtocolPacketTests(unittest.TestCase):
@@ -92,6 +96,67 @@ class ProtocolPacketTests(unittest.TestCase):
         encoded = huffman_compress(first) + huffman_compress(second)
 
         self.assertEqual(huffman_decompress(encoded), first + second)
+
+
+class FixtureOnlyProtocolAssertionTests(unittest.TestCase):
+    class FakeSocket:
+        def sendall(self, packet):
+            pass
+
+        def close(self):
+            pass
+
+    def _run_character_create(self, skip_fixture_tests):
+        result = TestResult()
+        sock = self.FakeSocket()
+        with (
+            patch("test_suite.game_connect", return_value=(sock, 1)),
+            patch("test_suite.make_char_create", return_value=b"create"),
+            patch("test_suite.recv_until_game_start", return_value=b"response"),
+            patch("test_suite._drain_game_socket", return_value=b"response"),
+            patch("test_suite.decode_game_response", side_effect=lambda data: data),
+            patch("test_suite.find_start_packet", return_value=(0, b"start")),
+            patch(
+                "test_suite._find_system_message",
+                side_effect=(
+                    []
+                    if skip_fixture_tests
+                    else ["SPHERE_NEWBIE_MAGERY 1", "SPHERE_NEWBIE_RESIST 1"]
+                ),
+            ) as find_message,
+        ):
+            test_char_create(
+                "localhost",
+                2593,
+                2593,
+                result,
+                skip_fixture_tests=skip_fixture_tests,
+            )
+        return result, find_message
+
+    def test_imported_world_mode_skips_only_the_two_fixture_markers(self):
+        result, find_message = self._run_character_create(skip_fixture_tests=True)
+
+        self.assertEqual(result.passed, 1)
+        self.assertEqual(result.failed, 0)
+        self.assertEqual(result.skipped_fixture_only, 2)
+        find_message.assert_not_called()
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertTrue(result.summary())
+        self.assertIn(
+            "Results: 1/1 passed, 2 skipped (fixture-only), 0 failed",
+            output.getvalue(),
+        )
+
+    def test_fixture_mode_still_checks_both_markers(self):
+        result, find_message = self._run_character_create(skip_fixture_tests=False)
+
+        self.assertEqual(result.passed, 3)
+        self.assertEqual(result.failed, 0)
+        self.assertEqual(result.skipped_fixture_only, 0)
+        self.assertEqual(find_message.call_count, 2)
 
 
 if __name__ == "__main__":
