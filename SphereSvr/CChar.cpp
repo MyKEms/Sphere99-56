@@ -2109,6 +2109,7 @@ bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 	{
 		DEBUG_ERR(( "Char 0%x Invalid, id='%s', code=0%x" LOG_CR, GetUID(), (LPCTSTR) GetResourceName(), iResultCode ));
 		DeleteThis();
+		return( false );
 	}
 
 	return( true );

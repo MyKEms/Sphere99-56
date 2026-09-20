@@ -573,6 +573,20 @@ void CWorld::Save( bool fForceImmediate, bool fAllowDamagedWorld ) // Save world
 
 /////////////////////////////////////////////////////////////////////
 
+static bool WorldReadSectionSerial( LPCTSTR pszFilePath, CScriptLineContext sectionContext, CGString& sSerial )
+{
+	CScript serialScript;
+	if ( !serialScript.Open( pszFilePath ))
+		return( false );
+
+	serialScript.SeekContext( sectionContext );
+	bool fFound = serialScript.FindKey( "SERIAL" );
+	if ( fFound )
+		sSerial.Copy( serialScript.GetArgRaw());
+	serialScript.Close();
+	return( fFound );
+}
+
 bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 {
 	CScript s;
@@ -601,9 +615,14 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 
 	while ( s.FindNextSection())
 	{
-		if ( s.IsSectionType( "WORLDITEM" ))
+		bool fWorldItem = s.IsSectionType( "WORLDITEM" );
+		bool fWorldChar = s.IsSectionType( "WORLDCHAR" );
+		bool fObjectSection = fWorldItem || fWorldChar;
+		CScriptLineContext sectionContext = s.GetContext();
+		CGString sWorldCharType( s.GetArgRaw());
+		if ( fWorldItem )
 			m_iLoadReadItems++;
-		else if ( s.IsSectionType( "WORLDCHAR" ))
+		else if ( fWorldChar )
 			m_iLoadReadChars++;
 
 		if (! ( ++iLoadStage & 0x1FF ))	// don't update too often
@@ -612,6 +631,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 		}
 
 		bool fSectionLoaded = false;
+		CGString sFailureReason;
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 		bool fRecoveredFault = false;
 #endif
@@ -632,7 +652,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			else
 #endif
 			{
-				fSectionLoaded = g_Cfg.LoadScriptSection(s);
+				fSectionLoaded = g_Cfg.LoadScriptSection( s, fWorldChar ? &sFailureReason : NULL );
 			}
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			g_fSEGV_catch = 0;
@@ -640,23 +660,47 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 		}
 		catch ( CGException &e )
 		{
+			if ( fWorldChar )
+				sFailureReason.Copy( "exception while loading character section" );
 			g_Log.CatchEvent( &e, "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum );
 		}
 		catch (...)
 		{
+			if ( fWorldChar )
+				sFailureReason.Copy( "exception while loading character section" );
 			g_Log.CatchEvent( NULL, "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum );
 		}
 
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 		if ( fRecoveredFault )
 		{
-			MarkLoadIssue( s.IsSectionType( "WORLDCHAR" ) || s.IsSectionType( "WORLDITEM" ));
+			if ( fWorldChar )
+				sFailureReason.Copy( "recoverable fault while loading character section" );
+			if ( fWorldChar )
+			{
+				CGString sSerial( "unknown" );
+				WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
+				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+					"WORLDCHAR load failed: uid=%s type='%s' reason=%s" LOG_CR,
+					(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
+			}
+			MarkLoadIssue( fObjectSection );
 			continue;
 		}
 #endif
 		if ( !fSectionLoaded )
 		{
-			MarkLoadIssue( s.IsSectionType( "WORLDCHAR" ) || s.IsSectionType( "WORLDITEM" ));
+			if ( fWorldChar )
+			{
+				if ( sFailureReason.IsEmpty())
+					sFailureReason.Copy( "character section could not be loaded" );
+				CGString sSerial( "unknown" );
+				WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
+				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+					"WORLDCHAR load failed: uid=%s type='%s' reason=%s" LOG_CR,
+					(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
+			}
+			MarkLoadIssue( fObjectSection );
 		}
 	}
 

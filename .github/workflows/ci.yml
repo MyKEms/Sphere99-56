@@ -149,6 +149,16 @@ jobs:
             --port 2711 \
             --truncated
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-unresolved-char" \
+            --world-load-counts \
+            --world-load-counts-probe \
+            --unresolved-worldchar-type
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-unresolved-char" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2714 \
+            --unresolved-worldchar-type
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -352,6 +362,16 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2713 \
             --truncated
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-counts-unresolved-char" \
+            --world-load-counts \
+            --world-load-counts-probe \
+            --unresolved-worldchar-type
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-world-counts-unresolved-char" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2715 \
+            --unresolved-worldchar-type
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \

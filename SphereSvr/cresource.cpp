@@ -958,9 +958,11 @@ CPointMap CSphereResourceMgr::GetRegionPoint( LPCTSTR pCmd ) const // Decode a t
 
 //*************************************************************
 
-bool CSphereResourceMgr::LoadScriptSection( CScript& s )
+bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason )
 {
 	// Index or read any resource blocks we know how to handle.
+	if ( pFailureReason )
+		pFailureReason->Empty();
 	CSphereScriptContext FileContext(&s);	// set this as the context.
 	CGString sCoverageResourceName(s.GetArgRaw());
 	CVarDefPtr pVarNum;
@@ -1039,6 +1041,8 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			 restype != RES_Teleporters && restype != RES_TypeDefs && restype != RES_PLevel &&
 			 restype != RES_Map && restype != RES_RaceClass && restype != RES_BlockEMail )
 		{
+			if ( pFailureReason && restype == RES_WorldChar )
+				pFailureReason->Copy( "character type does not resolve to a resource index" );
 			DEBUG_ERR(( "Invalid %s block index '%s'" LOG_CR, (LPCTSTR) s.GetSection(), (LPCTSTR) s.GetArgRaw()));
 			return( false );
 		}
@@ -1360,15 +1364,26 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 	case RES_WorldChar:	// saved in world file.
 		if ( ! rid.IsValidRID())
 		{
+			if ( pFailureReason )
+				pFailureReason->Copy( "character type does not resolve to a resource index" );
 			g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Undefined char type '%s'" LOG_CR, (LPCTSTR) s.GetArgRaw());
 			return( false );
 		}
 		try {
 			pNewObj = CChar::CreateBasic((CREID_TYPE)rid.GetResIndex());
 			if ( pNewObj == NULL )
+			{
+				if ( pFailureReason )
+					pFailureReason->Copy( "character creation failed" );
 				return false;
-			return( pNewObj->s_LoadProps(s));
+			}
+			bool fLoaded = pNewObj->s_LoadProps(s);
+			if ( !fLoaded && pFailureReason )
+				pFailureReason->Copy( "character properties were rejected" );
+			return( fLoaded );
 		} catch (...) {
+			if ( pFailureReason )
+				pFailureReason->Copy( "exception while loading character properties" );
 			return false;
 		}
 
