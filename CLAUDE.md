@@ -49,12 +49,15 @@ replacement for the i386 build.
 
 - The public CI builds the engine with GCC multilib and checks the ELF type.
 - `tools/test_protocol.py` is the dependency-free offline packet-fixture test.
-- `tools/test_suite.py` runs 14 scenarios / 15 result assertions. CI generates
+- `tools/test_suite.py` runs 14 scenarios / 15 general result assertions. The
+  synthetic function-table and trigger scenario adds 19 fixture assertions.
+  CI generates
   a synthetic disposable runtime fixture locally, including sparse map data,
   generic resources, and custom trigger hooks. It creates accounts and
   characters, so never point it at a world you intend to keep. For imported
-  scripts without those fixture hooks, `--skip-fixture-tests` skips only the
-  final two fixture-specific assertions.
+  scripts without those fixture hooks, `--skip-fixture-tests` marks the two
+  synthetic `SPHERE_NEWBIE_*` marker assertions as skipped and skips the
+  synthetic function-table and trigger test.
 - A real ClassicUO/TazUO client and a representative world remain separate
   compatibility tests. The public repository does not claim production
   compatibility from the headless suite alone.

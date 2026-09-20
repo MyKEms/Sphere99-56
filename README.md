@@ -99,14 +99,18 @@ against a world you intend to keep:
 ```bash
 python3 tools/test_suite.py localhost 2593 --quick
 python3 tools/test_suite.py localhost 2593
-# Imported script sets lack the fixture-only trigger hooks used by the last test.
+# Imported script sets lack fixture-only NEWBIE markers and trigger hooks.
 python3 tools/test_suite.py localhost 2593 --skip-fixture-tests
 ```
 
-The full synthetic-fixture run reports 15 assertions. `--skip-fixture-tests`
-omits the two assertions that require the fixture's custom script hooks; the
-remaining protocol checks still create accounts and characters, so use only a
-disposable runtime in either mode.
+The full synthetic-fixture run checks the two skill-keyed `SPHERE_NEWBIE_*`
+markers and the synthetic function-table and trigger hooks. With
+`--skip-fixture-tests`, those two markers are reported as skipped rather than
+failed, and the synthetic function-table and trigger test is skipped. The
+full fixture run passes 34/34 assertions; imported-world mode reports 13/13
+passed with 2 skipped (fixture-only). The remaining protocol checks still
+create accounts and characters, so use only a disposable runtime in either
+mode.
 
 For a completely self-contained Linux smoke test, generate the synthetic
 fixture and run the server plus the full suite. The generated directory is
