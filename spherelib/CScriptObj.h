@@ -64,6 +64,24 @@ bool ScriptUnknownReportIsEnabled();
 bool ScriptUnknownResultIsRejected(HRESULT hRes);
 bool ScriptUnknownReportWrite();
 
+typedef DWORD SCRIPT_EXECUTION_COVERAGE_TOKEN;
+#define SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN 0xffffffffu
+#define SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN 0xfffffffeu
+
+void ScriptExecutionCoverageSetPath(LPCTSTR pszPath);
+bool ScriptExecutionCoverageIsEnabled();
+SCRIPT_EXECUTION_COVERAGE_TOKEN ScriptExecutionCoverageRegister(
+	int iResourceType,
+	int iResourceIndex,
+	int iResourcePage,
+	LPCTSTR pszResourceName,
+	LPCTSTR pszSectionKind,
+	LPCTSTR pszSectionName,
+	DWORD dwOrdinal,
+	LPCTSTR pszSourceFile);
+void ScriptExecutionCoverageHit(SCRIPT_EXECUTION_COVERAGE_TOKEN token);
+bool ScriptExecutionCoverageWrite();
+
 class CScriptUnknownRejectTracker
 {
 public:

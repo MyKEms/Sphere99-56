@@ -140,30 +140,79 @@ typedef CRefPtr<CResourceDef> CResourceDefPtr;
 #define XTRIG_UNKNOWN 0	// bit 0 is reserved to say there are triggers here that do not conform.
 
 class CResourceScript;
+struct CResourceCoverageOption
+{
+	DWORD m_dwKey;
+	DWORD m_dwToken;
+};
+
 class CResourceLink : public CResourceDef
 {
 private:
 	CResourceScript* m_pScript;
 	CScriptLineContext m_LineContext;
+	SCRIPT_EXECUTION_COVERAGE_TOKEN m_ScriptCoverageToken;
+	CGTypedArray<CResourceCoverageOption, CResourceCoverageOption> m_ScriptCoverageOptions;
+	bool m_fScriptCoverageOptionsOverflow;
 
 public:
 	CResourceLink(CSphereUID rid);
 
 	CResourceScript* GetLinkFile() const { return m_pScript; }
 	CScriptLineContext GetLinkContext() const { return m_LineContext; }
+	SCRIPT_EXECUTION_COVERAGE_TOKEN GetScriptCoverageToken() const { return m_ScriptCoverageToken; }
+	SCRIPT_EXECUTION_COVERAGE_TOKEN GetScriptCoverageOptionToken(DWORD dwKey) const
+	{
+		if (!ScriptExecutionCoverageIsEnabled())
+			return SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+		for (size_t i = 0; i < m_ScriptCoverageOptions.GetCount(); ++i)
+		{
+			CResourceCoverageOption option = m_ScriptCoverageOptions.GetAt(i);
+			if (option.m_dwKey == dwKey)
+				return option.m_dwToken;
+		}
+		return m_fScriptCoverageOptionsOverflow
+			? SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN
+			: SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+	}
+	void AddScriptCoverageOption(DWORD dwKey, SCRIPT_EXECUTION_COVERAGE_TOKEN token)
+	{
+		if (token == SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN)
+		{
+			m_fScriptCoverageOptionsOverflow = true;
+			return;
+		}
+		if (token == SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN)
+			return;
+		for (size_t i = 0; i < m_ScriptCoverageOptions.GetCount(); ++i)
+		{
+			if (m_ScriptCoverageOptions.GetAt(i).m_dwKey == dwKey)
+				return;
+		}
+		CResourceCoverageOption option;
+		option.m_dwKey = dwKey;
+		option.m_dwToken = token;
+		m_ScriptCoverageOptions.Add(option);
+	}
 	void CopyLink( const CResourceLink* pLink )
 	{
 		if (pLink)
 		{
+			if (pLink != this)
+			{
+				m_ScriptCoverageOptions.RemoveAll();
+				m_fScriptCoverageOptionsOverflow = pLink->m_fScriptCoverageOptionsOverflow;
+				m_ScriptCoverageOptions.CopyArray(pLink->m_ScriptCoverageOptions);
+			}
 			m_pScript = pLink->m_pScript;
 			m_LineContext = pLink->m_LineContext;
+			m_ScriptCoverageToken = pLink->m_ScriptCoverageToken;
 		}
 	}
-	virtual void SetLinkSection(CResourceScript* pScript, CScriptLineContext context)
-	{
-		m_pScript = pScript;
-		m_LineContext = context;
-	}
+	virtual void SetLinkSection(
+		CResourceScript* pScript,
+		CScriptLineContext context,
+		LPCTSTR pszResourceName = NULL);
 
 	virtual HRESULT s_PropSet(LPCTSTR pszKey, CGVariant& vVal) { return HRES_UNKNOWN_PROPERTY; }
 	virtual HRESULT s_PropGet(LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
@@ -175,6 +224,8 @@ class CResourceTriggered : public CResourceLink
 {
 private:
 	CGStringArray m_TriggerNames;
+	CGTypedArray<SCRIPT_EXECUTION_COVERAGE_TOKEN, SCRIPT_EXECUTION_COVERAGE_TOKEN> m_TriggerCoverageTokens;
+	bool m_fTriggerCoverageOverflow;
 
 public:
 	CResourceTriggered(CSphereUID rid);
@@ -182,14 +233,23 @@ public:
 	{
 		CResourceLink::CopyLink(pLink);
 		m_TriggerNames.RemoveAll();
+		m_TriggerCoverageTokens.RemoveAll();
+		m_fTriggerCoverageOverflow = false;
 		const CResourceTriggered* pTrigLink = dynamic_cast<const CResourceTriggered*>(pLink);
 		if ( pTrigLink == NULL )
 			return;
+		m_fTriggerCoverageOverflow = pTrigLink->m_fTriggerCoverageOverflow;
+		if (pTrigLink->m_TriggerCoverageTokens.GetCount() > 0)
+			m_TriggerCoverageTokens.CopyArray(pTrigLink->m_TriggerCoverageTokens);
 		for ( size_t i = 0; i < pTrigLink->m_TriggerNames.GetCount(); i++ )
 			m_TriggerNames.Add(pTrigLink->m_TriggerNames.GetAt(i));
 	}
-	void SetLinkSection(CResourceScript* pScript, CScriptLineContext context);
+	void SetLinkSection(
+		CResourceScript* pScript,
+		CScriptLineContext context,
+		LPCTSTR pszResourceName = NULL);
 	bool HasTriggerName(LPCTSTR pszName) const;
+	SCRIPT_EXECUTION_COVERAGE_TOKEN GetTriggerCoverageToken(LPCTSTR pszName) const;
 
 	// Execute a trigger script from this resource.
 	// Declaration only -- implementation after CResourceLock is defined.
@@ -424,6 +484,8 @@ public:
 		SeekContext(ctx);
 	}
 
+	CResourceLink* GetLinkResource() const { return m_pLink; }
+
 	// Check if the current line is a trigger header (starts with "ON").
 	bool IsLineTrigger()
 	{
@@ -525,13 +587,24 @@ inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& cont
 		return TRIGRET_RET_FALSE;
 
 	// Execute the trigger's script block.
+	ScriptExecutionCoverageHit(GetTriggerCoverageToken(pszName));
 	return context.ExecuteScript(s, TRIGRUN_SECTION_TRUE);
 }
 
-inline void CResourceTriggered::SetLinkSection(CResourceScript* pScript, CScriptLineContext context)
+inline void CResourceTriggered::SetLinkSection(
+	CResourceScript* pScript,
+	CScriptLineContext context,
+	LPCTSTR pszResourceName)
 {
-	CResourceLink::SetLinkSection(pScript, context);
+	CResourceLink::SetLinkSection(pScript, context, pszResourceName);
 	m_TriggerNames.RemoveAll();
+	m_TriggerCoverageTokens.RemoveAll();
+	m_fTriggerCoverageOverflow = false;
+	CSphereUID rid = GetResourceID();
+	RES_TYPE restype = rid.GetResType();
+	bool fTrackCoverage = ScriptExecutionCoverageIsEnabled() &&
+		(restype == RES_ItemDef || restype == RES_CharDef ||
+		 restype == RES_Events || restype == RES_TypeDef);
 
 	CResourceLock s(this);
 	if ( !s.IsFileOpen() )
@@ -558,7 +631,21 @@ inline void CResourceTriggered::SetLinkSection(CResourceScript* pScript, CScript
 			}
 		}
 		if ( !fAlreadyStored )
+		{
+			if (fTrackCoverage)
+			{
+				SCRIPT_EXECUTION_COVERAGE_TOKEN coverageToken = ScriptExecutionCoverageRegister(
+					static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+					(pszResourceName && *pszResourceName) ? pszResourceName : GetResourceName(),
+					"trigger", pszName, 0,
+					pScript ? pScript->GetFilePath() : "");
+				if (coverageToken == SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN)
+					m_fTriggerCoverageOverflow = true;
+				else
+					m_TriggerCoverageTokens.Add(coverageToken);
+			}
 			m_TriggerNames.Add(CGString(pszName));
+		}
 	}
 }
 
@@ -575,6 +662,27 @@ inline bool CResourceTriggered::HasTriggerName(LPCTSTR pszName) const
 			return true;
 	}
 	return false;
+}
+
+inline SCRIPT_EXECUTION_COVERAGE_TOKEN CResourceTriggered::GetTriggerCoverageToken(LPCTSTR pszName) const
+{
+	if ( !ScriptExecutionCoverageIsEnabled() || !pszName || !*pszName )
+		return SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+	if ( *pszName == '@' )
+		pszName++;
+
+	for ( size_t i = 0; i < m_TriggerNames.GetCount(); i++ )
+	{
+		if ( !_stricmp(m_TriggerNames.GetAt(i), pszName) )
+		{
+			if (m_TriggerCoverageTokens.IsValidIndex(i))
+				return m_TriggerCoverageTokens.GetAt(i);
+			if (m_fTriggerCoverageOverflow)
+				return SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN;
+			return SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+		}
+	}
+	return SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
 }
 
 #endif // _INC_CRESOURCEBASE_H

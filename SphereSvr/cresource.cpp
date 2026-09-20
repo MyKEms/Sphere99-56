@@ -962,6 +962,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 {
 	// Index or read any resource blocks we know how to handle.
 	CSphereScriptContext FileContext(&s);	// set this as the context.
+	CGString sCoverageResourceName(s.GetArgRaw());
 	CVarDefPtr pVarNum;
 	CSphereUID rid;
 
@@ -1629,7 +1630,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s )
 			s.SeekContext( LinkContext );
 		}
 
-		pNewLink->SetLinkSection(pResScript, LinkContext);
+		pNewLink->SetLinkSection(pResScript, LinkContext, sCoverageResourceName);
 	}
 	else if ( pNewDef && pVarNum )
 	{
@@ -2565,6 +2566,8 @@ bool CSphereResourceMgr::LoadIni( bool fTest )
 	// A missing setting in the active INI keeps reporting disabled.
 	g_Serv.m_sUnknownKeywordReport.Empty();
 	ScriptUnknownReportSetPath("");
+	g_Serv.m_sScriptExecutionReport.Empty();
+	ScriptExecutionCoverageSetPath("");
 
 	if ( ! OpenScriptFind( m_scpIni, NULL )) // Open script file
 	{

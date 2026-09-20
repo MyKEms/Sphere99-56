@@ -52,6 +52,8 @@ TRIGRET_TYPE CClient::Dialog_OnButton( CSphereUID rid, DWORD dwButtonID, CSphere
 		}
 		return TRIGRET_ENDIF;
 	}
+	if (s.GetLinkResource())
+		ScriptExecutionCoverageHit(s.GetLinkResource()->GetScriptCoverageOptionToken(dwButtonID));
 
 	return exec.ExecuteScript( s, TRIGRUN_SECTION_TRUE );
 }
@@ -72,6 +74,8 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	{
 		return( false );
 	}
+	if (sDialog.GetLinkResource())
+		ScriptExecutionCoverageHit(sDialog.GetLinkResource()->GetScriptCoverageToken());
 
 	// starting x,y location.
 	int piArgs[2];
@@ -207,6 +211,8 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 					CResourceLock sFunction( g_Cfg.ResourceGetDef(ridFunc));
 					if ( sFunction.IsFileOpen())
 					{
+						if (sFunction.GetLinkResource())
+							ScriptExecutionCoverageHit(sFunction.GetLinkResource()->GetScriptCoverageToken());
 						CSphereExpArgs funcExec( pObj, m_pChar, vFuncArgs );
 						funcExec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
 						continue;

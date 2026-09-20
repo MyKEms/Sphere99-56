@@ -725,6 +725,12 @@ HRESULT CServer::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		ScriptUnknownReportSetPath(m_sUnknownKeywordReport);
 		return NO_ERROR;
 	}
+	if ( !_stricmp(pszKey, "SCRIPTEXECUTIONREPORT"))
+	{
+		m_sScriptExecutionReport = vVal.GetPSTR() ? vVal.GetPSTR() : "";
+		ScriptExecutionCoverageSetPath(m_sScriptExecutionReport);
+		return NO_ERROR;
+	}
 
 	HRESULT hRes = g_Cfg.s_PropSet(pszKey, vVal);
 	if ( hRes == NO_ERROR )
@@ -740,6 +746,11 @@ HRESULT CServer::s_PropGet( LPCTSTR pszKey, CGVariant& vVal, CScriptConsole* pSr
 	if ( !_stricmp(pszKey, "UNKNOWNKEYWORDREPORT"))
 	{
 		vVal = m_sUnknownKeywordReport;
+		return NO_ERROR;
+	}
+	if ( !_stricmp(pszKey, "SCRIPTEXECUTIONREPORT"))
+	{
+		vVal = m_sScriptExecutionReport;
 		return NO_ERROR;
 	}
 
@@ -759,6 +770,8 @@ void CServer::s_WriteProps( CScript &s )
 	s.WriteKey( "NAME", GetName());
 	if ( m_sUnknownKeywordReport.GetLength() > 0 )
 		s.WriteKey( "UNKNOWNKEYWORDREPORT", m_sUnknownKeywordReport );
+	if ( m_sScriptExecutionReport.GetLength() > 0 )
+		s.WriteKey( "SCRIPTEXECUTIONREPORT", m_sScriptExecutionReport );
 	s_WriteServerData( s );
 	g_Cfg.s_WriteProps(s);
 }
@@ -767,7 +780,7 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 {
 	// SAVE can be issued by an internal/timer context without a console
 	// source; all other console commands still require one.
-	ASSERT( pSrc || iProp == M_Save || iProp == M_UnknownReport );
+	ASSERT( pSrc || iProp == M_Save || iProp == M_UnknownReport || iProp == M_ScriptCoverageReport );
 	switch (iProp)
 	{
 	case M_ProfileGet:
@@ -976,6 +989,15 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 			return HRES_INVALID_HANDLE;
 		pSrc->Printf( "Unknown keyword report written to %s." LOG_CR,
 			(LPCTSTR) m_sUnknownKeywordReport );
+		break;
+
+	case M_ScriptCoverageReport:
+		if ( pSrc == NULL || pSrc->GetPrivLevel() < PLEVEL_Admin )
+			return HRES_PRIVILEGE_NOT_HELD;
+		if ( m_sScriptExecutionReport.GetLength() <= 0 || !ScriptExecutionCoverageWrite() )
+			return HRES_INVALID_HANDLE;
+		pSrc->Printf( "Script execution coverage report written to %s." LOG_CR,
+			(LPCTSTR) m_sScriptExecutionReport );
 		break;
 
 	case M_SMsg:

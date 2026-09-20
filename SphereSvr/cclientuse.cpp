@@ -652,6 +652,11 @@ HRESULT CClient::Cmd_Skill_Menu( CSphereUID rid, int iSelect )
 				if ( iOnCount > iSelect )	// we are done.
 					break;
 			}
+			if ( iSelect > 0 && iOnCount == iSelect && s.GetLinkResource())
+			{
+				ScriptExecutionCoverageHit(
+					s.GetLinkResource()->GetScriptCoverageOptionToken(static_cast<DWORD>(iOnCount)));
+			}
 			continue;
 		}
 
@@ -1176,4 +1181,3 @@ bool CClient::Cmd_SecureTrade( CChar* pChar, CItem* pItem )
 	pCont1->ContentAdd( pItem, pt );
 	return( true );
 }
-

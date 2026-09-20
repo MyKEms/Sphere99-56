@@ -107,6 +107,29 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2695 \
             --expect-disabled
+          python3 tools/fixtures/make_script_coverage_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-coverage-shutdown"
+          python3 tools/fixtures/test_script_execution_coverage.py \
+            "$RUNNER_TEMP/sphere-asan-coverage-shutdown" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2700
+          python3 tools/fixtures/make_script_coverage_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-coverage-on-demand" \
+            --on-demand-report
+          python3 tools/fixtures/test_script_execution_coverage.py \
+            "$RUNNER_TEMP/sphere-asan-coverage-on-demand" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2701 \
+            --expect-on-demand
+          python3 tools/fixtures/make_script_coverage_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-coverage-disabled" \
+            --disabled \
+            --on-demand-report
+          python3 tools/fixtures/test_script_execution_coverage.py \
+            "$RUNNER_TEMP/sphere-asan-coverage-disabled" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2702 \
+            --expect-disabled
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
@@ -153,6 +176,9 @@ jobs:
           path: |
             ${{ runner.temp }}/sphere-asan-fixture/server.log
             ${{ runner.temp }}/sphere-asan-lifetime/server.log
+            ${{ runner.temp }}/sphere-asan-coverage-shutdown/server.log
+            ${{ runner.temp }}/sphere-asan-coverage-on-demand/server.log
+            ${{ runner.temp }}/sphere-asan-coverage-disabled/server.log
           if-no-files-found: warn
 
   load-safety:
@@ -265,6 +291,29 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2695 \
             --expect-disabled
+          python3 tools/fixtures/make_script_coverage_fixture.py \
+            "$RUNNER_TEMP/sphere-coverage-shutdown"
+          python3 tools/fixtures/test_script_execution_coverage.py \
+            "$RUNNER_TEMP/sphere-coverage-shutdown" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2700
+          python3 tools/fixtures/make_script_coverage_fixture.py \
+            "$RUNNER_TEMP/sphere-coverage-on-demand" \
+            --on-demand-report
+          python3 tools/fixtures/test_script_execution_coverage.py \
+            "$RUNNER_TEMP/sphere-coverage-on-demand" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2701 \
+            --expect-on-demand
+          python3 tools/fixtures/make_script_coverage_fixture.py \
+            "$RUNNER_TEMP/sphere-coverage-disabled" \
+            --disabled \
+            --on-demand-report
+          python3 tools/fixtures/test_script_execution_coverage.py \
+            "$RUNNER_TEMP/sphere-coverage-disabled" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2702 \
+            --expect-disabled
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \
@@ -302,5 +351,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: synthetic-fixture-server-log
-          path: ${{ runner.temp }}/sphere-fixture/server.log
+          path: |
+            ${{ runner.temp }}/sphere-fixture/server.log
+            ${{ runner.temp }}/sphere-coverage-shutdown/server.log
+            ${{ runner.temp }}/sphere-coverage-on-demand/server.log
+            ${{ runner.temp }}/sphere-coverage-disabled/server.log
           if-no-files-found: warn

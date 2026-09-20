@@ -14,10 +14,12 @@
 #include <atomic>
 #include <cstdint>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifdef __GNUG__
@@ -89,8 +91,91 @@ namespace
 		}
 	};
 
+	const size_t SCRIPT_EXECUTION_COVERAGE_LIMIT = 65536;
+	const size_t SCRIPT_EXECUTION_COVERAGE_MAX_RESOURCE_NAME = 128;
+	const size_t SCRIPT_EXECUTION_COVERAGE_MAX_SECTION_NAME = 128;
+	const size_t SCRIPT_EXECUTION_COVERAGE_MAX_SOURCE_FILE = 512;
+
+	struct ScriptExecutionCoverageKey
+	{
+		int resourceType;
+		int resourceIndex;
+		int resourcePage;
+		DWORD ordinal;
+		std::string sectionKind;
+		std::string sectionName;
+
+		bool operator==(const ScriptExecutionCoverageKey& other) const
+		{
+			return resourceType == other.resourceType &&
+				resourceIndex == other.resourceIndex &&
+				resourcePage == other.resourcePage &&
+				ordinal == other.ordinal &&
+				sectionKind == other.sectionKind &&
+				sectionName == other.sectionName;
+		}
+	};
+
+	struct ScriptExecutionCoverageKeyHash
+	{
+		size_t operator()(const ScriptExecutionCoverageKey& key) const
+		{
+			size_t hash = std::hash<int>()(key.resourceType);
+			auto combine = [&hash](size_t value)
+			{
+				hash ^= value + static_cast<size_t>(0x9e3779b9) + (hash << 6) + (hash >> 2);
+			};
+			combine(std::hash<int>()(key.resourceIndex));
+			combine(std::hash<int>()(key.resourcePage));
+			combine(std::hash<DWORD>()(key.ordinal));
+			combine(std::hash<std::string>()(key.sectionKind));
+			combine(std::hash<std::string>()(key.sectionName));
+			return hash;
+		}
+	};
+
+	struct ScriptExecutionCoverageEntry
+	{
+		int resourceType;
+		int resourceIndex;
+		int resourcePage;
+		DWORD ordinal;
+		std::string resourceTypeName;
+		std::string resourceName;
+		std::string sectionKind;
+		std::string sectionName;
+		std::string sourceFile;
+		std::atomic<uint64_t> hits;
+
+		ScriptExecutionCoverageEntry()
+			: resourceType(0), resourceIndex(0), resourcePage(0), ordinal(0), hits(0)
+		{
+		}
+	};
+
+	struct ScriptExecutionCoverageReporter
+	{
+		std::mutex mutex;
+		std::string path;
+		std::unique_ptr<ScriptExecutionCoverageEntry> ownedEntries[SCRIPT_EXECUTION_COVERAGE_LIMIT];
+		std::atomic<ScriptExecutionCoverageEntry*> hitEntries[SCRIPT_EXECUTION_COVERAGE_LIMIT];
+		std::unordered_map<ScriptExecutionCoverageKey, DWORD, ScriptExecutionCoverageKeyHash> indices;
+		size_t entryCount;
+		std::atomic<uint64_t> overflowSections;
+		std::atomic<uint64_t> overflowHits;
+
+		ScriptExecutionCoverageReporter()
+			: entryCount(0), overflowSections(0), overflowHits(0)
+		{
+			for (size_t i = 0; i < SCRIPT_EXECUTION_COVERAGE_LIMIT; ++i)
+				hitEntries[i].store(NULL, std::memory_order_relaxed);
+		}
+	};
+
 	UnknownKeywordReporter g_UnknownKeywordReporter;
 	std::atomic<bool> g_UnknownKeywordReportEnabled(false);
+	ScriptExecutionCoverageReporter g_ScriptExecutionCoverageReporter;
+	std::atomic<bool> g_ScriptExecutionCoverageEnabled(false);
 
 	LPCTSTR UnknownKeywordKindName(SCRIPT_UNKNOWN_KIND kind)
 	{
@@ -205,6 +290,105 @@ namespace
 			}
 		}
 		return result;
+	}
+
+	LPCTSTR ScriptExecutionCoverageResourceTypeName(int iResourceType)
+	{
+		switch (static_cast<RES_TYPE>(iResourceType))
+		{
+		case RES_CharDef: return "CHARDEF";
+		case RES_Dialog: return "DIALOG";
+		case RES_Events: return "EVENTS";
+		case RES_Function: return "FUNCTION";
+		case RES_ItemDef: return "ITEMDEF";
+		case RES_Menu: return "MENU";
+		case RES_SkillMenu: return "SKILLMENU";
+		case RES_TypeDef: return "TYPEDEF";
+		default: return "UNKNOWN";
+		}
+	}
+
+	std::string BoundedCoverageString(LPCTSTR pszValue, size_t maxLength)
+	{
+		if (!pszValue)
+			return std::string();
+		size_t length = 0;
+		while (length < maxLength && pszValue[length])
+			++length;
+		return std::string(pszValue, length);
+	}
+
+	bool SaturatingIncrement(std::atomic<uint64_t>& counter)
+	{
+		uint64_t current = counter.load(std::memory_order_relaxed);
+		while (current != UINT64_MAX)
+		{
+			if (counter.compare_exchange_weak(
+				current, current + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+				return true;
+		}
+		return false;
+	}
+
+	struct ScriptExecutionCoverageSnapshot
+	{
+		int resourceType;
+		int resourceIndex;
+		int resourcePage;
+		DWORD ordinal;
+		std::string resourceTypeName;
+		std::string resourceName;
+		std::string sectionKind;
+		std::string sectionName;
+		std::string sourceFile;
+		uint64_t hits;
+	};
+
+	void WriteScriptExecutionCoverageJson(
+		std::ofstream& output,
+		const std::vector<ScriptExecutionCoverageSnapshot>& entries,
+		uint64_t total,
+		uint64_t overflowSections,
+		uint64_t overflowHits)
+	{
+		size_t executed = 0;
+		for (size_t i = 0; i < entries.size(); ++i)
+		{
+			if (entries[i].hits > 0)
+				++executed;
+		}
+		uint64_t loaded = static_cast<uint64_t>(entries.size());
+		if (overflowSections > UINT64_MAX - loaded)
+			loaded = UINT64_MAX;
+		else
+			loaded += overflowSections;
+
+		output << "{\n  \"version\": 1"
+			<< ",\n  \"loaded\": " << loaded
+			<< ",\n  \"distinct\": " << entries.size()
+			<< ",\n  \"executed\": " << executed
+			<< ",\n  \"total_hits\": " << total
+			<< ",\n  \"overflow_sections\": " << overflowSections
+			<< ",\n  \"overflow_hits\": " << overflowHits
+			<< ",\n  \"entries\": [";
+		for (size_t i = 0; i < entries.size(); ++i)
+		{
+			const ScriptExecutionCoverageSnapshot& entry = entries[i];
+			output << (i ? ",\n" : "\n")
+				<< "    {\"resource_type\": \"" << JsonEscape(entry.resourceTypeName)
+				<< "\", \"resource_index\": " << entry.resourceIndex
+				<< ", \"resource_page\": " << entry.resourcePage
+				<< ", \"resource_name\": \"" << JsonEscape(entry.resourceName)
+				<< "\", \"section_kind\": \"" << JsonEscape(entry.sectionKind)
+				<< "\", \"section_name\": \"" << JsonEscape(entry.sectionName)
+				<< "\", \"ordinal\": " << entry.ordinal
+				<< ", \"count\": " << entry.hits
+				<< ", \"source_file\": \"" << JsonEscape(entry.sourceFile)
+				<< "\"}";
+		}
+		if (!entries.empty())
+			output << '\n';
+		output << "  ]\n}\n";
 	}
 
 	std::string CsvEscape(const std::string& value)
@@ -390,6 +574,182 @@ bool ScriptUnknownReportWrite()
 	return !output.fail();
 }
 
+void ScriptExecutionCoverageSetPath(LPCTSTR pszPath)
+{
+	ScriptExecutionCoverageReporter& reporter = g_ScriptExecutionCoverageReporter;
+	std::lock_guard<std::mutex> lock(reporter.mutex);
+	reporter.path = (pszPath && *pszPath) ? pszPath : "";
+	g_ScriptExecutionCoverageEnabled.store(!reporter.path.empty(), std::memory_order_release);
+}
+
+bool ScriptExecutionCoverageIsEnabled()
+{
+	return g_ScriptExecutionCoverageEnabled.load(std::memory_order_acquire);
+}
+
+SCRIPT_EXECUTION_COVERAGE_TOKEN ScriptExecutionCoverageRegister(
+	int iResourceType,
+	int iResourceIndex,
+	int iResourcePage,
+	LPCTSTR pszResourceName,
+	LPCTSTR pszSectionKind,
+	LPCTSTR pszSectionName,
+	DWORD dwOrdinal,
+	LPCTSTR pszSourceFile)
+{
+	if (!ScriptExecutionCoverageIsEnabled())
+		return SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+
+	ScriptExecutionCoverageKey key;
+	key.resourceType = iResourceType;
+	key.resourceIndex = iResourceIndex;
+	key.resourcePage = iResourcePage;
+	key.ordinal = dwOrdinal;
+	key.sectionKind = BoundedCoverageString(pszSectionKind, SCRIPT_EXECUTION_COVERAGE_MAX_SECTION_NAME);
+	key.sectionName = BoundedCoverageString(pszSectionName, SCRIPT_EXECUTION_COVERAGE_MAX_SECTION_NAME);
+	std::string resourceName = BoundedCoverageString(pszResourceName, SCRIPT_EXECUTION_COVERAGE_MAX_RESOURCE_NAME);
+	std::string sourceFile = BoundedCoverageString(pszSourceFile, SCRIPT_EXECUTION_COVERAGE_MAX_SOURCE_FILE);
+
+	ScriptExecutionCoverageReporter& reporter = g_ScriptExecutionCoverageReporter;
+	std::lock_guard<std::mutex> lock(reporter.mutex);
+	if (reporter.path.empty())
+		return SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+
+	std::unordered_map<ScriptExecutionCoverageKey, DWORD, ScriptExecutionCoverageKeyHash>::iterator existing =
+		reporter.indices.find(key);
+	if (existing != reporter.indices.end())
+	{
+		ScriptExecutionCoverageEntry* entry = reporter.ownedEntries[existing->second].get();
+		if (entry)
+		{
+			entry->resourceName = resourceName;
+			entry->resourceTypeName = ScriptExecutionCoverageResourceTypeName(iResourceType);
+			entry->sourceFile = sourceFile;
+		}
+		return existing->second;
+	}
+
+	if (reporter.entryCount >= SCRIPT_EXECUTION_COVERAGE_LIMIT)
+	{
+		SaturatingIncrement(reporter.overflowSections);
+		return SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN;
+	}
+
+	DWORD token = static_cast<DWORD>(reporter.entryCount);
+	std::unique_ptr<ScriptExecutionCoverageEntry> entry(new ScriptExecutionCoverageEntry);
+	entry->resourceType = iResourceType;
+	entry->resourceIndex = iResourceIndex;
+	entry->resourcePage = iResourcePage;
+	entry->ordinal = dwOrdinal;
+	entry->resourceTypeName = ScriptExecutionCoverageResourceTypeName(iResourceType);
+	entry->resourceName = resourceName;
+	entry->sectionKind = key.sectionKind;
+	entry->sectionName = key.sectionName;
+	entry->sourceFile = sourceFile;
+	reporter.indices.insert(std::make_pair(key, token));
+	ScriptExecutionCoverageEntry* entryPointer = entry.get();
+	reporter.ownedEntries[reporter.entryCount] = std::move(entry);
+	reporter.hitEntries[reporter.entryCount].store(entryPointer, std::memory_order_release);
+	++reporter.entryCount;
+	return token;
+}
+
+void ScriptExecutionCoverageHit(SCRIPT_EXECUTION_COVERAGE_TOKEN token)
+{
+	if (token == SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN || !ScriptExecutionCoverageIsEnabled())
+		return;
+
+	ScriptExecutionCoverageReporter& reporter = g_ScriptExecutionCoverageReporter;
+	if (token == SCRIPT_EXECUTION_COVERAGE_OVERFLOW_TOKEN)
+	{
+		SaturatingIncrement(reporter.overflowHits);
+		return;
+	}
+	if (token >= SCRIPT_EXECUTION_COVERAGE_LIMIT)
+		return;
+
+	ScriptExecutionCoverageEntry* entry = reporter.hitEntries[token].load(std::memory_order_acquire);
+	if (!entry)
+		return;
+	bool entryIncremented = SaturatingIncrement(entry->hits);
+	if (!entryIncremented)
+		SaturatingIncrement(reporter.overflowHits);
+}
+
+bool ScriptExecutionCoverageWrite()
+{
+	ScriptExecutionCoverageReporter& reporter = g_ScriptExecutionCoverageReporter;
+	std::string path;
+	std::vector<ScriptExecutionCoverageSnapshot> entries;
+	uint64_t total = 0;
+	uint64_t overflowSections = 0;
+	uint64_t overflowHits = 0;
+	{
+		std::lock_guard<std::mutex> lock(reporter.mutex);
+		path = reporter.path;
+		if (path.empty())
+			return false;
+		entries.reserve(reporter.entryCount);
+		for (size_t i = 0; i < reporter.entryCount; ++i)
+		{
+			const ScriptExecutionCoverageEntry* entry = reporter.ownedEntries[i].get();
+			if (!entry)
+				continue;
+			ScriptExecutionCoverageSnapshot snapshot;
+			snapshot.resourceType = entry->resourceType;
+			snapshot.resourceIndex = entry->resourceIndex;
+			snapshot.resourcePage = entry->resourcePage;
+			snapshot.ordinal = entry->ordinal;
+			snapshot.resourceTypeName = entry->resourceTypeName;
+			snapshot.resourceName = entry->resourceName;
+			snapshot.sectionKind = entry->sectionKind;
+			snapshot.sectionName = entry->sectionName;
+			snapshot.sourceFile = entry->sourceFile;
+			snapshot.hits = entry->hits.load(std::memory_order_relaxed);
+			entries.push_back(snapshot);
+		}
+		overflowSections = reporter.overflowSections.load(std::memory_order_relaxed);
+		overflowHits = reporter.overflowHits.load(std::memory_order_relaxed);
+	}
+	for (size_t i = 0; i < entries.size(); ++i)
+	{
+		if (entries[i].hits > UINT64_MAX - total)
+			total = UINT64_MAX;
+		else
+			total += entries[i].hits;
+	}
+	if (overflowHits > UINT64_MAX - total)
+		total = UINT64_MAX;
+	else
+		total += overflowHits;
+
+	std::sort(entries.begin(), entries.end(), [](
+		const ScriptExecutionCoverageSnapshot& left,
+		const ScriptExecutionCoverageSnapshot& right)
+	{
+		if (left.sourceFile != right.sourceFile)
+			return left.sourceFile < right.sourceFile;
+		if (left.resourceTypeName != right.resourceTypeName)
+			return left.resourceTypeName < right.resourceTypeName;
+		if (left.resourceIndex != right.resourceIndex)
+			return left.resourceIndex < right.resourceIndex;
+		if (left.resourcePage != right.resourcePage)
+			return left.resourcePage < right.resourcePage;
+		if (left.sectionKind != right.sectionKind)
+			return left.sectionKind < right.sectionKind;
+		if (left.sectionName != right.sectionName)
+			return left.sectionName < right.sectionName;
+		return left.ordinal < right.ordinal;
+	});
+
+	std::ofstream output(path.c_str(), std::ios::out | std::ios::trunc);
+	if (!output.is_open())
+		return false;
+	WriteScriptExecutionCoverageJson(output, entries, total, overflowSections, overflowHits);
+	output.close();
+	return !output.fail();
+}
+
 //***************************************************************************
 //	CSphereScriptContext
 
@@ -511,6 +871,9 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			CResourceLock sFunction( g_Cfg.ResourceGetDef(ridFunc));
 			if ( ! sFunction.IsFileOpen())
 				return( HRES_INVALID_HANDLE );
+			CResourceLink* pFunctionLink = sFunction.GetLinkResource();
+			if (pFunctionLink)
+				ScriptExecutionCoverageHit(pFunctionLink->GetScriptCoverageToken());
 			// create a new sub-context with new args.
 			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs );
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );

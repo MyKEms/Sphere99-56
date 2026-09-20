@@ -558,6 +558,7 @@ bool CChar::ReadScriptTrig( CCharDef* pCharDef, CCharDef::T_TYPE_ trig )
 		return( false );
 	if ( ! sLock.FindTriggerName( CCharDef::sm_Triggers[trig].m_pszName ))
 		return( false );
+	ScriptExecutionCoverageHit(pCharDef->GetTriggerCoverageToken(CCharDef::sm_Triggers[trig].m_pszName));
 	return( ReadScript( sLock ));
 }
 

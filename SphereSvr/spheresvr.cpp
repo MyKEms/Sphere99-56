@@ -647,6 +647,13 @@ void Sphere_ExitServer()
 			"Unable to write unresolved keyword report to %s." LOG_CR,
 			(LPCTSTR) g_Serv.m_sUnknownKeywordReport );
 	}
+	if ( g_Serv.m_iExitFlag >= 0 && g_Serv.m_sScriptExecutionReport.GetLength() > 0 &&
+		!ScriptExecutionCoverageWrite() )
+	{
+		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+			"Unable to write script execution coverage report to %s." LOG_CR,
+			(LPCTSTR) g_Serv.m_sScriptExecutionReport );
+	}
 
 	g_Cfg.Unload(false);
 	g_Accounts.Empty();
