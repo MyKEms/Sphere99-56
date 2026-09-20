@@ -202,7 +202,8 @@ public:
 			{
 				m_ScriptCoverageOptions.RemoveAll();
 				m_fScriptCoverageOptionsOverflow = pLink->m_fScriptCoverageOptionsOverflow;
-				m_ScriptCoverageOptions.CopyArray(pLink->m_ScriptCoverageOptions);
+				if (pLink->m_ScriptCoverageOptions.GetCount() > 0)
+					m_ScriptCoverageOptions.CopyArray(pLink->m_ScriptCoverageOptions);
 			}
 			m_pScript = pLink->m_pScript;
 			m_LineContext = pLink->m_LineContext;
