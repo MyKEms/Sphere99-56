@@ -73,12 +73,22 @@ def main() -> int:
         action="store_true",
         help="expect one nested item to reference a non-container",
     )
+    parser.add_argument(
+        "--typedef-container-reference",
+        action="store_true",
+        help="expect a symbolic type from TYPEDEFS to create a container",
+    )
     args = parser.parse_args()
 
     if sum(
-        (args.truncated, args.unresolved_worldchar_type, args.noncontainer_reference)
+        (
+            args.truncated,
+            args.unresolved_worldchar_type,
+            args.noncontainer_reference,
+            args.typedef_container_reference,
+        )
     ) > 1:
-        parser.error("choose only one world-load failure option")
+        parser.error("choose only one world-load fixture mode")
 
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
@@ -226,7 +236,7 @@ def main() -> int:
                             "nested non-container fixture logged unexpected errors: "
                             f"{unexpected_errors!r}"
                         )
-                else:
+                elif not args.typedef_container_reference:
                     sock, _ = game_connect(
                         args.host,
                         args.port,
@@ -289,7 +299,11 @@ def main() -> int:
         )
     expected_count_lines = (
         [expected_line]
-        if args.unresolved_worldchar_type or args.noncontainer_reference
+        if (
+            args.unresolved_worldchar_type
+            or args.noncontainer_reference
+            or args.typedef_container_reference
+        )
         else [expected_line, expected_line]
     )
     if all_count_lines != expected_count_lines:
@@ -298,7 +312,11 @@ def main() -> int:
             f"expected {expected_count_lines!r}, got {all_count_lines!r}"
         )
 
-    if not args.unresolved_worldchar_type and not args.noncontainer_reference:
+    if (
+        not args.unresolved_worldchar_type
+        and not args.noncontainer_reference
+        and not args.typedef_container_reference
+    ):
         admin_lines = [
             message
             for message in response_messages
