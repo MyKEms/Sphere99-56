@@ -21,6 +21,7 @@ TILE_BLOCK_QTY = 32
 TERRAIN_RECORD_BYTES = 26
 ITEM_RECORD_BYTES = 37
 DEFAULT_ITEM_ID = 0x0E75
+SYNTHETIC_HAIR_ID = 0x203B
 
 
 def write_sparse(path: Path, size: int) -> None:
@@ -89,10 +90,10 @@ def write_mul_fixture(root: Path) -> None:
     write_bytes(muls / "multi.idx", b"\0" * 12)
     write_bytes(muls / "multi.mul", b"")
 
-    # The server only needs the file layout for the synthetic item definition;
+    # Include the protocol fixture's container and character-create hair IDs;
     # all terrain and other item records remain zero/default data.
     tiledata = muls / "tiledata.mul"
-    write_sparse(tiledata, tiledata_size(DEFAULT_ITEM_ID))
+    write_sparse(tiledata, tiledata_size(max(DEFAULT_ITEM_ID, SYNTHETIC_HAIR_ID)))
     write_container_tile(tiledata, DEFAULT_ITEM_ID)
 
     # Hues are not opened by the server startup mask, but keeping a tiny valid
