@@ -4,6 +4,8 @@
 //
 
 #include "stdafx.h"	// predef header.
+
+#include <stdio.h>
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 #include <signal.h>
@@ -213,8 +215,13 @@ void CWorld::ResetLoadIntegrity()
 	m_iLoadSkippedSections = 0;
 	m_iLoadSkippedObjects = 0;
 	m_iLoadFailedParses = 0;
+	m_iLoadReadItems = 0;
+	m_iLoadReadChars = 0;
+	m_iLoadItems = 0;
+	m_iLoadChars = 0;
 	m_fSaveBlockedByLoad = false;
 	m_fLoadIntegrityReported = false;
+	m_fLoadCountsCaptured = false;
 }
 
 void CWorld::MarkLoadIssue( bool fObjectSection )
@@ -237,6 +244,32 @@ void CWorld::ReportLoadIntegrity()
 		"SAVE FORCE only if accepting the loss is intentional." LOG_CR,
 		m_iLoadSkippedSections, m_iLoadSkippedObjects, m_iLoadFailedParses );
 	m_fLoadIntegrityReported = true;
+}
+
+void CWorld::FormatLoadCounts( CGString& s ) const
+{
+	s.Format( "world load: items=%d chars=%d read_items=%d read_chars=%d",
+		m_iLoadItems, m_iLoadChars, m_iLoadReadItems, m_iLoadReadChars );
+}
+
+void CWorld::LogLoadCounts() const
+{
+	CGString sCounts;
+	FormatLoadCounts( sCounts );
+	g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT, "%s" LOG_CR, (LPCTSTR) sCounts );
+#ifndef _WIN32
+	// Linux's legacy logger only writes errors to the captured console stream.
+	fprintf( stderr, "[INFO] %s\n", (LPCTSTR) sCounts );
+	fflush( stderr );
+#endif
+}
+
+void CWorld::CaptureLoadCounts()
+{
+	m_iLoadItems = g_Serv.StatGet( SERV_STAT_ITEMS );
+	m_iLoadChars = g_Serv.StatGet( SERV_STAT_CHARS );
+	m_fLoadCountsCaptured = true;
+	LogLoadCounts();
 }
 
 void CWorld::GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int iSaveCount ) // static
@@ -568,6 +601,11 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 
 	while ( s.FindNextSection())
 	{
+		if ( s.IsSectionType( "WORLDITEM" ))
+			m_iLoadReadItems++;
+		else if ( s.IsSectionType( "WORLDCHAR" ))
+			m_iLoadReadChars++;
+
 		if (! ( ++iLoadStage & 0x1FF ))	// don't update too often
 		{
 			g_Serv.Event_PrintPercent( SERVTRIG_LoadStatus, s.GetPosition(), lLoadSize );
@@ -657,6 +695,10 @@ bool CWorld::LoadWorld() // Load world from script
 	int iPrevSaveCount = m_iSaveCountID;
 	for(;;)
 	{
+		// If this save needs to fall back to an older backup, report only the
+		// sections read from the save that actually loaded.
+		m_iLoadReadItems = 0;
+		m_iLoadReadChars = 0;
 		if ( LoadFile( sWorldName ))
 		{
 			// Version 0.99 stores chars in separate file — always try to load it.
@@ -697,7 +739,8 @@ bool CWorld::LoadWorld() // Load world from script
 
 bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 {
-	if ( GetUIDCount())	// we already loaded?
+	// The UID table reserves slot zero, so its size does not mean the world is loaded.
+	if ( m_fLoadCountsCaptured )	// a successful load already completed?
 		return( true );
 
 	ResetLoadIntegrity();
@@ -727,6 +770,8 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	if ( pszLoadName )
 	{
 		// Command line load this file. g_Cfg.m_sWorldBaseDir
+		m_iLoadReadItems = 0;
+		m_iLoadReadChars = 0;
 		if ( ! LoadFile( pszLoadName ))
 		{
 			ReportLoadIntegrity();
@@ -811,6 +856,7 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	const TCHAR* pszVersion = SPHERE_VERSION;
 	m_iLoadVersion = Exp_GetComplex( pszVersion );	// Set m_iLoadVersion
 	g_Serv.OnTriggerEvent( SERVTRIG_LoadDone );
+	CaptureLoadCounts();
 
 	return( true );
 }
@@ -1010,6 +1056,7 @@ void CWorld::Close( bool fResources )
 	}
 
 	CloseAllUIDs();
+	m_fLoadCountsCaptured = false;
 
 	m_Clock.InitTime();	// no more sense of time.
 }

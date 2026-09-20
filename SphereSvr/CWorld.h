@@ -311,8 +311,13 @@ private:
 	int		m_iLoadSkippedSections;
 	int		m_iLoadSkippedObjects;
 	int		m_iLoadFailedParses;
+	int		m_iLoadReadItems;
+	int		m_iLoadReadChars;
+	int		m_iLoadItems;
+	int		m_iLoadChars;
 	bool	m_fSaveBlockedByLoad;
 	bool	m_fLoadIntegrityReported;
+	bool	m_fLoadCountsCaptured;
 
 	// World data.
 	CSector m_Sectors[ SECTOR_QTY ];
@@ -345,6 +350,7 @@ private:
 	void ResetLoadIntegrity();
 	void MarkLoadIssue( bool fObjectSection );
 	void ReportLoadIntegrity();
+	void CaptureLoadCounts();
 
 	bool SaveTry(bool fForceImmediate); // Save world state
 	void GarbageCollection_GMPages();
@@ -463,6 +469,9 @@ public:
 	int GetLoadSkippedSections() const { return m_iLoadSkippedSections; }
 	int GetLoadSkippedObjects() const { return m_iLoadSkippedObjects; }
 	int GetLoadFailedParses() const { return m_iLoadFailedParses; }
+	bool HasLoadCounts() const { return m_fLoadCountsCaptured; }
+	void FormatLoadCounts( CGString& s ) const;
+	void LogLoadCounts() const;
 	bool LoadAll( LPCTSTR pszLoadName = NULL );
 	void Close( bool fResources );
 
