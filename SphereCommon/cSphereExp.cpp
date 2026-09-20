@@ -452,6 +452,18 @@ CSphereExpContext::~CSphereExpContext()
 	}
 }
 
+CResourceObj* CSphereExpContext::ResolveUIDObject(UID_INDEX uid)
+{
+	CObjBasePtr pObj = g_World.ObjFind(uid);
+	return dynamic_cast<CResourceObj*>((CObjBase*)pObj);
+}
+
+bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
+{
+	CSphereUID ridFunc = g_Cfg.ResourceCheckIDType(RES_Function, pszKey);
+	return ridFunc.IsValidRID();
+}
+
 void CSphereExpContext::InitFunctions()	// static
 {
 	if ( sm_FunctionsAll.GetSize())

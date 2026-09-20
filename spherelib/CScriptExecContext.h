@@ -78,6 +78,58 @@ private:
 		return SCRIPT_UNKNOWN_GET;
 	}
 
+protected:
+	// Numeric values returned by script functions may be UIDs. Concrete engine
+	// contexts can resolve them to world objects without coupling this shared
+	// execution context to the server's world implementation.
+	virtual CResourceObj* ResolveUIDObject(UID_INDEX uid)
+	{
+		(void)uid;
+		return NULL;
+	}
+
+	virtual bool IsScriptFunction(LPCTSTR pszKey)
+	{
+		(void)pszKey;
+		return false;
+	}
+
+	CResourceObj* ResolveObjectResult(const CGVariant& value, LPCTSTR pszFunctionRoot)
+	{
+		CResourceObj* pObj = dynamic_cast<CResourceObj*>(value.GetRef());
+		if ( pObj == NULL && pszFunctionRoot && value.IsNumeric() && IsScriptFunction(pszFunctionRoot) )
+			pObj = ResolveUIDObject(value.GetUID());
+		return pObj;
+	}
+
+	bool ResolveDottedFunctionResult(LPCTSTR pszKey, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected)
+	{
+		LPCTSTR pszDot = strchr(pszKey, '.');
+		if ( pszDot == NULL || pszDot == pszKey || pszDot[1] == '\0' )
+			return false;
+
+		TCHAR szRoot[SCRIPT_MAX_LINE_LEN];
+		size_t iRootLen = pszDot - pszKey;
+		if ( iRootLen >= sizeof(szRoot) )
+			return false;
+
+		memcpy(szRoot, pszKey, iRootLen);
+		szRoot[iRootLen] = '\0';
+		CGVariant vRootArgs;
+		CGVariant vRoot;
+		HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
+		rejected.Observe(hRoot, szRoot, m_pBaseObj);
+		if ( hRoot != NO_ERROR )
+			return false;
+
+		CResourceObj* pRootObj = ResolveObjectResult(vRoot, szRoot);
+		if ( pRootObj == NULL )
+			return false;
+
+		vValRet.SetRef(pRootObj);
+		return true;
+	}
+
 public:
 	// Gump command table for dialog construction.
 	static LPCTSTR const sm_szGumpCmds[];
@@ -346,6 +398,8 @@ public:
 
 					HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
 					rejected.Observe(hRes, szKey, m_pBaseObj);
+					if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
+						hRes = NO_ERROR;
 					if ( hRes == NO_ERROR )
 					{
 						CScriptObj* pRef = vValRet.GetRef();
@@ -545,6 +599,8 @@ public:
 				// Try global function dispatch.
 				HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
 				rejected.Observe(hRes, szKey, m_pBaseObj);
+				if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
+					hRes = NO_ERROR;
 				if ( hRes == NO_ERROR )
 				{
 					// Object reference chaining: <argo.tag(name)>, <argo.uid>, etc.
@@ -799,13 +855,14 @@ public:
 				CGVariant vRoot;
 				HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
 				rejected.Observe(hRoot, szRoot, m_pBaseObj);
+				bool fRootFromFunction = (hRoot == NO_ERROR);
 				if ( hRoot != NO_ERROR && pObj )
 				{
 					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
 					rejected.Observe(hRoot, szRoot, m_pBaseObj);
 				}
 
-				CResourceObj* pRootObj = dynamic_cast<CResourceObj*>(vRoot.GetRef());
+				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRoot : NULL);
 				if ( hRoot == NO_ERROR && pRootObj )
 				{
 					CGVariant vArgs(pszArg);
