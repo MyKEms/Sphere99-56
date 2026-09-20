@@ -390,8 +390,13 @@ Synthetic starting point
     (root / "logs").mkdir(parents=True, exist_ok=True)
 
 
-def write_world_load_counts_save(root: Path, *, truncate_world_item: bool) -> None:
-    """Write a known synthetic save, optionally ending with one broken item."""
+def write_world_load_counts_save(
+    root: Path,
+    *,
+    truncate_world_item: bool,
+    unresolved_worldchar_type: bool,
+) -> None:
+    """Write a known synthetic save with optional world-load failures."""
 
     world_sections = [
         "TITLE=Sphere synthetic object-count fixture",
@@ -420,7 +425,9 @@ def write_world_load_counts_save(root: Path, *, truncate_world_item: bool) -> No
                 "TITLE=Sphere synthetic object-count fixture",
                 "VERSION=0.99",
                 "SAVECOUNT=0",
-                "[WORLDCHAR c_MAN]",
+                "[WORLDCHAR SYNTHETIC_MISSING_CHARDEF]"
+                if unresolved_worldchar_type
+                else "[WORLDCHAR c_MAN]",
                 "SERIAL=3",
                 "NPC=2",
                 "STR=100",
@@ -501,10 +508,19 @@ def main() -> int:
         action="store_true",
         help="append one incomplete world item section to the synthetic save",
     )
+    parser.add_argument(
+        "--unresolved-worldchar-type",
+        action="store_true",
+        help="use one synthetic character type with no CHARDEF",
+    )
     args = parser.parse_args()
 
-    if args.truncate_world_item and not args.world_load_counts:
-        parser.error("--truncate-world-item requires --world-load-counts")
+    if (
+        args.truncate_world_item or args.unresolved_worldchar_type
+    ) and not args.world_load_counts:
+        parser.error("world-load failure options require --world-load-counts")
+    if args.truncate_world_item and args.unresolved_worldchar_type:
+        parser.error("choose only one world-load failure option")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -529,7 +545,9 @@ def main() -> int:
     )
     if args.world_load_counts:
         write_world_load_counts_save(
-            root, truncate_world_item=args.truncate_world_item
+            root,
+            truncate_world_item=args.truncate_world_item,
+            unresolved_worldchar_type=args.unresolved_worldchar_type,
         )
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")

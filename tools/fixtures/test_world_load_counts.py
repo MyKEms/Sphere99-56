@@ -63,7 +63,15 @@ def main() -> int:
         action="store_true",
         help="expect one incomplete world-item section in the save",
     )
+    parser.add_argument(
+        "--unresolved-worldchar-type",
+        action="store_true",
+        help="expect one WORLDCHAR section with no matching CHARDEF",
+    )
     args = parser.parse_args()
+
+    if args.truncated and args.unresolved_worldchar_type:
+        parser.error("choose only one world-load failure option")
 
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
@@ -75,11 +83,12 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    expected_line = (
-        "world load: items=2 chars=1 read_items=3 read_chars=1"
-        if args.truncated
-        else "world load: items=2 chars=1 read_items=2 read_chars=1"
-    )
+    if args.unresolved_worldchar_type:
+        expected_line = "world load: items=2 chars=0 read_items=2 read_chars=1"
+    elif args.truncated:
+        expected_line = "world load: items=2 chars=1 read_items=3 read_chars=1"
+    else:
+        expected_line = "world load: items=2 chars=1 read_items=2 read_chars=1"
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
     from uo_test_client import (  # pylint: disable=import-outside-toplevel
@@ -124,7 +133,11 @@ def main() -> int:
                     for line in startup_log.splitlines()
                     if line.startswith("[ERROR]") or line.startswith("[CRITICAL]")
                 ]
-                if not args.truncated and startup_errors:
+                if (
+                    not args.truncated
+                    and not args.unresolved_worldchar_type
+                    and startup_errors
+                ):
                     raise RuntimeError(
                         f"complete synthetic save logged load errors: {startup_errors!r}"
                     )
@@ -135,40 +148,67 @@ def main() -> int:
                     raise RuntimeError(
                         "truncated save did not report exactly one skipped object section"
                     )
-                sock, _ = game_connect(
-                    args.host,
-                    args.port,
-                    "Administrator",
-                    "world-count-pw",
-                    game_port=args.port + 1000,
-                )
-                if sock is None:
-                    raise RuntimeError("admin probe did not reach the character list")
-                try:
-                    sock.sendall(
-                        make_char_create(
-                            name="WorldCountProbe",
-                            sex=0,
-                            start_loc=1,
-                            skill1=25,
-                            val1=40,
-                            skill2=26,
-                            val2=40,
-                            skill3=1,
-                            val3=20,
+                if args.unresolved_worldchar_type:
+                    if not any(
+                        "Invalid WORLDCHAR block index" in line
+                        for line in startup_errors
+                    ):
+                        raise RuntimeError(
+                            "unresolved character type did not report an invalid resource index"
                         )
+                    if not any(
+                        "world load skipped 1 sections (1 objects)" in line
+                        for line in startup_log.splitlines()
+                    ):
+                        raise RuntimeError(
+                            "unresolved character type did not report one skipped object section"
+                        )
+                    diagnostic = (
+                        "WORLDCHAR load failed: uid=3 "
+                        "type='SYNTHETIC_MISSING_CHARDEF' "
+                        "reason=character type does not resolve to a resource index"
                     )
-                    response = recv_until_game_start(sock, timeout=10.0)
-                    if not response:
-                        raise RuntimeError("admin character did not enter the world")
-                    decoded = decode_game_response(
-                        drain_game_socket(sock, response)
+                    if not any(
+                        diagnostic in line for line in startup_errors
+                    ):
+                        raise RuntimeError(
+                            "read-but-not-created WORLDCHAR error diagnostic was missing its UID and reason"
+                        )
+                else:
+                    sock, _ = game_connect(
+                        args.host,
+                        args.port,
+                        "Administrator",
+                        "world-count-pw",
+                        game_port=args.port + 1000,
                     )
-                    if find_start_packet(decoded) is None:
-                        raise RuntimeError("admin character did not enter the world")
-                    response_messages = system_messages(decoded)
-                finally:
-                    sock.close()
+                    if sock is None:
+                        raise RuntimeError("admin probe did not reach the character list")
+                    try:
+                        sock.sendall(
+                            make_char_create(
+                                name="WorldCountProbe",
+                                sex=0,
+                                start_loc=1,
+                                skill1=25,
+                                val1=40,
+                                skill2=26,
+                                val2=40,
+                                skill3=1,
+                                val3=20,
+                            )
+                        )
+                        response = recv_until_game_start(sock, timeout=10.0)
+                        if not response:
+                            raise RuntimeError("admin character did not enter the world")
+                        decoded = decode_game_response(
+                            drain_game_socket(sock, response)
+                        )
+                        if find_start_packet(decoded) is None:
+                            raise RuntimeError("admin character did not enter the world")
+                        response_messages = system_messages(decoded)
+                    finally:
+                        sock.close()
             except (OSError, RuntimeError, subprocess.SubprocessError) as error:
                 runner_error = str(error)
             finally:
@@ -195,23 +235,29 @@ def main() -> int:
         failures.append(
             f"expected one startup line {expected_line!r}, got {startup_lines!r}"
         )
-    if all_count_lines != [expected_line, expected_line]:
+    expected_count_lines = (
+        [expected_line]
+        if args.unresolved_worldchar_type
+        else [expected_line, expected_line]
+    )
+    if all_count_lines != expected_count_lines:
         failures.append(
-            "expected the startup and on-demand log lines to match "
-            f"{[expected_line, expected_line]!r}, got {all_count_lines!r}"
+            "unexpected startup/on-demand log lines: "
+            f"expected {expected_count_lines!r}, got {all_count_lines!r}"
         )
 
-    admin_lines = [
-        message
-        for message in response_messages
-        if message.startswith("SPHERE_WORLD_COUNTS ")
-    ]
-    expected_admin_line = f"SPHERE_WORLD_COUNTS {expected_line}"
-    if admin_lines != [expected_admin_line]:
-        failures.append(
-            f"admin SERV.WORLDCOUNTS response was {admin_lines!r}; "
-            f"expected {[expected_admin_line]!r}"
-        )
+    if not args.unresolved_worldchar_type:
+        admin_lines = [
+            message
+            for message in response_messages
+            if message.startswith("SPHERE_WORLD_COUNTS ")
+        ]
+        expected_admin_line = f"SPHERE_WORLD_COUNTS {expected_line}"
+        if admin_lines != [expected_admin_line]:
+            failures.append(
+                f"admin SERV.WORLDCOUNTS response was {admin_lines!r}; "
+                f"expected {[expected_admin_line]!r}"
+            )
 
     if failures:
         print("world-load counts probe failed:", file=sys.stderr)
