@@ -131,6 +131,24 @@ jobs:
             --port 2702 \
             --expect-disabled
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts" \
+            --world-load-counts \
+            --world-load-counts-probe
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2710
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-truncated" \
+            --world-load-counts \
+            --world-load-counts-probe \
+            --truncate-world-item
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-truncated" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2711 \
+            --truncated
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -179,6 +197,8 @@ jobs:
             ${{ runner.temp }}/sphere-asan-coverage-shutdown/server.log
             ${{ runner.temp }}/sphere-asan-coverage-on-demand/server.log
             ${{ runner.temp }}/sphere-asan-coverage-disabled/server.log
+            ${{ runner.temp }}/sphere-asan-world-counts/server.log
+            ${{ runner.temp }}/sphere-asan-world-counts-truncated/server.log
           if-no-files-found: warn
 
   load-safety:
@@ -315,6 +335,24 @@ jobs:
             --port 2702 \
             --expect-disabled
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-counts" \
+            --world-load-counts \
+            --world-load-counts-probe
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-world-counts" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2712
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-counts-truncated" \
+            --world-load-counts \
+            --world-load-counts-probe \
+            --truncate-world-item
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-world-counts-truncated" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2713 \
+            --truncated
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -356,4 +394,6 @@ jobs:
             ${{ runner.temp }}/sphere-coverage-shutdown/server.log
             ${{ runner.temp }}/sphere-coverage-on-demand/server.log
             ${{ runner.temp }}/sphere-coverage-disabled/server.log
+            ${{ runner.temp }}/sphere-world-counts/server.log
+            ${{ runner.temp }}/sphere-world-counts-truncated/server.log
           if-no-files-found: warn

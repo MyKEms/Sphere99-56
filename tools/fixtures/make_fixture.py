@@ -140,6 +140,7 @@ def write_scripts(
     unknown_keyword_overflow_probe: bool = False,
     unknown_keyword_admin_probe: bool = False,
     unknown_keyword_rejected_probe: bool = False,
+    world_load_counts_probe: bool = False,
 ) -> None:
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
@@ -192,6 +193,11 @@ def write_scripts(
             for index in range(1025)
         )
         if unknown_keyword_overflow_probe
+        else ""
+    )
+    world_load_counts_probe_script = (
+        "SYSMESSAGE SPHERE_WORLD_COUNTS <SERV.WORLDCOUNTS>\n"
+        if world_load_counts_probe
         else ""
     )
     write_text(
@@ -279,7 +285,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 NEWITEM SYNTHETIC_HAIR
-""" + unknown_keyword_probe_script + unknown_keyword_overflow_script + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + """
 ON=@EnvironChange
 RETURN
 ON=@Logout
@@ -384,6 +390,53 @@ Synthetic starting point
     (root / "logs").mkdir(parents=True, exist_ok=True)
 
 
+def write_world_load_counts_save(root: Path, *, truncate_world_item: bool) -> None:
+    """Write a known synthetic save, optionally ending with one broken item."""
+
+    world_sections = [
+        "TITLE=Sphere synthetic object-count fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+        "[WORLDITEM SYNTHETIC_MAGERY_START]",
+        "SERIAL=1",
+        "P=128,128,0",
+        "[WORLDITEM SYNTHETIC_RESIST_START]",
+        "SERIAL=2",
+        "P=129,128,0",
+    ]
+    if truncate_world_item:
+        world_sections.extend(
+            [
+                "[WORLDITEM]",
+                "NAME=deliberately-truncated-synthetic-object",
+            ]
+        )
+    world_sections.append("[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic object-count fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                "NPC=2",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -433,7 +486,25 @@ def main() -> int:
         action="store_true",
         help="include a valid comma-valued ARG and an invalid empty-name ARG",
     )
+    parser.add_argument(
+        "--world-load-counts",
+        action="store_true",
+        help="write a synthetic save with two items and one character",
+    )
+    parser.add_argument(
+        "--world-load-counts-probe",
+        action="store_true",
+        help="invoke SERV.WORLDCOUNTS from the admin login event",
+    )
+    parser.add_argument(
+        "--truncate-world-item",
+        action="store_true",
+        help="append one incomplete world item section to the synthetic save",
+    )
     args = parser.parse_args()
+
+    if args.truncate_world_item and not args.world_load_counts:
+        parser.error("--truncate-world-item requires --world-load-counts")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -454,7 +525,12 @@ def main() -> int:
         unknown_keyword_overflow_probe=args.unknown_keyword_overflow_probe,
         unknown_keyword_admin_probe=args.unknown_keyword_admin_probe,
         unknown_keyword_rejected_probe=args.unknown_keyword_rejected_probe,
+        world_load_counts_probe=args.world_load_counts_probe,
     )
+    if args.world_load_counts:
+        write_world_load_counts_save(
+            root, truncate_world_item=args.truncate_world_item
+        )
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
