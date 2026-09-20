@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import socket
 import subprocess
 import sys
@@ -33,6 +32,8 @@ def coverage_report_failures(report: object) -> list[str]:
 
     if not isinstance(report, dict):
         return ["script execution coverage report root must be an object"]
+    if type(report.get("version")) is not int or report.get("version") != 1:
+        return [f"unsupported script execution coverage report version: {report.get('version')!r}"]
     entries = report.get("entries")
     if not isinstance(entries, list):
         return ["script execution coverage report has no entries array"]
@@ -41,8 +42,8 @@ def coverage_report_failures(report: object) -> list[str]:
         ("FUNCTION", "f_coverage_alpha", "function", "f_coverage_alpha", 0): 1,
         ("FUNCTION", "f_coverage_beta", "function", "f_coverage_beta", 0): 1,
         ("FUNCTION", "f_coverage_never", "function", "f_coverage_never", 0): 0,
-        ("CHARDEF", "c_MAN", "trigger", "Create", 0): 1,
-        ("CHARDEF", "c_MAN", "trigger", "CoverageNever", 0): 0,
+        ("EVENTS", "e_AllPlayers", "trigger", "LogIn", 0): 1,
+        ("EVENTS", "e_AllPlayers", "trigger", "CoverageNever", 0): 0,
     }
     observed: dict[tuple[object, ...], int] = {}
     failures = []
@@ -67,6 +68,8 @@ def coverage_report_failures(report: object) -> list[str]:
         for field in ("resource_index", "resource_page"):
             if type(entry.get(field)) is not int:
                 failures.append(f"invalid {field} for script coverage entry {key!r}")
+        if not isinstance(entry.get("source_file"), str) or not entry.get("source_file"):
+            failures.append(f"invalid source_file for script coverage entry {key!r}")
 
     if set(observed) != set(expected):
         failures.append(
@@ -84,19 +87,26 @@ def coverage_report_failures(report: object) -> list[str]:
         failures.append(
             f"coverage distinct count was {report.get('distinct')!r}; expected {len(entries)}"
         )
+    if type(report.get("loaded")) is not int or report.get("loaded") != len(entries):
+        failures.append(
+            f"coverage loaded count was {report.get('loaded')!r}; expected {len(entries)}"
+        )
     executed = sum(1 for count in observed.values() if count > 0)
     if type(report.get("executed")) is not int or report.get("executed") != executed:
         failures.append(
             f"coverage executed count was {report.get('executed')!r}; expected {executed}"
         )
     total = sum(observed.values())
-    if type(report.get("total")) is not int or report.get("total") != total:
+    if type(report.get("total_hits")) is not int or report.get("total_hits") != total:
         failures.append(
-            f"coverage total was {report.get('total')!r}; expected {total}"
+            f"coverage total_hits was {report.get('total_hits')!r}; expected {total}"
         )
-    overflow = report.get("overflow")
+    overflow = report.get("overflow_sections")
     if type(overflow) is not int or overflow != 0:
-        failures.append(f"coverage overflow was {overflow!r}; expected 0")
+        failures.append(f"coverage overflow_sections was {overflow!r}; expected 0")
+    overflow_hits = report.get("overflow_hits")
+    if type(overflow_hits) is not int or overflow_hits != 0:
+        failures.append(f"coverage overflow_hits was {overflow_hits!r}; expected 0")
     return failures
 
 
@@ -107,10 +117,16 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2793)
     parser.add_argument("--startup-timeout", type=float, default=120.0)
-    parser.add_argument(
+    report_mode = parser.add_mutually_exclusive_group()
+    report_mode.add_argument(
         "--expect-disabled",
         action="store_true",
         help="verify no report is emitted when SCRIPTEXECUTIONREPORT is absent",
+    )
+    report_mode.add_argument(
+        "--expect-on-demand",
+        action="store_true",
+        help="verify the admin method writes the report before shutdown",
     )
     args = parser.parse_args()
 
@@ -124,6 +140,10 @@ def main() -> int:
         parser.error(f"server binary does not exist: {binary}")
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
+    try:
+        report_path.unlink()
+    except FileNotFoundError:
+        pass
 
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
@@ -149,7 +169,7 @@ def main() -> int:
             process = subprocess.Popen(
                 [str(binary), f"-P{args.port}"],
                 cwd=fixture,
-                stdin=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
             )
@@ -161,7 +181,7 @@ def main() -> int:
                 sock, _ = game_connect(
                     args.host,
                     args.port,
-                    f"coverage_{os.getpid()}",
+                    "Administrator",
                     "coverage-password",
                     game_port=args.port + 1000,
                 )
@@ -189,11 +209,7 @@ def main() -> int:
                 finally:
                     sock.close()
 
-                if not args.expect_disabled:
-                    if process.stdin is None:
-                        raise RuntimeError("server console input pipe was not opened")
-                    process.stdin.write(b"SERV.SCRIPTCOVERAGEREPORT\n")
-                    process.stdin.flush()
+                if args.expect_on_demand:
                     deadline = time.monotonic() + 5.0
                     while not report_path.is_file() and time.monotonic() < deadline:
                         time.sleep(0.05)

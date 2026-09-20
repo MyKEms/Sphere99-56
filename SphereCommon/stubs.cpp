@@ -18,13 +18,15 @@ bool CResourceDef::IsValidHeap() const
 
 // CResourceLink
 CResourceLink::CResourceLink(CSphereUID rid)
-	: CResourceDef(rid), m_pScript(NULL)
+	: CResourceDef(rid), m_pScript(NULL),
+	  m_ScriptCoverageToken(SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN),
+	  m_fScriptCoverageOptionsOverflow(false)
 {
 }
 
 // CResourceTriggered
 CResourceTriggered::CResourceTriggered(CSphereUID rid)
-	: CResourceLink(rid)
+	: CResourceLink(rid), m_fTriggerCoverageOverflow(false)
 {
 }
 

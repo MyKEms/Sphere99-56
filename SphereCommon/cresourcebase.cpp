@@ -9,6 +9,85 @@
 // Stub for missing function
 static int FindArg(void* p) { return -1; }
 
+void CResourceLink::SetLinkSection(
+	CResourceScript* pScript,
+	CScriptLineContext context,
+	LPCTSTR pszLinkResourceName)
+{
+	m_pScript = pScript;
+	m_LineContext = context;
+	m_ScriptCoverageToken = SCRIPT_EXECUTION_COVERAGE_INVALID_TOKEN;
+	m_ScriptCoverageOptions.RemoveAll();
+	m_fScriptCoverageOptionsOverflow = false;
+
+	if (!pScript || !ScriptExecutionCoverageIsEnabled())
+		return;
+
+	CSphereUID rid = GetResourceID();
+	RES_TYPE restype = rid.GetResType();
+	LPCTSTR pszResourceName = (pszLinkResourceName && *pszLinkResourceName)
+		? pszLinkResourceName
+		: GetResourceName();
+	LPCTSTR pszSourceFile = pScript->GetFilePath();
+	if (!pszResourceName || !*pszResourceName)
+		pszResourceName = "";
+
+	if (restype == RES_Function)
+	{
+		m_ScriptCoverageToken = ScriptExecutionCoverageRegister(
+			static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+			pszResourceName, "function",
+			pszResourceName[0] ? pszResourceName : "body", 0, pszSourceFile);
+		return;
+	}
+
+	if (restype == RES_Dialog)
+	{
+		if (rid.GetResPage() == 0)
+		{
+			m_ScriptCoverageToken = ScriptExecutionCoverageRegister(
+				static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+				pszResourceName, "dialog", "layout", 0, pszSourceFile);
+			return;
+		}
+		if (rid.GetResPage() != RES_DIALOG_BUTTON)
+			return;
+
+		CResourceLock script(this);
+		if (!script.IsFileOpen())
+			return;
+		while (script.ReadKeyParse())
+		{
+			if (!script.IsLineTrigger())
+				continue;
+			DWORD button = static_cast<DWORD>(atoi(script.GetArgRaw()));
+			SCRIPT_EXECUTION_COVERAGE_TOKEN coverageToken = ScriptExecutionCoverageRegister(
+				static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+				pszResourceName, "dialog_button", "button", button, pszSourceFile);
+			AddScriptCoverageOption(button, coverageToken);
+		}
+		return;
+	}
+
+	if (restype != RES_Menu && restype != RES_SkillMenu)
+		return;
+
+	CResourceLock script(this);
+	if (!script.IsFileOpen())
+		return;
+	DWORD option = 0;
+	while (script.ReadKeyParse())
+	{
+		if (!script.IsLineTrigger())
+			continue;
+		++option;
+		SCRIPT_EXECUTION_COVERAGE_TOKEN coverageToken = ScriptExecutionCoverageRegister(
+			static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+			pszResourceName, "menu_option", "option", option, pszSourceFile);
+		AddScriptCoverageOption(option, coverageToken);
+	}
+}
+
 /////////////////////////////////////////////////
 // -CResourceRefArray
 

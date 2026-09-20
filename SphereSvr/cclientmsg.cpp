@@ -3148,6 +3148,8 @@ TRIGRET_TYPE CClient::Menu_OnSelect( CSphereUID rid, int iSelect, CObjBase* pObj
 		if ( i > iSelect )
 			break;
 
+		if (s.GetLinkResource())
+			ScriptExecutionCoverageHit(s.GetLinkResource()->GetScriptCoverageOptionToken(static_cast<DWORD>(i)));
 		CSphereExpContext exec(pObj,m_pChar);
 		return exec.ExecuteScript( s, TRIGRUN_SECTION_TRUE );
 	}

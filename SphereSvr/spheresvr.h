@@ -992,6 +992,7 @@ public:
 	SERVMODE_TYPE m_iModeCode;  // Just some error code to return to system.
 	SPHEREERR_TYPE  m_iExitFlag;	// identifies who caused the exit. <0 = error
 	CGString m_sUnknownKeywordReport;	// Optional CSV/JSON path; empty disables collection.
+	CGString m_sScriptExecutionReport;	// Optional JSON path; empty disables collection.
 	bool m_fResyncPause;		// Server is temporarily halted so files can be updated.
 	uintptr_t m_dwParentThread;	// The thread we got Init in.
 	DWORD m_dwTickCount;	// Last system tick count.

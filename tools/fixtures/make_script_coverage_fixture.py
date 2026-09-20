@@ -9,12 +9,13 @@ from pathlib import Path
 from make_fixture import skill_sections, write_mul_fixture, write_runtime_files, write_text
 
 
-def write_coverage_scripts(root: Path) -> None:
+def write_coverage_scripts(root: Path, on_demand_report: bool) -> None:
     scripts = root / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
+    report_command = "SERV.SCRIPTCOVERAGEREPORT\n" if on_demand_report else ""
     write_text(
         scripts / "spheretables.scp",
-        """; Synthetic coverage fixture. No production or shard data is used.
+        f"""; Synthetic script coverage fixture.
 
 [TYPEDEF 0]
 DEFNAME=T_NORMAL
@@ -63,11 +64,6 @@ ID=0x0190
 STR=100
 DEX=100
 ARMOR=5,5
-ON=@Create
-VAR coverage_alpha,<f_coverage_alpha>
-VAR coverage_beta,<f_coverage_beta>
-ON=@CoverageNever
-RETURN 0
 
 [CHARDEF 0x0191]
 DEFNAME=c_WOMAN
@@ -86,6 +82,11 @@ RETURN 22
 RETURN 33
 
 [EVENTS e_AllPlayers]
+ON=@LogIn
+VAR coverage_alpha,<f_coverage_alpha>
+VAR coverage_beta,<f_coverage_beta>
+{report_command}ON=@CoverageNever
+RETURN 0
 
 [SPEECH spk_AllPlayers]
 
@@ -111,6 +112,11 @@ def main() -> int:
         action="store_true",
         help="omit the opt-in report setting to exercise default-off behavior",
     )
+    parser.add_argument(
+        "--on-demand-report",
+        action="store_true",
+        help="request a report through SERV.SCRIPTCOVERAGEREPORT during login",
+    )
     args = parser.parse_args()
 
     root = args.output.resolve()
@@ -132,7 +138,7 @@ def main() -> int:
         text.replace(marker, marker + report_setting, 1),
         encoding="ascii",
     )
-    write_coverage_scripts(root)
+    write_coverage_scripts(root, args.on_demand_report)
     write_mul_fixture(root, extra_item_id=0x205A)
     print(f"wrote synthetic script-coverage fixture to {root}")
     return 0
