@@ -683,6 +683,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 		}
 
 		bool fSectionLoaded = false;
+		bool fWorldCharDefaulted = false;
 		CGString sFailureReason;
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 		bool fRecoveredFault = false;
@@ -704,7 +705,10 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			else
 #endif
 			{
-				fSectionLoaded = g_Cfg.LoadScriptSection( s, fObjectSection ? &sFailureReason : NULL );
+				fSectionLoaded = g_Cfg.LoadScriptSection(
+					s,
+					fObjectSection ? &sFailureReason : NULL,
+					fWorldChar ? &fWorldCharDefaulted : NULL );
 			}
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			g_fSEGV_catch = 0;
@@ -746,7 +750,17 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			if ( fWorldItem )
 				m_iLoadItems++;
 			else if ( fWorldChar )
+			{
 				m_iLoadChars++;
+				if ( fWorldCharDefaulted )
+				{
+					CGString sSerial( "unknown" );
+					WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
+					g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+						"WORLDCHAR load fallback: uid=%s type='%s' reason=character type does not resolve to a resource index default=DEFAULTCHAR" LOG_CR,
+						(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType );
+				}
+			}
 		}
 		else
 		{
