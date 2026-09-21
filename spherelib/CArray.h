@@ -420,9 +420,11 @@ public:
 	void Copy(const CGTypedArray<TYPE, ARG_TYPE>* pArray)
 	{
 		if (!pArray || pArray == this) return;
+		size_t nCount = pArray->GetCount();
 		Empty();
-		SetCount(pArray->GetCount());
-		memcpy(static_cast<void*>(GetBasePtr()), pArray->GetBasePtr(), GetCount() * sizeof(TYPE));
+		SetCount(nCount);
+		if (nCount)
+			memcpy(static_cast<void*>(GetBasePtr()), pArray->GetBasePtr(), nCount * sizeof(TYPE));
 	}
 public:
 	inline int BadIndex() const { return 0; }

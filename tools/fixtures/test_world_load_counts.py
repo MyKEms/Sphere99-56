@@ -78,6 +78,11 @@ def main() -> int:
         action="store_true",
         help="expect a symbolic type from TYPEDEFS to create a container",
     )
+    parser.add_argument(
+        "--multi-property",
+        action="store_true",
+        help="expect one synthetic IT_MULTI item to load through its P property",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -86,6 +91,7 @@ def main() -> int:
             args.unresolved_worldchar_type,
             args.noncontainer_reference,
             args.typedef_container_reference,
+            args.multi_property,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -236,7 +242,7 @@ def main() -> int:
                             "nested non-container fixture logged unexpected errors: "
                             f"{unexpected_errors!r}"
                         )
-                elif not args.typedef_container_reference:
+                elif not args.typedef_container_reference and not args.multi_property:
                     sock, _ = game_connect(
                         args.host,
                         args.port,
@@ -303,6 +309,7 @@ def main() -> int:
             args.unresolved_worldchar_type
             or args.noncontainer_reference
             or args.typedef_container_reference
+            or args.multi_property
         )
         else [expected_line, expected_line]
     )
@@ -316,6 +323,7 @@ def main() -> int:
         not args.unresolved_worldchar_type
         and not args.noncontainer_reference
         and not args.typedef_container_reference
+        and not args.multi_property
     ):
         admin_lines = [
             message
