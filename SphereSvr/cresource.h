@@ -512,7 +512,7 @@ public:
 	bool ResourceTestItemMuls();
 	bool ResourceTestCharAnims();
 
-	virtual bool LoadScriptSection( CScript& s, CGString* pFailureReason = NULL );
+	virtual bool LoadScriptSection( CScript& s, CGString* pFailureReason = NULL, bool* pWorldCharDefaulted = NULL );
 	virtual CResourceDefPtr ResourceGetDef( UID_INDEX rid );
 	virtual const CScript* SetScriptContext( const CScript* pScriptContext );
 	virtual CResourceObjPtr FindUID( UID_INDEX rid );

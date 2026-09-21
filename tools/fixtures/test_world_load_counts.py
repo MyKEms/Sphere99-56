@@ -120,8 +120,8 @@ def main() -> int:
         )
     elif args.unresolved_worldchar_type:
         expected_line = (
-            "world load: created_items=2 created_chars=0 read_items=2 read_chars=1 "
-            "allocated_items=2 allocated_chars=0"
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
         )
     elif args.named_container_reference:
         expected_line = (
@@ -199,30 +199,26 @@ def main() -> int:
                         "truncated save did not report exactly one skipped object section"
                     )
                 if args.unresolved_worldchar_type:
-                    if not any(
-                        "Invalid WORLDCHAR block index" in line
-                        for line in startup_errors
-                    ):
+                    diagnostic = (
+                        "WORLDCHAR load fallback: uid=3 "
+                        "type='SYNTHETIC_MISSING_CHARDEF' "
+                        "reason=character type does not resolve to a resource index "
+                        "default=DEFAULTCHAR"
+                    )
+                    fallback_errors = [
+                        line for line in startup_errors if diagnostic in line
+                    ]
+                    if len(fallback_errors) != 1 or startup_errors != fallback_errors:
                         raise RuntimeError(
-                            "unresolved character type did not report an invalid resource index"
+                            "unresolved character type did not produce exactly one fallback error "
+                            "with its UID, original token, and DEFAULTCHAR selection"
                         )
-                    if not any(
-                        "world load skipped 1 sections (1 objects)" in line
+                    if any(
+                        "world load skipped " in line
                         for line in startup_log.splitlines()
                     ):
                         raise RuntimeError(
-                            "unresolved character type did not report one skipped object section"
-                        )
-                    diagnostic = (
-                        "WORLDCHAR load failed: uid=3 "
-                        "type='SYNTHETIC_MISSING_CHARDEF' "
-                        "reason=character type does not resolve to a resource index"
-                    )
-                    if not any(
-                        diagnostic in line for line in startup_errors
-                    ):
-                        raise RuntimeError(
-                            "read-but-not-created WORLDCHAR error diagnostic was missing its UID and reason"
+                            "DEFAULTCHAR fallback was incorrectly counted as a skipped section"
                         )
                 elif args.noncontainer_reference:
                     diagnostics = [

@@ -971,11 +971,13 @@ static void DeleteFailedWorldLoadObject( CObjBase* pObj )
 	}
 }
 
-bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason )
+bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason, bool* pWorldCharDefaulted )
 {
 	// Index or read any resource blocks we know how to handle.
 	if ( pFailureReason )
 		pFailureReason->Empty();
+	if ( pWorldCharDefaulted )
+		*pWorldCharDefaulted = false;
 	CSphereScriptContext FileContext(&s);	// set this as the context.
 	CGString sCoverageResourceName(s.GetArgRaw());
 	CVarDefPtr pVarNum;
@@ -1041,6 +1043,25 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 		LPCTSTR pszArg = s.GetArgRaw();
 		if ( pszArg == NULL ) pszArg = "";
 		rid = ResourceGetNewID( restype, pszArg, pVarNum );
+	}
+
+	if ( ! rid.IsValidRID() && restype == RES_WorldChar )
+	{
+		int iDefaultChar = ResourceGetIndexType( RES_CharDef, "DEFAULTCHAR" );
+		if ( iDefaultChar < 0 )
+		{
+			// DEFAULTCHAR can be a DEFNAME expression (for example, c_MAN)
+			// instead of a direct CHARDEF alias.
+			CGString sDefaultCharName = m_Const.FindKeyStr( "DEFAULTCHAR" );
+			if ( ! sDefaultCharName.IsEmpty() )
+				iDefaultChar = ResourceGetIndexType( RES_CharDef, (LPCTSTR) sDefaultCharName );
+		}
+		if ( iDefaultChar >= 0 )
+		{
+			rid = ResourceGetID( RES_CharDef, iDefaultChar );
+			if ( pWorldCharDefaulted && rid.IsValidRID() )
+				*pWorldCharDefaulted = true;
+		}
 	}
 
 	if ( ! rid.IsValidRID() )
