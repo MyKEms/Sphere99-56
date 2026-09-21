@@ -142,6 +142,7 @@ def write_scripts(
     unknown_keyword_rejected_probe: bool = False,
     world_load_counts_probe: bool = False,
     typedef_container_probe: bool = False,
+    multi_property_probe: bool = False,
 ) -> None:
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
@@ -218,6 +219,20 @@ def write_scripts(
         "TYPE=T_CONTAINER\n"
         "TDATA2=1\n"
         if typedef_container_probe
+        else ""
+    )
+    multi_property_typedef = (
+        "\n[TYPEDEF 47]\nDEFNAME=T_MULTI\n"
+        if multi_property_probe
+        else ""
+    )
+    multi_property_itemdef = (
+        "\n[ITEMDEF 0x4000]\n"
+        "DEFNAME=SYNTHETIC_MULTI\n"
+        "NAME=synthetic multi\n"
+        "TYPE=T_MULTI\n"
+        "MULTIREGION=-1,-1,1,1\n"
+        if multi_property_probe
         else ""
     )
     write_text(
@@ -311,7 +326,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 NEWITEM SYNTHETIC_HAIR
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + typedef_container_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
 RETURN
 ON=@Logout
@@ -423,6 +438,7 @@ def write_world_load_counts_save(
     unresolved_worldchar_type: bool,
     noncontainer_reference: bool,
     typedef_container_reference: bool,
+    multi_property_reference: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -454,6 +470,17 @@ def write_world_load_counts_save(
                 "[WORLDITEM SYNTHETIC_OBJECT]",
                 "SERIAL=5",
                 "CONT=4",
+            ]
+        )
+    elif multi_property_reference:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                "SERIAL=4",
+                "P=128,128,0",
+                "[WORLDITEM SYNTHETIC_MULTI]",
+                "SERIAL=5",
+                "P=128,128,0",
             ]
         )
     else:
@@ -581,6 +608,11 @@ def main() -> int:
         action="store_true",
         help="include a symbolic item type from the built-in TYPEDEFS table",
     )
+    parser.add_argument(
+        "--multi-property",
+        action="store_true",
+        help="load one synthetic IT_MULTI item through its P property",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -588,6 +620,7 @@ def main() -> int:
         args.unresolved_worldchar_type,
         args.noncontainer_reference,
         args.typedef_container_reference,
+        args.multi_property,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -615,6 +648,7 @@ def main() -> int:
         unknown_keyword_rejected_probe=args.unknown_keyword_rejected_probe,
         world_load_counts_probe=args.world_load_counts_probe,
         typedef_container_probe=args.typedef_container_reference,
+        multi_property_probe=args.multi_property,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -623,6 +657,7 @@ def main() -> int:
             unresolved_worldchar_type=args.unresolved_worldchar_type,
             noncontainer_reference=args.noncontainer_reference,
             typedef_container_reference=args.typedef_container_reference,
+            multi_property_reference=args.multi_property,
         )
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")

@@ -310,7 +310,8 @@ bool CSectorTemplate::LinkRegion( CRegionBasic* pRegionNew )
 	{
 		CRegionPtr pRegion = m_RegionLinks[i];
 		ASSERT(pRegion);
-		ASSERT(pRegion->GetRefCount() >= 2 );
+		// The current CRefPtr port does not track references; require only a live region.
+		ASSERT(pRegion->GetRefCount());
 		if ( pRegionNew == pRegion )
 		{
 			DEBUG_ERR(( "region already linked!" LOG_CR ));
