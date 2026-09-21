@@ -293,6 +293,12 @@ void CWorld::CleanupLoadOrphans()
 		{
 			try
 			{
+				// Load-time orphans have no active runtime callback. Remove their
+				// contents synchronously before queuing the owner so load counts
+				// exclude nested objects that could not be attached.
+				CContainer* pContainer = dynamic_cast<CContainer*>(pObj);
+				if ( pContainer )
+					pContainer->DeleteAll();
 				pObj->DeleteThis();
 				iOrphaned++;
 			}
