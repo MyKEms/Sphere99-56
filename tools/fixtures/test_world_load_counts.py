@@ -84,6 +84,11 @@ def main() -> int:
         action="store_true",
         help="expect one synthetic IT_MULTI item to load through its P property",
     )
+    parser.add_argument(
+        "--named-container-reference",
+        action="store_true",
+        help="expect a named scripted container to accept a saved child item",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -93,6 +98,7 @@ def main() -> int:
             args.noncontainer_reference,
             args.typedef_container_reference,
             args.multi_property,
+            args.named_container_reference,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -116,6 +122,11 @@ def main() -> int:
         expected_line = (
             "world load: created_items=2 created_chars=0 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=0"
+        )
+    elif args.named_container_reference:
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
         )
     elif args.truncated:
         expected_line = (
@@ -255,7 +266,17 @@ def main() -> int:
                             "nested non-container fixture logged unexpected errors: "
                             f"{unexpected_errors!r}"
                         )
-                elif not args.typedef_container_reference and not args.multi_property:
+                elif args.named_container_reference and any(
+                    "Non container uid=" in line for line in startup_errors
+                ):
+                    raise RuntimeError(
+                        "named scripted container rejected its saved child item"
+                    )
+                elif (
+                    not args.typedef_container_reference
+                    and not args.multi_property
+                    and not args.named_container_reference
+                ):
                     sock, _ = game_connect(
                         args.host,
                         args.port,
@@ -323,6 +344,7 @@ def main() -> int:
             or args.noncontainer_reference
             or args.typedef_container_reference
             or args.multi_property
+            or args.named_container_reference
         )
         else [expected_line, expected_line]
     )
@@ -337,6 +359,7 @@ def main() -> int:
         and not args.noncontainer_reference
         and not args.typedef_container_reference
         and not args.multi_property
+        and not args.named_container_reference
     ):
         admin_lines = [
             message
