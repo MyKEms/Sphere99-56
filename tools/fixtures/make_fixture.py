@@ -22,6 +22,11 @@ TERRAIN_RECORD_BYTES = 26
 ITEM_RECORD_BYTES = 37
 DEFAULT_ITEM_ID = 0x0E75
 SYNTHETIC_HAIR_ID = 0x203B
+TIMER_LIFETIME_OWNER_SERIAL = 100
+TIMER_LIFETIME_ITEM_SERIALS = (101, 102, 103, 104, 105)
+UID_F_ITEM = 0x40000000
+TIMER_LIFETIME_DELAY_SECONDS = 15
+TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 
 
 def write_sparse(path: Path, size: int) -> None:
@@ -141,10 +146,12 @@ def write_scripts(
     unknown_keyword_admin_probe: bool = False,
     unknown_keyword_rejected_probe: bool = False,
     world_load_counts_probe: bool = False,
+    world_save_probe: bool = False,
     unresolved_worldchar_type: bool = False,
     typedef_container_probe: bool = False,
     multi_property_probe: bool = False,
     named_resource_id_probe: bool = False,
+    timer_lifetime_probe: bool = False,
 ) -> None:
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
@@ -204,9 +211,72 @@ def write_scripts(
         if world_load_counts_probe
         else ""
     )
+    world_save_probe_script = (
+        "SERV.SAVE\n"
+        if world_save_probe
+        else ""
+    )
+    timer_lifetime_before_markers = (
+        "SERV.B SPHERE_TIMER_COUNTS_BEFORE <SERV.ITEMS>|<SERV.CHARS>\n"
+        "SERV.B SPHERE_TIMER_UIDS_BEFORE "
+        "<ISUIDVALID(100)>|<ISUIDVALID(1073741925)>|"
+        "<ISUIDVALID(1073741926)>|<ISUIDVALID(1073741927)>|"
+        "<ISUIDVALID(1073741928)>|<ISUIDVALID(1073741929)>\n"
+        if timer_lifetime_probe
+        else ""
+    )
+    timer_lifetime_probe_itemdefs = (
+        "\n[ITEMDEF 0x0E78]\n"
+        "DEFNAME=SYNTHETIC_TIMER_OBSERVER\n"
+        "NAME=synthetic timer observer\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        f"ON=@Create\nSERV.B SPHERE_TIMER_OBSERVER_CREATED\nTIMER={TIMER_LIFETIME_OBSERVER_DELAY_SECONDS}\n"
+        f"ON=@Equip\nSERV.B SPHERE_TIMER_OBSERVER_EQUIPPED <TIMER>|<LAYER>\nTIMER={TIMER_LIFETIME_OBSERVER_DELAY_SECONDS}\nSERV.B SPHERE_TIMER_OBSERVER_ARMED <TIMER>|<LAYER>\n"
+        "ON=@Timer\n"
+        "SERV.SAVE 1\n"
+        "SERV.B SPHERE_TIMER_COUNTS_AFTER <SERV.ITEMS>|<SERV.CHARS>\n"
+        "SERV.B SPHERE_TIMER_UIDS_AFTER "
+        "<ISUIDVALID(100)>|<ISUIDVALID(1073741925)>|"
+        "<ISUIDVALID(1073741926)>|<ISUIDVALID(1073741927)>|"
+        "<ISUIDVALID(1073741928)>|<ISUIDVALID(1073741929)>\n"
+        "RETURN 0\n"
+        "\n[ITEMDEF 0x0E79]\n"
+        "DEFNAME=SYNTHETIC_TIMER_SIBLING\n"
+        "NAME=synthetic timer sibling\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_TIMER_SIBLING_TRIGGERED\n"
+        "RETURN 1\n"
+        if timer_lifetime_probe
+        else ""
+    )
+    timer_lifetime_observer_login = (
+        "NEWITEM SYNTHETIC_TIMER_OBSERVER\n"
+        "EQUIPLAST\n"
+        if timer_lifetime_probe
+        else ""
+    )
+    timer_lifetime_baseline = (
+        "VAR(timer_probe_before_items,<SERV.ITEMS>)\n"
+        "VAR(timer_probe_before_chars,<SERV.CHARS>)\n"
+        if timer_lifetime_probe
+        else ""
+    )
+    timer_lifetime_owner_create = (
+        "ON=@Create\nITEM=SYNTHETIC_TIMER_LIFETIME\nLAYER=30\nTIMER=5\n"
+        if not timer_lifetime_probe
+        else ""
+    )
+    timer_lifetime_item_type = (
+        "TYPE=T_CONTAINER\nLAYER=21\nTDATA2=1\n"
+        if timer_lifetime_probe
+        else "TYPE=T_EQ_SCRIPT\nLAYER=30\n"
+    )
     typedef_container_table = (
         "\n[TYPEDEFS]\nT_NORMAL 0\nT_CONTAINER 1\n"
-        if typedef_container_probe
+        if typedef_container_probe or timer_lifetime_probe
         else ""
     )
     typedef_normal_alias = (
@@ -304,10 +374,13 @@ DEFNAME=CONTAINER
 [TYPEDEF 61]
 DEFNAME=T_HAIR
 
+[TYPEDEF 176]
+DEFNAME=T_EQ_SCRIPT
+
 [ITEMDEF 0x0E75]
 DEFNAME=DEFAULTITEM
 NAME=synthetic container
-TYPE=CONTAINER
+TYPE=T_CONTAINER
 TDATA2=1
 
 [ITEMDEF 0x0E76]
@@ -335,6 +408,22 @@ ON=@FixtureItemCustom
 SRC.SYSMESSAGE SPHERE_ITEM_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
 
+[ITEMDEF 0x0E77]
+DEFNAME=SYNTHETIC_TIMER_LIFETIME
+NAME=synthetic timer lifetime item
+""" + timer_lifetime_item_type + """ON=@Create
+SERV.B SPHERE_TIMER_ITEM_CREATED
+ON=@Timer
+SERV.B SPHERE_TIMER_LIFETIME_TRIGGERED
+""" + timer_lifetime_before_markers + """CONT.REMOVE
+SERV.B SPHERE_TIMER_REMOVE_RETURNED
+RETURN 1
+ON=@UnEquip
+SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
+REMOVE
+SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
+
+""" + timer_lifetime_probe_itemdefs + """
 [ITEMDEF 0x09B2]
 DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
@@ -359,8 +448,23 @@ ID=0x0191
 STR=100
 DEX=100
 
+[CHARDEF 0x0192]
+DEFNAME=SYNTHETIC_TIMER_OWNER
+NAME=synthetic timer owner
+ID=0x0190
+STR=100
+DEX=100
+""" + timer_lifetime_owner_create + """
+
 [EVENTS e_AllPlayers]
 ON=@LogIn
+""" + timer_lifetime_baseline + """
+""" + timer_lifetime_observer_login + """
+ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
+IF (<ARG.timer_probe_match> == 1)
+NEWNPC SYNTHETIC_TIMER_OWNER
+SYSMESSAGE SPHERE_TIMER_OWNER_CREATED
+ENDIF
 ARG(trigger_value,5)
 SYSMESSAGE SPHERE_ARG_SET <ARG(value,30)>|<ARG.value>|<ARG.trigger_value>
 SYSMESSAGE SPHERE_ARG_MACRO <?ARG(macro_value,31)?>|<ARG.macro_value>
@@ -380,11 +484,12 @@ SYSMESSAGE SPHERE_TRIGGER_RETURN <TRIGGER(@FixtureReturn)>
 HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
-NEWITEM SYNTHETIC_HAIR
+""" + ("" if timer_lifetime_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
 RETURN
 ON=@Logout
+""" + world_save_probe_script + """
 RETURN 0
 ON=@FixtureCustom
 SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
@@ -444,6 +549,7 @@ def write_runtime_files(
     *,
     unknown_keyword_report: bool = False,
     unknown_keyword_report_format: str = "json",
+    force_garbage_collect: bool = False,
 ) -> None:
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
@@ -472,7 +578,7 @@ SAVEPERIOD=1440
 SAVEBACKGROUND=0
 CLIENTLINGER=60
 SECURE=1
-""" + unknown_keyword_report_setting + """
+""" + ("FORCEGARBAGECOLLECT=1\n" if force_garbage_collect else "") + unknown_keyword_report_setting + """
 
 [STARTS]
 Synthetic land
@@ -600,6 +706,66 @@ def write_world_load_counts_save(
     )
 
 
+def write_timer_lifetime_save(root: Path) -> None:
+    """Seed a saved NPC with an active timer item and a nested sibling tree."""
+
+    timer_item_serial, container_serial, child_a_serial, child_b_serial, sibling_serial = (
+        TIMER_LIFETIME_ITEM_SERIALS
+    )
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic timer lifetime fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic timer lifetime fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR SYNTHETIC_TIMER_OWNER]",
+                f"SERIAL={TIMER_LIFETIME_OWNER_SERIAL}",
+                "NPC=2",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[WORLDITEM SYNTHETIC_TIMER_SIBLING]",
+                f"SERIAL={sibling_serial}",
+                f"CONT={TIMER_LIFETIME_OWNER_SERIAL}",
+                "LAYER=30",
+                f"TIMER={TIMER_LIFETIME_DELAY_SECONDS}",
+                "[WORLDITEM SYNTHETIC_TIMER_LIFETIME]",
+                f"SERIAL={timer_item_serial}",
+                f"CONT={TIMER_LIFETIME_OWNER_SERIAL}",
+                "LAYER=21",
+                f"TIMER={TIMER_LIFETIME_DELAY_SECONDS}",
+                "[WORLDITEM DEFAULTITEM]",
+                f"SERIAL={container_serial}",
+                f"CONT={UID_F_ITEM | timer_item_serial}",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                f"SERIAL={child_a_serial}",
+                f"CONT={UID_F_ITEM | container_serial}",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                f"SERIAL={child_b_serial}",
+                f"CONT={UID_F_ITEM | container_serial}",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -660,6 +826,11 @@ def main() -> int:
         help="invoke SERV.WORLDCOUNTS from the admin login event",
     )
     parser.add_argument(
+        "--world-save-probe",
+        action="store_true",
+        help="save the newly logged-in fixture character from its login event",
+    )
+    parser.add_argument(
         "--truncate-world-item",
         action="store_true",
         help="append one incomplete world item section to the synthetic save",
@@ -689,6 +860,11 @@ def main() -> int:
         action="store_true",
         help="add named ITEMDEF/CHARDEF entries and a nested named-container save",
     )
+    parser.add_argument(
+        "--timer-lifetime-probe",
+        action="store_true",
+        help="seed a timer-owner, nested-item, sibling, and UID-cleanup probe",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -703,6 +879,8 @@ def main() -> int:
         parser.error("world-load options require --world-load-counts")
     if sum(world_load_modes) > 1:
         parser.error("choose only one world-load fixture mode")
+    if args.timer_lifetime_probe and any(world_load_modes):
+        parser.error("timer-lifetime probe cannot be combined with a world-load mode")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -713,6 +891,7 @@ def main() -> int:
         root,
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
+        force_garbage_collect=args.timer_lifetime_probe,
     )
     write_scripts(
         root,
@@ -724,10 +903,12 @@ def main() -> int:
         unknown_keyword_admin_probe=args.unknown_keyword_admin_probe,
         unknown_keyword_rejected_probe=args.unknown_keyword_rejected_probe,
         world_load_counts_probe=args.world_load_counts_probe,
+        world_save_probe=args.world_save_probe,
         unresolved_worldchar_type=args.unresolved_worldchar_type,
         typedef_container_probe=args.typedef_container_reference,
         multi_property_probe=args.multi_property,
         named_resource_id_probe=args.named_resource_ids,
+        timer_lifetime_probe=args.timer_lifetime_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -739,6 +920,8 @@ def main() -> int:
             multi_property_reference=args.multi_property,
             named_container_reference=args.named_resource_ids,
         )
+    if args.timer_lifetime_probe:
+        write_timer_lifetime_save(root)
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0

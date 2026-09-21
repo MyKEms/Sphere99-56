@@ -20,6 +20,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends g++-multilib make
 
+      - name: Test CRefPtr null semantics
+        run: python3 tools/test_refptr.py
+
       - name: Build
         run: make -j"$(nproc)" 2>&1 | tee build.log
 
@@ -234,6 +237,21 @@ jobs:
             --repo "$GITHUB_WORKSPACE" \
             --port 2793 \
             --lifetime-soak 25
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-timer-lifetime" \
+            --timer-lifetime-probe
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          python3 tools/fixtures/test_timer_lifetime.py \
+            "$RUNNER_TEMP/sphere-asan-timer-lifetime" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2794
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-save" \
+            --world-save-probe
+          python3 tools/fixtures/test_world_save_roundtrip.py \
+            "$RUNNER_TEMP/sphere-asan-world-save" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2720
 
       - name: Upload ASan fixture server log on failure
         if: failure()
@@ -249,6 +267,8 @@ jobs:
             ${{ runner.temp }}/sphere-asan-world-counts/server.log
             ${{ runner.temp }}/sphere-asan-world-counts-truncated/server.log
             ${{ runner.temp }}/sphere-asan-named-resource-ids/server.log
+            ${{ runner.temp }}/sphere-asan-timer-lifetime/server.log
+            ${{ runner.temp }}/sphere-asan-world-save/server.log
           if-no-files-found: warn
 
   load-safety:
@@ -482,6 +502,20 @@ jobs:
             --expect-invalid-newbie SYNTHETIC_UNKNOWN_SKILL \
             --unknown-keyword-allowlist \
             "$GITHUB_WORKSPACE/tools/fixtures/unknown_keyword_allowlist.json"
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-timer-lifetime" \
+            --timer-lifetime-probe
+          python3 tools/fixtures/test_timer_lifetime.py \
+            "$RUNNER_TEMP/sphere-timer-lifetime" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2794
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-save" \
+            --world-save-probe
+          python3 tools/fixtures/test_world_save_roundtrip.py \
+            "$RUNNER_TEMP/sphere-world-save" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2720
 
       - name: Upload server log on failure
         if: failure()
@@ -495,4 +529,6 @@ jobs:
             ${{ runner.temp }}/sphere-coverage-disabled/server.log
             ${{ runner.temp }}/sphere-world-counts/server.log
             ${{ runner.temp }}/sphere-world-counts-truncated/server.log
+            ${{ runner.temp }}/sphere-timer-lifetime/server.log
+            ${{ runner.temp }}/sphere-world-save/server.log
           if-no-files-found: warn

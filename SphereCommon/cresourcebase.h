@@ -200,6 +200,7 @@ public:
 		{
 			if (pLink != this)
 			{
+				SetResourceName(pLink->GetResourceName());
 				m_ScriptCoverageOptions.RemoveAll();
 				m_fScriptCoverageOptionsOverflow = pLink->m_fScriptCoverageOptionsOverflow;
 				if (pLink->m_ScriptCoverageOptions.GetCount() > 0)

@@ -236,11 +236,13 @@ public:
 
 	static int  sm_iCount;		// how many total objects in the world ?
 	static bool sm_fDeleteReal;	// Delete for real. not just place in "to be deleted" list
+	bool IsDeletePending() const { return m_fDeletePending; }
 
 protected:
 	CRefPtr<CObjBaseDef> m_BaseRef;	// Pointer to the resource that describes this type.
 
 private:
+	bool m_fDeletePending;		// Runtime deletion is already queued or in progress.
 	CServTime m_timeout;		// when does this rot away ? or other action. 0 = never, else system time
 	HUE_TYPE m_wHue;		// Hue or skin color. (WORD w/High 2 bits reserved)
 };
@@ -320,6 +322,7 @@ private:
 	WORD m_amount;		// Amount of items in pile. 64K max (or corpse type)
 	IT_TYPE m_type;		// What does this item do when dclicked ? 
 	WORD m_AttrMask;		// ATTR_TYPE Attribute flags.
+	bool m_fUnEquipTriggerActive;	// Prevent recursive T_UnEquip on this item.
 
 	// TAG_CRAFTEDBY=uid Maker of this item
 public:
@@ -935,6 +938,8 @@ public:
 	{
 		return( m_type );
 	}
+	bool IsUnEquipTriggerActive() const { return m_fUnEquipTriggerActive; }
+	void SetUnEquipTriggerActive( bool fActive ) { m_fUnEquipTriggerActive = fActive; }
 	CItemPtr SetType( IT_TYPE type );
 	bool IsTypeLit() const
 	{
@@ -1330,7 +1335,18 @@ public:
 		{
 			Trade_Delete();
 		}
-		DeleteAll();	// get rid of my contents first to protect against weight calc errors.
+		if ( CObjBase::sm_fDeleteReal )
+		{
+			DeleteAll();	// get rid of my contents first to protect against weight calc errors.
+		}
+		else
+		{
+			while ( GetHead() != NULL )
+			{
+				CItemPtr pItem = GetHead();
+				pItem->DeleteThis();
+			}
+		}
 		CItemVendable::DeleteThis();
 	}
 
@@ -2234,6 +2250,7 @@ class CChar : public CObjBase, public CContainer, public CAccountConsole
 public:
 	DECLARE_LISTREC_TYPE(CChar)
 private:
+	bool m_fDeletingContents;	// Prevent recursive character deletion from item triggers.
 	// Spell type effects.
 #define STATF_INVUL			0x00000001	// Invulnerability
 #define STATF_DEAD			0x00000002

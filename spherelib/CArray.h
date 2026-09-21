@@ -231,10 +231,13 @@ public:
 inline void CGObListRec::RemoveSelf()       // remove myself from my parent list.
 {
 	// Remove myself from my parent list (if i have one)
-	if (GetParent() == NULL)
+	CGObList* pParent = GetParent();
+	if (pParent == NULL)
 		return;
-	m_pParent->RemoveAtSpecial(this);
-	ASSERT(GetParent() == NULL);
+	pParent->RemoveAtSpecial(this);
+	// Removal hooks can move or delete this record reentrantly. The original
+	// parent must release it, but a hook may have attached it elsewhere.
+	ASSERT(GetParent() != pParent);
 }
 
 template<class TYPE>

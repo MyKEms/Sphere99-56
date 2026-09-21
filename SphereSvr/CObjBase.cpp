@@ -65,6 +65,7 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	// based on CObjBaseTemplate
 	// dwUIDMask = UID_F_ITEM;
 	sm_iCount ++;
+	m_fDeletePending = false;
 	m_wHue=HUE_DEFAULT;
 	m_timeCreate.InitTimeCurrent();
 
@@ -1184,8 +1185,12 @@ void CObjBase::DeleteThis()
 	}
 	else
 	{
-		if ( GetParent() == &(g_World.m_ObjDelete))	// already been deleted
+		if ( m_fDeletePending || GetParent() == &(g_World.m_ObjDelete))	// already been deleted
+		{
+			m_fDeletePending = true;
 			return;
+		}
+		m_fDeletePending = true;
 		CObjBasePtr temp(this);	// make sure we do not destruct yet
 		RemoveFromView();
 		// free up the UID slot.

@@ -26,7 +26,7 @@ public:
     // rely on ReleaseRefObj() to detach the pointer (notably CChar::ClientDetach).
     void ReleaseRefObj() { m_pointer = NULL; }
     virtual void UnLink() {} // STUB
-    bool IsValidNewObj() const { return true; } // STUB
+    bool IsValidNewObj() const { return m_pointer != NULL; }
     bool IsValidRefObj() const { return m_pointer != NULL; }
     void Free() { m_pointer = NULL; }
 
