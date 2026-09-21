@@ -15,7 +15,8 @@ from run_suite import shutdown_failures, stop_server, wait_for_port
 
 
 COUNT_LINE_RE = re.compile(
-    r"world load: items=\d+ chars=\d+ read_items=\d+ read_chars=\d+"
+    r"world load: created_items=\d+ created_chars=\d+ read_items=\d+ "
+    r"read_chars=\d+ allocated_items=\d+ allocated_chars=\d+"
 )
 
 
@@ -107,13 +108,25 @@ def main() -> int:
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
     if args.noncontainer_reference:
-        expected_line = "world load: items=2 chars=1 read_items=3 read_chars=1"
+        expected_line = (
+            "world load: created_items=3 created_chars=1 read_items=3 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
+        )
     elif args.unresolved_worldchar_type:
-        expected_line = "world load: items=2 chars=0 read_items=2 read_chars=1"
+        expected_line = (
+            "world load: created_items=2 created_chars=0 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=0"
+        )
     elif args.truncated:
-        expected_line = "world load: items=2 chars=1 read_items=3 read_chars=1"
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=3 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
+        )
     else:
-        expected_line = "world load: items=2 chars=1 read_items=2 read_chars=1"
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
+        )
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
     from uo_test_client import (  # pylint: disable=import-outside-toplevel

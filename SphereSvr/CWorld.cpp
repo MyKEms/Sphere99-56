@@ -219,6 +219,8 @@ void CWorld::ResetLoadIntegrity()
 	m_iLoadReadChars = 0;
 	m_iLoadItems = 0;
 	m_iLoadChars = 0;
+	m_iLoadAllocatedItems = 0;
+	m_iLoadAllocatedChars = 0;
 	m_fSaveBlockedByLoad = false;
 	m_fLoadIntegrityReported = false;
 	m_fLoadCountsCaptured = false;
@@ -248,8 +250,10 @@ void CWorld::ReportLoadIntegrity()
 
 void CWorld::FormatLoadCounts( CGString& s ) const
 {
-	s.Format( "world load: items=%d chars=%d read_items=%d read_chars=%d",
-		m_iLoadItems, m_iLoadChars, m_iLoadReadItems, m_iLoadReadChars );
+	s.Format( "world load: created_items=%d created_chars=%d read_items=%d read_chars=%d "
+		"allocated_items=%d allocated_chars=%d",
+		m_iLoadItems, m_iLoadChars, m_iLoadReadItems, m_iLoadReadChars,
+		m_iLoadAllocatedItems, m_iLoadAllocatedChars );
 }
 
 void CWorld::LogLoadCounts() const
@@ -266,10 +270,58 @@ void CWorld::LogLoadCounts() const
 
 void CWorld::CaptureLoadCounts()
 {
-	m_iLoadItems = g_Serv.StatGet( SERV_STAT_ITEMS );
-	m_iLoadChars = g_Serv.StatGet( SERV_STAT_CHARS );
+	// Created counts are recorded per successfully loaded object section. Do not
+	// infer them from live UID slots here: that table also reflects later deletion
+	// and placement side effects, not just section-load success.
+	m_iLoadAllocatedItems = g_Serv.StatGet( SERV_STAT_ITEMS );
+	m_iLoadAllocatedChars = g_Serv.StatGet( SERV_STAT_CHARS );
 	m_fLoadCountsCaptured = true;
 	LogLoadCounts();
+}
+
+void CWorld::CleanupLoadOrphans()
+{
+	// Anything still in m_ObjNew was never placed in a sector or container.
+	// Remove its UID and queue it for normal deletion before load counts are captured.
+	const bool fDeleteRealPrev = CObjBase::sm_fDeleteReal;
+	CObjBase::sm_fDeleteReal = false;
+	int iOrphaned = 0;
+	while ( m_ObjNew.GetHead() )
+	{
+		CObjBase* pObj = STATIC_CAST(CObjBase, m_ObjNew.GetHead());
+		if ( pObj )
+		{
+			try
+			{
+				pObj->DeleteThis();
+				iOrphaned++;
+			}
+			catch (...)
+			{
+				// Preserve the orphan in the world's deletion queue if a virtual
+				// cleanup hook throws, but never free a UID slot now owned by another
+				// object.
+				if ( pObj->GetParent() != &m_ObjDelete )
+				{
+					DWORD dwUIDIndex = pObj->GetUIDIndex() & UID_INDEX_MASK;
+					if ( dwUIDIndex && FindUIDObj( dwUIDIndex ) == pObj )
+						FreeUID( pObj );
+					pObj->RemoveSelf();
+					m_ObjDelete.InsertHead( pObj );
+				}
+				iOrphaned++;
+			}
+		}
+		else
+		{
+			m_ObjNew.GetHead()->RemoveSelf();
+		}
+	}
+	CObjBase::sm_fDeleteReal = fDeleteRealPrev;
+	if ( iOrphaned )
+	{
+		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN, "%d orphaned objects queued for deletion during load cleanup" LOG_CR, iOrphaned );
+	}
 }
 
 void CWorld::GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int iSaveCount ) // static
@@ -652,7 +704,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			else
 #endif
 			{
-				fSectionLoaded = g_Cfg.LoadScriptSection( s, fWorldChar ? &sFailureReason : NULL );
+				fSectionLoaded = g_Cfg.LoadScriptSection( s, fObjectSection ? &sFailureReason : NULL );
 			}
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 			g_fSEGV_catch = 0;
@@ -660,44 +712,53 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 		}
 		catch ( CGException &e )
 		{
-			if ( fWorldChar )
-				sFailureReason.Copy( "exception while loading character section" );
+			if ( fObjectSection )
+				sFailureReason.Copy( fWorldItem ? "exception while loading item section" : "exception while loading character section" );
 			g_Log.CatchEvent( &e, "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum );
 		}
 		catch (...)
 		{
-			if ( fWorldChar )
-				sFailureReason.Copy( "exception while loading character section" );
+			if ( fObjectSection )
+				sFailureReason.Copy( fWorldItem ? "exception while loading item section" : "exception while loading character section" );
 			g_Log.CatchEvent( NULL, "Load Exception line %d " SPHERE_TITLE " is UNSTABLE!", s.GetContext().m_iLineNum );
 		}
 
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 		if ( fRecoveredFault )
 		{
-			if ( fWorldChar )
-				sFailureReason.Copy( "recoverable fault while loading character section" );
-			if ( fWorldChar )
+			if ( fObjectSection )
+				sFailureReason.Copy( fWorldItem ? "recoverable fault while loading item section" : "recoverable fault while loading character section" );
+			if ( fObjectSection )
 			{
 				CGString sSerial( "unknown" );
 				WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
 				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
-					"WORLDCHAR load failed: uid=%s type='%s' reason=%s" LOG_CR,
+					"%s load failed: uid=%s type='%s' reason=%s" LOG_CR,
+					fWorldItem ? "WORLDITEM" : "WORLDCHAR",
 					(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
 			}
 			MarkLoadIssue( fObjectSection );
 			continue;
 		}
 #endif
-		if ( !fSectionLoaded )
+		if ( fSectionLoaded )
 		{
-			if ( fWorldChar )
+			if ( fWorldItem )
+				m_iLoadItems++;
+			else if ( fWorldChar )
+				m_iLoadChars++;
+		}
+		else
+		{
+			if ( fObjectSection )
 			{
 				if ( sFailureReason.IsEmpty())
-					sFailureReason.Copy( "character section could not be loaded" );
+					sFailureReason.Copy( fWorldItem ? "item section could not be loaded" : "character section could not be loaded" );
 				CGString sSerial( "unknown" );
 				WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
 				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
-					"WORLDCHAR load failed: uid=%s type='%s' reason=%s" LOG_CR,
+					"%s load failed: uid=%s type='%s' reason=%s" LOG_CR,
+					fWorldItem ? "WORLDITEM" : "WORLDCHAR",
 					(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
 			}
 			MarkLoadIssue( fObjectSection );
@@ -720,6 +781,8 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 bool CWorld::LoadFileForTest( LPCTSTR pszName )
 {
 	bool fLoaded = LoadFile( pszName );
+	CleanupLoadOrphans();
+	CaptureLoadCounts();
 	ReportLoadIntegrity();
 	return fLoaded;
 }
@@ -743,6 +806,8 @@ bool CWorld::LoadWorld() // Load world from script
 		// sections read from the save that actually loaded.
 		m_iLoadReadItems = 0;
 		m_iLoadReadChars = 0;
+		m_iLoadItems = 0;
+		m_iLoadChars = 0;
 		if ( LoadFile( sWorldName ))
 		{
 			// Version 0.99 stores chars in separate file — always try to load it.
@@ -859,48 +924,13 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 		}
 	}
 
-	// Clean up objects still in m_ObjNew after loading.
-	// Objects that were successfully placed in sectors/containers have already been
-	// removed from m_ObjNew. Anything still here is orphaned (e.g., item whose
-	// container wasn't loaded). Delete orphans and free their UID table entries.
-	{
-		CObjBase::sm_fDeleteReal = true;
-		int iOrphaned = 0;
-		while ( m_ObjNew.GetHead() )
-		{
-			CObjBase* pObj = STATIC_CAST(CObjBase, m_ObjNew.GetHead());
-			if ( pObj )
-			{
-				try
-				{
-					DWORD uid = pObj->GetUID();
-					FreeUID( pObj );
-					pObj->DeleteThis();
-					iOrphaned++;
-				}
-				catch (...)
-				{
-					m_ObjNew.GetHead()->RemoveSelf();
-					iOrphaned++;
-				}
-			}
-			else
-			{
-				m_ObjNew.GetHead()->RemoveSelf();
-			}
-		}
-		CObjBase::sm_fDeleteReal = false;
-		if ( iOrphaned )
-		{
-			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN, "%d orphaned objects deleted during load cleanup" LOG_CR, iOrphaned );
-		}
-	}
+	CleanupLoadOrphans();
 
 	// Set the current version now.
 	const TCHAR* pszVersion = SPHERE_VERSION;
 	m_iLoadVersion = Exp_GetComplex( pszVersion );	// Set m_iLoadVersion
-	g_Serv.OnTriggerEvent( SERVTRIG_LoadDone );
 	CaptureLoadCounts();
+	g_Serv.OnTriggerEvent( SERVTRIG_LoadDone );
 
 	return( true );
 }

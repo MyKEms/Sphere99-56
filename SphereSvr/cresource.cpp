@@ -958,6 +958,19 @@ CPointMap CSphereResourceMgr::GetRegionPoint( LPCTSTR pCmd ) const // Decode a t
 
 //*************************************************************
 
+static void DeleteFailedWorldLoadObject( CObjBase* pObj )
+{
+	if ( pObj == NULL || pObj->GetParent() == &g_World.m_ObjDelete )
+		return;
+	try
+	{
+		pObj->DeleteThis();
+	}
+	catch (...)
+	{
+	}
+}
+
 bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason )
 {
 	// Index or read any resource blocks we know how to handle.
@@ -1373,37 +1386,71 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 			g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Undefined char type '%s'" LOG_CR, (LPCTSTR) s.GetArgRaw());
 			return( false );
 		}
-		try {
-			pNewObj = CChar::CreateBasic((CREID_TYPE)rid.GetResIndex());
-			if ( pNewObj == NULL )
-			{
+		{
+			CCharPtr pWorldChar;
+			try {
+				pWorldChar = CChar::CreateBasic((CREID_TYPE)rid.GetResIndex());
+				pNewObj = pWorldChar;
+				if ( pWorldChar == NULL )
+				{
+					if ( pFailureReason )
+						pFailureReason->Copy( "character creation failed" );
+					return false;
+				}
+				bool fLoaded = pWorldChar->s_LoadProps(s);
+				if ( !fLoaded && pFailureReason && pFailureReason->IsEmpty())
+					pFailureReason->Copy( "character properties were rejected" );
+				if ( !fLoaded )
+					DeleteFailedWorldLoadObject( pWorldChar );
+				return( fLoaded );
+			} catch (...) {
+				DeleteFailedWorldLoadObject( pWorldChar );
 				if ( pFailureReason )
-					pFailureReason->Copy( "character creation failed" );
+					pFailureReason->Copy( "exception while loading character properties" );
 				return false;
 			}
-			bool fLoaded = pNewObj->s_LoadProps(s);
-			if ( !fLoaded && pFailureReason )
-				pFailureReason->Copy( "character properties were rejected" );
-			return( fLoaded );
-		} catch (...) {
-			if ( pFailureReason )
-				pFailureReason->Copy( "exception while loading character properties" );
-			return false;
 		}
 
 	case RES_WorldItem:	// saved in world file.
 		if ( ! rid.IsValidRID())
 		{
+			if ( pFailureReason )
+				pFailureReason->Copy( "item type does not resolve to a resource index" );
 			g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR, "Undefined item type '%s'" LOG_CR, (LPCTSTR) s.GetArgRaw());
 			return( false );
 		}
-		try {
-			pNewObj = CItem::CreateBase((ITEMID_TYPE)rid.GetResIndex());
-			if ( pNewObj == NULL )
+		{
+			CItemPtr pWorldItem;
+			try {
+				pWorldItem = CItem::CreateBase((ITEMID_TYPE)rid.GetResIndex());
+				pNewObj = pWorldItem;
+				if ( pWorldItem == NULL )
+				{
+					if ( pFailureReason )
+						pFailureReason->Copy( "item creation failed" );
+					return false;
+				}
+				bool fLoaded = pWorldItem->s_LoadProps(s);
+#ifdef SPHERE_LOAD_SAFETY_TEST
+				// Exercise both rejection and exception cleanup after the object has
+				// consumed its properties and reached its saved position.
+				DWORD dwTestSerial = pWorldItem->GetUIDIndex() & UID_INDEX_MASK;
+				if ( dwTestSerial == 42 )
+					throw 42;
+				if ( dwTestSerial == 43 )
+					fLoaded = false;
+#endif
+				if ( !fLoaded && pFailureReason && pFailureReason->IsEmpty())
+					pFailureReason->Copy( "item properties were rejected" );
+				if ( !fLoaded )
+					DeleteFailedWorldLoadObject( pWorldItem );
+				return( fLoaded );
+			} catch (...) {
+				DeleteFailedWorldLoadObject( pWorldItem );
+				if ( pFailureReason )
+					pFailureReason->Copy( "exception while loading item properties" );
 				return false;
-			return( pNewObj->s_LoadProps(s));
-		} catch (...) {
-			return false;
+			}
 		}
 
 	//*******************************************************************

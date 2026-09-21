@@ -313,8 +313,10 @@ private:
 	int		m_iLoadFailedParses;
 	int		m_iLoadReadItems;
 	int		m_iLoadReadChars;
-	int		m_iLoadItems;
-	int		m_iLoadChars;
+	int		m_iLoadItems;		// item sections accepted by the resource loader
+	int		m_iLoadChars;		// character sections accepted by the resource loader
+	int		m_iLoadAllocatedItems;	// current constructor statistic at load completion
+	int		m_iLoadAllocatedChars;	// current constructor statistic at load completion
 	bool	m_fSaveBlockedByLoad;
 	bool	m_fLoadIntegrityReported;
 	bool	m_fLoadCountsCaptured;
@@ -348,6 +350,7 @@ private:
 	bool LoadFile( LPCTSTR pszName );
 	bool LoadWorld();
 	void ResetLoadIntegrity();
+	void CleanupLoadOrphans();
 	void MarkLoadIssue( bool fObjectSection );
 	void ReportLoadIntegrity();
 	void CaptureLoadCounts();

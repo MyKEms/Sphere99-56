@@ -69,13 +69,33 @@ int main()
 
 	const std::string sWorldPath = std::string( szTempDir ) + "/broken-world.scp";
 	const std::string sWorldBaseDir = std::string( szTempDir ) + "/";
+	const ITEMID_TYPE testItemID = ITEMID_GOLD_C1;
+	if ( !g_Cfg.FindItemDef( testItemID ))
+	{
+		CItemDef* pTestItemDef = new CItemDef( testItemID );
+		if ( g_Cfg.m_ResHash.AddSortKey( pTestItemDef,
+			CSphereUID( RES_ItemDef, testItemID )) < 0 )
+		{
+			std::fprintf( stderr, "could not register the synthetic item definition\n" );
+			return 1;
+		}
+	}
 	{
 		std::ofstream world( sWorldPath.c_str() );
 		world << "TITLE=Sphere Test World\n"
 			"VERSION=0.99\n"
 			"SAVECOUNT=0\n"
 			"[WORLDITEM]\n"
-			"NAME=deliberately-broken-object\n"
+			"NAME=deliberately-broken-object\n";
+		world << "[WORLDITEM " << testItemID << "]\n"
+			"SERIAL=42\n"
+			"P=128,128,0\n"
+			"[WORLDITEM " << testItemID << "]\n"
+			"SERIAL=43\n"
+			"P=129,128,0\n"
+			"[WORLDITEM " << testItemID << "]\n"
+			"SERIAL=44\n"
+			"P=130,128,0\n"
 			"[EOF]\n";
 		if ( !world )
 		{
@@ -88,19 +108,59 @@ int main()
 
 	g_Cfg.m_sWorldBaseDir = sWorldBaseDir.c_str();
 	const int iSaveCountBefore = g_World.m_iSaveCountID;
+	CItemPtr pRuntimeOrphan = CItem::CreateBase( testItemID );
+	if ( pRuntimeOrphan == NULL )
+	{
+		std::fprintf( stderr, "could not create disposable orphan for cleanup coverage\n" );
+		unlink( sWorldPath.c_str() );
+		rmdir( szTempDir );
+		return 1;
+	}
 	const bool fLoaded = g_World.LoadFileForTest( sWorldPath.c_str() );
 	if ( !fLoaded || !g_World.IsSaveBlockedByLoad() ||
-		g_World.GetLoadSkippedSections() != 1 ||
-		g_World.GetLoadSkippedObjects() != 1 ||
-		g_World.GetLoadFailedParses() != 1 )
+		g_World.GetLoadSkippedSections() != 3 ||
+		g_World.GetLoadSkippedObjects() != 3 ||
+		g_World.GetLoadFailedParses() != 3 )
 	{
 		std::fprintf( stderr,
-			"load guard did not record the broken object: loaded=%d sections=%d objects=%d parses=%d blocked=%d\n",
+			"load guard did not record the failed object sections: loaded=%d sections=%d objects=%d parses=%d blocked=%d\n",
 			fLoaded ? 1 : 0,
 			g_World.GetLoadSkippedSections(),
 			g_World.GetLoadSkippedObjects(),
 			g_World.GetLoadFailedParses(),
 			g_World.IsSaveBlockedByLoad() ? 1 : 0 );
+		unlink( sWorldPath.c_str() );
+		rmdir( szTempDir );
+		return 1;
+	}
+	if ( g_World.ItemFind( CSphereUID( UID_F_ITEM | 42 )) != NULL ||
+		g_World.ItemFind( CSphereUID( UID_F_ITEM | 43 )) != NULL ||
+		g_World.ItemFind( CSphereUID( UID_F_ITEM | 44 )) == NULL ||
+		g_World.m_ObjNew.GetCount() != 0 )
+	{
+		std::fprintf( stderr,
+			"failed or orphaned items remained addressable after cleanup\n" );
+		unlink( sWorldPath.c_str() );
+		rmdir( szTempDir );
+		return 1;
+	}
+	CGString sLoadCounts;
+	g_World.FormatLoadCounts( sLoadCounts );
+	std::string sLoadCountsText = (LPCTSTR) sLoadCounts;
+	if ( sLoadCountsText.find(
+		"created_items=1 created_chars=0 read_items=4 read_chars=0" ) == std::string::npos ||
+		sLoadCountsText.find( "allocated_items=4 allocated_chars=0" ) == std::string::npos )
+	{
+		std::fprintf( stderr, "load summary did not separate created and read sections: %s\n",
+			sLoadCountsText.c_str());
+		unlink( sWorldPath.c_str() );
+		rmdir( szTempDir );
+		return 1;
+	}
+	g_World.GarbageCollection_New();
+	if ( g_Serv.StatGet( SERV_STAT_ITEMS ) != 1 )
+	{
+		std::fprintf( stderr, "failed items remained allocated after world garbage collection\n" );
 		unlink( sWorldPath.c_str() );
 		rmdir( szTempDir );
 		return 1;
@@ -125,6 +185,6 @@ int main()
 		return 1;
 	}
 
-	std::printf( "load safety: broken object counted and NULL-source save refused\n" );
+	std::printf( "load safety: failed and orphaned objects cleaned, counts separated, and NULL-source SAVE refused\n" );
 	return 0;
 }
