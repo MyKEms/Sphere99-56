@@ -144,7 +144,10 @@ The loader has a fail-closed save guard. If a world, chars, or statics file
 skips a section or fails to parse, the server logs a critical summary and
 refuses autosave and plain `SAVE`. Review the source first; an administrator
 may explicitly acknowledge the risk with `SAVE FORCE`. The regression test
-uses a temporary broken world file and verifies that no save file is created:
+loads disposable failed and valid item sections plus an unplaced runtime
+orphan. It verifies that failed sections do not increment created counts,
+checks that rejected objects leave no live UID and orphan cleanup queues the
+runtime object for normal deletion, and confirms that no save file is created:
 
 ```bash
 make load-safety-test
