@@ -652,7 +652,14 @@ struct CHashArray : public CGSortedArray< TYPE*, TYPE*, HASH_INDEX>
 	}
 	HASH_INDEX FindKeyFree(HASH_INDEX startKey) const
 	{
-		return startKey; // STUB
+		const HASH_INDEX maxKey = static_cast<HASH_INDEX>(-1);
+		while (this->FindKey(startKey) >= 0)
+		{
+			if (startKey == maxKey)
+				return 0;
+			++startKey;
+		}
+		return startKey;
 	}
 };
 

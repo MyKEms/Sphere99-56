@@ -2013,9 +2013,16 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 
 	if ( iHashRange )
 	{
-		// find a new FREE entry starting here
+		// Keep named item and character IDs stable across script loads.
+		// Other resource types retain their randomized starting point.
+		int iHashOffset = Calc_GetRandVal( iHashRange );
+		if ( restype == RES_CharDef || restype == RES_ItemDef )
+			iHashOffset = 0;
 
-		rid = m_ResHash.FindKeyFree( rid + Calc_GetRandVal( iHashRange ));
+		HASH_INDEX freeKey = m_ResHash.FindKeyFree( rid + iHashOffset );
+		if ( ! freeKey )
+			return( ridinvalid );
+		rid = freeKey;
 	}
 	else
 	{
