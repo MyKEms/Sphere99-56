@@ -20,6 +20,7 @@ Tests:
   12. Script engine stability
   13. Expression evaluation proxy
   14. Direct script function-table smoke test
+  15. Timer-trigger character teardown preserves the server
 """
 
 import socket
@@ -603,6 +604,17 @@ def _find_system_message(data, prefix):
     return None
 
 
+def _count_system_messages(data, prefix):
+    """Count classic 0x1c system-message texts with the requested prefix."""
+    count = 0
+    for packet in split_packet_stream(data, allow_truncated=True):
+        if packet.command != 0x1C or len(packet.data) < 45:
+            continue
+        text = packet.data[44:].split(b"\0", 1)[0].decode("ascii", errors="replace")
+        count += text.startswith(prefix)
+    return count
+
+
 def _drain_game_socket(sock, initial=b""):
     """Collect a bounded post-entry window without racing the server."""
     data = bytearray(initial)
@@ -732,6 +744,112 @@ def test_script_function_tables(host, port, game_port, result):
             sock.close()
 
 
+def test_timer_item_owner_teardown(host, port, game_port, result):
+    """Test 15: deleting an item's owner during its timer callback is safe."""
+    print("\n[Test 15] Timer Item Owner Teardown")
+    sock = None
+    try:
+        sock, _ = game_connect(
+            host, port, test_account("timerlife"), "timerpass", game_port=game_port
+        )
+        if sock is None:
+            result.fail("Timer item owner teardown", "Could not reach charlist")
+            return
+
+        sock.sendall(make_char_create(name="TimerLifetimeProbe", sex=0, start_loc=1))
+        response = recv_until_game_start(sock, timeout=10.0)
+        decoded_response = decode_game_response(response)
+        if find_start_packet(decoded_response) is None:
+            response_packets = split_packet_stream(decoded_response, allow_truncated=True)
+            packet_types = ",".join(f"{packet.command:02x}" for packet in response_packets)
+            result.fail(
+                "Timer teardown fixture entry",
+                f"No valid game-start packet in {len(response)} bytes; "
+                f"start_opcode_seen={int(any(packet.command == 0x1B for packet in response_packets))}; "
+                f"packet_types={packet_types}; "
+                f"setup_marker={int(_find_system_message(decoded_response, 'SPHERE_TIMER_ITEM_CREATED') is not None)}",
+            )
+        else:
+            result.ok("Timer teardown fixture entered the game")
+
+        received = bytearray(response)
+        deadline = time.monotonic() + 12.0
+        sock.settimeout(0.2)
+        while time.monotonic() < deadline:
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            except (ConnectionResetError, OSError):
+                break
+            if not chunk:
+                break
+            received.extend(chunk)
+            messages = decode_game_response(bytes(received))
+            if _find_system_message(messages, "SPHERE_TIMER_REMOVE_RETURNED"):
+                break
+
+        messages = decode_game_response(bytes(received))
+        created_marker = _find_system_message(messages, "SPHERE_TIMER_ITEM_CREATED")
+        if created_marker is not None:
+            result.ok("Timer item was created on the synthetic owner")
+        else:
+            owner_created = _find_system_message(messages, "SPHERE_TIMER_OWNER_CREATED") is not None
+            result.fail(
+                "Timer item setup",
+                f"Item create marker was not received (owner_created={int(owner_created)})",
+            )
+
+        timer_count = _count_system_messages(messages, "SPHERE_TIMER_LIFETIME_TRIGGERED")
+        if timer_count == 1:
+            result.ok("Equipped timer trigger reached owner teardown")
+        else:
+            result.fail("Equipped timer trigger", f"expected one callback marker, got {timer_count}")
+
+        unequip_count = _count_system_messages(messages, "SPHERE_TIMER_UNEQUIP_TRIGGERED")
+        if unequip_count == 1:
+            result.ok("Owner teardown fired the equipped item's unequip trigger")
+        else:
+            result.fail(
+                "Equipped item unequip trigger",
+                f"expected one unequip marker, got {unequip_count}",
+            )
+
+        unequip_remove_count = _count_system_messages(
+            messages, "SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED"
+        )
+        if unequip_remove_count == 1:
+            result.ok("Reentrant item removal returned from the unequip trigger")
+        else:
+            result.fail(
+                "Reentrant unequip removal",
+                f"expected one return marker, got {unequip_remove_count}",
+            )
+
+        remove_count = _count_system_messages(messages, "SPHERE_TIMER_REMOVE_RETURNED")
+        if remove_count == 1:
+            result.ok("Timer callback returned after deleting its owner")
+        else:
+            result.fail(
+                "Timer callback owner removal",
+                f"expected one post-removal marker, got {remove_count}",
+            )
+
+        # Verify that the listener remains available after the timer owner was
+        # removed from inside the equipped item's callback.
+        time.sleep(0.5)
+        try:
+            with socket.create_connection((host, port), timeout=3.0):
+                result.ok("Server accepts a connection after timer-triggered teardown")
+        except OSError as error:
+            result.fail("Server after timer-triggered teardown", str(error))
+    except Exception as error:
+        result.fail("Timer item owner teardown", str(error))
+    finally:
+        if sock is not None:
+            sock.close()
+
+
 def main():
     host = sys.argv[1] if len(sys.argv) > 1 else "localhost"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 2593
@@ -795,6 +913,7 @@ def main():
         print("\n[Test 14] Skipped — requires the synthetic script hooks from make_fixture.py")
     else:
         test_script_function_tables(host, port, game_port, result)
+        test_timer_item_owner_teardown(host, port, game_port, result)
 
     success = result.summary()
     sys.exit(0 if success else 1)

@@ -231,6 +231,8 @@ bool CChar::LayerAdd( CItem* pItem, LAYER_TYPE layer )
 	// NOTE: remove CanEquipLayer from here and just use ItemEquip for checking.!???
 	if ( pItem == NULL )
 		return false;
+	if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete) )
+		return false;
 	if ( IsMyChild(pItem) &&
 		pItem->GetEquipLayer() == layer )
 	{
@@ -265,6 +267,8 @@ bool CChar::LayerAdd( CItem* pItem, LAYER_TYPE layer )
 	}
 
 	pItem->RemoveSelf(); // make sure all triggers fire. T_UnEquip
+	if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete) )
+		return false;
 	CContainer::ContentAddPrivate( pItem );
 	pItem->SetEquipLayer( layerAct );
 
@@ -406,11 +410,19 @@ void CChar::OnRemoveOb( CGObListRec* pObRec )	// Override this = called when rem
 	DEBUG_CHECK( pItem->IsItemEquipped());
 
 	LAYER_TYPE layer = pItem->GetEquipLayer();
-	if ( layer != LAYER_DRAGGING && ! g_Serv.IsLoading())
+	if ( layer != LAYER_DRAGGING && ! g_Serv.IsLoading() &&
+		! pItem->IsUnEquipTriggerActive())
 	{
+		pItem->SetUnEquipTriggerActive( true );
 		CSphereExpContext exec(pItem, this);
 		pItem->OnTrigger( CItemDef::T_UnEquip, exec);
+		pItem->SetUnEquipTriggerActive( false );
 	}
+
+	// The trigger can remove or reparent this item. Its nested removal already
+	// handled this character's contents and equipment state in that case.
+	if ( pItem->GetParent() != this )
+		return;
 
 	CContainer::OnRemoveOb( pObRec );
 
@@ -3104,6 +3116,8 @@ bool CChar::OnTick()
 		for ( ; pItem!=NULL; pItem=pItemNext )
 		{
 			pItemNext = pItem->GetNext();
+			if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete))
+				continue;
 
 			if ( pItem->IsType(IT_EQ_MEMORY_OBJ))
 			{
@@ -3125,6 +3139,8 @@ bool CChar::OnTick()
 				if ( ! IsValidUID())
 					return false;	// i've been deleted.
 			}
+			if ( IsDeletePending() || GetParent() == &(g_World.m_ObjDelete))
+				return false;
 		}
 
 		// Players have a silly "always run" flag that gets stuck on.

@@ -3,6 +3,12 @@
   "entries": [
     {
       "kind": "trigger",
+      "keyword": "@ENVIRONCHANGE",
+      "count": 1,
+      "reason": "The spawned synthetic timer NPC has no environment-change handler."
+    },
+    {
+      "kind": "trigger",
       "keyword": "@ITEMUNEQUIP",
       "count_range": [2, 32],
       "reason": "Synthetic character equipment cleanup has no fixture handler."
@@ -12,6 +18,12 @@
       "keyword": "@STEP",
       "count": 9,
       "reason": "The headless walking scenario has no fixture step handler."
+    },
+    {
+      "kind": "trigger",
+      "keyword": "@NPCSEENEWPLAYER",
+      "count_range": [1, 32],
+      "reason": "The synthetic timer NPC has no new-player sight handler."
     },
     {
       "kind": "trigger",

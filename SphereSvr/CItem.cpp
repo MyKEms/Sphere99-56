@@ -38,6 +38,7 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 
 	g_Serv.StatInc(SERV_STAT_ITEMS);
 	m_AttrMask = 0;
+	m_fUnEquipTriggerActive = false;
 	m_amount = 1;
 
 	m_itNormal.m_more1 = 0;
@@ -63,6 +64,9 @@ CItem::~CItem()
 void CItem::DeleteThis()
 {
 	// NOTE: we should make this object useless just in case.
+	if ( ! CObjBase::sm_fDeleteReal &&
+		( IsDeletePending() || GetParent() == &(g_World.m_ObjDelete) ))
+		return;
 
 	if ( ! g_Serv.IsLoading())
 		switch ( m_type )

@@ -226,6 +226,17 @@ void CResourceRefArray::s_WriteProps( CScript& s, LPCTSTR pszKey ) const
 {
 	for ( int j=0;j<GetSize(); j++ )
 	{
+		CResourceLink* pResourceLink = GetAt(j);
+		if ( pResourceLink )
+		{
+			CSphereUID rid = pResourceLink->GetUIDIndex();
+			if ( rid.GetResType() == RES_Profession && rid.GetResIndex() == 0 )
+			{
+				// The implicit default profession has no name and is restored by
+				// CCharPlayer; it cannot be represented as an EVENTS key.
+				continue;
+			}
+		}
 		CString sName = GetResourceName( j );
 		ASSERT( sName[0] );
 		ASSERT( sName[0] != '0' || sName[1] != '0' );
@@ -588,4 +599,3 @@ const CScript* CSphereResourceMgr::SetScriptContext( const CScript* pScriptConte
 		return NULL;
 	}
 }
-

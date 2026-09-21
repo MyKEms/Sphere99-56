@@ -53,6 +53,7 @@ void CScriptClassTemplate<CChar>::InitScriptClass()
 
 CChar::CChar( CREID_TYPE baseID ) : CObjBase(UID_INDEX_CLEAR)
 {
+	m_fDeletingContents = false;
 	g_Serv.StatInc( SERV_STAT_CHARS );	// Count created CChars.
 
 	m_StatFlag = 0;
@@ -119,6 +120,13 @@ CCharPtr CChar::CreateNPC( CREID_TYPE baseID )	// static
 
 void CChar::DeleteThis()
 {
+	if ( ! CObjBase::sm_fDeleteReal )
+	{
+		if ( m_fDeletingContents )
+			return;
+		m_fDeletingContents = true;
+	}
+
 	if ( IsStatFlag( STATF_Ridden ))
 	{
 		CItemPtr pItem = Horse_GetMountItem();
@@ -141,7 +149,21 @@ void CChar::DeleteThis()
 		m_pParty.ReleaseRefObj();
 	}
 
-	DeleteAll();		// remove contents early so virtuals will work.
+	if ( CObjBase::sm_fDeleteReal )
+	{
+		DeleteAll();		// remove contents early so virtuals will work.
+	}
+	else
+	{
+		// An equipped item's timer script can delete this character while the
+		// item's OnTick() callback is still running. Queue the contents for the
+		// world garbage collector instead of destructing that active item here.
+		while ( GetHead() != NULL )
+		{
+			CItemPtr pItem = GetHead();
+			pItem->DeleteThis();
+		}
+	}
 
 	CObjBase::DeleteThis();
 }
@@ -1636,6 +1658,8 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		return ItemDrop( g_World.ItemFind( vArgs.GetUID()), GetTopPoint());
 	case M_Equip:	// uid
 		return ItemEquip( g_World.ItemFind( vArgs.GetUID()));
+	case M_EquipLast:
+		return ItemEquip( g_World.ItemFind( m_Act.m_Targ));
 	case M_EquipHalo:
 		{
 			// equip a halo light

@@ -1711,10 +1711,21 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 					if ( pszDefName && pszDefName[0] )
 					{
 						g_Cfg.m_Const.SetKeyVar( pszDefName, CGVariant( VARTYPE_UID, &rid ));
+						if ( pNewLink && !_stricmp( s.GetKey(), "DEFNAME" ))
+							pNewLink->SetResourceName( pszDefName );
 					}
 				}
 			}
 			s.SeekContext( LinkContext );
+		}
+		if ( pNewLink && !pNewLink->GetResourceName()[0] && !sCoverageResourceName.IsEmpty())
+		{
+			TCHAR* pszResourceName = Str_GetTemp();
+			strcpylen( pszResourceName, sCoverageResourceName, CSTRING_MAX_LEN );
+			TCHAR* pszArgs = NULL;
+			Str_Parse( pszResourceName, &pszArgs );
+			if ( pszResourceName[0] )
+				pNewLink->SetResourceName( pszResourceName );
 		}
 
 		pNewLink->SetLinkSection(pResScript, LinkContext, sCoverageResourceName);

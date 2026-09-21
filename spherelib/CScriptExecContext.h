@@ -819,7 +819,7 @@ public:
 
 		// Try dispatching to the base object.
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-		if ( pObj )
+		if ( pObj && ( !strchr(pszKey, '.') || fPropertySet ))
 		{
 			// Try as a property set (KEY=VALUE).
 			CGVariant vVal(pszArg);

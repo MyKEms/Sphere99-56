@@ -912,6 +912,11 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			return( HRES_BAD_ARG_QTY );
 		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));
 		break;
+	case F_IsUIDValid:
+		if ( vArgs.IsEmpty())
+			return( HRES_BAD_ARG_QTY );
+		vValRet.SetBool( g_World.ObjFind( vArgs.GetUID()) != NULL );
+		break;
 	case F_Var:
 		return g_Cfg.m_Var.s_MethodTags( vArgs, vValRet, GetSrc() );
 
