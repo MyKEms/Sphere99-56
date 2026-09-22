@@ -246,6 +246,23 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2794
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-timer-lifetime-item-first" \
+            --timer-lifetime-item-first-probe
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          python3 tools/fixtures/test_timer_lifetime.py \
+            "$RUNNER_TEMP/sphere-asan-timer-lifetime-item-first" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --item-first \
+            --port 2795
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-timer-sibling-mutation" \
+            --timer-sibling-mutation-probe
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          python3 tools/fixtures/test_timer_sibling_mutation.py \
+            "$RUNNER_TEMP/sphere-asan-timer-sibling-mutation" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2796
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-world-save" \
             --world-save-probe
           python3 tools/fixtures/test_world_save_roundtrip.py \
@@ -276,6 +293,8 @@ jobs:
             ${{ runner.temp }}/sphere-asan-world-counts-truncated/server.log
             ${{ runner.temp }}/sphere-asan-named-resource-ids/server.log
             ${{ runner.temp }}/sphere-asan-timer-lifetime/server.log
+            ${{ runner.temp }}/sphere-asan-timer-lifetime-item-first/server.log
+            ${{ runner.temp }}/sphere-asan-timer-sibling-mutation/server.log
             ${{ runner.temp }}/sphere-asan-world-save/server.log
             ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
           if-no-files-found: warn
@@ -524,6 +543,21 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2794
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-timer-lifetime-item-first" \
+            --timer-lifetime-item-first-probe
+          python3 tools/fixtures/test_timer_lifetime.py \
+            "$RUNNER_TEMP/sphere-timer-lifetime-item-first" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --item-first \
+            --port 2795
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-timer-sibling-mutation" \
+            --timer-sibling-mutation-probe
+          python3 tools/fixtures/test_timer_sibling_mutation.py \
+            "$RUNNER_TEMP/sphere-timer-sibling-mutation" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2796
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-world-save" \
             --world-save-probe
           python3 tools/fixtures/test_world_save_roundtrip.py \
@@ -552,6 +586,8 @@ jobs:
             ${{ runner.temp }}/sphere-world-counts/server.log
             ${{ runner.temp }}/sphere-world-counts-truncated/server.log
             ${{ runner.temp }}/sphere-timer-lifetime/server.log
+            ${{ runner.temp }}/sphere-timer-lifetime-item-first/server.log
+            ${{ runner.temp }}/sphere-timer-sibling-mutation/server.log
             ${{ runner.temp }}/sphere-world-save/server.log
             ${{ runner.temp }}/sphere-dotted-expressions/server.log
           if-no-files-found: warn
