@@ -67,6 +67,14 @@ REQUIRED_MARKERS = (
     "SPHERE_REVIEW_MALFORMED_COUNT",
     "SPHERE_REVIEW_REFERENCE",
     "SPHERE_REVIEW_REFERENCE_COUNT",
+    "SPHERE_REVIEW_DUPE_BEFORE",
+    "SPHERE_REVIEW_DUPE_REF",
+    "SPHERE_REVIEW_DUPE_REF_COUNT",
+    "SPHERE_REVIEW_DUPE_VALUE",
+    "SPHERE_REVIEW_DUPE_VALUE_COUNT",
+    "SPHERE_REVIEW_DUPE_VALUE_VALID",
+    "SPHERE_REVIEW_DUPE_VALUE_VALID_COUNT",
+    "SPHERE_REVIEW_DUPE_AFTER",
 )
 
 
@@ -221,10 +229,32 @@ def main() -> int:
                 "SPHERE_REVIEW_UNKNOWN_COUNT",
                 "SPHERE_REVIEW_MALFORMED_COUNT",
                 "SPHERE_REVIEW_REFERENCE_COUNT",
+                "SPHERE_REVIEW_DUPE_REF_COUNT",
+                "SPHERE_REVIEW_DUPE_VALUE_COUNT",
+                "SPHERE_REVIEW_DUPE_VALUE_VALID_COUNT",
             ):
                 actual = parse_value(observed, prefix)
                 if actual != 1:
                     failures.append(f"{prefix} expected getter count 1, got {actual!r}")
+
+            dupe_before = parse_value(observed, "SPHERE_REVIEW_DUPE_BEFORE")
+            dupe_after = parse_value(observed, "SPHERE_REVIEW_DUPE_AFTER")
+            dupe_value = parse_value(observed, "SPHERE_REVIEW_DUPE_VALUE")
+            dupe_valid = parse_value(observed, "SPHERE_REVIEW_DUPE_VALUE_VALID")
+            if dupe_before is None or dupe_after is None:
+                failures.append(
+                    f"DUPE probe did not report character counts: "
+                    f"before={dupe_before!r}, after={dupe_after!r}"
+                )
+            elif dupe_after - dupe_before != 3:
+                failures.append(
+                    f"reference-returning DUPE suffix created "
+                    f"{dupe_after - dupe_before} characters; expected 3"
+                )
+            if dupe_value is None or dupe_value <= 0:
+                failures.append(f"DUPE suffix returned an invalid serial: {dupe_value!r}")
+            if dupe_valid != 1:
+                failures.append(f"DUPE suffix serial did not resolve to a live UID: {dupe_valid!r}")
 
             for prefix in REQUIRED_MARKERS:
                 count = marker_count(observed, prefix)

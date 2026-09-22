@@ -507,6 +507,17 @@ def write_scripts(
         "VAR dotted_getter_calls,0\n"
         "SYSMESSAGE SPHERE_REVIEW_REFERENCE <f_fixture_getter.name>\n"
         "SYSMESSAGE SPHERE_REVIEW_REFERENCE_COUNT <VAR(dotted_getter_calls)>\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_BEFORE <SERV.CHARS>\n"
+        "VAR dotted_getter_calls,0\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_REF <f_fixture_getter.DUPE>\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_REF_COUNT <VAR(dotted_getter_calls)>\n"
+        "VAR dotted_getter_calls,0\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_VALUE <f_fixture_getter.DUPE.SERIAL>\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_VALUE_COUNT <VAR(dotted_getter_calls)>\n"
+        "VAR dotted_getter_calls,0\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_VALUE_VALID <ISUIDVALID 0x<f_fixture_getter.DUPE.SERIAL>>\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_VALUE_VALID_COUNT <VAR(dotted_getter_calls)>\n"
+        "SYSMESSAGE SPHERE_REVIEW_DUPE_AFTER <SERV.CHARS>\n"
         if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
         else ""
     )
