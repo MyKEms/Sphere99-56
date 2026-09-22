@@ -102,8 +102,14 @@ protected:
 		return pObj;
 	}
 
-	bool ResolveDottedFunctionResult(LPCTSTR pszKey, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected)
+	bool ResolveDottedFunctionResult(
+		LPCTSTR pszKey,
+		CGVariant& vValRet,
+		CScriptUnknownRejectTracker& rejected,
+		bool* pfRootResolved = NULL)
 	{
+		if ( pfRootResolved )
+			*pfRootResolved = false;
 		LPCTSTR pszDot = strchr(pszKey, '.');
 		if ( pszDot == NULL || pszDot == pszKey || pszDot[1] == '\0' )
 			return false;
@@ -132,6 +138,8 @@ protected:
 		CGVariant vRoot;
 		HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
 		rejected.Observe(hRoot, szRoot, m_pBaseObj);
+		if ( pfRootResolved && hRoot == NO_ERROR )
+			*pfRootResolved = true;
 		if ( hRoot != NO_ERROR )
 			return false;
 
@@ -640,17 +648,21 @@ public:
 
 				// Resolve dotted function roots before the ordinary parser strips
 				// function arguments from szKey (for example FINDUID(uid).CONT.UID).
+				bool fDottedRootResolved = false;
 				if ( strchr(pszExpr, '.') != NULL &&
-					ResolveDottedFunctionResult(pszExpr, vValRet, rejected) )
+					ResolveDottedFunctionResult(pszExpr, vValRet, rejected, &fDottedRootResolved) )
 				{
 					sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
 					fResolved = true;
 				}
 
 				// Try global function dispatch.
-				HRESULT hRes = fResolved ? NO_ERROR : Function_Dispatch(szKey, vArgs, vValRet);
+				HRESULT hRes = fResolved
+					? NO_ERROR
+					: (fDottedRootResolved ? HRES_UNKNOWN_PROPERTY : Function_Dispatch(szKey, vArgs, vValRet));
 				rejected.Observe(hRes, szKey, m_pBaseObj);
-				if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
+				if ( hRes != NO_ERROR && !fDottedRootResolved &&
+					ResolveDottedFunctionResult(szKey, vValRet, rejected) )
 					hRes = NO_ERROR;
 				if ( hRes == NO_ERROR )
 				{
