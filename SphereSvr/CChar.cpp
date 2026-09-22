@@ -158,9 +158,13 @@ void CChar::DeleteThis()
 		// An equipped item's timer script can delete this character while the
 		// item's OnTick() callback is still running. Queue the contents for the
 		// world garbage collector instead of destructing that active item here.
-		while ( GetHead() != NULL )
+		// Keep the next link before deleting each item: the current item can be
+		// pending while its unequip trigger is still unwinding, so retrying
+		// GetHead() would spin on that same item forever.
+		CItemPtr pItemNext;
+		for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItemNext )
 		{
-			CItemPtr pItem = GetHead();
+			pItemNext = pItem->GetNext();
 			pItem->DeleteThis();
 		}
 	}

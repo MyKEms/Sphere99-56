@@ -1350,9 +1350,13 @@ public:
 		}
 		else
 		{
-			while ( GetHead() != NULL )
+			// A child may still be linked while its unequip callback reenters
+			// this container. Advance through the saved next link so a pending
+			// in-flight child cannot make this loop retry forever.
+			CItemPtr pItemNext;
+			for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItemNext )
 			{
-				CItemPtr pItem = GetHead();
+				pItemNext = pItem->GetNext();
 				pItem->DeleteThis();
 			}
 		}
