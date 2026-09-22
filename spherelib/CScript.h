@@ -132,8 +132,8 @@ public:
 	bool FindKey(LPCTSTR pszName);
 
 	// Writing
-	void WriteSection(LPCTSTR pszSection, ...);
-	void WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal);
+	bool WriteSection(LPCTSTR pszSection, ...);
+	bool WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal);
 	void WriteKeyInt(LPCTSTR pszKey, int iValue);
 	void WriteKeyDWORD(LPCTSTR pszKey, DWORD iValue);
 	bool WriteProfileStringSec(LPCTSTR pszSection, LPCTSTR pszKey, LPCTSTR pszVal);

@@ -313,9 +313,22 @@ private:
 class CFileText : public CGFile
 {
 public:
+#ifdef SPHERE_SAVE_IO_TEST
+	enum TEST_FAULT
+	{
+		TEST_FAULT_NONE = 0,
+		TEST_FAULT_SHORT_WRITE,
+		TEST_FAULT_FLUSH,
+		TEST_FAULT_CLOSE,
+	};
+	static void SetTestFault( TEST_FAULT fault );
+	static void ClearTestFault();
+	static bool WasTestFaultTriggered();
+#endif
 	static const char* m_sClassName;
 	FILE* m_pStream;		///< The current open script type file.
 protected:
+	mutable bool m_fIOError;
 	/**
 	* @brief Get open mode in string format.
 	*
@@ -337,6 +350,7 @@ public:
 	CFileText()
 	{
 		m_pStream = NULL;
+		m_fIOError = false;
 #ifdef _WIN32
 		bNoBuffer = false;
 #endif
@@ -362,7 +376,9 @@ public:
 	/**
 	* @brief Write changes to disk.
 	*/
-	void Flush() const;
+	bool Flush() const;
+	bool CloseChecked();
+	bool HasIOError() const { return m_fIOError; }
 	/**
 	* @brief Get position indicator position.
 	* @return The position indicator if file is opened, -1 otherwise.

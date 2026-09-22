@@ -182,10 +182,16 @@ value-range-test:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_VALUE_RANGE_TEST" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
+save-io-test:
+	$(MAKE) BUILD_DIR=build/save-io TARGET=build/save-io/save_io_test \
+		TEST_SRC=tools/save_io_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_SAVE_IO_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test value-range-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test clean

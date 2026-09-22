@@ -222,6 +222,7 @@ void CWorld::ResetLoadIntegrity()
 	m_iLoadAllocatedItems = 0;
 	m_iLoadAllocatedChars = 0;
 	m_fSaveBlockedByLoad = false;
+	m_fSaveFailed = false;
 	m_fLoadIntegrityReported = false;
 	m_fLoadCountsCaptured = false;
 }
@@ -393,6 +394,19 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 	return( true );
 }
 
+bool CWorld::FailSave( LPCTSTR pszReason )
+{
+	m_fSaveFailed = true;
+	g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+		"Save failed during %s; committed generation remains %d" LOG_CR,
+		pszReason ? pszReason : "file I/O", m_iSaveCountID );
+	SetAllowUIDReuse();
+	m_FileWorld.CloseChecked();
+	m_FilePlayers.CloseChecked();
+	m_iSaveStage = INT_MAX;
+	return false;
+}
+
 HRESULT CWorld::SaveWorldStatics()
 {
 	// Save just the world statics out to the statics file.
@@ -419,6 +433,10 @@ HRESULT CWorld::SaveWorldStatics()
 	}
 
 	s.WriteSection( "EOF" );
+	const bool fWriteOK = !s.HasIOError();
+	const bool fCloseOK = s.CloseChecked();
+	if ( !fWriteOK || !fCloseOK )
+		return HRES_INTERNAL_ERROR;
 	return NO_ERROR;
 }
 
@@ -470,7 +488,7 @@ bool CWorld::SaveStage() // Save world state in stages.
 		{
 			CScript s;
 			if ( ! OpenScriptBackup( s, g_Cfg.m_sMainLogServerDir, "serv", m_iSaveCountID ))
-				break;
+				return FailSave( "opening server save" );
 			// s_WriteProps( s );
 			CThreadLockPtr lock( &(g_Cfg.m_Servers));
 			for ( int i=0; true; i++ )
@@ -482,18 +500,27 @@ bool CWorld::SaveStage() // Save world state in stages.
 				pServ->s_WriteCreated( s );
 			}
 			s.WriteSection( "EOF" );
+			if ( !s.CloseChecked())
+				return FailSave( "closing server save" );
 		}
 		break;
 
 	case SECTOR_QTY+2:
 		// Now make a backup of the account file.
-		g_Accounts.Account_SaveAll();
+		if ( !g_Accounts.Account_SaveAll())
+			return FailSave( "saving accounts" );
 		break;
 
 	case SECTOR_QTY+3:
 		// EOF marker to show we reached the end.
 		m_FileWorld.WriteSection( "EOF" );
 		m_FilePlayers.WriteSection( "EOF" );
+		if ( m_FileWorld.HasIOError() || m_FilePlayers.HasIOError())
+			return FailSave( "writing EOF" );
+		const bool fWorldCloseOK = m_FileWorld.CloseChecked();
+		const bool fPlayersCloseOK = m_FilePlayers.CloseChecked();
+		if ( !fWorldCloseOK || !fPlayersCloseOK )
+			return FailSave( "closing world files" );
 
 		m_iSaveCountID++;	// Save only counts if we get to the end winout trapping.
 		m_timeSave.InitTimeCurrent( g_Cfg.m_iSavePeriod );	// next save time.
@@ -502,11 +529,12 @@ bool CWorld::SaveStage() // Save world state in stages.
 
 		// Now clean up all the held over UIDs
 		SetAllowUIDReuse();
-		m_FileWorld.Close();
-		m_FilePlayers.Close();
 		m_iSaveStage = INT_MAX;
 		return( false );	// done.
 	}
+
+	if ( m_FileWorld.HasIOError() || m_FilePlayers.HasIOError())
+		return FailSave( "writing world files" );
 
 	if ( g_Cfg.m_iSaveBackgroundTime )
 	{
@@ -535,7 +563,8 @@ void CWorld::SaveForce() // Save world state
 
 	g_Serv.SetServerMode( iModePrv );			// Game is up and running
 
-	DEBUG_MSG(( "Save Done" LOG_CR ));
+	if ( !m_fSaveFailed )
+		DEBUG_MSG(( "Save Done" LOG_CR ));
 }
 
 bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
@@ -552,8 +581,9 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 		{
 			SaveStage();
 		}
-		return true;
+		return !m_fSaveFailed;
 	}
+	m_fSaveFailed = false;
 
 	// Do the write async from here in the future.
 	if ( g_Cfg.m_fSaveGarbageCollect )
@@ -565,11 +595,11 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 	// exponentially degrade the saves over time.
 	if ( ! OpenScriptBackup( m_FileWorld, g_Cfg.m_sWorldBaseDir, "world", m_iSaveCountID ))
 	{
-		return false;
+		return FailSave( "opening world save" );
 	}
 	if ( ! OpenScriptBackup( m_FilePlayers, g_Cfg.m_sWorldBaseDir, "chars", m_iSaveCountID ))
 	{
-		return false;
+		return FailSave( "opening character save" );
 	}
 
 	m_fSaveParity = ! m_fSaveParity; // Flip the parity of the save.
@@ -579,21 +609,24 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 	// Write the file headers.
 	s_WriteProps( m_FileWorld );
 	s_WriteProps( m_FilePlayers );
+	if ( m_FileWorld.HasIOError() || m_FilePlayers.HasIOError())
+		return FailSave( "writing save headers" );
 
 	if ( fForceImmediate || ! g_Cfg.m_iSaveBackgroundTime )	// Save now !
 	{
 		SaveForce();
+		return !m_fSaveFailed;
 	}
 
 	return true;
 }
 
-void CWorld::Save( bool fForceImmediate ) // Save world state
+bool CWorld::Save( bool fForceImmediate ) // Save world state
 {
-	Save( fForceImmediate, false );
+	return Save( fForceImmediate, false );
 }
 
-void CWorld::Save( bool fForceImmediate, bool fAllowDamagedWorld ) // Save world state
+bool CWorld::Save( bool fForceImmediate, bool fAllowDamagedWorld ) // Save world state
 {
 	if ( m_fSaveBlockedByLoad && !fAllowDamagedWorld )
 	{
@@ -602,7 +635,7 @@ void CWorld::Save( bool fForceImmediate, bool fAllowDamagedWorld ) // Save world
 			"Use explicit admin SAVE FORCE only after reviewing the load failure." LOG_CR,
 			m_iLoadSkippedSections, m_iLoadSkippedObjects, m_iLoadFailedParses );
 		Broadcast( "Save refused: world load was incomplete; use admin SAVE FORCE only after review." );
-		return;
+		return false;
 	}
 	if ( m_fSaveBlockedByLoad && fAllowDamagedWorld )
 	{
@@ -621,12 +654,13 @@ void CWorld::Save( bool fForceImmediate, bool fAllowDamagedWorld ) // Save world
 	if ( ! fRet )
 	{
 		Broadcast( "Save FAILED. " SPHERE_TITLE " is UNSTABLE!" );
-		m_FileWorld.Close();	// close if not already closed.
-		m_FilePlayers.Close();	// close if not already closed.
+		m_FileWorld.CloseChecked();	// close if not already closed.
+		m_FilePlayers.CloseChecked();	// close if not already closed.
 		// We should probably shut down the server if the save failed
 		// so that we don't destroy all of the good saves we have
 		g_Serv.SetExitFlag(SPHEREERR_INTERNAL);
 	}
+	return fRet;
 }
 
 /////////////////////////////////////////////////////////////////////

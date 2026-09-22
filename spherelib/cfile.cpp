@@ -14,6 +14,11 @@
 #include <unistd.h>
 #endif
 
+#ifdef SPHERE_SAVE_IO_TEST
+static CFileText::TEST_FAULT g_eTestFault = CFileText::TEST_FAULT_NONE;
+static bool g_fTestFaultTriggered = false;
+#endif
+
 ///////////////////////////////////////////////////////////
 // CFile
 
@@ -258,10 +263,7 @@ LPCTSTR CFileText::GetModeStr() const
 
 void CFileText::CloseBase()
 {
-	if (IsModeWrite())
-		fflush(m_pStream);
-	fclose(m_pStream);
-	m_pStream = NULL;
+	CloseChecked();
 }
 
 bool CFileText::OpenBase(void* pExtra)
@@ -271,6 +273,7 @@ bool CFileText::OpenBase(void* pExtra)
 	if (!m_pStream)
 		return false;
 
+	m_fIOError = false;
 	m_hFile = (OSFILE_TYPE)(intptr_t)fileno(m_pStream);
 	return true;
 }
@@ -290,11 +293,51 @@ DWORD CFileText::Seek(LONG lOffset, UINT iOrigin)
 	return (DWORD)lPos;
 }
 
-void CFileText::Flush() const
+bool CFileText::Flush() const
 {
 	if (!IsFileOpen())
-		return;
-	fflush(m_pStream);
+		return !m_fIOError;
+#ifdef SPHERE_SAVE_IO_TEST
+	if ( g_eTestFault == TEST_FAULT_FLUSH && !g_fTestFaultTriggered )
+	{
+		g_fTestFaultTriggered = true;
+		m_fIOError = true;
+		errno = EIO;
+		return false;
+	}
+#endif
+	if ( fflush(m_pStream) != 0 )
+	{
+		m_fIOError = true;
+		return false;
+	}
+	return true;
+}
+
+bool CFileText::CloseChecked()
+{
+	if ( !m_pStream )
+		return !m_fIOError;
+
+	bool fOK = true;
+	if ( IsModeWrite() && !Flush())
+		fOK = false;
+#ifdef SPHERE_SAVE_IO_TEST
+	if ( g_eTestFault == TEST_FAULT_CLOSE && !g_fTestFaultTriggered )
+	{
+		g_fTestFaultTriggered = true;
+		m_fIOError = true;
+		fOK = false;
+	}
+#endif
+	if ( fclose(m_pStream) != 0 )
+	{
+		m_fIOError = true;
+		fOK = false;
+	}
+	m_pStream = NULL;
+	m_hFile = NOFILE_HANDLE;
+	return fOK && !m_fIOError;
 }
 
 DWORD CFileText::GetPosition() const
@@ -318,12 +361,26 @@ bool CFileText::Write(const void* pData, DWORD iLen)
 #endif
 {
 	if (!pData || !IsFileOpen())
+	{
+		m_fIOError = true;
 		return false;
+	}
+#ifdef SPHERE_SAVE_IO_TEST
+	if ( g_eTestFault == TEST_FAULT_SHORT_WRITE && !g_fTestFaultTriggered )
+	{
+		g_fTestFaultTriggered = true;
+		m_fIOError = true;
+		return false;
+	}
+#endif
 	size_t iStatus = fwrite(pData, iLen, 1, m_pStream);
 #ifndef _WIN32
-	fflush(m_pStream);
+	if ( iStatus == 1 && !Flush())
+		return false;
 #endif
-	return (iStatus == 1);
+	if ( iStatus != 1 )
+		m_fIOError = true;
+	return (iStatus == 1) && !m_fIOError;
 }
 
 bool CFileText::WriteString(LPCTSTR pStr)
@@ -336,8 +393,25 @@ bool CFileText::WriteString(LPCTSTR pStr)
 size_t CFileText::VPrintf(LPCTSTR pFormat, va_list args)
 {
 	if (!pFormat || !IsFileOpen())
+	{
+		m_fIOError = true;
 		return 0;
-	return vfprintf(m_pStream, pFormat, args);
+	}
+	int iStatus = vfprintf(m_pStream, pFormat, args);
+	if ( iStatus < 0 )
+	{
+		m_fIOError = true;
+		return 0;
+	}
+#ifdef SPHERE_SAVE_IO_TEST
+	if ( g_eTestFault == TEST_FAULT_SHORT_WRITE && !g_fTestFaultTriggered )
+	{
+		g_fTestFaultTriggered = true;
+		m_fIOError = true;
+		return iStatus > 0 ? (size_t)(iStatus - 1) : 0;
+	}
+#endif
+	return (size_t)iStatus;
 }
 
 size_t _cdecl CFileText::Printf(LPCTSTR pFormat, ...)
@@ -350,6 +424,25 @@ size_t _cdecl CFileText::Printf(LPCTSTR pFormat, ...)
 	va_end(vargs);
 	return ret;
 }
+
+#ifdef SPHERE_SAVE_IO_TEST
+void CFileText::SetTestFault( TEST_FAULT fault )
+{
+	g_eTestFault = fault;
+	g_fTestFaultTriggered = false;
+}
+
+void CFileText::ClearTestFault()
+{
+	g_eTestFault = TEST_FAULT_NONE;
+	g_fTestFaultTriggered = false;
+}
+
+bool CFileText::WasTestFaultTriggered()
+{
+	return g_fTestFaultTriggered;
+}
+#endif
 
 bool CFileText::IsEOF() const
 {

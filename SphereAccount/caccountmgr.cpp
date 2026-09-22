@@ -239,6 +239,10 @@ bool CAccountMgr::Account_SaveAll()
 
 	// Write [EOF]
 	s.WriteSection( "EOF" );
+	const bool fWriteOK = !s.HasIOError();
+	const bool fCloseOK = s.CloseChecked();
+	if ( !fWriteOK || !fCloseOK )
+		return( false );
 
 	Account_LoadAll( true, true );	// clear the change file now.
 	return( true );

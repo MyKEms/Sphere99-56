@@ -287,6 +287,11 @@ jobs:
           make load-safety-test
           build/load-safety/load_safety_test
 
+      - name: Run checked-save I/O fault injection
+        run: |
+          make save-io-test
+          build/save-io/save_io_test
+
   value-ranges:
     name: Value-range properties and script lookup tables
     runs-on: ubuntu-24.04
