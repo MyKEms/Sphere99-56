@@ -28,6 +28,69 @@ UID_F_ITEM = 0x40000000
 TIMER_LIFETIME_DELAY_SECONDS = 15
 TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 
+# Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
+# the expression in the player's login trigger (default object and SRC are the
+# character), "I" in the @Equip trigger of an equipped item (default object is
+# the item, SRC is the character).  tools/fixtures/test_dotted_expressions.py
+# holds the expected values.
+DOTTED_PROBE_ACCOUNT = "DottedProbe"
+DOTTED_PROBE_ITEM_ID = 0x0E7B
+DOTTED_PROBE_DISPOSABLE_ID = 0x0E7C
+DOTTED_PROBE_LAYER = 30
+DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
+DOTTED_EXPRESSION_ROWS = (
+    # Forms without a function-root chain; their results must not change.
+    ("src_name", "<src.name>", "CI"),
+    ("src_str", "<src.str>", "C"),
+    ("src_serial", "<src.serial>", "CI"),
+    ("serv_name", "<serv.name>", "C"),
+    ("var_paren", "<var(dotted_probe_var)>", "C"),
+    ("eval_decimal", "<eval 5*1.5>", "CI"),
+    ("eval_decimal_zero", "<eval 30.0>", "C"),
+    ("eval_paren_decimal", "<eval(2.5)>", "C"),
+    ("eval_nested", "<eval <src.str>*1.5>", "C"),
+    ("strlen_dot", "<strlen a.b>", "CI"),
+    ("strcmp_dot", "<strcmp a.b,a.b>", "C"),
+    ("strindexof_dot", "<strindexof abc.def,def>", "C"),
+    ("safe_src_name", "<safe src.name>", "C"),
+    ("safe_missing_tag", "<safe src.tag(probe_missing)>", "C"),
+    ("tag_paren", "<tag(probe_text)>", "CI"),
+    ("function_plain", "<f_dotted_serial>", "CI"),
+    ("serial", "<serial>", "I"),
+    ("deferred_src_tag", "<?src.tag(probe_text)?>", "C"),
+    ("deferred_eval", "<?eval 5*1.5?>", "C"),
+    ("deferred_strlen", "<?strlen a.b?>", "C"),
+    # One-level references whose last segment carries its own arguments or
+    # is a script function evaluated with the reference as default object.
+    ("src_tag_paren", "<src.tag(probe_text)>", "CI"),
+    ("src_tag_paren_num", "<src.tag(probe_num)>", "C"),
+    ("src_tag_paren_missing", "<src.tag(probe_missing)>", "C"),
+    ("src_function", "<src.f_dotted_serial>", "CI"),
+    ("src_function_args", "<src.f_dotted_arg(5)>", "C"),
+    ("function_root_tag", "<f_dotted_serial.tag(probe_text)>", "CI"),
+    ("finduid_missing_name", "<finduid(0bad0bad).name>", "C"),
+    # Function roots with arguments and multi-level chains.
+    ("src_account_name", "<src.account.name>", "CI"),
+    ("findaccount_name", "<findaccount(" + DOTTED_PROBE_ACCOUNT + ").name>", "C"),
+    ("finduid_name", "<finduid(<src.serial>).name>", "C"),
+    ("finduid_serial", "<finduid(<src.serial>).serial>", "C"),
+    ("finduid_tag", "<finduid(<src.serial>).tag(probe_text)>", "C"),
+    ("finduid_function", "<finduid(<src.serial>).f_dotted_serial>", "C"),
+    ("lastnewitem_name", "<serv.lastnewitem.name>", "C"),
+    ("function_args_root", "<f_dotted_arg(<src.serial>).name>", "C"),
+    ("function_args_chain", "<f_dotted_arg(<src.serial>).findlayer(30).serial>", "C"),
+    ("src_findlayer_name", "<src.findlayer(30).name>", "CI"),
+    ("src_findlayer_serial", "<src.findlayer(30).serial>", "CI"),
+    ("src_findlayer_tag", "<src.findlayer(30).tag(probe_text)>", "C"),
+    ("deferred_finduid_name", "<?finduid(<src.serial>).name?>", "C"),
+    ("deferred_findlayer_serial", "<?src.findlayer(30).serial?>", "C"),
+    # Unresolved on every build so far (TAG.name and VAR.name reads are not
+    # implemented).  Their values are not asserted; they only check that the
+    # unknown-keyword report keeps the normalized legacy keys.
+    ("unresolved_src_tag_dot", "<src.tag.probe_text>", "C"),
+    ("unresolved_var_dot", "<var.dotted_probe_var>", "C"),
+)
+
 
 def write_sparse(path: Path, size: int) -> None:
     """Create a zero-filled sparse file of exactly *size* bytes."""
@@ -135,6 +198,101 @@ def skill_sections() -> str:
     return "\n".join(sections)
 
 
+def dotted_expression_lines(context: str, emit: str) -> list[str]:
+    return [
+        f"{emit} {DOTTED_PROBE_MARKER} {context}|{key}|[{expression}]"
+        for key, expression, contexts in DOTTED_EXPRESSION_ROWS
+        if context in contexts
+    ]
+
+
+def dotted_expression_scripts() -> tuple[str, str]:
+    """Return the login-trigger lines and the extra sections of the probe."""
+
+    marker = DOTTED_PROBE_MARKER
+    login = [
+        "TAG.probe_text=chartext",
+        "TAG.probe_num=7",
+        "VAR dotted_probe_var,globalvalue",
+        "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
+        "EQUIPLAST",
+        "NEWITEM SYNTHETIC_DOTTED_PROBE",
+        "EQUIPLAST",
+    ]
+    login += dotted_expression_lines("C", "SYSMESSAGE")
+    login += [
+        # Commands whose left side is a reference.
+        "TAG.cmd_base_set=23",
+        "SRC.TAG.cmd_src_set=21",
+        "F_DOTTED_SERIAL.TAG.cmd_function_set=30",
+        "FINDUID(1).TAG.cmd_finduid_set=41",
+        "SRC.SYSMESSAGE " + marker + " C|cmd_src_method|[reached]",
+        "SYSMESSAGE " + marker + " C|cmd_readback|[<tag(cmd_base_set)>|<tag(cmd_src_set)>|"
+        "<tag(cmd_function_set)>|<tag(cmd_finduid_set)>|<tag(cmd_item_src_set)>]",
+        "SRC.NAME=DottedRenamed",
+        "SYSMESSAGE " + marker + " C|cmd_src_name_set|[<name>]",
+        "NAME=" + DOTTED_PROBE_ACCOUNT,
+        "SYSMESSAGE " + marker + " C|disposable_before|[<isuidvalid <f_dotted_disposable>>]",
+        "F_DOTTED_DISPOSABLE.REMOVE",
+        "SYSMESSAGE " + marker + " C|disposable_after|[<isuidvalid <f_dotted_disposable>>]",
+        # A reference-returning function root is evaluated exactly once per
+        # expression, including when its suffix does not resolve or is a
+        # method with side effects (DUPE creates one character per call).
+        "VAR dotted_getter_calls,0",
+        "SYSMESSAGE " + marker + " C|getter_unknown|[<f_fixture_getter.UNKNOWN_REVIEW_PROPERTY>]",
+        "SYSMESSAGE " + marker + " C|getter_unknown_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "SYSMESSAGE " + marker + " C|getter_malformed|[<f_fixture_getter.UNKNOWN_REVIEW_PROPERTY.>]",
+        "SYSMESSAGE " + marker + " C|getter_malformed_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "SYSMESSAGE " + marker + " C|getter_reference|[<f_fixture_getter.name>]",
+        "SYSMESSAGE " + marker + " C|getter_reference_count|[<VAR(dotted_getter_calls)>]",
+        "SYSMESSAGE " + marker + " C|dupe_chars_before|[<SERV.CHARS>]",
+        "VAR dotted_getter_calls,0",
+        "SYSMESSAGE " + marker + " C|dupe_reference|[<f_fixture_getter.DUPE>]",
+        "SYSMESSAGE " + marker + " C|dupe_reference_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "SYSMESSAGE " + marker + " C|dupe_value|[<f_fixture_getter.DUPE.SERIAL>]",
+        "SYSMESSAGE " + marker + " C|dupe_value_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "SYSMESSAGE " + marker + " C|dupe_value_valid|[<ISUIDVALID 0x<f_fixture_getter.DUPE.SERIAL>>]",
+        "SYSMESSAGE " + marker + " C|dupe_value_valid_count|[<VAR(dotted_getter_calls)>]",
+        "SYSMESSAGE " + marker + " C|dupe_chars_after|[<SERV.CHARS>]",
+        "SYSMESSAGE " + marker + "_END",
+    ]
+
+    equip = ["TAG.probe_text=itemtext"]
+    equip += dotted_expression_lines("I", "SRC.SYSMESSAGE")
+    equip += [
+        "SRC.TAG.cmd_item_src_set=11",
+        "F_DOTTED_SERIAL.TAG.cmd_item_function_set=18",
+        "SRC.SYSMESSAGE " + marker + " I|cmd_readback|[<tag(cmd_item_function_set)>]",
+    ]
+
+    sections = (
+        f"\n[ITEMDEF 0x{DOTTED_PROBE_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_DOTTED_PROBE\n"
+        "NAME=synthetic dotted probe\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        f"LAYER={DOTTED_PROBE_LAYER}\n"
+        "ON=@Equip\n" + "\n".join(equip) + "\n"
+        f"\n[ITEMDEF 0x{DOTTED_PROBE_DISPOSABLE_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_DOTTED_DISPOSABLE\n"
+        "NAME=synthetic dotted disposable\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        f"LAYER={DOTTED_PROBE_LAYER}\n"
+        "ON=@Create\n"
+        "VAR dotted_disposable,<SERIAL>\n"
+        "\n[FUNCTION f_dotted_serial]\n"
+        "RETURN <SERIAL>\n"
+        "\n[FUNCTION f_dotted_arg]\n"
+        "RETURN <ARGS>\n"
+        "\n[FUNCTION f_dotted_disposable]\n"
+        "RETURN <VAR(dotted_disposable)>\n"
+    )
+    return "\n".join(login) + "\n", sections
+
+
 def write_scripts(
     root: Path,
     *,
@@ -152,11 +310,15 @@ def write_scripts(
     multi_property_probe: bool = False,
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
+    dotted_expression_probe: bool = False,
 ) -> None:
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
         if unknown_newbie
         else ""
+    )
+    dotted_expression_login, dotted_expression_sections = (
+        dotted_expression_scripts() if dotted_expression_probe else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -485,7 +647,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
 RETURN
 ON=@Logout
@@ -526,7 +688,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-
+""" + dotted_expression_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -865,6 +1027,11 @@ def main() -> int:
         action="store_true",
         help="seed a timer-owner, nested-item, sibling, and UID-cleanup probe",
     )
+    parser.add_argument(
+        "--dotted-expression-probe",
+        action="store_true",
+        help="evaluate dotted reference expressions and commands at login",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -909,6 +1076,7 @@ def main() -> int:
         multi_property_probe=args.multi_property,
         named_resource_id_probe=args.named_resource_ids,
         timer_lifetime_probe=args.timer_lifetime_probe,
+        dotted_expression_probe=args.dotted_expression_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
