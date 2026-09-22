@@ -430,6 +430,7 @@ public:
 
 					CGVariant vArgs;
 					CGVariant vValRet;
+					bool fDottedExpressionResolved = false;
 
 					if ( *pszArgs == '(' )
 					{
@@ -449,8 +450,13 @@ public:
 					HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
 					rejected.Observe(hRes, szKey, m_pBaseObj);
 					if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
+					{
 						hRes = NO_ERROR;
-					if ( hRes == NO_ERROR )
+						fDottedExpressionResolved = true;
+						sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+						fResolved = true;
+					}
+					if ( hRes == NO_ERROR && !fDottedExpressionResolved )
 					{
 						CScriptObj* pRef = vValRet.GetRef();
 						if ( pRef != NULL )
@@ -627,6 +633,7 @@ public:
 
 				CGVariant vArgs;
 				CGVariant vValRet;
+				bool fDottedExpressionResolved = false;
 
 				if ( *pszArgs == '(' )
 				{
@@ -654,6 +661,7 @@ public:
 				{
 					sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
 					fResolved = true;
+					fDottedExpressionResolved = true;
 				}
 
 				// Try global function dispatch.
@@ -664,7 +672,7 @@ public:
 				if ( hRes != NO_ERROR && !fDottedRootResolved &&
 					ResolveDottedFunctionResult(szKey, vValRet, rejected) )
 					hRes = NO_ERROR;
-				if ( hRes == NO_ERROR )
+				if ( hRes == NO_ERROR && !fDottedExpressionResolved )
 				{
 					// Object reference chaining: <argo.tag(name)>, <argo.uid>, etc.
 					CScriptObj* pRef = vValRet.GetRef();

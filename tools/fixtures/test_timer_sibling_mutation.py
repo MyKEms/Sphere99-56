@@ -267,6 +267,17 @@ def main() -> int:
                     prefix: parse_value(observed, prefix)
                     for prefix in expected_relations
                 },
+                dotted_dupe={
+                    "before_chars": dupe_before,
+                    "after_chars": dupe_after,
+                    "reference_count": parse_value(observed, "SPHERE_REVIEW_DUPE_REF_COUNT"),
+                    "value": dupe_value,
+                    "value_count": parse_value(observed, "SPHERE_REVIEW_DUPE_VALUE_COUNT"),
+                    "value_valid": dupe_valid,
+                    "value_valid_count": parse_value(
+                        observed, "SPHERE_REVIEW_DUPE_VALUE_VALID_COUNT"
+                    ),
+                },
                 marker_counts={prefix: marker_count(observed, prefix) for prefix in REQUIRED_MARKERS},
             )
             if failures:
@@ -295,7 +306,8 @@ def main() -> int:
         "timer-sibling-mutation probe passed: "
         f"before_uids={evidence['before_uids']!r} "
         f"after_uids={evidence['after_uids']!r} "
-        f"relations={evidence['relation_values']!r}"
+        f"relations={evidence['relation_values']!r} "
+        f"dotted_dupe={evidence['dotted_dupe']!r}"
     )
     return 0
 
