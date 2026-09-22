@@ -861,6 +861,8 @@ def write_world_load_counts_save(
     typedef_container_reference: bool,
     multi_property_reference: bool,
     named_container_reference: bool,
+    rejected_property: bool,
+    weird_item: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -869,7 +871,29 @@ def write_world_load_counts_save(
         "VERSION=0.99",
         "SAVECOUNT=0",
     ]
-    if named_container_reference:
+    if rejected_property:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                "SERIAL=4",
+                "P=128,128,0",
+                "SYNTHETIC_LEGACY_UNUSED=1",
+                "[WORLDITEM DEFAULTITEM]",
+                "SERIAL=5",
+                "P=129,128,0",
+                "HITS=10",
+            ]
+        )
+    elif weird_item:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                "SERIAL=4",
+                "P=128,128,0",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+            ]
+        )
+    elif named_container_reference:
         world_sections.extend(
             [
                 "[WORLDITEM SYNTHETIC_ALLOC_CONTAINER]",
@@ -1121,6 +1145,16 @@ def main() -> int:
         help="add named ITEMDEF/CHARDEF entries and a nested named-container save",
     )
     parser.add_argument(
+        "--rejected-property",
+        action="store_true",
+        help="include one saved meaningful property rejected by the item loader",
+    )
+    parser.add_argument(
+        "--weird-item",
+        action="store_true",
+        help="include one saved item that is deleted as invalid during load",
+    )
+    parser.add_argument(
         "--timer-lifetime-probe",
         action="store_true",
         help="seed a timer-owner, nested-item, sibling, and UID-cleanup probe",
@@ -1139,6 +1173,8 @@ def main() -> int:
         args.typedef_container_reference,
         args.multi_property,
         args.named_resource_ids,
+        args.rejected_property,
+        args.weird_item,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -1185,6 +1221,8 @@ def main() -> int:
             typedef_container_reference=args.typedef_container_reference,
             multi_property_reference=args.multi_property,
             named_container_reference=args.named_resource_ids,
+            rejected_property=args.rejected_property,
+            weird_item=args.weird_item,
         )
     if args.timer_lifetime_probe:
         write_timer_lifetime_save(root)

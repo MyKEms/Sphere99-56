@@ -221,6 +221,11 @@ void CWorld::ResetLoadIntegrity()
 	m_iLoadChars = 0;
 	m_iLoadAllocatedItems = 0;
 	m_iLoadAllocatedChars = 0;
+	m_iLoadAccepted = 0;
+	m_iLoadToleratedLegacy = 0;
+	m_iLoadRejected = 0;
+	m_iLoadDefaulted = 0;
+	m_iLoadDeleted = 0;
 	m_fSaveBlockedByLoad = false;
 	m_fSaveFailed = false;
 	m_fLoadIntegrityReported = false;
@@ -278,6 +283,47 @@ void CWorld::CaptureLoadCounts()
 	m_iLoadAllocatedChars = g_Serv.StatGet( SERV_STAT_CHARS );
 	m_fLoadCountsCaptured = true;
 	LogLoadCounts();
+}
+
+void CWorld::RecordLoadDiagnostic( LOAD_DIAGNOSTIC_TYPE type )
+{
+	switch ( type )
+	{
+	case LOAD_DIAG_ACCEPTED:
+		m_iLoadAccepted++;
+		break;
+	case LOAD_DIAG_TOLERATED_LEGACY:
+		m_iLoadToleratedLegacy++;
+		break;
+	case LOAD_DIAG_REJECTED:
+		m_iLoadRejected++;
+		break;
+	case LOAD_DIAG_DEFAULTED:
+		m_iLoadDefaulted++;
+		break;
+	case LOAD_DIAG_DELETED:
+		m_iLoadDeleted++;
+		break;
+	}
+}
+
+void CWorld::FormatLoadDiagnostics( CGString& s ) const
+{
+	s.Format( "world load diagnostics: accepted=%d tolerated_legacy=%d rejected=%d "
+		"defaulted=%d deleted=%d",
+		m_iLoadAccepted, m_iLoadToleratedLegacy, m_iLoadRejected,
+		m_iLoadDefaulted, m_iLoadDeleted );
+}
+
+void CWorld::LogLoadDiagnostics() const
+{
+	CGString sDiagnostics;
+	FormatLoadDiagnostics( sDiagnostics );
+	g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT, "%s" LOG_CR, (LPCTSTR) sDiagnostics );
+#ifndef _WIN32
+	fprintf( stderr, "[INFO] %s\n", (LPCTSTR) sDiagnostics );
+	fflush( stderr );
+#endif
 }
 
 void CWorld::CleanupLoadOrphans()
@@ -837,6 +883,7 @@ bool CWorld::LoadFileForTest( LPCTSTR pszName )
 	bool fLoaded = LoadFile( pszName );
 	CleanupLoadOrphans();
 	CaptureLoadCounts();
+	LogLoadDiagnostics();
 	ReportLoadIntegrity();
 	return fLoaded;
 }
@@ -984,6 +1031,7 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	const TCHAR* pszVersion = SPHERE_VERSION;
 	m_iLoadVersion = Exp_GetComplex( pszVersion );	// Set m_iLoadVersion
 	CaptureLoadCounts();
+	LogLoadDiagnostics();
 	g_Serv.OnTriggerEvent( SERVTRIG_LoadDone );
 
 	return( true );
