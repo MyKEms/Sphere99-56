@@ -318,6 +318,7 @@ private:
 	int		m_iLoadAllocatedItems;	// current constructor statistic at load completion
 	int		m_iLoadAllocatedChars;	// current constructor statistic at load completion
 	bool	m_fSaveBlockedByLoad;
+	bool	m_fSaveFailed;
 	bool	m_fLoadIntegrityReported;
 	bool	m_fLoadCountsCaptured;
 
@@ -356,6 +357,7 @@ private:
 	void CaptureLoadCounts();
 
 	bool SaveTry(bool fForceImmediate); // Save world state
+	bool FailSave( LPCTSTR pszReason );
 	void GarbageCollection_GMPages();
 	bool SaveStage();
 	static void GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int savecount );
@@ -466,8 +468,8 @@ public:
 
 	HRESULT Export( LPCTSTR pszFilename, const CChar* pSrc, WORD iModeFlags = IMPFLAGS_ITEMS, int iDist = SHRT_MAX, int dx = 0, int dy = 0 );
 	HRESULT Import( LPCTSTR pszFilename, const CChar* pSrc, WORD iModeFlags = IMPFLAGS_ITEMS, int iDist = SHRT_MAX, LPCSTR pszAgs1 = NULL, LPCSTR pszAgs2 = NULL );
-	void Save( bool fForceImmediate ); // Save world state
-	void Save( bool fForceImmediate, bool fAllowDamagedWorld ); // Explicit admin override.
+	bool Save( bool fForceImmediate ); // Save world state
+	bool Save( bool fForceImmediate, bool fAllowDamagedWorld ); // Explicit admin override.
 	bool IsSaveBlockedByLoad() const { return m_fSaveBlockedByLoad; }
 	int GetLoadSkippedSections() const { return m_iLoadSkippedSections; }
 	int GetLoadSkippedObjects() const { return m_iLoadSkippedObjects; }

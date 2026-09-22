@@ -172,7 +172,7 @@ int main()
 	CGVariant vValRet;
 	const HRESULT hSave = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL );
 	const int iRemainingEntries = CountDirectoryEntries( szTempDir );
-	const bool fSafe = hSave == NO_ERROR &&
+	const bool fSafe = hSave != NO_ERROR &&
 		g_World.m_iSaveCountID == iSaveCountBefore && iRemainingEntries == 1;
 
 	unlink( sWorldPath.c_str() );

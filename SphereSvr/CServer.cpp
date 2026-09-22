@@ -942,11 +942,15 @@ HRESULT CServer::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 			bool fForceImmediate = ( iArgQty > 0 ) ? ( vArgs.GetArrayInt(0) != 0 ) : false;
 			if ( fAllowDamagedWorld )
 				fForceImmediate = true;
-			g_World.Save( fForceImmediate, fAllowDamagedWorld );
-			if ( g_World.IsSaveBlockedByLoad() && !fAllowDamagedWorld )
+			const bool fSaveOK = g_World.Save( fForceImmediate, fAllowDamagedWorld );
+			if ( !fSaveOK )
 			{
-				if ( pSrc )
-					pSrc->WriteString( "Save refused: the world load was incomplete. Use admin SAVE FORCE after review." LOG_CR );
+				if ( g_World.IsSaveBlockedByLoad() && !fAllowDamagedWorld )
+				{
+					if ( pSrc )
+						pSrc->WriteString( "Save refused: the world load was incomplete. Use admin SAVE FORCE after review." LOG_CR );
+				}
+				return HRES_INTERNAL_ERROR;
 			}
 		}
 		break;

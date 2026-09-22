@@ -333,7 +333,7 @@ void CScript::SeekContext(CScriptLineContext& context)
 ///////////////////////////////////////////////////////////////
 // Writing
 
-void CScript::WriteSection(LPCTSTR pszSection, ...)
+bool CScript::WriteSection(LPCTSTR pszSection, ...)
 {
 	va_list vargs;
 	va_start(vargs, pszSection);
@@ -342,17 +342,19 @@ void CScript::WriteSection(LPCTSTR pszSection, ...)
 	VPrintf(pszSection, vargs);
 	Printf("]\n");
 	va_end(vargs);
+	return !HasIOError();
 }
 
-void CScript::WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal)
+bool CScript::WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal)
 {
 	if (!pszKey || !pszKey[0])
-		return;
+		return false;
 
 	if (lpszVal && lpszVal[0])
 		Printf("%s=%s\n", pszKey, lpszVal);
 	else
 		Printf("%s\n", pszKey);
+	return !HasIOError();
 }
 
 void CScript::WriteKeyInt(LPCTSTR pszKey, int iValue)
@@ -373,13 +375,11 @@ bool CScript::WriteProfileStringSec(LPCTSTR pszSection, LPCTSTR pszKey, LPCTSTR 
 {
 	if (!FindSection(pszSection, 0))
 		return false;
-	WriteKey(pszKey, pszVal);
-	return true;
+	return WriteKey(pszKey, pszVal);
 }
 
 bool CScript::WriteProfileStringOffset(long lSectionOffset, LPCTSTR pszKey, LPCTSTR pszVal)
 {
 	Seek(lSectionOffset, SEEK_SET);
-	WriteKey(pszKey, pszVal);
-	return true;
+	return WriteKey(pszKey, pszVal);
 }
