@@ -125,6 +125,7 @@ def main() -> int:
     )
 
     failures: list[str] = []
+    evidence: dict[str, object] = {}
 
     def exercise() -> None:
         sock, _ = game_connect(
@@ -156,7 +157,7 @@ def main() -> int:
             messages = collect_markers(
                 sock,
                 response,
-                10.0 if args.item_first else 26.0,
+                26.0,
                 PREFIXES + ("SPHERE_TIMER_COUNTS_AFTER", "SPHERE_TIMER_UIDS_AFTER"),
             )
             observed_messages = all_system_messages(messages)
@@ -198,7 +199,30 @@ def main() -> int:
                 count = marker_count(observed_messages, prefix)
                 if count != 1:
                     failures.append(f"timer marker {prefix} occurred {count} times")
-            if find_system_message(messages, "SPHERE_TIMER_SIBLING_TRIGGERED") is not None:
+            evidence.update(
+                before_counts=before,
+                after_counts=after,
+                before_uids=before_uids,
+                after_uids=after_uids,
+                marker_counts={
+                    prefix: marker_count(observed_messages, prefix)
+                    for prefix in (
+                        "SPHERE_TIMER_LIFETIME_TRIGGERED",
+                        "SPHERE_TIMER_REMOVE_RETURNED",
+                        "SPHERE_TIMER_UNEQUIP_TRIGGERED",
+                        "SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED",
+                        "SPHERE_TIMER_LISTENER_ALIVE",
+                        "SPHERE_TIMER_COUNTS_BEFORE",
+                        "SPHERE_TIMER_UIDS_BEFORE",
+                        "SPHERE_TIMER_COUNTS_AFTER",
+                        "SPHERE_TIMER_UIDS_AFTER",
+                    )
+                },
+                sibling_count=marker_count(
+                    observed_messages, "SPHERE_TIMER_SIBLING_TRIGGERED"
+                ),
+            )
+            if evidence["sibling_count"]:
                 failures.append("deleted sibling timer ran after owner teardown")
             if failures:
                 failures.append(f"observed synthetic messages: {observed_messages!r}")
@@ -222,7 +246,15 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("timer-lifetime probe passed: owner, nested children, and sibling left no UID entries")
+    print(
+        "timer-lifetime probe passed: "
+        f"before_counts={evidence['before_counts']!r} "
+        f"after_counts={evidence['after_counts']!r} "
+        f"before_uids={evidence['before_uids']!r} "
+        f"after_uids={evidence['after_uids']!r} "
+        f"marker_counts={evidence['marker_counts']!r} "
+        f"sibling_count={evidence['sibling_count']}"
+    )
     return 0
 
 
