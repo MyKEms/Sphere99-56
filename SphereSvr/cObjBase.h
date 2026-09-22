@@ -237,12 +237,15 @@ public:
 	static int  sm_iCount;		// how many total objects in the world ?
 	static bool sm_fDeleteReal;	// Delete for real. not just place in "to be deleted" list
 	bool IsDeletePending() const { return m_fDeletePending; }
+	bool HasLoadToleratedLegacy() const { return m_fLoadToleratedLegacy; }
+	void SetLoadToleratedLegacy( bool fTolerated ) { m_fLoadToleratedLegacy = fTolerated; }
 
 protected:
 	CRefPtr<CObjBaseDef> m_BaseRef;	// Pointer to the resource that describes this type.
 
 private:
 	bool m_fDeletePending;		// Runtime deletion is already queued or in progress.
+	bool m_fLoadToleratedLegacy;	// An unknown saved property was tolerated during load.
 	CServTime m_timeout;		// when does this rot away ? or other action. 0 = never, else system time
 	HUE_TYPE m_wHue;		// Hue or skin color. (WORD w/High 2 bits reserved)
 };

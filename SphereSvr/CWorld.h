@@ -291,6 +291,15 @@ public:
 
 class CGMPage;
 
+enum LOAD_DIAGNOSTIC_TYPE
+{
+	LOAD_DIAG_ACCEPTED,
+	LOAD_DIAG_TOLERATED_LEGACY,
+	LOAD_DIAG_REJECTED,
+	LOAD_DIAG_DEFAULTED,
+	LOAD_DIAG_DELETED,
+};
+
 extern class CWorld : public CWorldThread
 {
 	// the world. Stuff saved in *World.SCP
@@ -317,6 +326,11 @@ private:
 	int		m_iLoadChars;		// character sections accepted by the resource loader
 	int		m_iLoadAllocatedItems;	// current constructor statistic at load completion
 	int		m_iLoadAllocatedChars;	// current constructor statistic at load completion
+	int		m_iLoadAccepted;
+	int		m_iLoadToleratedLegacy;
+	int		m_iLoadRejected;
+	int		m_iLoadDefaulted;
+	int		m_iLoadDeleted;
 	bool	m_fSaveBlockedByLoad;
 	bool	m_fSaveFailed;
 	bool	m_fLoadIntegrityReported;
@@ -474,9 +488,17 @@ public:
 	int GetLoadSkippedSections() const { return m_iLoadSkippedSections; }
 	int GetLoadSkippedObjects() const { return m_iLoadSkippedObjects; }
 	int GetLoadFailedParses() const { return m_iLoadFailedParses; }
+	int GetLoadAccepted() const { return m_iLoadAccepted; }
+	int GetLoadToleratedLegacy() const { return m_iLoadToleratedLegacy; }
+	int GetLoadRejected() const { return m_iLoadRejected; }
+	int GetLoadDefaulted() const { return m_iLoadDefaulted; }
+	int GetLoadDeleted() const { return m_iLoadDeleted; }
 	bool HasLoadCounts() const { return m_fLoadCountsCaptured; }
 	void FormatLoadCounts( CGString& s ) const;
 	void LogLoadCounts() const;
+	void RecordLoadDiagnostic( LOAD_DIAGNOSTIC_TYPE type );
+	void FormatLoadDiagnostics( CGString& s ) const;
+	void LogLoadDiagnostics() const;
 	bool LoadAll( LPCTSTR pszLoadName = NULL );
 	void Close( bool fResources );
 

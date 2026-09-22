@@ -2638,12 +2638,32 @@ bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 {
 	// Read all properties directly through CItem's virtual s_PropSet,
 	// NOT through CObjBase::s_LoadProps which dispatches via CResourceObj vtable.
+	bool fRejected = false;
+	bool fToleratedLegacy = false;
 	while (s.ReadKeyParse())
 	{
 		CGVariant vArg;
 		vArg = s.GetArgRaw();
-		s_PropSet(s.GetKey(), vArg);
+		LPCTSTR pszKey = s.GetKey();
+		HRESULT hRes = s_PropSet( pszKey, vArg );
+		if ( hRes == HRES_UNKNOWN_PROPERTY )
+		{
+			fToleratedLegacy = true;
+		}
+		else if ( hRes != NO_ERROR )
+		{
+			if ( !fRejected )
+			{
+				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+					"WORLDITEM property rejected: uid=0%x key='%s' hresult=%ld" LOG_CR,
+					(DWORD)GetUID(), pszKey, (long)hRes );
+			}
+			fRejected = true;
+		}
 	}
+	SetLoadToleratedLegacy( fToleratedLegacy );
+	if ( fRejected )
+		return false;
 	if ( GetContainer() == NULL )	// Place into the world.
 	{
 		if ( GetTopPoint().IsCharValid())
@@ -2657,6 +2677,7 @@ bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 	{
 		DEBUG_ERR(( "Item 0%x Invalid, id=%s, code=0%x" LOG_CR, GetUID(), (LPCTSTR) GetResourceName(), iResultCode ));
 		DeleteThis();
+		return false;
 	}
 
 	return( true );

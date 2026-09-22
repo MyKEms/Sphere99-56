@@ -2110,12 +2110,32 @@ void CChar::s_WriteParity( CScript& s )
 bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 {
 	// Read all properties directly through CChar's virtual s_PropSet.
+	bool fRejected = false;
+	bool fToleratedLegacy = false;
 	while (s.ReadKeyParse())
 	{
 		CGVariant vArg;
 		vArg = s.GetArgRaw();
-		s_PropSet(s.GetKey(), vArg);
+		LPCTSTR pszKey = s.GetKey();
+		HRESULT hRes = s_PropSet( pszKey, vArg );
+		if ( hRes == HRES_UNKNOWN_PROPERTY )
+		{
+			fToleratedLegacy = true;
+		}
+		else if ( hRes != NO_ERROR )
+		{
+			if ( !fRejected )
+			{
+				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+					"WORLDCHAR property rejected: uid=0%x key='%s' hresult=%ld" LOG_CR,
+					(DWORD)GetUID(), pszKey, (long)hRes );
+			}
+			fRejected = true;
+		}
 	}
+	SetLoadToleratedLegacy( fToleratedLegacy );
+	if ( fRejected )
+		return false;
 
 	// Init the STATF_SaveParity flag.
 	// StatFlag_Mod( STATF_SaveParity, g_World.m_fSaveParity );

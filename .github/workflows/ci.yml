@@ -162,6 +162,24 @@ jobs:
             --port 2714 \
             --unresolved-worldchar-type
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-rejected-property" \
+            --world-load-counts \
+            --rejected-property
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-rejected-property" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2722 \
+            --rejected-property
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-weird-item" \
+            --world-load-counts \
+            --weird-item
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-weird-item" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2723 \
+            --weird-item
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-world-counts-noncontainer" \
             --world-load-counts \
             --noncontainer-reference
@@ -274,6 +292,8 @@ jobs:
             ${{ runner.temp }}/sphere-asan-coverage-disabled/server.log
             ${{ runner.temp }}/sphere-asan-world-counts/server.log
             ${{ runner.temp }}/sphere-asan-world-counts-truncated/server.log
+            ${{ runner.temp }}/sphere-asan-world-counts-rejected-property/server.log
+            ${{ runner.temp }}/sphere-asan-world-counts-weird-item/server.log
             ${{ runner.temp }}/sphere-asan-named-resource-ids/server.log
             ${{ runner.temp }}/sphere-asan-timer-lifetime/server.log
             ${{ runner.temp }}/sphere-asan-world-save/server.log
@@ -447,6 +467,24 @@ jobs:
             --port 2715 \
             --unresolved-worldchar-type
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-counts-rejected-property" \
+            --world-load-counts \
+            --rejected-property
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-world-counts-rejected-property" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2722 \
+            --rejected-property
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-counts-weird-item" \
+            --world-load-counts \
+            --weird-item
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-world-counts-weird-item" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2723 \
+            --weird-item
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-world-counts-noncontainer" \
             --world-load-counts \
             --noncontainer-reference
@@ -551,6 +589,8 @@ jobs:
             ${{ runner.temp }}/sphere-coverage-disabled/server.log
             ${{ runner.temp }}/sphere-world-counts/server.log
             ${{ runner.temp }}/sphere-world-counts-truncated/server.log
+            ${{ runner.temp }}/sphere-world-counts-rejected-property/server.log
+            ${{ runner.temp }}/sphere-world-counts-weird-item/server.log
             ${{ runner.temp }}/sphere-timer-lifetime/server.log
             ${{ runner.temp }}/sphere-world-save/server.log
             ${{ runner.temp }}/sphere-dotted-expressions/server.log
