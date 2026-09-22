@@ -18,6 +18,10 @@ COUNT_LINE_RE = re.compile(
     r"world load: created_items=\d+ created_chars=\d+ read_items=\d+ "
     r"read_chars=\d+ allocated_items=\d+ allocated_chars=\d+"
 )
+DIAGNOSTIC_LINE_RE = re.compile(
+    r"world load diagnostics: accepted=\d+ tolerated_legacy=\d+ "
+    r"rejected=\d+ defaulted=\d+ deleted=\d+"
+)
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -89,6 +93,16 @@ def main() -> int:
         action="store_true",
         help="expect a named scripted container to accept a saved child item",
     )
+    parser.add_argument(
+        "--rejected-property",
+        action="store_true",
+        help="expect a meaningful saved property to be rejected",
+    )
+    parser.add_argument(
+        "--weird-item",
+        action="store_true",
+        help="expect an invalid saved item to be deleted during load",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -99,6 +113,8 @@ def main() -> int:
             args.typedef_container_reference,
             args.multi_property,
             args.named_container_reference,
+            args.rejected_property,
+            args.weird_item,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -113,10 +129,15 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    if args.noncontainer_reference:
+    if args.rejected_property or args.weird_item:
         expected_line = (
-            "world load: created_items=3 created_chars=1 read_items=3 read_chars=1 "
+            "world load: created_items=1 created_chars=1 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=1"
+        )
+    elif args.noncontainer_reference:
+        expected_line = (
+            "world load: created_items=1 created_chars=1 read_items=3 read_chars=1 "
+            "allocated_items=3 allocated_chars=1"
         )
     elif args.unresolved_worldchar_type:
         expected_line = (
@@ -137,6 +158,37 @@ def main() -> int:
         expected_line = (
             "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=1"
+        )
+
+    if args.rejected_property:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=1 tolerated_legacy=1 rejected=1 "
+            "defaulted=0 deleted=0"
+        )
+    elif args.weird_item:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=2 tolerated_legacy=0 rejected=0 "
+            "defaulted=0 deleted=1"
+        )
+    elif args.unresolved_worldchar_type:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=2 tolerated_legacy=0 rejected=0 "
+            "defaulted=1 deleted=0"
+        )
+    elif args.truncated:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=1 "
+            "defaulted=0 deleted=0"
+        )
+    elif args.noncontainer_reference:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=2 tolerated_legacy=0 rejected=2 "
+            "defaulted=0 deleted=0"
+        )
+    else:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=0 "
+            "defaulted=0 deleted=0"
         )
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
@@ -186,6 +238,8 @@ def main() -> int:
                     not args.truncated
                     and not args.unresolved_worldchar_type
                     and not args.noncontainer_reference
+                    and not args.rejected_property
+                    and not args.weird_item
                     and startup_errors
                 ):
                     raise RuntimeError(
@@ -198,6 +252,22 @@ def main() -> int:
                     raise RuntimeError(
                         "truncated save did not report exactly one skipped object section"
                     )
+                if args.rejected_property:
+                    if not any(
+                        "WORLDITEM property rejected" in line and "key='HITS'" in line
+                        for line in startup_errors
+                    ):
+                        raise RuntimeError(
+                            "rejected-property fixture did not report the rejected HITS property"
+                        )
+                if args.weird_item:
+                    if not any(
+                        "reason=item was deleted as invalid during load" in line
+                        for line in startup_errors
+                    ):
+                        raise RuntimeError(
+                            "weird-item fixture did not report deletion during load"
+                        )
                 if args.unresolved_worldchar_type:
                     diagnostic = (
                         "WORLDCHAR load fallback: uid=3 "
@@ -252,10 +322,32 @@ def main() -> int:
                             "nested non-container diagnostic is missing fields: "
                             + ", ".join(missing)
                         )
+                    rejected_properties = [
+                        line
+                        for line in startup_errors
+                        if "WORLDITEM property rejected" in line
+                    ]
+                    if len(rejected_properties) != 2:
+                        raise RuntimeError(
+                            "nested non-container fixture did not reject both invalid CONT properties"
+                        )
+                    rejected_objects = [
+                        line
+                        for line in startup_errors
+                        if "WORLDITEM load failed" in line
+                    ]
+                    if len(rejected_objects) != 2:
+                        raise RuntimeError(
+                            "nested non-container fixture did not report both rejected objects"
+                        )
                     unexpected_errors = [
                         line
                         for line in startup_errors
                         if line not in diagnostics
+                        and line not in rejected_properties
+                        and line not in rejected_objects
+                        and "Invalid container 05" not in line
+                        and "world load skipped 2 sections (2 objects)" not in line
                     ]
                     if unexpected_errors:
                         raise RuntimeError(
@@ -272,6 +364,8 @@ def main() -> int:
                     not args.typedef_container_reference
                     and not args.multi_property
                     and not args.named_container_reference
+                    and not args.rejected_property
+                    and not args.weird_item
                 ):
                     sock, _ = game_connect(
                         args.host,
@@ -341,6 +435,8 @@ def main() -> int:
             or args.typedef_container_reference
             or args.multi_property
             or args.named_container_reference
+            or args.rejected_property
+            or args.weird_item
         )
         else [expected_line, expected_line]
     )
@@ -350,12 +446,23 @@ def main() -> int:
             f"expected {expected_count_lines!r}, got {all_count_lines!r}"
         )
 
+    diagnostic_lines = [
+        match.group(0) for match in DIAGNOSTIC_LINE_RE.finditer(log_contents)
+    ]
+    if diagnostic_lines != [expected_diagnostics]:
+        failures.append(
+            "unexpected load diagnostics: "
+            f"expected {[expected_diagnostics]!r}, got {diagnostic_lines!r}"
+        )
+
     if (
         not args.unresolved_worldchar_type
         and not args.noncontainer_reference
         and not args.typedef_container_reference
         and not args.multi_property
         and not args.named_container_reference
+        and not args.rejected_property
+        and not args.weird_item
     ):
         admin_lines = [
             message

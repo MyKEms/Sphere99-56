@@ -971,6 +971,31 @@ static void DeleteFailedWorldLoadObject( CObjBase* pObj )
 	}
 }
 
+static void RecordWorldLoadDiagnostic( CObjBase* pObj, bool fLoaded, bool fDefaulted )
+{
+	if ( pObj && pObj->IsDeletePending())
+	{
+		g_World.RecordLoadDiagnostic( LOAD_DIAG_DELETED );
+		return;
+	}
+	if ( !pObj || !fLoaded )
+	{
+		g_World.RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
+		return;
+	}
+	if ( fDefaulted )
+	{
+		g_World.RecordLoadDiagnostic( LOAD_DIAG_DEFAULTED );
+		return;
+	}
+	if ( pObj->HasLoadToleratedLegacy())
+	{
+		g_World.RecordLoadDiagnostic( LOAD_DIAG_TOLERATED_LEGACY );
+		return;
+	}
+	g_World.RecordLoadDiagnostic( LOAD_DIAG_ACCEPTED );
+}
+
 bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason, bool* pWorldCharDefaulted )
 {
 	// Index or read any resource blocks we know how to handle.
@@ -1032,6 +1057,8 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 		if ( restype <= 0 )
 		{
 			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN, "Unknown section '%s' in '%s'" LOG_CR, (LPCTSTR) s.GetKey(), (LPCTSTR) s.GetFileTitle());
+			if ( s.IsSectionType( "WORLDITEM" ) || s.IsSectionType( "WORLDCHAR" ))
+				g_World.RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
 			return( false );
 		}
 	}
@@ -1077,6 +1104,8 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 		{
 			if ( pFailureReason && restype == RES_WorldChar )
 				pFailureReason->Copy( "character type does not resolve to a resource index" );
+			if ( restype == RES_WorldChar || restype == RES_WorldItem )
+				g_World.RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
 			DEBUG_ERR(( "Invalid %s block index '%s'" LOG_CR, (LPCTSTR) s.GetSection(), (LPCTSTR) s.GetArgRaw()));
 			return( false );
 		}
@@ -1416,15 +1445,23 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 				{
 					if ( pFailureReason )
 						pFailureReason->Copy( "character creation failed" );
+					RecordWorldLoadDiagnostic( NULL, false, false );
 					return false;
 				}
 				bool fLoaded = pWorldChar->s_LoadProps(s);
+				RecordWorldLoadDiagnostic( pWorldChar, fLoaded,
+					fLoaded && pWorldCharDefaulted && *pWorldCharDefaulted );
 				if ( !fLoaded && pFailureReason && pFailureReason->IsEmpty())
-					pFailureReason->Copy( "character properties were rejected" );
+				{
+					pFailureReason->Copy( pWorldChar->IsDeletePending()
+						? "character was deleted as invalid during load"
+						: "character properties were rejected" );
+				}
 				if ( !fLoaded )
 					DeleteFailedWorldLoadObject( pWorldChar );
 				return( fLoaded );
 			} catch (...) {
+				RecordWorldLoadDiagnostic( pWorldChar, false, false );
 				DeleteFailedWorldLoadObject( pWorldChar );
 				if ( pFailureReason )
 					pFailureReason->Copy( "exception while loading character properties" );
@@ -1449,6 +1486,7 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 				{
 					if ( pFailureReason )
 						pFailureReason->Copy( "item creation failed" );
+					RecordWorldLoadDiagnostic( NULL, false, false );
 					return false;
 				}
 				bool fLoaded = pWorldItem->s_LoadProps(s);
@@ -1461,12 +1499,18 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 				if ( dwTestSerial == 43 )
 					fLoaded = false;
 #endif
+				RecordWorldLoadDiagnostic( pWorldItem, fLoaded, false );
 				if ( !fLoaded && pFailureReason && pFailureReason->IsEmpty())
-					pFailureReason->Copy( "item properties were rejected" );
+				{
+					pFailureReason->Copy( pWorldItem->IsDeletePending()
+						? "item was deleted as invalid during load"
+						: "item properties were rejected" );
+				}
 				if ( !fLoaded )
 					DeleteFailedWorldLoadObject( pWorldItem );
 				return( fLoaded );
 			} catch (...) {
+				RecordWorldLoadDiagnostic( pWorldItem, false, false );
 				DeleteFailedWorldLoadObject( pWorldItem );
 				if ( pFailureReason )
 					pFailureReason->Copy( "exception while loading item properties" );

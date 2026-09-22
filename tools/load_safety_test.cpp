@@ -120,14 +120,24 @@ int main()
 	if ( !fLoaded || !g_World.IsSaveBlockedByLoad() ||
 		g_World.GetLoadSkippedSections() != 3 ||
 		g_World.GetLoadSkippedObjects() != 3 ||
-		g_World.GetLoadFailedParses() != 3 )
+		g_World.GetLoadFailedParses() != 3 ||
+		g_World.GetLoadAccepted() != 1 ||
+		g_World.GetLoadToleratedLegacy() != 0 ||
+		g_World.GetLoadRejected() != 3 ||
+		g_World.GetLoadDefaulted() != 0 ||
+		g_World.GetLoadDeleted() != 0 )
 	{
 		std::fprintf( stderr,
-			"load guard did not record the failed object sections: loaded=%d sections=%d objects=%d parses=%d blocked=%d\n",
+			"load guard did not record the failed object sections: loaded=%d sections=%d objects=%d parses=%d accepted=%d tolerated=%d rejected=%d defaulted=%d deleted=%d blocked=%d\n",
 			fLoaded ? 1 : 0,
 			g_World.GetLoadSkippedSections(),
 			g_World.GetLoadSkippedObjects(),
 			g_World.GetLoadFailedParses(),
+			g_World.GetLoadAccepted(),
+			g_World.GetLoadToleratedLegacy(),
+			g_World.GetLoadRejected(),
+			g_World.GetLoadDefaulted(),
+			g_World.GetLoadDeleted(),
 			g_World.IsSaveBlockedByLoad() ? 1 : 0 );
 		unlink( sWorldPath.c_str() );
 		rmdir( szTempDir );
