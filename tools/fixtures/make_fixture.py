@@ -28,6 +28,23 @@ UID_F_ITEM = 0x40000000
 TIMER_LIFETIME_DELAY_SECONDS = 15
 TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 
+# The sibling-mutation fixture keeps three independent source lists and three
+# unrelated destination containers.  The serials are deliberately explicit so
+# the generated scripts can assert UID and parent relationships without any
+# private world data.
+MUTATION_OWNER_SERIALS = (200, 201, 202)
+MUTATION_DESTINATION_OWNER_SERIAL = 300
+MUTATION_DEST_SERIALS = (210, 211, 212)
+MUTATION_KEEP_SERIALS = (220, 221, 222)
+MUTATION_A_SERIALS = (230, 240, 250)
+MUTATION_B_SERIALS = (231, 241, 251)
+MUTATION_C_SERIALS = (232, 242, 253)
+MUTATION_C_CHILD_SERIALS = (233, 243, 254)
+MUTATION_TIMER_SECONDS = 5
+MUTATION_RELATION_TIMER_SECONDS = 18
+MUTATION_KEEP_TIMER_SECONDS = 19
+MUTATION_OBSERVER_DELAY_SECONDS = 22
+
 
 def write_sparse(path: Path, size: int) -> None:
     """Create a zero-filled sparse file of exactly *size* bytes."""
@@ -135,6 +152,186 @@ def skill_sections() -> str:
     return "\n".join(sections)
 
 
+def timer_sibling_mutation_definitions() -> str:
+    """Return three independent A->B sibling-mutation scenarios.
+
+    Case 1 deletes B while the owner is removing A.  Case 2 reparents B to a
+    live destination while the remaining C subtree is cleaned.  Case 3 does
+    the same with a nested B subtree and a nested C subtree.  The callbacks
+    emit only generic synthetic markers; the test checks the object registry
+    and parent links after the deferred collector has run.
+    """
+
+    owner_uids = MUTATION_OWNER_SERIALS
+    dest_uids = tuple(UID_F_ITEM | serial for serial in MUTATION_DEST_SERIALS)
+    b_uids = tuple(UID_F_ITEM | serial for serial in MUTATION_B_SERIALS)
+    uid_tokens = [
+        *(str(serial) for serial in owner_uids),
+        *(str(uid) for uid in dest_uids),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_KEEP_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_A_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_B_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_C_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_C_CHILD_SERIALS),
+    ]
+    uid_checks = "|".join(f"<ISUIDVALID {uid}>" for uid in uid_tokens)
+
+    def action_item(
+        item_id: int,
+        defname: str,
+        timer_marker: str,
+        callback_marker: str,
+        action_lines: str,
+        action_return_marker: str,
+        owner_return_marker: str,
+    ) -> str:
+        return (
+            f"\n[ITEMDEF 0x{item_id:04X}]\n"
+            f"DEFNAME={defname}\n"
+            f"NAME={defname.lower()}\n"
+            "TYPE=T_EQ_SCRIPT\n"
+            "LAYER=30\n"
+            "ON=@Timer\n"
+            f"SERV.B {timer_marker}\n"
+            "REMOVE\n"
+            f"SERV.B {timer_marker}_RETURNED\n"
+            "RETURN 1\n"
+            "ON=@UnEquip\n"
+            f"SERV.B {callback_marker}\n"
+            f"{action_lines}"
+            f"SERV.B {action_return_marker}\n"
+            "CONT.REMOVE\n"
+            f"SERV.B {owner_return_marker}\n"
+            "RETURN 1\n"
+        )
+
+    case1 = action_item(
+        0x0E7B,
+        "SYNTHETIC_MUTATION_A_DELETE",
+        "SPHERE_MUT_CASE1_TIMER",
+        "SPHERE_MUT_CASE1_CALLBACK",
+        f"FINDUID({b_uids[0]}).REMOVE\n",
+        "SPHERE_MUT_CASE1_B_REMOVE_RETURNED",
+        "SPHERE_MUT_CASE1_OWNER_REMOVE_RETURNED",
+    )
+    case2 = action_item(
+        0x0E7F,
+        "SYNTHETIC_MUTATION_A_REPARENT",
+        "SPHERE_MUT_CASE2_TIMER",
+        "SPHERE_MUT_CASE2_CALLBACK",
+        f"FINDUID({b_uids[1]}).CONT={dest_uids[1]}\n",
+        "SPHERE_MUT_CASE2_B_REPARENT_RETURNED",
+        "SPHERE_MUT_CASE2_OWNER_REMOVE_RETURNED",
+    )
+    case3 = action_item(
+        0x0E83,
+        "SYNTHETIC_MUTATION_A_NESTED_REPARENT",
+        "SPHERE_MUT_CASE3_TIMER",
+        "SPHERE_MUT_CASE3_CALLBACK",
+        f"FINDUID({b_uids[2]}).CONT={dest_uids[2]}\n",
+        "SPHERE_MUT_CASE3_B_REPARENT_RETURNED",
+        "SPHERE_MUT_CASE3_OWNER_REMOVE_RETURNED",
+    )
+
+    def relation_item(
+        item_id: int,
+        defname: str,
+        parent_marker: str,
+    ) -> str:
+        return (
+            f"\n[ITEMDEF 0x{item_id:04X}]\n"
+            f"DEFNAME={defname}\n"
+            f"NAME={defname.lower()}\n"
+            "TYPE=T_EQ_SCRIPT\n"
+            "LAYER=30\n"
+            + "ON=@Timer\n"
+            f"SERV.B {parent_marker} <CONT.SERIAL>\n"
+            "RETURN 1\n"
+        )
+
+    return (
+        "\n[ITEMDEF 0x0E7A]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_OBSERVER\n"
+        "NAME=synthetic mutation observer\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        f"ON=@Equip\nTIMER={MUTATION_OBSERVER_DELAY_SECONDS}\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_MUTATION_LISTENER_ALIVE\n"
+        "SERV.SAVE 1\n"
+        f"SERV.B SPHERE_MUTATION_UIDS_AFTER {uid_checks}\n"
+        f"SERV.B SPHERE_MUT_CASE2_B_PARENT <FINDUID({b_uids[1]}).CONT.SERIAL>\n"
+        f"SERV.B SPHERE_MUT_CASE3_B_PARENT <FINDUID({b_uids[2]}).CONT.SERIAL>\n"
+        f"SERV.B SPHERE_MUT_CASE1_KEEP_PARENT <FINDUID({UID_F_ITEM | MUTATION_KEEP_SERIALS[0]}).CONT.SERIAL>\n"
+        f"SERV.B SPHERE_MUT_CASE2_KEEP_PARENT <FINDUID({UID_F_ITEM | MUTATION_KEEP_SERIALS[1]}).CONT.SERIAL>\n"
+        f"SERV.B SPHERE_MUT_CASE3_KEEP_PARENT <FINDUID({UID_F_ITEM | MUTATION_KEEP_SERIALS[2]}).CONT.SERIAL>\n"
+        "RETURN 0\n"
+        + case1
+        + "\n[ITEMDEF 0x0E7C]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_B_DELETE\n"
+        "NAME=synthetic mutation B delete\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        + "\n[ITEMDEF 0x0E7D]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_C_DELETE\n"
+        "NAME=synthetic mutation C delete\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        + "\n[ITEMDEF 0x0E7E]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_NESTED_1\n"
+        "NAME=synthetic mutation nested one\n"
+        "TYPE=T_NORMAL\n"
+        + case2
+        + relation_item(
+            0x0E80,
+            "SYNTHETIC_MUTATION_B_REPARENT",
+            "SPHERE_MUT_CASE2_B_PARENT",
+        )
+        + "\n[ITEMDEF 0x0E81]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_C_REPARENT\n"
+        "NAME=synthetic mutation C reparent\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        + "\n[ITEMDEF 0x0E82]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_NESTED_2\n"
+        "NAME=synthetic mutation nested two\n"
+        "TYPE=T_NORMAL\n"
+        + case3
+        + relation_item(
+            0x0E84,
+            "SYNTHETIC_MUTATION_B_NESTED",
+            "SPHERE_MUT_CASE3_B_PARENT",
+        )
+        + "\n[ITEMDEF 0x0E86]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_C_NESTED\n"
+        "NAME=synthetic mutation C nested\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        + "\n[ITEMDEF 0x0E87]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_NESTED_3\n"
+        "NAME=synthetic mutation nested three\n"
+        "TYPE=T_NORMAL\n"
+        + "\n[ITEMDEF 0x0E88]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_DEST_1\n"
+        "NAME=synthetic mutation destination one\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        + "\n[ITEMDEF 0x0E89]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_DEST_2\n"
+        "NAME=synthetic mutation destination two\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        + "\n[ITEMDEF 0x0E8A]\n"
+        "DEFNAME=SYNTHETIC_MUTATION_DEST_3\n"
+        "NAME=synthetic mutation destination three\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        + relation_item(0x0E8B, "SYNTHETIC_MUTATION_KEEP_1", "SPHERE_MUT_CASE1_KEEP_PARENT")
+        + relation_item(0x0E8C, "SYNTHETIC_MUTATION_KEEP_2", "SPHERE_MUT_CASE2_KEEP_PARENT")
+        + relation_item(0x0E8D, "SYNTHETIC_MUTATION_KEEP_3", "SPHERE_MUT_CASE3_KEEP_PARENT")
+    )
+
+
 def write_scripts(
     root: Path,
     *,
@@ -153,6 +350,7 @@ def write_scripts(
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
+    timer_sibling_mutation_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     unknown_newbie_section = (
@@ -267,6 +465,34 @@ def write_scripts(
         if timer_lifetime_probe
         else ""
     )
+    mutation_uid_tokens = [
+        *(str(serial) for serial in MUTATION_OWNER_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_DEST_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_KEEP_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_A_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_B_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_C_SERIALS),
+        *(str(UID_F_ITEM | serial) for serial in MUTATION_C_CHILD_SERIALS),
+    ]
+    mutation_uid_checks = "|".join(
+        f"<ISUIDVALID {uid}>" for uid in mutation_uid_tokens
+    )
+    timer_sibling_mutation_before_markers = (
+        f"SERV.B SPHERE_MUTATION_UIDS_BEFORE {mutation_uid_checks}\n"
+        if timer_sibling_mutation_probe
+        else ""
+    )
+    timer_sibling_mutation_observer_login = (
+        "NEWITEM SYNTHETIC_MUTATION_OBSERVER\n"
+        "EQUIPLAST\n"
+        if timer_sibling_mutation_probe
+        else ""
+    )
+    timer_sibling_mutation_sections = (
+        timer_sibling_mutation_definitions()
+        if timer_sibling_mutation_probe
+        else ""
+    )
     timer_lifetime_owner_create = (
         "ON=@Create\nITEM=SYNTHETIC_TIMER_LIFETIME\nLAYER=30\nTIMER=5\n"
         if not timer_lifetime_probe
@@ -281,7 +507,7 @@ def write_scripts(
     unequip_remove = "CONT.REMOVE" if timer_lifetime_item_first_probe else "REMOVE"
     typedef_container_table = (
         "\n[TYPEDEFS]\nT_NORMAL 0\nT_CONTAINER 1\n"
-        if typedef_container_probe or timer_lifetime_probe
+        if typedef_container_probe or timer_lifetime_probe or timer_sibling_mutation_probe
         else ""
     )
     typedef_normal_alias = (
@@ -463,8 +689,8 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + timer_lifetime_baseline + """
-""" + timer_lifetime_observer_login + """
+""" + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
 NEWNPC SYNTHETIC_TIMER_OWNER
@@ -538,7 +764,7 @@ RETURN <SRC.SERIAL>
 P=128,128,0
 RECT=1,1,6143,4096
 
-""" + skill_sections() + """
+""" + skill_sections() + timer_sibling_mutation_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -771,6 +997,132 @@ def write_timer_lifetime_save(root: Path) -> None:
     )
 
 
+def write_timer_sibling_mutation_save(root: Path) -> None:
+    """Seed three independent sibling mutation cases and live destinations."""
+
+    owner1, owner2, owner3 = MUTATION_OWNER_SERIALS
+    dest1, dest2, dest3 = (UID_F_ITEM | serial for serial in MUTATION_DEST_SERIALS)
+    keep1, keep2, keep3 = MUTATION_KEEP_SERIALS
+    a1, a2, a3 = MUTATION_A_SERIALS
+    b1, b2, b3 = MUTATION_B_SERIALS
+    c1, c2, c3 = MUTATION_C_SERIALS
+    c1_child, c2_child, c3_child = MUTATION_C_CHILD_SERIALS
+
+    world_sections = [
+        "TITLE=Sphere synthetic sibling mutation fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+        "[EOF]",
+    ]
+    write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
+
+    def char_header(serial: int, x: int) -> list[str]:
+        return [
+            "[WORLDCHAR c_MAN]",
+            f"SERIAL={serial}",
+            "NPC=2",
+            "STR=100",
+            "INT=100",
+            "DEX=100",
+            "HITS=100",
+            "MAXHITS=100",
+            "MANA=100",
+            "STAM=100",
+            f"P={x},140,0",
+        ]
+
+    chars = [
+        *char_header(MUTATION_DESTINATION_OWNER_SERIAL, 180),
+        "[WORLDITEM DEFAULTITEM]",
+        "SERIAL=210",
+        "LAYER=21",
+        f"CONT={MUTATION_DESTINATION_OWNER_SERIAL}",
+        "TIMERD=-1",
+        "[WORLDITEM DEFAULTITEM]",
+        "SERIAL=211",
+        f"CONT={dest1}",
+        "TIMERD=-1",
+        "[WORLDITEM DEFAULTITEM]",
+        "SERIAL=212",
+        f"CONT={dest1}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_KEEP_1]",
+        f"SERIAL={keep1}",
+        f"CONT={dest1}",
+        f"TIMER={MUTATION_KEEP_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_MUTATION_KEEP_2]",
+        f"SERIAL={keep2}",
+        f"CONT={dest2}",
+        f"TIMER={MUTATION_KEEP_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_MUTATION_KEEP_3]",
+        f"SERIAL={keep3}",
+        f"CONT={dest3}",
+        f"TIMER={MUTATION_KEEP_TIMER_SECONDS}",
+        *char_header(owner1, 120),
+        "[WORLDITEM DEFAULTITEM]",
+        f"SERIAL={c1}",
+        "LAYER=21",
+        f"CONT={owner1}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_NESTED_1]",
+        f"SERIAL={c1_child}",
+        f"CONT={UID_F_ITEM | c1}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_B_DELETE]",
+        f"SERIAL={b1}",
+        f"CONT={owner1}",
+        "LAYER=30",
+        f"TIMER={MUTATION_RELATION_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_MUTATION_A_DELETE]",
+        f"SERIAL={a1}",
+        f"CONT={owner1}",
+        "LAYER=30",
+        f"TIMER={MUTATION_TIMER_SECONDS}",
+        *char_header(owner2, 140),
+        "[WORLDITEM DEFAULTITEM]",
+        f"SERIAL={c2}",
+        "LAYER=21",
+        f"CONT={owner2}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_NESTED_2]",
+        f"SERIAL={c2_child}",
+        f"CONT={UID_F_ITEM | c2}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_B_REPARENT]",
+        f"SERIAL={b2}",
+        f"CONT={owner2}",
+        "LAYER=30",
+        f"TIMER={MUTATION_RELATION_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_MUTATION_A_REPARENT]",
+        f"SERIAL={a2}",
+        f"CONT={owner2}",
+        "LAYER=30",
+        f"TIMER={MUTATION_TIMER_SECONDS}",
+        *char_header(owner3, 160),
+        "[WORLDITEM DEFAULTITEM]",
+        f"SERIAL={c3}",
+        "LAYER=21",
+        f"CONT={owner3}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_NESTED_3]",
+        f"SERIAL={c3_child}",
+        f"CONT={UID_F_ITEM | c3}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_MUTATION_B_NESTED]",
+        f"SERIAL={b3}",
+        f"CONT={owner3}",
+        "LAYER=30",
+        f"TIMER={MUTATION_RELATION_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_MUTATION_A_NESTED_REPARENT]",
+        f"SERIAL={a3}",
+        f"CONT={owner3}",
+        "LAYER=30",
+        f"TIMER={MUTATION_TIMER_SECONDS}",
+        "[EOF]",
+    ]
+    write_text(root / "save" / "spherechars.scp", "\n".join(chars))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -875,6 +1227,11 @@ def main() -> int:
         action="store_true",
         help="exercise item-first timer removal with reentrant owner removal",
     )
+    parser.add_argument(
+        "--timer-sibling-mutation-probe",
+        action="store_true",
+        help="exercise delete/reparent callbacks across three sibling lists",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -889,9 +1246,19 @@ def main() -> int:
         parser.error("world-load options require --world-load-counts")
     if sum(world_load_modes) > 1:
         parser.error("choose only one world-load fixture mode")
-    if (args.timer_lifetime_probe or args.timer_lifetime_item_first_probe) and any(world_load_modes):
+    if (
+        args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+    ) and any(world_load_modes):
         parser.error("timer-lifetime probe cannot be combined with a world-load mode")
-    if args.timer_lifetime_probe and args.timer_lifetime_item_first_probe:
+    if sum(
+        (
+            args.timer_lifetime_probe,
+            args.timer_lifetime_item_first_probe,
+            args.timer_sibling_mutation_probe,
+        )
+    ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
 
     root = args.output.resolve()
@@ -903,7 +1270,11 @@ def main() -> int:
         root,
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
-        force_garbage_collect=args.timer_lifetime_probe or args.timer_lifetime_item_first_probe,
+        force_garbage_collect=(
+            args.timer_lifetime_probe
+            or args.timer_lifetime_item_first_probe
+            or args.timer_sibling_mutation_probe
+        ),
     )
     write_scripts(
         root,
@@ -922,6 +1293,7 @@ def main() -> int:
         named_resource_id_probe=args.named_resource_ids,
         timer_lifetime_probe=args.timer_lifetime_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
+        timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -935,7 +1307,15 @@ def main() -> int:
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
-    write_mul_fixture(root)
+    if args.timer_sibling_mutation_probe:
+        write_timer_sibling_mutation_save(root)
+    write_mul_fixture(
+        root,
+        extra_item_id=0x0E8A if args.timer_sibling_mutation_probe else 0,
+    )
+    if args.timer_sibling_mutation_probe:
+        for item_id in (0x0E7D, 0x0E81, 0x0E86, 0x0E88, 0x0E89, 0x0E8A):
+            write_container_tile(root / "muls" / "tiledata.mul", item_id)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
 

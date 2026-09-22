@@ -108,14 +108,27 @@ protected:
 		if ( pszDot == NULL || pszDot == pszKey || pszDot[1] == '\0' )
 			return false;
 
-		TCHAR szRoot[SCRIPT_MAX_LINE_LEN];
+		TCHAR szRootExpr[SCRIPT_MAX_LINE_LEN];
 		size_t iRootLen = pszDot - pszKey;
-		if ( iRootLen >= sizeof(szRoot) )
+		if ( iRootLen >= sizeof(szRootExpr) )
 			return false;
 
-		memcpy(szRoot, pszKey, iRootLen);
-		szRoot[iRootLen] = '\0';
+		memcpy(szRootExpr, pszKey, iRootLen);
+		szRootExpr[iRootLen] = '\0';
+		TCHAR szRoot[SCRIPT_MAX_LINE_LEN];
+		strncpy(szRoot, szRootExpr, sizeof(szRoot) - 1);
+		szRoot[sizeof(szRoot) - 1] = '\0';
 		CGVariant vRootArgs;
+		TCHAR* pRootParen = strchr(szRoot, '(');
+		if ( pRootParen )
+		{
+			TCHAR* pRootEnd = strrchr(pRootParen + 1, ')');
+			if ( pRootEnd == NULL )
+				return false;
+			*pRootEnd = '\0';
+			*pRootParen = '\0';
+			vRootArgs = pRootParen + 1;
+		}
 		CGVariant vRoot;
 		HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
 		rejected.Observe(hRoot, szRoot, m_pBaseObj);
@@ -126,8 +139,37 @@ protected:
 		if ( pRootObj == NULL )
 			return false;
 
-		vValRet.SetRef(pRootObj);
-		return true;
+		CResourceObj* pCurrent = pRootObj;
+		LPCTSTR pszSubKey = pszDot + 1;
+		for (;;)
+		{
+			TCHAR szSubKey[SCRIPT_MAX_LINE_LEN];
+			const char* pNextDot = strchr(pszSubKey, '.');
+			size_t iSubLen = pNextDot ? (size_t)(pNextDot - pszSubKey) : strlen(pszSubKey);
+			if ( iSubLen == 0 || iSubLen >= sizeof(szSubKey) )
+				return false;
+			memcpy(szSubKey, pszSubKey, iSubLen);
+			szSubKey[iSubLen] = '\0';
+			CGVariant vSubRet;
+			HRESULT hSub = pCurrent->s_PropGet(szSubKey, vSubRet, m_pSrc);
+			rejected.Observe(hSub, szSubKey, pCurrent);
+			if ( hSub != NO_ERROR )
+			{
+				hSub = pCurrent->s_Method(szSubKey, vRootArgs, vSubRet, m_pSrc);
+				rejected.Observe(hSub, szSubKey, pCurrent);
+			}
+			if ( hSub != NO_ERROR )
+				return false;
+			if ( pNextDot == NULL )
+			{
+				vValRet = vSubRet;
+				return true;
+			}
+			pCurrent = ResolveObjectResult(vSubRet, NULL);
+			if ( pCurrent == NULL )
+				return false;
+			pszSubKey = pNextDot + 1;
+		}
 	}
 
 public:
@@ -596,8 +638,17 @@ public:
 					vArgs = pszArgs;
 				}
 
+				// Resolve dotted function roots before the ordinary parser strips
+				// function arguments from szKey (for example FINDUID(uid).CONT.UID).
+				if ( strchr(pszExpr, '.') != NULL &&
+					ResolveDottedFunctionResult(pszExpr, vValRet, rejected) )
+				{
+					sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+					fResolved = true;
+				}
+
 				// Try global function dispatch.
-				HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
+				HRESULT hRes = fResolved ? NO_ERROR : Function_Dispatch(szKey, vArgs, vValRet);
 				rejected.Observe(hRes, szKey, m_pBaseObj);
 				if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
 					hRes = NO_ERROR;
@@ -851,23 +902,48 @@ public:
 				memcpy(szRoot, pszKey, iRootLen);
 				szRoot[iRootLen] = '\0';
 
+				// Resolve function-style roots such as FINDUID(0x40000001)
+				// before dispatching the dotted command.  The command form is
+				// also used for property writes (FINDUID(...).CONT=uid), so keep
+				// the assignment path separate from method calls below.
+				TCHAR szRootName[SCRIPT_MAX_LINE_LEN];
+				strncpy(szRootName, szRoot, sizeof(szRootName) - 1);
+				szRootName[sizeof(szRootName) - 1] = '\0';
 				CGVariant vRootArgs;
+				TCHAR* pRootParen = strchr(szRootName, '(');
+				if ( pRootParen )
+				{
+					TCHAR* pRootEnd = strrchr(pRootParen + 1, ')');
+					if ( pRootEnd )
+						*pRootEnd = '\0';
+					*pRootParen = '\0';
+					vRootArgs = pRootParen + 1;
+				}
 				CGVariant vRoot;
-				HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
-				rejected.Observe(hRoot, szRoot, m_pBaseObj);
+				HRESULT hRoot = Function_Dispatch(szRootName, vRootArgs, vRoot);
+				rejected.Observe(hRoot, szRootName, m_pBaseObj);
 				bool fRootFromFunction = (hRoot == NO_ERROR);
 				if ( hRoot != NO_ERROR && pObj )
 				{
-					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
-					rejected.Observe(hRoot, szRoot, m_pBaseObj);
+					hRoot = pObj->s_PropGet(szRootName, vRoot, m_pSrc);
+					rejected.Observe(hRoot, szRootName, m_pBaseObj);
 				}
 
-				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRoot : NULL);
+				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
 				if ( hRoot == NO_ERROR && pRootObj )
 				{
-					CGVariant vArgs(pszArg);
 					CGVariant vValRet;
-					HRESULT hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
+					HRESULT hRes;
+					if ( fPropertySet )
+					{
+						CGVariant vVal(pszArg);
+						hRes = pRootObj->s_PropSet(pszDot + 1, vVal);
+					}
+					else
+					{
+						CGVariant vArgs(pszArg);
+						hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
+					}
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					if ( hRes == NO_ERROR )
 						return NO_ERROR;
