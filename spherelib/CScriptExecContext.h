@@ -130,6 +130,294 @@ protected:
 		return true;
 	}
 
+	// Split one reference-chain segment, "NAME" or "NAME(args)", into its
+	// name and its own argument list.
+	static bool SplitDottedSegment(LPCTSTR pszSegment, size_t iLen, TCHAR* pszName, size_t iNameSize, CGVariant& vArgs)
+	{
+		vArgs.SetVoid();
+		if ( iLen == 0 || iLen >= iNameSize )
+			return false;
+		memcpy(pszName, pszSegment, iLen);
+		pszName[iLen] = '\0';
+
+		TCHAR* pParen = strchr(pszName, '(');
+		if ( pParen == NULL )
+			return true;
+		if ( pParen == pszName || pszName[iLen - 1] != ')' )
+			return false;
+		pszName[iLen - 1] = '\0';
+		*pParen = '\0';
+		vArgs = pParen + 1;
+		return true;
+	}
+
+	// Resolve a reference chain whose root is a context function, for example
+	// SRC.FINDLAYER(30).NAME, FINDUID(uid).TAG(name) or F_FUNC(arg).CONT.UID.
+	// Each segment keeps its own arguments.  A segment is looked up on the
+	// current object as a property, then as a method, then as a function with
+	// the object as its base -- the order the single-level reference path has
+	// always used.
+	//
+	// Returns true when the whole chain resolved.  fEffect reports whether a
+	// script function or an object method already ran; the caller must then
+	// not evaluate the same expression a second time through another path.
+	// Expressions with top-level whitespace ("EVAL 1.5", "STRLEN a.b") are
+	// function calls with arguments, not chains, and are left to the caller.
+	bool ResolveDottedChain(LPCTSTR pszExpr, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected, bool& fEffect)
+	{
+		fEffect = false;
+
+		enum { MAX_CHAIN_SEGMENTS = 32 };
+		size_t aStart[MAX_CHAIN_SEGMENTS];
+		size_t aLen[MAX_CHAIN_SEGMENTS];
+		int iSegments = 0;
+		int iDepth = 0;
+		size_t iSegmentStart = 0;
+		size_t i = 0;
+		for ( ; pszExpr[i]; i++ )
+		{
+			TCHAR ch = pszExpr[i];
+			if ( ch == '(' )
+				iDepth++;
+			else if ( ch == ')' )
+			{
+				if ( --iDepth < 0 )
+					return false;
+			}
+			else if ( iDepth == 0 )
+			{
+				if ( ISWHITESPACE(ch) )
+					return false;
+				if ( ch == '.' )
+				{
+					if ( iSegments >= MAX_CHAIN_SEGMENTS - 1 )
+						return false;
+					aStart[iSegments] = iSegmentStart;
+					aLen[iSegments] = i - iSegmentStart;
+					iSegments++;
+					iSegmentStart = i + 1;
+				}
+			}
+		}
+		if ( iDepth != 0 || iSegments == 0 )
+			return false;
+		aStart[iSegments] = iSegmentStart;
+		aLen[iSegments] = i - iSegmentStart;
+		iSegments++;
+
+		TCHAR szRoot[SCRIPT_MAX_LINE_LEN];
+		CGVariant vArgs;
+		if ( !SplitDottedSegment(pszExpr + aStart[0], aLen[0], szRoot, sizeof(szRoot), vArgs) )
+			return false;
+
+		CGVariant vCurrent;
+		HRESULT hRes = Function_Dispatch(szRoot, vArgs, vCurrent);
+		rejected.Observe(hRes, szRoot, m_pBaseObj);
+		if ( hRes != NO_ERROR )
+			return false;
+		if ( IsScriptFunction(szRoot) )
+			fEffect = true;
+
+		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, szRoot);
+		if ( pCurrent == NULL )
+		{
+			// A script function that returned no object (empty or a UID that
+			// does not resolve) reads as an empty value.  Other roots that
+			// yield no object are left to the caller, which keeps the
+			// historical result (for example FINDUID of a missing UID).
+			if ( fEffect && (vCurrent.IsEmpty() || vCurrent.IsNumeric()) )
+			{
+				vValRet.SetStr("");
+				return true;
+			}
+			return false;
+		}
+
+		for ( int iSegment = 1; iSegment < iSegments; iSegment++ )
+		{
+			TCHAR szName[SCRIPT_MAX_LINE_LEN];
+			if ( !SplitDottedSegment(pszExpr + aStart[iSegment], aLen[iSegment], szName, sizeof(szName), vArgs) )
+				return false;
+
+			CGVariant vNext;
+			bool fFromFunction = false;
+			hRes = pCurrent->s_PropGet(szName, vNext, m_pSrc);
+			rejected.Observe(hRes, szName, pCurrent);
+			if ( hRes != NO_ERROR )
+			{
+				hRes = pCurrent->s_Method(szName, vArgs, vNext, m_pSrc);
+				rejected.Observe(hRes, szName, pCurrent);
+				if ( hRes == NO_ERROR )
+					fEffect = true;
+			}
+			if ( hRes != NO_ERROR )
+			{
+				CScriptObj* pOldBase = GetBaseObject();
+				SetBaseObject(pCurrent);
+				hRes = Function_Dispatch(szName, vArgs, vNext);
+				SetBaseObject(pOldBase);
+				rejected.Observe(hRes, szName, pCurrent);
+				if ( hRes == NO_ERROR )
+				{
+					fEffect = true;
+					fFromFunction = true;
+				}
+			}
+			if ( hRes != NO_ERROR )
+				return false;
+
+			if ( iSegment == iSegments - 1 )
+			{
+				vValRet = vNext;
+				return true;
+			}
+
+			pCurrent = ResolveObjectResult(vNext, fFromFunction ? szName : NULL);
+			if ( pCurrent == NULL )
+			{
+				// An intermediate lookup that found nothing (for example
+				// FINDLAYER of an empty layer) reads as an empty value.
+				if ( vNext.IsEmpty() )
+				{
+					vValRet.SetStr("");
+					return true;
+				}
+				return false;
+			}
+		}
+		return false;
+	}
+
+	// Evaluate the text of one <...> or <?...?> escape (without delimiters
+	// and without a SAFE prefix).  Returns true and sets sResult when the
+	// expression resolved.
+	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult, CScriptUnknownRejectTracker& rejected)
+	{
+		// Split function name from arguments: "FUNC(args)" or "FUNC args" or "OBJ.PROP"
+		TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+		strncpy(szKey, pszExpr, sizeof(szKey)-1);
+		szKey[sizeof(szKey)-1] = '\0';
+
+		// Find argument separator: space or '('
+		TCHAR* pszArgs = szKey;
+		while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
+			pszArgs++;
+
+		CGVariant vArgs;
+		CGVariant vValRet;
+		HRESULT hRes;
+
+		if ( *pszArgs == '(' )
+		{
+			// Function call: FUNC(args)
+			*pszArgs++ = '\0';
+			// Strip trailing ')'
+			int len = strlen(pszArgs);
+			if ( len > 0 && pszArgs[len-1] == ')' )
+				pszArgs[len-1] = '\0';
+			vArgs = pszArgs;
+		}
+		else if ( *pszArgs == ' ' )
+		{
+			// Function or eval: "eval 1+2" or "FUNC args"
+			*pszArgs++ = '\0';
+			while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
+			vArgs = pszArgs;
+		}
+
+		// Reference chains with function roots and per-segment arguments.
+		// Their diagnostics are kept apart so that a chain which is not
+		// resolvable here does not change what the legacy path reports.
+		bool fChainEffect = false;
+		CScriptUnknownRejectTracker chainRejected;
+		if ( ResolveDottedChain(pszExpr, vValRet, chainRejected, fChainEffect) )
+		{
+			sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+			return true;
+		}
+
+		if ( fChainEffect )
+		{
+			// A script function or method already ran for this expression.
+			// Every other path below can dispatch the same root or method
+			// again, so the chain's result is final.
+			rejected = chainRejected;
+			return false;
+		}
+
+		// Try global function dispatch.
+		hRes = Function_Dispatch(szKey, vArgs, vValRet);
+		rejected.Observe(hRes, szKey, m_pBaseObj);
+		if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
+			hRes = NO_ERROR;
+		if ( hRes == NO_ERROR )
+		{
+			// Object reference chaining: <argo.tag(name)>, <argo.uid>, etc.
+			CScriptObj* pRef = vValRet.GetRef();
+			TCHAR* pDot = strchr(szKey, '.');
+			if ( pRef == NULL || pDot == NULL )
+			{
+				sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+				return true;
+			}
+
+			// Dispatch sub-key on the referenced object.
+			LPCTSTR pszSubKey = pDot + 1;
+			CResourceObj* pRefObj = dynamic_cast<CResourceObj*>(pRef);
+			if ( pRefObj )
+			{
+				CGVariant vSubRet;
+				hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
+				rejected.Observe(hRes, pszSubKey, pRefObj);
+				if ( hRes != NO_ERROR )
+				{
+					hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
+					rejected.Observe(hRes, pszSubKey, pRefObj);
+				}
+				if ( hRes != NO_ERROR )
+				{
+					// Try as function call with ref as base object.
+					CScriptObj* pOldBase = GetBaseObject();
+					SetBaseObject(pRefObj);
+					hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
+					SetBaseObject(pOldBase);
+					rejected.Observe(hRes, pszSubKey, pRefObj);
+				}
+				if ( hRes == NO_ERROR )
+				{
+					sResult = vSubRet.IsEmpty() ? "" : vSubRet.GetPSTR();
+					return true;
+				}
+			}
+		}
+
+		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+		if ( pObj == NULL )
+			return false;
+
+		// Try object property access (SRC.NAME, OBJ.PROP, etc.)
+		hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
+		rejected.Observe(hRes, pszExpr, m_pBaseObj);
+		if ( hRes == NO_ERROR )
+		{
+			sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+			return true;
+		}
+
+		// Try method call on object.
+		if ( szKey[0] )
+		{
+			hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
+			rejected.Observe(hRes, szKey, m_pBaseObj);
+			if ( hRes == NO_ERROR )
+			{
+				sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+				return true;
+			}
+		}
+		return false;
+	}
+
 public:
 	// Gump command table for dialog construction.
 	static LPCTSTR const sm_szGumpCmds[];
@@ -370,113 +658,7 @@ public:
 				CScriptUnknownRejectTracker rejected;
 				try
 				{
-					TCHAR szKey[SCRIPT_MAX_LINE_LEN];
-					strncpy(szKey, pszExpr, sizeof(szKey)-1);
-					szKey[sizeof(szKey)-1] = '\0';
-
-					TCHAR* pszArgs = szKey;
-					while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
-						pszArgs++;
-
-					CGVariant vArgs;
-					CGVariant vValRet;
-
-					if ( *pszArgs == '(' )
-					{
-						*pszArgs++ = '\0';
-						int len = strlen(pszArgs);
-						if ( len > 0 && pszArgs[len-1] == ')' )
-							pszArgs[len-1] = '\0';
-						vArgs = pszArgs;
-					}
-					else if ( *pszArgs == ' ' )
-					{
-						*pszArgs++ = '\0';
-						while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
-						vArgs = pszArgs;
-					}
-
-					HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
-					rejected.Observe(hRes, szKey, m_pBaseObj);
-					if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
-						hRes = NO_ERROR;
-					if ( hRes == NO_ERROR )
-					{
-						CScriptObj* pRef = vValRet.GetRef();
-						if ( pRef != NULL )
-						{
-							TCHAR* pDot = strchr(szKey, '.');
-							if ( pDot )
-							{
-								LPCTSTR pszSubKey = pDot + 1;
-								CResourceObj* pRefObj = dynamic_cast<CResourceObj*>(pRef);
-								if ( pRefObj )
-								{
-									CGVariant vSubRet;
-									hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
-									rejected.Observe(hRes, pszSubKey, pRefObj);
-									if ( hRes != NO_ERROR )
-									{
-										hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
-										rejected.Observe(hRes, pszSubKey, pRefObj);
-									}
-									if ( hRes != NO_ERROR )
-									{
-										CScriptObj* pOldBase = GetBaseObject();
-										SetBaseObject(pRefObj);
-										hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
-										SetBaseObject(pOldBase);
-										rejected.Observe(hRes, pszSubKey, pRefObj);
-									}
-									if ( hRes == NO_ERROR )
-									{
-										sResult = vSubRet.IsEmpty() ? "" : vSubRet.GetPSTR();
-										fResolved = true;
-									}
-								}
-							}
-							else
-							{
-								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-								fResolved = true;
-							}
-						}
-						else
-						{
-							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-							fResolved = true;
-						}
-					}
-
-					if ( !fResolved )
-					{
-						CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-						if ( pObj )
-						{
-							hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
-							rejected.Observe(hRes, pszExpr, m_pBaseObj);
-							if ( hRes == NO_ERROR )
-							{
-								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-								fResolved = true;
-							}
-						}
-					}
-
-					if ( !fResolved && szKey[0] )
-					{
-						CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-						if ( pObj )
-						{
-							hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
-							rejected.Observe(hRes, szKey, m_pBaseObj);
-							if ( hRes == NO_ERROR )
-							{
-								sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-								fResolved = true;
-							}
-						}
-					}
+					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected);
 				}
 				catch (...)
 				{
@@ -565,124 +747,7 @@ public:
 
 			try
 			{
-				// Split function name from arguments: "FUNC(args)" or "FUNC args" or "OBJ.PROP"
-				TCHAR szKey[SCRIPT_MAX_LINE_LEN];
-				strncpy(szKey, pszExpr, sizeof(szKey)-1);
-				szKey[sizeof(szKey)-1] = '\0';
-
-				// Find argument separator: space, '(', or '.'
-				TCHAR* pszArgs = szKey;
-				while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
-					pszArgs++;
-
-				CGVariant vArgs;
-				CGVariant vValRet;
-
-				if ( *pszArgs == '(' )
-				{
-					// Function call: FUNC(args)
-					*pszArgs++ = '\0';
-					// Strip trailing ')'
-					int len = strlen(pszArgs);
-					if ( len > 0 && pszArgs[len-1] == ')' )
-						pszArgs[len-1] = '\0';
-					vArgs = pszArgs;
-				}
-				else if ( *pszArgs == ' ' )
-				{
-					// Function or eval: "eval 1+2" or "FUNC args"
-					*pszArgs++ = '\0';
-					while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
-					vArgs = pszArgs;
-				}
-
-				// Try global function dispatch.
-				HRESULT hRes = Function_Dispatch(szKey, vArgs, vValRet);
-				rejected.Observe(hRes, szKey, m_pBaseObj);
-				if ( hRes != NO_ERROR && ResolveDottedFunctionResult(szKey, vValRet, rejected) )
-					hRes = NO_ERROR;
-				if ( hRes == NO_ERROR )
-				{
-					// Object reference chaining: <argo.tag(name)>, <argo.uid>, etc.
-					CScriptObj* pRef = vValRet.GetRef();
-					if ( pRef != NULL )
-					{
-						TCHAR* pDot = strchr(szKey, '.');
-						if ( pDot )
-						{
-							// Dispatch sub-key on the referenced object.
-							LPCTSTR pszSubKey = pDot + 1;
-							CResourceObj* pRefObj = dynamic_cast<CResourceObj*>(pRef);
-							if ( pRefObj )
-							{
-								CGVariant vSubRet;
-								hRes = pRefObj->s_PropGet(pszSubKey, vSubRet, m_pSrc);
-								rejected.Observe(hRes, pszSubKey, pRefObj);
-								if ( hRes != NO_ERROR )
-								{
-									hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
-									rejected.Observe(hRes, pszSubKey, pRefObj);
-								}
-								if ( hRes != NO_ERROR )
-								{
-									// Try as function call with ref as base object.
-									CScriptObj* pOldBase = GetBaseObject();
-									SetBaseObject(pRefObj);
-									hRes = Function_Dispatch(pszSubKey, vArgs, vSubRet);
-									SetBaseObject(pOldBase);
-									rejected.Observe(hRes, pszSubKey, pRefObj);
-								}
-								if ( hRes == NO_ERROR )
-								{
-									sResult = vSubRet.IsEmpty() ? "" : vSubRet.GetPSTR();
-									fResolved = true;
-								}
-							}
-						}
-						else
-						{
-							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-							fResolved = true;
-						}
-					}
-					else
-					{
-						sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-						fResolved = true;
-					}
-				}
-
-				// Try object property access (SRC.NAME, OBJ.PROP, etc.)
-				if ( !fResolved )
-				{
-					CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-					if ( pObj )
-					{
-						hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
-						rejected.Observe(hRes, pszExpr, m_pBaseObj);
-						if ( hRes == NO_ERROR )
-						{
-							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-							fResolved = true;
-						}
-					}
-				}
-
-				// Try method call on object.
-				if ( !fResolved && szKey[0] )
-				{
-					CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-					if ( pObj )
-					{
-						hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
-						rejected.Observe(hRes, szKey, m_pBaseObj);
-						if ( hRes == NO_ERROR )
-						{
-							sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
-							fResolved = true;
-						}
-					}
-				}
+				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected);
 			}
 			catch (...)
 			{
@@ -851,10 +916,18 @@ public:
 				memcpy(szRoot, pszKey, iRootLen);
 				szRoot[iRootLen] = '\0';
 
+				// Function-style roots such as FINDUID(uid) carry their own
+				// arguments.
+				TCHAR szRootName[SCRIPT_MAX_LINE_LEN];
 				CGVariant vRootArgs;
+				if ( !SplitDottedSegment(szRoot, iRootLen, szRootName, sizeof(szRootName), vRootArgs) )
+				{
+					strcpy(szRootName, szRoot);
+					vRootArgs.SetVoid();
+				}
 				CGVariant vRoot;
-				HRESULT hRoot = Function_Dispatch(szRoot, vRootArgs, vRoot);
-				rejected.Observe(hRoot, szRoot, m_pBaseObj);
+				HRESULT hRoot = Function_Dispatch(szRootName, vRootArgs, vRoot);
+				rejected.Observe(hRoot, szRootName, m_pBaseObj);
 				bool fRootFromFunction = (hRoot == NO_ERROR);
 				if ( hRoot != NO_ERROR && pObj )
 				{
@@ -862,12 +935,23 @@ public:
 					rejected.Observe(hRoot, szRoot, m_pBaseObj);
 				}
 
-				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRoot : NULL);
+				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
 				if ( hRoot == NO_ERROR && pRootObj )
 				{
+					HRESULT hRes;
+					if ( fPropertySet )
+					{
+						// ROOT.KEY=value is a property write on the referenced
+						// object (SRC.NAME=x, FINDUID(uid).TAG.KEY=x).
+						CGVariant vVal(pszArg);
+						hRes = pRootObj->s_PropSet(pszDot + 1, vVal);
+						rejected.Observe(hRes, pszDot + 1, pRootObj);
+						if ( hRes == NO_ERROR )
+							return NO_ERROR;
+					}
 					CGVariant vArgs(pszArg);
 					CGVariant vValRet;
-					HRESULT hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
+					hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					if ( hRes == NO_ERROR )
 						return NO_ERROR;
