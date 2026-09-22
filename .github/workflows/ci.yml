@@ -252,6 +252,14 @@ jobs:
             "$RUNNER_TEMP/sphere-asan-world-save" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2720
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-dotted-expressions" \
+            --dotted-expression-probe \
+            --unknown-keyword-report
+          python3 tools/fixtures/test_dotted_expressions.py \
+            "$RUNNER_TEMP/sphere-asan-dotted-expressions" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2731
 
       - name: Upload ASan fixture server log on failure
         if: failure()
@@ -269,6 +277,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-named-resource-ids/server.log
             ${{ runner.temp }}/sphere-asan-timer-lifetime/server.log
             ${{ runner.temp }}/sphere-asan-world-save/server.log
+            ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
           if-no-files-found: warn
 
   load-safety:
@@ -521,6 +530,14 @@ jobs:
             "$RUNNER_TEMP/sphere-world-save" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2720
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-dotted-expressions" \
+            --dotted-expression-probe \
+            --unknown-keyword-report
+          python3 tools/fixtures/test_dotted_expressions.py \
+            "$RUNNER_TEMP/sphere-dotted-expressions" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2730
 
       - name: Upload server log on failure
         if: failure()
@@ -536,4 +553,5 @@ jobs:
             ${{ runner.temp }}/sphere-world-counts-truncated/server.log
             ${{ runner.temp }}/sphere-timer-lifetime/server.log
             ${{ runner.temp }}/sphere-world-save/server.log
+            ${{ runner.temp }}/sphere-dotted-expressions/server.log
           if-no-files-found: warn
