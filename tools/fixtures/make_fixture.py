@@ -152,7 +152,7 @@ def skill_sections() -> str:
     return "\n".join(sections)
 
 
-def timer_sibling_mutation_definitions() -> str:
+def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
     """Return three independent A->B sibling-mutation scenarios.
 
     Case 1 deletes B while the owner is removing A.  Case 2 reparents B to a
@@ -185,6 +185,7 @@ def timer_sibling_mutation_definitions() -> str:
         action_return_marker: str,
         owner_return_marker: str,
     ) -> str:
+        timer_action = "CONT.REMOVE\n" if owner_first else "REMOVE\n"
         return (
             f"\n[ITEMDEF 0x{item_id:04X}]\n"
             f"DEFNAME={defname}\n"
@@ -193,7 +194,7 @@ def timer_sibling_mutation_definitions() -> str:
             "LAYER=30\n"
             "ON=@Timer\n"
             f"SERV.B {timer_marker}\n"
-            "REMOVE\n"
+            f"{timer_action}"
             f"SERV.B {timer_marker}_RETURNED\n"
             "RETURN 1\n"
             "ON=@UnEquip\n"
@@ -351,6 +352,7 @@ def write_scripts(
     timer_lifetime_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
+    timer_sibling_mutation_owner_first_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     unknown_newbie_section = (
@@ -479,18 +481,33 @@ def write_scripts(
     )
     timer_sibling_mutation_before_markers = (
         f"SERV.B SPHERE_MUTATION_UIDS_BEFORE {mutation_uid_checks}\n"
-        if timer_sibling_mutation_probe
+        if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
         else ""
     )
     timer_sibling_mutation_observer_login = (
         "NEWITEM SYNTHETIC_MUTATION_OBSERVER\n"
         "EQUIPLAST\n"
-        if timer_sibling_mutation_probe
+        if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
         else ""
     )
     timer_sibling_mutation_sections = (
-        timer_sibling_mutation_definitions()
-        if timer_sibling_mutation_probe
+        timer_sibling_mutation_definitions(
+            owner_first=timer_sibling_mutation_owner_first_probe
+        )
+        if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
+        else ""
+    )
+    parser_getter_probe = (
+        "VAR dotted_getter_calls,0\n"
+        "SYSMESSAGE SPHERE_REVIEW_UNKNOWN <f_fixture_getter.UNKNOWN_REVIEW_PROPERTY>\n"
+        "SYSMESSAGE SPHERE_REVIEW_UNKNOWN_COUNT <VAR(dotted_getter_calls)>\n"
+        "VAR dotted_getter_calls,0\n"
+        "SYSMESSAGE SPHERE_REVIEW_MALFORMED <f_fixture_getter.UNKNOWN_REVIEW_PROPERTY.>\n"
+        "SYSMESSAGE SPHERE_REVIEW_MALFORMED_COUNT <VAR(dotted_getter_calls)>\n"
+        "VAR dotted_getter_calls,0\n"
+        "SYSMESSAGE SPHERE_REVIEW_REFERENCE <f_fixture_getter.name>\n"
+        "SYSMESSAGE SPHERE_REVIEW_REFERENCE_COUNT <VAR(dotted_getter_calls)>\n"
+        if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
         else ""
     )
     timer_lifetime_owner_create = (
@@ -507,7 +524,12 @@ def write_scripts(
     unequip_remove = "CONT.REMOVE" if timer_lifetime_item_first_probe else "REMOVE"
     typedef_container_table = (
         "\n[TYPEDEFS]\nT_NORMAL 0\nT_CONTAINER 1\n"
-        if typedef_container_probe or timer_lifetime_probe or timer_sibling_mutation_probe
+        if (
+            typedef_container_probe
+            or timer_lifetime_probe
+            or timer_sibling_mutation_probe
+            or timer_sibling_mutation_owner_first_probe
+        )
         else ""
     )
     typedef_normal_alias = (
@@ -706,6 +728,7 @@ SYSMESSAGE SPHERE_DOTTED_METHOD_COUNT <VAR(dotted_getter_calls)>
 VAR dotted_getter_calls,0
 SYSMESSAGE SPHERE_DOTTED_PROPERTY <f_fixture_getter.name>
 SYSMESSAGE SPHERE_DOTTED_PROPERTY_COUNT <VAR(dotted_getter_calls)>
+""" + parser_getter_probe + """
 SYSMESSAGE SPHERE_TABLE_SMOKE <EVAL 1+2>|<STRLEN abc>|<RAND 1>|<ISNUM 123>|<STRCMP abc,abc>
 SYSMESSAGE SPHERE_NEWBIE_MAGERY <RESCOUNT(0x0E72)>
 SYSMESSAGE SPHERE_NEWBIE_RESIST <RESCOUNT(0x0E73)>
@@ -1232,6 +1255,11 @@ def main() -> int:
         action="store_true",
         help="exercise delete/reparent callbacks across three sibling lists",
     )
+    parser.add_argument(
+        "--timer-sibling-mutation-owner-first-probe",
+        action="store_true",
+        help="exercise owner-first delete/reparent callbacks across three sibling lists",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -1250,6 +1278,7 @@ def main() -> int:
         args.timer_lifetime_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
     ) and any(world_load_modes):
         parser.error("timer-lifetime probe cannot be combined with a world-load mode")
     if sum(
@@ -1257,6 +1286,7 @@ def main() -> int:
             args.timer_lifetime_probe,
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
+            args.timer_sibling_mutation_owner_first_probe,
         )
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
@@ -1274,6 +1304,7 @@ def main() -> int:
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
             or args.timer_sibling_mutation_probe
+            or args.timer_sibling_mutation_owner_first_probe
         ),
     )
     write_scripts(
@@ -1294,6 +1325,7 @@ def main() -> int:
         timer_lifetime_probe=args.timer_lifetime_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
+        timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -1307,13 +1339,16 @@ def main() -> int:
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
-    if args.timer_sibling_mutation_probe:
+    if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     write_mul_fixture(
         root,
-        extra_item_id=0x0E8A if args.timer_sibling_mutation_probe else 0,
+        extra_item_id=(0x0E8A
+                       if args.timer_sibling_mutation_probe
+                       or args.timer_sibling_mutation_owner_first_probe
+                       else 0),
     )
-    if args.timer_sibling_mutation_probe:
+    if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         for item_id in (0x0E7D, 0x0E81, 0x0E86, 0x0E88, 0x0E89, 0x0E8A):
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
     print(f"wrote synthetic Sphere runtime fixture to {root}")

@@ -61,6 +61,12 @@ REQUIRED_MARKERS = (
     "SPHERE_MUT_CASE1_KEEP_PARENT",
     "SPHERE_MUT_CASE2_KEEP_PARENT",
     "SPHERE_MUT_CASE3_KEEP_PARENT",
+    "SPHERE_REVIEW_UNKNOWN",
+    "SPHERE_REVIEW_UNKNOWN_COUNT",
+    "SPHERE_REVIEW_MALFORMED",
+    "SPHERE_REVIEW_MALFORMED_COUNT",
+    "SPHERE_REVIEW_REFERENCE",
+    "SPHERE_REVIEW_REFERENCE_COUNT",
 )
 
 
@@ -210,6 +216,15 @@ def main() -> int:
                 actual = parse_value(observed, prefix)
                 if actual != expected:
                     failures.append(f"{prefix} expected parent {expected}, got {actual!r}")
+
+            for prefix in (
+                "SPHERE_REVIEW_UNKNOWN_COUNT",
+                "SPHERE_REVIEW_MALFORMED_COUNT",
+                "SPHERE_REVIEW_REFERENCE_COUNT",
+            ):
+                actual = parse_value(observed, prefix)
+                if actual != 1:
+                    failures.append(f"{prefix} expected getter count 1, got {actual!r}")
 
             for prefix in REQUIRED_MARKERS:
                 count = marker_count(observed, prefix)
