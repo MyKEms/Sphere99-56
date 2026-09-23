@@ -16,7 +16,7 @@ import sys
 
 
 ACCOUNT = "GumpSkillProbe"
-PASSWORD = "gump-skill-probe-pw"
+LOGIN_VALUE = "gump-skill-probe-pw"
 MARKER = "SPHERE_GUMP_SKILL_CLICKED"
 BUTTON_ID = 7
 TEXT_LABEL = "Choose class"

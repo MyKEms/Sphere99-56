@@ -20,8 +20,8 @@ from typing import Optional
 from make_gump_skill_fixture import (
     ACCOUNT,
     BUTTON_ID,
+    LOGIN_VALUE,
     MARKER,
-    PASSWORD,
     TEXT_LABEL,
 )
 from run_suite import shutdown_failures
@@ -56,7 +56,7 @@ def exercise(args: argparse.Namespace) -> list[str]:
         args.host,
         args.port,
         ACCOUNT,
-        PASSWORD,
+        LOGIN_VALUE,
         game_port=args.port + 1000,
     )
     if sock is None:
