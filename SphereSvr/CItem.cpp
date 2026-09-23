@@ -39,6 +39,8 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	g_Serv.StatInc(SERV_STAT_ITEMS);
 	m_AttrMask = 0;
 	m_fUnEquipTriggerActive = false;
+	m_uidLoadContainer.InitUID();
+	m_layerLoadContainer = LAYER_NONE;
 	m_amount = 1;
 
 	m_itNormal.m_more1 = 0;
@@ -2271,6 +2273,12 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	CObjBasePtr pObjCont = g_World.ObjFind(uid);
 	if ( pObjCont == NULL )
 	{
+		if ( g_Serv.IsLoading() && uid.IsValidObjUID())
+		{
+			m_uidLoadContainer = uid;
+			m_layerLoadContainer = layer;
+			return( NO_ERROR );
+		}
 		if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
 			DEBUG_ERR(( "Invalid container 0%lx" LOG_CR, (DWORD) uid ));
 		return( HRES_INVALID_HANDLE );	// not valid object.
@@ -2335,6 +2343,22 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 			dwItemContainerUID));
 	}
 	return( HRES_INVALID_HANDLE );	// not a container.
+}
+
+bool CItem::ResolveLoadContainer()
+{
+	if ( ! HasPendingLoadContainer())
+		return true;
+	CSphereUID uid = m_uidLoadContainer;
+	LAYER_TYPE layer = m_layerLoadContainer;
+	HRESULT hRes = LoadSetContainer( uid, layer );
+	if ( SUCCEEDED(hRes) && GetContainer() != NULL )
+	{
+		m_uidLoadContainer.InitUID();
+		m_layerLoadContainer = LAYER_NONE;
+		return true;
+	}
+	return false;
 }
 
 LPCTSTR const CItem::sm_szAttrNames[] =	// static desc ATTR_TYPE bits.
@@ -2478,11 +2502,35 @@ HRESULT CItem::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item Script
 {
+	if ( ! _strnicmp(pszKey, "REGION.", 7) )
+	{
+		// Older saves persisted dynamic region pseudo-properties. They have no
+		// item-side setter, but retaining the raw key/value makes the next save
+		// readable by this loader and avoids silently dropping legacy state.
+		PreserveLoadProperty( pszKey, vVal.GetPSTR());
+		return HRES_UNKNOWN_PROPERTY;
+	}
+
 	// Handle P= property for position (world loading and scripts)
 	if ( ! _stricmp(pszKey, "P") )
 	{
 		CPointMap pt;
 		pt.v_Set( vVal );
+		if ( IsItemInContainer())
+		{
+			POINT ptContained;
+			ptContained.x = pt.m_x;
+			ptContained.y = pt.m_y;
+			SetContainedPoint( ptContained );
+			return NO_ERROR;
+		}
+		if ( HasPendingLoadContainer())
+		{
+			// CONT may precede its parent in an older save. Keep the contained
+			// point on the item until ResolveLoadContainers attaches it.
+			SetUnkPoint( pt );
+			return NO_ERROR;
+		}
 		MoveTo( pt );
 		return NO_ERROR;
 	}
@@ -2655,6 +2703,7 @@ bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 		HRESULT hRes = s_PropSet( pszKey, vArg );
 		if ( hRes == HRES_UNKNOWN_PROPERTY )
 		{
+			PreserveLoadProperty( pszKey, vArg.GetPSTR());
 			fToleratedLegacy = true;
 		}
 		else if ( FAILED(hRes) )

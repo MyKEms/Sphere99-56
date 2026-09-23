@@ -379,6 +379,7 @@ private:
 	bool LoadWorld();
 	void ResetLoadIntegrity();
 	void CleanupLoadOrphans();
+	void ResolveLoadContainers();
 	void MarkLoadIssue( bool fObjectSection );
 	void ReportLoadIntegrity();
 	void CaptureLoadCounts();

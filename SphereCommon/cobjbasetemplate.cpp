@@ -13,6 +13,7 @@
 CObjBaseTemplate::CObjBaseTemplate() : 
 	CResourceObj(UID_INDEX_CLEAR) // fill this in later.
 {
+	m_pt.InitPoint();
 #if defined(SPHERE_CLIENT) || defined(SPHERE_MAP)
 	m_z_sort = SPHEREMAP_SIZE_MIN_Z;
 	m_z_top = SPHEREMAP_SIZE_MIN_Z;

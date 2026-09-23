@@ -103,6 +103,11 @@ def main() -> int:
         action="store_true",
         help="expect an invalid saved item to be deleted during load",
     )
+    parser.add_argument(
+        "--child-before-parent",
+        action="store_true",
+        help="expect a contained item saved before its container to be restored",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -115,6 +120,7 @@ def main() -> int:
             args.named_container_reference,
             args.rejected_property,
             args.weird_item,
+            args.child_before_parent,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -129,7 +135,12 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    if args.rejected_property:
+    if args.child_before_parent:
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
+        )
+    elif args.rejected_property:
         expected_line = (
             "world load: created_items=2 created_chars=2 read_items=2 read_chars=2 "
             "allocated_items=2 allocated_chars=2"
@@ -165,7 +176,12 @@ def main() -> int:
             "allocated_items=2 allocated_chars=1"
         )
 
-    if args.rejected_property:
+    if args.child_before_parent:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=0 "
+            "defaulted=0 deleted=0"
+        )
+    elif args.rejected_property:
         expected_diagnostics = (
             "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=1 "
             "defaulted=0 deleted=0"
@@ -239,7 +255,9 @@ def main() -> int:
                     for line in startup_log.splitlines()
                     if line.startswith("[ERROR]") or line.startswith("[CRITICAL]")
                 ]
-                if args.truncated:
+                if args.child_before_parent:
+                    allowed_startup_error_fragments = ()
+                elif args.truncated:
                     allowed_startup_error_fragments = (
                         "Invalid WORLDITEM block index",
                         "WORLDITEM load failed",
@@ -328,6 +346,16 @@ def main() -> int:
                         raise RuntimeError(
                             "weird-item fixture logged unexpected load failure: "
                             f"{unexpected_errors!r}"
+                        )
+                if args.child_before_parent:
+                    if any(
+                        "Invalid container" in line
+                        or "Non container" in line
+                        or "WORLDITEM property rejected" in line
+                        for line in startup_errors
+                    ):
+                        raise RuntimeError(
+                            "child-before-parent fixture did not restore the contained item"
                         )
                 if args.unresolved_worldchar_type:
                     diagnostic = (
@@ -502,6 +530,7 @@ def main() -> int:
             or args.named_container_reference
             or args.rejected_property
             or args.weird_item
+            or args.child_before_parent
         )
         else [expected_line, expected_line]
     )
@@ -528,6 +557,7 @@ def main() -> int:
         and not args.named_container_reference
         and not args.rejected_property
         and not args.weird_item
+        and not args.child_before_parent
     ):
         admin_lines = [
             message

@@ -233,6 +233,7 @@ public:
 
 	CResourceRefArray m_Events;		// When events are attached to this?
 	CVarDefArray m_TagDefs;			// attach extra tags here. (this that dont apply to all)
+	CVarDefArray m_LoadedProps;		// saved properties unknown to this engine; retained for round-trip safety.
 
 	static int  sm_iCount;		// how many total objects in the world ?
 	static bool sm_fDeleteReal;	// Delete for real. not just place in "to be deleted" list
@@ -243,6 +244,7 @@ public:
 	void SetLoadRejectedProperty( bool fRejected ) { m_fLoadRejectedProperty = fRejected; }
 	bool HasLoadDefaulted() const { return m_fLoadDefaulted; }
 	void SetLoadDefaulted( bool fDefaulted ) { m_fLoadDefaulted = fDefaulted; }
+	void PreserveLoadProperty( LPCTSTR pszKey, LPCTSTR pszValue );
 
 protected:
 	CRefPtr<CObjBaseDef> m_BaseRef;	// Pointer to the resource that describes this type.
@@ -332,6 +334,8 @@ private:
 	IT_TYPE m_type;		// What does this item do when dclicked ? 
 	WORD m_AttrMask;		// ATTR_TYPE Attribute flags.
 	bool m_fUnEquipTriggerActive;	// Prevent recursive T_UnEquip on this item.
+	CSphereUID m_uidLoadContainer;	// deferred CONT target while loading sections out of order.
+	LAYER_TYPE m_layerLoadContainer;
 
 	// TAG_CRAFTEDBY=uid Maker of this item
 public:
@@ -913,6 +917,8 @@ public:
 	virtual void  Update( const CClient* pClientExclude = NULL );		// send this new item to everyone.
 	void  Flip( LPCTSTR pCmd = NULL );
 	HRESULT LoadSetContainer( CSphereUID uid, LAYER_TYPE layer );
+	bool HasPendingLoadContainer() const { return m_uidLoadContainer.IsValidObjUID(); }
+	bool ResolveLoadContainer();
 
 	void WriteUOX( CScript& s, int index );
 
