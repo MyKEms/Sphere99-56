@@ -51,6 +51,28 @@ static bool TestUIDReset()
 	return uids.AllocUID( &second, 0 ) == 1;
 }
 
+static bool TestLoadDetailBudgetScope()
+{
+	// Consume one category while the server is loading.  The ninth detail is
+	// suppressed by the bounded load budget, but the same category must be
+	// visible again once the server is running.
+	g_Serv.SetServerMode( SERVMODE_Loading );
+	for ( int i = 0; i < 8; ++i )
+	{
+		if ( !g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDCHAR_FAILURE ))
+			return false;
+	}
+	if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDCHAR_FAILURE ))
+		return false;
+
+	g_Serv.SetServerMode( SERVMODE_Run );
+	const bool fRuntimeVisible =
+		g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDCHAR_FAILURE ) &&
+		g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDCHAR_FAILURE );
+	g_Serv.SetServerMode( SERVMODE_Loading );
+	return fRuntimeVisible;
+}
+
 int main()
 {
 	if ( !TestUIDReset() )
@@ -59,6 +81,12 @@ int main()
 		return 1;
 	}
 	std::printf( "UID reset: reserved slot 0 preserved\n" );
+	if ( !TestLoadDetailBudgetScope() )
+	{
+		std::fprintf( stderr, "load detail budget leaked into runtime diagnostics\n" );
+		return 1;
+	}
+	std::printf( "load detail budget: bounded during load and visible at runtime\n" );
 
 	char szTempDir[] = "/tmp/sphere-load-safety-XXXXXX";
 	if ( mkdtemp( szTempDir ) == NULL )
