@@ -239,6 +239,10 @@ public:
 	bool IsDeletePending() const { return m_fDeletePending; }
 	bool HasLoadToleratedLegacy() const { return m_fLoadToleratedLegacy; }
 	void SetLoadToleratedLegacy( bool fTolerated ) { m_fLoadToleratedLegacy = fTolerated; }
+	bool HasLoadRejectedProperty() const { return m_fLoadRejectedProperty; }
+	void SetLoadRejectedProperty( bool fRejected ) { m_fLoadRejectedProperty = fRejected; }
+	bool HasLoadDefaulted() const { return m_fLoadDefaulted; }
+	void SetLoadDefaulted( bool fDefaulted ) { m_fLoadDefaulted = fDefaulted; }
 
 protected:
 	CRefPtr<CObjBaseDef> m_BaseRef;	// Pointer to the resource that describes this type.
@@ -246,6 +250,8 @@ protected:
 private:
 	bool m_fDeletePending;		// Runtime deletion is already queued or in progress.
 	bool m_fLoadToleratedLegacy;	// An unknown saved property was tolerated during load.
+	bool m_fLoadRejectedProperty;	// A meaningful saved property was rejected but the object stayed loaded.
+	bool m_fLoadDefaulted;		// A saved value was replaced with a documented default.
 	CServTime m_timeout;		// when does this rot away ? or other action. 0 = never, else system time
 	HUE_TYPE m_wHue;		// Hue or skin color. (WORD w/High 2 bits reserved)
 };

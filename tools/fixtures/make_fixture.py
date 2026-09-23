@@ -960,6 +960,69 @@ def write_world_load_counts_save(
         )
     world_sections.append("[EOF]")
     write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
+    if rejected_property:
+        write_text(
+            root / "accounts" / "sphereaccu.scp",
+            "\n".join(
+                [
+                    "[ACCOUNT FixturePlayer]",
+                    "PASSWORD=fixture-pw",
+                    "LASTCHARUID=4",
+                    "CHARUID=4",
+                    "[EOF]",
+                ]
+            ),
+        )
+        char_sections = [
+            "[WORLDCHAR c_MAN]",
+            "SERIAL=3",
+            "NPC=2",
+            "ACTION=MAGERY",
+            "STR=100",
+            "INT=100",
+            "DEX=100",
+            "HITS=100",
+            "MAXHITS=100",
+            "MANA=100",
+            "STAM=100",
+            "P=130,128,0",
+            "[WORLDCHAR c_MAN]",
+            "SERIAL=4",
+            "ACCOUNT=FixturePlayer",
+            "STR=100",
+            "INT=100",
+            "DEX=100",
+            "HITS=100",
+            "MAXHITS=100",
+            "MANA=100",
+            "STAM=100",
+            "SkillLock.5=1",
+            "P=131,128,0",
+            "[EOF]",
+        ]
+    else:
+        char_sections = [
+            "[WORLDCHAR SYNTHETIC_MISSING_CHARDEF]"
+            if unresolved_worldchar_type
+            else (
+                "[WORLDCHAR SYNTHETIC_ALLOC_CHAR_00]"
+                if named_container_reference
+                else "[WORLDCHAR c_MAN]"
+            ),
+            "SERIAL=3",
+            "NPC=2",
+            "STR=100",
+            "INT=100",
+            "DEX=100",
+            "HITS=100",
+            "MAXHITS=100",
+            "MANA=100",
+            "STAM=100",
+            "P=130,128,0",
+            "[EOF]",
+        ]
+        if unresolved_worldchar_type:
+            char_sections.insert(-1, "OBODY=SYNTHETIC_MISSING_BODY")
     write_text(
         root / "save" / "spherechars.scp",
         "\n".join(
@@ -967,25 +1030,8 @@ def write_world_load_counts_save(
                 "TITLE=Sphere synthetic object-count fixture",
                 "VERSION=0.99",
                 "SAVECOUNT=0",
-                "[WORLDCHAR SYNTHETIC_MISSING_CHARDEF]"
-                if unresolved_worldchar_type
-                else (
-                    "[WORLDCHAR SYNTHETIC_ALLOC_CHAR_00]"
-                    if named_container_reference
-                    else "[WORLDCHAR c_MAN]"
-                ),
-                "SERIAL=3",
-                "NPC=2",
-                "STR=100",
-                "INT=100",
-                "DEX=100",
-                "HITS=100",
-                "MAXHITS=100",
-                "MANA=100",
-                "STAM=100",
-                "P=130,128,0",
-                "[EOF]",
             ]
+            + char_sections
         ),
     )
 

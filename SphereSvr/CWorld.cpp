@@ -226,10 +226,29 @@ void CWorld::ResetLoadIntegrity()
 	m_iLoadRejected = 0;
 	m_iLoadDefaulted = 0;
 	m_iLoadDeleted = 0;
+	for ( int i = 0; i < LOAD_LOG_QTY; ++i )
+	{
+		m_iLoadLogEmitted[i] = 0;
+		m_iLoadLogSuppressed[i] = 0;
+	}
 	m_fSaveBlockedByLoad = false;
 	m_fSaveFailed = false;
 	m_fLoadIntegrityReported = false;
 	m_fLoadCountsCaptured = false;
+}
+
+bool CWorld::ShouldLogLoadDetail( LOAD_LOG_CATEGORY category )
+{
+	if ( category < 0 || category >= LOAD_LOG_QTY )
+		return true;
+	static const int sm_iLoadLogLimit = 8;
+	if ( m_iLoadLogEmitted[category] < sm_iLoadLogLimit )
+	{
+		m_iLoadLogEmitted[category]++;
+		return true;
+	}
+	m_iLoadLogSuppressed[category]++;
+	return false;
 }
 
 void CWorld::MarkLoadIssue( bool fObjectSection )
@@ -320,6 +339,28 @@ void CWorld::LogLoadDiagnostics() const
 	CGString sDiagnostics;
 	FormatLoadDiagnostics( sDiagnostics );
 	g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT, "%s" LOG_CR, (LPCTSTR) sDiagnostics );
+	static LPCTSTR const sm_szLoadLogCategories[LOAD_LOG_QTY] =
+	{
+		"WORLDCHAR property rejected",
+		"WORLDITEM property rejected",
+		"WORLDCHAR property detail",
+		"WORLDITEM property detail",
+		"WORLDCHAR load failed",
+		"WORLDITEM load failed",
+	};
+	for ( int i = 0; i < LOAD_LOG_QTY; ++i )
+	{
+		if ( m_iLoadLogSuppressed[i] )
+		{
+			g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,
+				"world load diagnostics: %s %d more suppressed" LOG_CR,
+				sm_szLoadLogCategories[i], m_iLoadLogSuppressed[i] );
+#ifndef _WIN32
+			fprintf( stderr, "[INFO] world load diagnostics: %s %d more suppressed\n",
+				sm_szLoadLogCategories[i], m_iLoadLogSuppressed[i] );
+#endif
+		}
+	}
 #ifndef _WIN32
 	fprintf( stderr, "[INFO] %s\n", (LPCTSTR) sDiagnostics );
 	fflush( stderr );
@@ -822,10 +863,13 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 			{
 				CGString sSerial( "unknown" );
 				WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
-				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
-					"%s load failed: uid=%s type='%s' reason=%s" LOG_CR,
-					fWorldItem ? "WORLDITEM" : "WORLDCHAR",
-					(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
+				if ( ShouldLogLoadDetail( fWorldItem ? LOAD_LOG_WORLDITEM_FAILURE : LOAD_LOG_WORLDCHAR_FAILURE ))
+				{
+					g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+						"%s load failed: uid=%s type='%s' reason=%s" LOG_CR,
+						fWorldItem ? "WORLDITEM" : "WORLDCHAR",
+						(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
+				}
 			}
 			MarkLoadIssue( fObjectSection );
 			continue;
@@ -856,10 +900,13 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 					sFailureReason.Copy( fWorldItem ? "item section could not be loaded" : "character section could not be loaded" );
 				CGString sSerial( "unknown" );
 				WorldReadSectionSerial( s.GetFilePath(), sectionContext, sSerial );
-				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
-					"%s load failed: uid=%s type='%s' reason=%s" LOG_CR,
-					fWorldItem ? "WORLDITEM" : "WORLDCHAR",
-					(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
+				if ( ShouldLogLoadDetail( fWorldItem ? LOAD_LOG_WORLDITEM_FAILURE : LOAD_LOG_WORLDCHAR_FAILURE ))
+				{
+					g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+						"%s load failed: uid=%s type='%s' reason=%s" LOG_CR,
+						fWorldItem ? "WORLDITEM" : "WORLDCHAR",
+						(LPCTSTR) sSerial, (LPCTSTR) sWorldCharType, (LPCTSTR) sFailureReason );
+				}
 			}
 			MarkLoadIssue( fObjectSection );
 		}

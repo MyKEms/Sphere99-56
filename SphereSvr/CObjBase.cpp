@@ -67,6 +67,8 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	sm_iCount ++;
 	m_fDeletePending = false;
 	m_fLoadToleratedLegacy = false;
+	m_fLoadRejectedProperty = false;
+	m_fLoadDefaulted = false;
 	m_wHue=HUE_DEFAULT;
 	m_timeCreate.InitTimeCurrent();
 

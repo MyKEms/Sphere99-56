@@ -300,6 +300,17 @@ enum LOAD_DIAGNOSTIC_TYPE
 	LOAD_DIAG_DELETED,
 };
 
+enum LOAD_LOG_CATEGORY
+{
+	LOAD_LOG_WORLDCHAR_PROPERTY,
+	LOAD_LOG_WORLDITEM_PROPERTY,
+	LOAD_LOG_WORLDCHAR_PROPERTY_DETAIL,
+	LOAD_LOG_WORLDITEM_PROPERTY_DETAIL,
+	LOAD_LOG_WORLDCHAR_FAILURE,
+	LOAD_LOG_WORLDITEM_FAILURE,
+	LOAD_LOG_QTY,
+};
+
 extern class CWorld : public CWorldThread
 {
 	// the world. Stuff saved in *World.SCP
@@ -331,6 +342,8 @@ private:
 	int		m_iLoadRejected;
 	int		m_iLoadDefaulted;
 	int		m_iLoadDeleted;
+	int		m_iLoadLogEmitted[LOAD_LOG_QTY];
+	int		m_iLoadLogSuppressed[LOAD_LOG_QTY];
 	bool	m_fSaveBlockedByLoad;
 	bool	m_fSaveFailed;
 	bool	m_fLoadIntegrityReported;
@@ -497,6 +510,7 @@ public:
 	void FormatLoadCounts( CGString& s ) const;
 	void LogLoadCounts() const;
 	void RecordLoadDiagnostic( LOAD_DIAGNOSTIC_TYPE type );
+	bool ShouldLogLoadDetail( LOAD_LOG_CATEGORY category );
 	void FormatLoadDiagnostics( CGString& s ) const;
 	void LogLoadDiagnostics() const;
 	bool LoadAll( LPCTSTR pszLoadName = NULL );

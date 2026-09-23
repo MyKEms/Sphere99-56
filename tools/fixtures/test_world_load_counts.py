@@ -129,15 +129,20 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    if args.rejected_property or args.weird_item:
+    if args.rejected_property:
         expected_line = (
-            "world load: created_items=1 created_chars=1 read_items=2 read_chars=1 "
+            "world load: created_items=2 created_chars=2 read_items=2 read_chars=2 "
+            "allocated_items=2 allocated_chars=2"
+        )
+    elif args.weird_item:
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=1"
         )
     elif args.noncontainer_reference:
         expected_line = (
-            "world load: created_items=1 created_chars=1 read_items=3 read_chars=1 "
-            "allocated_items=3 allocated_chars=1"
+            "world load: created_items=3 created_chars=1 read_items=3 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
         )
     elif args.unresolved_worldchar_type:
         expected_line = (
@@ -162,7 +167,7 @@ def main() -> int:
 
     if args.rejected_property:
         expected_diagnostics = (
-            "world load diagnostics: accepted=1 tolerated_legacy=1 rejected=1 "
+            "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=1 "
             "defaulted=0 deleted=0"
         )
     elif args.weird_item:
@@ -182,7 +187,7 @@ def main() -> int:
         )
     elif args.noncontainer_reference:
         expected_diagnostics = (
-            "world load diagnostics: accepted=2 tolerated_legacy=0 rejected=2 "
+            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=1 "
             "defaulted=0 deleted=0"
         )
     else:
@@ -234,16 +239,42 @@ def main() -> int:
                     for line in startup_log.splitlines()
                     if line.startswith("[ERROR]") or line.startswith("[CRITICAL]")
                 ]
-                if (
-                    not args.truncated
-                    and not args.unresolved_worldchar_type
-                    and not args.noncontainer_reference
-                    and not args.rejected_property
-                    and not args.weird_item
-                    and startup_errors
-                ):
+                if args.truncated:
+                    allowed_startup_error_fragments = (
+                        "Invalid WORLDITEM block index",
+                        "WORLDITEM load failed",
+                        "CRITICAL: world load skipped",
+                    )
+                elif args.unresolved_worldchar_type:
+                    allowed_startup_error_fragments = (
+                        "OBODY Invalid Char",
+                        "WORLDCHAR load fallback",
+                    )
+                elif args.noncontainer_reference:
+                    allowed_startup_error_fragments = (
+                        "Non container uid=",
+                        "WORLDITEM property rejected",
+                    )
+                elif args.rejected_property:
+                    allowed_startup_error_fragments = (
+                        "Item:Hitpoints assigned for non-weapon DEFAULTITEM",
+                        "WORLDITEM property rejected",
+                    )
+                elif args.weird_item:
+                    allowed_startup_error_fragments = ("Item 00 Invalid, id=",)
+                else:
+                    allowed_startup_error_fragments = ()
+                unexpected_startup_errors = [
+                    line
+                    for line in startup_errors
+                    if not any(
+                        fragment in line for fragment in allowed_startup_error_fragments
+                    )
+                ]
+                if unexpected_startup_errors:
                     raise RuntimeError(
-                        f"complete synthetic save logged load errors: {startup_errors!r}"
+                        "synthetic save logged unexpected load errors: "
+                        f"{unexpected_startup_errors!r}"
                     )
                 if args.truncated and not any(
                     "world load skipped 1 sections (1 objects)" in line
@@ -253,20 +284,50 @@ def main() -> int:
                         "truncated save did not report exactly one skipped object section"
                     )
                 if args.rejected_property:
-                    if not any(
-                        "WORLDITEM property rejected" in line and "key='HITS'" in line
+                    rejected_properties = [
+                        line
                         for line in startup_errors
+                        if "WORLDITEM property rejected" in line
+                    ]
+                    if len(rejected_properties) != 1 or not any(
+                        "WORLDITEM property rejected" in line and "key='HITS'" in line
+                        for line in rejected_properties
+                    ) or any("WORLDCHAR property rejected" in line for line in startup_errors):
+                        raise RuntimeError(
+                            "rejected-property fixture did not preserve the successful NPC/player setters"
+                        )
+                    unexpected_errors = [
+                        line
+                        for line in startup_errors
+                        if line not in rejected_properties
+                        and "Item:Hitpoints assigned for non-weapon DEFAULTITEM" not in line
+                    ]
+                    if unexpected_errors or any(
+                        "world load skipped " in line or "CRITICAL:" in line
+                        for line in startup_log.splitlines()
                     ):
                         raise RuntimeError(
-                            "rejected-property fixture did not report the rejected HITS property"
+                            "rejected-property fixture logged unexpected load failure: "
+                            f"{unexpected_errors!r}"
                         )
                 if args.weird_item:
-                    if not any(
-                        "reason=item was deleted as invalid during load" in line
-                        for line in startup_errors
+                    deleted_items = [
+                        line for line in startup_errors if "Invalid, id=" in line
+                    ]
+                    if len(deleted_items) != 1:
+                        raise RuntimeError(
+                            "weird-item fixture did not report exactly one deleted item"
+                        )
+                    unexpected_errors = [
+                        line for line in startup_errors if line not in deleted_items
+                    ]
+                    if unexpected_errors or any(
+                        "world load skipped " in line or "CRITICAL:" in line
+                        for line in startup_log.splitlines()
                     ):
                         raise RuntimeError(
-                            "weird-item fixture did not report deletion during load"
+                            "weird-item fixture logged unexpected load failure: "
+                            f"{unexpected_errors!r}"
                         )
                 if args.unresolved_worldchar_type:
                     diagnostic = (
@@ -278,10 +339,26 @@ def main() -> int:
                     fallback_errors = [
                         line for line in startup_errors if diagnostic in line
                     ]
-                    if len(fallback_errors) != 1 or startup_errors != fallback_errors:
+                    defaulted_body_errors = [
+                        line
+                        for line in startup_errors
+                        if "OBODY Invalid Char" in line
+                    ]
+                    if len(fallback_errors) != 1 or len(defaulted_body_errors) != 1:
                         raise RuntimeError(
-                            "unresolved character type did not produce exactly one fallback error "
-                            "with its UID, original token, and DEFAULTCHAR selection"
+                            "unresolved character fixture did not preserve one DEFAULTCHAR "
+                            "fallback and one stale-OBODY default"
+                        )
+                    unexpected_errors = [
+                        line
+                        for line in startup_errors
+                        if line not in fallback_errors
+                        and line not in defaulted_body_errors
+                    ]
+                    if unexpected_errors:
+                        raise RuntimeError(
+                            "unresolved character fixture logged unexpected errors: "
+                            f"{unexpected_errors!r}"
                         )
                     if any(
                         "world load skipped " in line
@@ -327,27 +404,15 @@ def main() -> int:
                         for line in startup_errors
                         if "WORLDITEM property rejected" in line
                     ]
-                    if len(rejected_properties) != 2:
+                    if len(rejected_properties) != 1:
                         raise RuntimeError(
-                            "nested non-container fixture did not reject both invalid CONT properties"
-                        )
-                    rejected_objects = [
-                        line
-                        for line in startup_errors
-                        if "WORLDITEM load failed" in line
-                    ]
-                    if len(rejected_objects) != 2:
-                        raise RuntimeError(
-                            "nested non-container fixture did not report both rejected objects"
+                            "nested non-container fixture did not reject the invalid CONT property"
                         )
                     unexpected_errors = [
                         line
                         for line in startup_errors
                         if line not in diagnostics
                         and line not in rejected_properties
-                        and line not in rejected_objects
-                        and "Invalid container 05" not in line
-                        and "world load skipped 2 sections (2 objects)" not in line
                     ]
                     if unexpected_errors:
                         raise RuntimeError(

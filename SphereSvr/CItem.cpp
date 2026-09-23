@@ -2268,7 +2268,8 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	CObjBasePtr pObjCont = g_World.ObjFind(uid);
 	if ( pObjCont == NULL )
 	{
-		DEBUG_ERR(( "Invalid container 0%lx" LOG_CR, (DWORD) uid ));
+		if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
+			DEBUG_ERR(( "Invalid container 0%lx" LOG_CR, (DWORD) uid ));
 		return( HRES_INVALID_HANDLE );	// not valid object.
 	}
 
@@ -2314,19 +2315,22 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	const ITEMID_TYPE idItem = static_cast<ITEMID_TYPE>(pItemDef ? pItemDef->GetID() : GetDispID());
 	const DWORD dwParentContainerUID = pParentContainer ? (DWORD)pParentContainer->GetUID() : 0;
 	const DWORD dwItemContainerUID = pItemContainer ? (DWORD)pItemContainer->GetUID() : 0;
-	DEBUG_ERR(( "Non container uid=0%lx,id=0x%04x,name=%s,type=%d,is_container=%d,parent_container_uid=0x%08lx,child_uid=0%lx,child_id=0x%04x,child_name=%s,child_type=%d,child_is_container=%d,child_container_uid=0x%08lx" LOG_CR,
-		(DWORD) uid,
-		(unsigned)idParent,
-		pszParentName,
-		pParentItem ? (int)pParentItem->GetType() : -1,
-		pObjCont->IsContainer(),
-		dwParentContainerUID,
-		(DWORD)GetUID(),
-		(unsigned)idItem,
-		pszItemName,
-		(int)GetType(),
-		IsContainer(),
-		dwItemContainerUID));
+	if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
+	{
+		DEBUG_ERR(( "Non container uid=0%lx,id=0x%04x,name=%s,type=%d,is_container=%d,parent_container_uid=0x%08lx,child_uid=0%lx,child_id=0x%04x,child_name=%s,child_type=%d,child_is_container=%d,child_container_uid=0x%08lx" LOG_CR,
+			(DWORD) uid,
+			(unsigned)idParent,
+			pszParentName,
+			pParentItem ? (int)pParentItem->GetType() : -1,
+			pObjCont->IsContainer(),
+			dwParentContainerUID,
+			(DWORD)GetUID(),
+			(unsigned)idItem,
+			pszItemName,
+			(int)GetType(),
+			IsContainer(),
+			dwItemContainerUID));
+	}
 	return( HRES_INVALID_HANDLE );	// not a container.
 }
 
@@ -2530,7 +2534,8 @@ HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item 
 	case P_Hitpoints:
 		if ( ! IsTypeArmorWeapon() && !IsType(IT_SHOVEL))
 		{
-			DEBUG_ERR(( "Item:Hitpoints assigned for non-weapon %s" LOG_CR, (LPCTSTR) GetResourceName()));
+			if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
+				DEBUG_ERR(( "Item:Hitpoints assigned for non-weapon %s" LOG_CR, (LPCTSTR) GetResourceName()));
 			return( HRES_INVALID_HANDLE );
 		}
 		m_itArmor.m_Hits_Cur = vVal.GetInt();
@@ -2638,7 +2643,6 @@ bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 {
 	// Read all properties directly through CItem's virtual s_PropSet,
 	// NOT through CObjBase::s_LoadProps which dispatches via CResourceObj vtable.
-	bool fRejected = false;
 	bool fToleratedLegacy = false;
 	while (s.ReadKeyParse())
 	{
@@ -2650,20 +2654,18 @@ bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 		{
 			fToleratedLegacy = true;
 		}
-		else if ( hRes != NO_ERROR )
+		else if ( FAILED(hRes) )
 		{
-			if ( !fRejected )
+			SetLoadRejectedProperty( true );
+			if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY ))
 			{
 				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
 					"WORLDITEM property rejected: uid=0%x key='%s' hresult=%ld" LOG_CR,
 					(DWORD)GetUID(), pszKey, (long)hRes );
 			}
-			fRejected = true;
 		}
 	}
 	SetLoadToleratedLegacy( fToleratedLegacy );
-	if ( fRejected )
-		return false;
 	if ( GetContainer() == NULL )	// Place into the world.
 	{
 		if ( GetTopPoint().IsCharValid())
@@ -2677,7 +2679,7 @@ bool CItem::s_LoadProps( CScript& s ) // Load an item from script
 	{
 		DEBUG_ERR(( "Item 0%x Invalid, id=%s, code=0%x" LOG_CR, GetUID(), (LPCTSTR) GetResourceName(), iResultCode ));
 		DeleteThis();
-		return false;
+		return true;
 	}
 
 	return( true );
