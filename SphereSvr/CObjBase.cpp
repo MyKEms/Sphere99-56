@@ -69,6 +69,8 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	m_fLoadToleratedLegacy = false;
 	m_fLoadRejectedProperty = false;
 	m_fLoadDefaulted = false;
+	m_fSaveParity = false;
+	m_fSaveParityValid = false;
 	m_wHue=HUE_DEFAULT;
 	// A zero timeout means that no timer is scheduled.  InitTime() would set
 	// the timeout to the current tick and make a freshly loaded item expire on
@@ -228,10 +230,18 @@ void CObjBase::s_WriteSafe( CScript& s )
 	try
 	{
 		uid = GetUID();
+		if ( g_World.IsSaving() && m_fSaveParityValid &&
+			m_fSaveParity == g_World.m_fSaveParity )
+			return;
 		if ( ! g_Cfg.m_fSaveGarbageCollect )
 		{
 			if ( g_World.FixObj( this ))
 				return;
+		}
+		if ( g_World.IsSaving())
+		{
+			m_fSaveParity = g_World.m_fSaveParity;
+			m_fSaveParityValid = true;
 		}
 		s_WriteProps(s);
 	}
@@ -687,6 +697,13 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			if ( IsItem())
 			{
 				dwUID |= UID_F_ITEM;
+			}
+			// AllocUID assigns a fresh slot on collision; reject the section first
+			// so a duplicate saved serial cannot silently replace its first object.
+			if ( g_World.FindUIDObj( dwUID ) != NULL )
+			{
+				g_World.RecordLoadDuplicateSerial( dwUID & UID_INDEX_MASK, IsItem());
+				return HRES_INVALID_INDEX;
 			}
 			if ( g_World.LoadUID( dwUID, this ) == 0 )
 				return HRES_INVALID_INDEX;

@@ -345,6 +345,22 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2720
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-spawn-gem" \
+            --spawn-gem-probe \
+            --world-save-probe
+          python3 tools/fixtures/test_spawn_gem_serialization.py \
+            "$RUNNER_TEMP/sphere-asan-spawn-gem" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2740
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-spawn-gem-duplicate" \
+            --spawn-gem-duplicate-serial-probe
+          python3 tools/fixtures/test_spawn_gem_serialization.py \
+            "$RUNNER_TEMP/sphere-asan-spawn-gem-duplicate" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2741 \
+            --duplicate-load
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-dotted-expressions" \
             --dotted-expression-probe \
             --unknown-keyword-report
@@ -392,6 +408,9 @@ jobs:
             ${{ runner.temp }}/sphere-asan-timer-sibling-mutation/server.log
             ${{ runner.temp }}/sphere-asan-timer-sibling-mutation-owner-first/server.log
             ${{ runner.temp }}/sphere-asan-world-save/server.log
+            ${{ runner.temp }}/sphere-asan-spawn-gem/server.log
+            ${{ runner.temp }}/sphere-asan-spawn-gem/server-reload.log
+            ${{ runner.temp }}/sphere-asan-spawn-gem-duplicate/server.log
             ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-asan-arg-locals/server.log
           if-no-files-found: warn
@@ -736,6 +755,22 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2720
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-spawn-gem" \
+            --spawn-gem-probe \
+            --world-save-probe
+          python3 tools/fixtures/test_spawn_gem_serialization.py \
+            "$RUNNER_TEMP/sphere-spawn-gem" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2742
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-spawn-gem-duplicate" \
+            --spawn-gem-duplicate-serial-probe
+          python3 tools/fixtures/test_spawn_gem_serialization.py \
+            "$RUNNER_TEMP/sphere-spawn-gem-duplicate" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2743 \
+            --duplicate-load
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-dotted-expressions" \
             --dotted-expression-probe \
             --unknown-keyword-report
@@ -778,6 +813,9 @@ jobs:
             ${{ runner.temp }}/sphere-timer-sibling-mutation/server.log
             ${{ runner.temp }}/sphere-timer-sibling-mutation-owner-first/server.log
             ${{ runner.temp }}/sphere-world-save/server.log
+            ${{ runner.temp }}/sphere-spawn-gem/server.log
+            ${{ runner.temp }}/sphere-spawn-gem/server-reload.log
+            ${{ runner.temp }}/sphere-spawn-gem-duplicate/server.log
             ${{ runner.temp }}/sphere-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-arg-locals/server.log
             ${{ runner.temp }}/sphere-book-pages/server.log
