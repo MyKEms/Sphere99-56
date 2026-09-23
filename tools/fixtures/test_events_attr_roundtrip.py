@@ -86,9 +86,9 @@ def wait_for_generation(path: Path, previous: str, timeout: float) -> str:
             candidate != previous
             and count > previous_count
             and "[EOF]" in candidate
-            and "EVENTS=" in candidate
-            and "CHANGER=" in candidate
         ):
+            # Let validation name missing metadata on implementations that do
+            # not preserve EVENTS or CHANGER instead of timing out here.
             # A save is written in place.  Require one stable read so the
             # assertions never inspect a partially written section.
             time.sleep(0.05)

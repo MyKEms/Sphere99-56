@@ -609,35 +609,8 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		{
 			break;
 		}
-		// 0.99 saves use EVENTS for more than [EVENTS] blocks.  Item
-		// TYPEDEFs, professions and speech links are stored in the same array
-		// and must survive a round trip with their original resource type.
-		// Resolve each entry independently because v_Set() accepts one resource
-		// namespace per call and a single mixed line otherwise drops the rest.
-		{
-			static const RES_TYPE sm_EventResourceTypes[] =
-			{
-				RES_Events, RES_TypeDef, RES_Profession, RES_Speech,
-				RES_ItemDef, RES_CharDef
-			};
-			const int iArgCount = vVal.MakeArraySize();
-			for ( int i = 0; i < iArgCount; i++ )
-			{
-				LPCTSTR pszEvent = vVal.GetArrayStr(i);
-				bool fResolved = false;
-				for ( RES_TYPE restype : sm_EventResourceTypes )
-				{
-					CGVariant vEvent( pszEvent ? pszEvent : "" );
-					if ( m_Events.v_Set( vEvent, restype ))
-					{
-						fResolved = true;
-						break;
-					}
-				}
-				if ( !fResolved )
-					return(HRES_BAD_ARGUMENTS);
-			}
-		}
+		if ( ! m_Events.v_Set( vVal, RES_Events ))
+			return(HRES_BAD_ARGUMENTS);
 		break;
 	case P_Tag:
 		return( m_TagDefs.s_PropSetTags( vVal ));
