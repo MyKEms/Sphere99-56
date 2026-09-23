@@ -230,6 +230,7 @@ public:
 
 	CServTime  m_timeCreate;		// When was i created ?
 	CSphereUID m_uidChanger;		// UID of account that created this. or Last GM (Account) to have modified this.
+	CGString m_sChangerName;		// Legacy saves store the account name instead of its UID.
 
 	CResourceRefArray m_Events;		// When events are attached to this?
 	CVarDefArray m_TagDefs;			// attach extra tags here. (this that dont apply to all)

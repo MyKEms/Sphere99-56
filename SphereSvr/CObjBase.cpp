@@ -278,6 +278,8 @@ void CObjBase::DupeCopy( const CObjBase* pObj )
 {
 	CObjBaseTemplate::DupeCopy( pObj );
 	m_wHue = pObj->GetHue();
+	m_uidChanger = pObj->m_uidChanger;
+	m_sChangerName = pObj->m_sChangerName;
 	// m_timeout = pObj->m_timeout;
 	m_TagDefs = pObj->m_TagDefs;
 	m_LoadedProps = pObj->m_LoadedProps;
@@ -654,7 +656,11 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_Changer:
 		if ( ! g_Serv.IsLoading())	// only set (this way) on load.
 			return( HRES_PRIVILEGE_NOT_HELD );
-		m_uidChanger = vVal.GetUID();
+		m_sChangerName = vVal.GetPSTR();
+		if ( CAccountPtr pAccount = g_Accounts.Account_FindNameCheck( m_sChangerName ))
+			m_uidChanger = pAccount->GetUIDIndex();
+		else
+			m_uidChanger = vVal.GetUID();
 		break;
 	case P_Color:
 		if ( ! _stricmp( vVal.GetPSTR(), "match_shirt" ) ||
@@ -765,7 +771,9 @@ void CObjBase::s_WriteProps( CScript& s )
 	if ( m_timeout.IsTimeValid() )
 		s.WriteKeyInt( "TIMER", GetTimerAdjusted());
 	s.WriteKeyDWORD( "AGE", m_timeCreate.GetCacheAge() / TICKS_PER_SEC );
-	if ( m_uidChanger.IsValidUID())
+	if ( !m_sChangerName.IsEmpty())
+		s.WriteKey( "CHANGER", m_sChangerName );
+	else if ( m_uidChanger.IsValidUID())
 		s.WriteKeyDWORD( "CHANGER", m_uidChanger );
 	m_TagDefs.s_WriteTags(s,NULL);
 	for ( int i = 0; i < (int)m_LoadedProps.GetSize(); i++ )
@@ -1276,6 +1284,7 @@ void CObjBase::SetChangerSrc( CScriptConsole* pSrc )
 	if ( pAccount == NULL )
 		return;
 	m_uidChanger = pAccount->GetUIDIndex();
+	m_sChangerName = pAccount->GetName();
 }
 
 void CObjBase::DeleteThis()
