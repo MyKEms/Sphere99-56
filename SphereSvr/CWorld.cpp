@@ -1264,13 +1264,21 @@ HRESULT CWorld::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		m_Clock.InitTime( vVal.GetInt());
 		break;
 	case P_Version:
+	{
 		// Save headers use the 0.99 dotted version form (for example
-		// "0.99u").  GetInt() stops at the dot and turns that into zero,
+		// "0.99u"), sometimes wrapped in quotes.  GetInt() stops at the dot
+		// and turns that into zero,
 		// which incorrectly enables every pre-0.99 migration while loading.
 		// Use the Sphere expression parser so dotted 0.99 versions retain
 		// their numeric 99 value and current-format properties are accepted.
-		m_iLoadVersion = Exp_GetComplex( vVal.GetPSTR());
+		LPCTSTR pszVersion = vVal.GetPSTR();
+		while ( pszVersion && isspace( (unsigned char)*pszVersion ))
+			pszVersion++;
+		if ( pszVersion && *pszVersion == '"' )
+			pszVersion++;
+		m_iLoadVersion = Exp_GetComplex( pszVersion );
 		break;
+	}
 	case P_Title: // ignore this
 		break;
 	default:

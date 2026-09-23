@@ -12,6 +12,7 @@ from pathlib import Path
 from run_suite import shutdown_failures, stop_server, wait_for_port
 
 
+EXPECTED_EVENTS = {"e_AllPlayers", "t_fixture_events", "class_fixture"}
 SAVECOUNT_RE = re.compile(r"(?m)^SAVECOUNT=(\d+)$")
 SANITIZER_RE = re.compile(
     r"AddressSanitizer|UndefinedBehaviorSanitizer|LeakSanitizer|"
@@ -53,6 +54,20 @@ def sphere_number(value: str) -> int:
 
 def read_save(path: Path) -> str:
     return path.read_text(encoding="ascii", errors="replace")
+
+
+def repeated_values(text: str, prefix: str, key: str) -> list[str]:
+    """Return repeated property values from matching sections in save order."""
+
+    values: list[str] = []
+    in_section = False
+    for line in text.splitlines():
+        if line.startswith("["):
+            in_section = line.startswith(prefix)
+            continue
+        if in_section and line.startswith(f"{key}="):
+            values.append(line.split("=", 1)[1])
+    return values
 
 
 def wait_for_generation(path: Path, previous: str, timeout: float) -> str:
@@ -136,8 +151,9 @@ def validate_generation(world: str, chars: str, generation: int) -> list[str]:
         )
     if len(items) == 1:
         item = items[0]
-        if item.get("EVENTS") != "e_AllPlayers":
-            failures.append(f"generation {generation}: item EVENTS={item.get('EVENTS')!r}")
+        item_events = set(repeated_values(world, "[WORLDITEM ", "EVENTS"))
+        if item_events != EXPECTED_EVENTS:
+            failures.append(f"generation {generation}: item EVENTS={sorted(item_events)!r}")
         if "CHANGER" not in item:
             failures.append(f"generation {generation}: item CHANGER missing")
         elif sphere_number(item["CHANGER"]) != 1234:
@@ -152,9 +168,13 @@ def validate_generation(world: str, chars: str, generation: int) -> list[str]:
             )
     if len(characters) == 1:
         character = characters[0]
-        if character.get("EVENTS") != "e_AllPlayers":
+        character_events = set(
+            repeated_values(world, "[WORLDCHAR ", "EVENTS")
+            + repeated_values(chars, "[WORLDCHAR ", "EVENTS")
+        )
+        if character_events != EXPECTED_EVENTS:
             failures.append(
-                f"generation {generation}: character EVENTS={character.get('EVENTS')!r}"
+                f"generation {generation}: character EVENTS={sorted(character_events)!r}"
             )
         if "CHANGER" not in character:
             failures.append(f"generation {generation}: character CHANGER missing")

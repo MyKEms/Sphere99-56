@@ -253,6 +253,7 @@ EVENTS_ATTR_ITEM_SERIAL = 4
 EVENTS_ATTR_CHAR_SERIAL = 3
 EVENTS_ATTR_CHANGER = 1234
 EVENTS_ATTR_MASK = 0x001C
+EVENTS_ATTR_VALUES = ("e_AllPlayers", "t_fixture_events", "class_fixture")
 
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
@@ -1425,6 +1426,12 @@ DEFNAME=T_HAIR
 [TYPEDEF 176]
 DEFNAME=T_EQ_SCRIPT
 
+[TYPEDEF 177]
+DEFNAME=t_fixture_events
+
+[PROFESSION 11]
+DEFNAME=class_fixture
+
 [ITEMDEF 0x0E75]
 DEFNAME=DEFAULTITEM
 NAME=synthetic container
@@ -2170,12 +2177,12 @@ def write_events_attr_save(root: Path) -> None:
         "\n".join(
             [
                 "TITLE=Sphere synthetic EVENTS/ATTR fixture",
-                "VERSION=0.99",
+                'VERSION="0.99z8"',
                 "SAVECOUNT=0",
                 "[WORLDITEM SYNTHETIC_OBJECT]",
                 f"SERIAL={EVENTS_ATTR_ITEM_SERIAL}",
                 "P=128,128,0",
-                "EVENTS=e_AllPlayers",
+                *(f"EVENTS={value}" for value in EVENTS_ATTR_VALUES),
                 f"CHANGER={EVENTS_ATTR_CHANGER}",
                 f"ATTR=0x{EVENTS_ATTR_MASK:04X}",
                 "LEGACY_UNKNOWN=keep-item",
@@ -2188,7 +2195,7 @@ def write_events_attr_save(root: Path) -> None:
         "\n".join(
             [
                 "TITLE=Sphere synthetic EVENTS/ATTR fixture",
-                "VERSION=0.99",
+                'VERSION="0.99z8"',
                 "SAVECOUNT=0",
                 "[WORLDCHAR c_MAN]",
                 f"SERIAL={EVENTS_ATTR_CHAR_SERIAL}",
@@ -2201,7 +2208,7 @@ def write_events_attr_save(root: Path) -> None:
                 "MANA=100",
                 "STAM=100",
                 "P=130,128,0",
-                "EVENTS=e_AllPlayers",
+                *(f"EVENTS={value}" for value in EVENTS_ATTR_VALUES),
                 f"CHANGER={EVENTS_ATTR_CHANGER}",
                 "LEGACY_UNKNOWN=keep-char",
                 "[EOF]",
