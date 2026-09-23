@@ -836,6 +836,17 @@ void CSphereExpContext::InitFunctions()	// static
 
 HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet )
 {
+	// LASTNEW is exposed by CWorld rather than the generated function table.
+	// Route all three aliases through the world property getter so a freshly
+	// created object can be used as a reference-chain root.
+	if ( !_stricmp(pszKey, "LASTNEW") || !_stricmp(pszKey, "LASTNEWITEM") ||
+		!_stricmp(pszKey, "LASTNEWCHAR") )
+	{
+		HRESULT hRes = g_World.s_PropGet(pszKey, vValRet, GetSrc());
+		if ( hRes == NO_ERROR )
+			return hRes;
+	}
+
 	// Evaluate an identifier.
 	// Find the key in the defs collection
 	// Skip to the end of the identifier name. ( + any args? )
