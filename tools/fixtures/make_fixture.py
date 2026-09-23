@@ -45,6 +45,13 @@ DOTTED_PROBE_SECTOR_LIGHT = 4
 DOTTED_PROBE_CAPPED_WHILE = "WHILE (2>1)"
 DOTTED_PROBE_CAPPED_FOR = "FOR 20000"
 DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
+
+# Named ARG locals and positional-object probe.  The generated login trigger
+# creates one synthetic item through a script-level NEWITEMSAFE wrapper, then
+# passes its UID into a nested function so ARG/ARGV resolution is exercised in
+# the same context shape as a real function call.
+ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
+ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 DOTTED_EXPRESSION_ROWS = (
     # Forms without a function-root chain; their results must not change.
     ("src_name", "<src.name>", "CI"),
@@ -304,6 +311,41 @@ def dotted_expression_lines(context: str, emit: str) -> list[str]:
         for key, expression, contexts in DOTTED_EXPRESSION_ROWS
         if context in contexts
     ]
+
+
+def arg_locals_scripts() -> tuple[str, str]:
+    """Return login lines and function sections for ARG-local behavior."""
+
+    marker = ARG_LOCALS_MARKER
+    login = [
+        "NEWITEMSAFE SYNTHETIC_OBJECT",
+        f"SYSMESSAGE {marker} C|lastnew_name|[<LASTNEW.NAME>]",
+        "F_ARG_LOCALS_PROBE(<LASTNEW.SERIAL>)",
+        f"SYSMESSAGE {marker} C_END",
+    ]
+    sections = """
+[FUNCTION NEWITEMSAFE]
+NEWITEM <ARGS>
+RETURN <LASTNEW.SERIAL>
+
+[FUNCTION f_arg_locals_probe]
+ARG(i,0)
+ARG(argobj,<ARGV(0)>)
+SYSMESSAGE SPHERE_ARG_LOCALS C|before|[<ARG.i>|<arg(i)>|<i>]
+WHILE (<ARG.i> < 3)
+ARG(i,#+1)
+ENDWHILE
+SYSMESSAGE SPHERE_ARG_LOCALS C|counter_after|[<ARG.i>|<arg(i)>|<i>]
+WHILE (i < 5)
+ARG(i,#+1)
+ENDWHILE
+SYSMESSAGE SPHERE_ARG_LOCALS C|bare_after|[<i>]
+SYSMESSAGE SPHERE_ARG_LOCALS C|object_before|[<argobj.name>|<ARG(argobj).name>|<ARGV(0).TYPE>]
+ARGV(0).TYPE=T_NORMAL
+SYSMESSAGE SPHERE_ARG_LOCALS C|object_after|[<argobj.type>|<ARGV(0).TYPE>]
+RETURN <i>
+"""
+    return "\n".join(login) + "\n", sections
 
 
 def dotted_expression_scripts() -> tuple[str, str, str]:
@@ -701,6 +743,7 @@ def write_scripts(
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
     dotted_expression_probe: bool = False,
+    arg_locals_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
@@ -713,6 +756,9 @@ def write_scripts(
     )
     dotted_expression_login, dotted_expression_sections, environ_change_body = (
         dotted_expression_scripts() if dotted_expression_probe else ("", "", "RETURN\n")
+    )
+    arg_locals_login, arg_locals_sections = (
+        arg_locals_scripts() if arg_locals_probe else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1092,7 +1138,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + world_save_probe_script + """
@@ -1132,7 +1178,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + """
+""" + dotted_expression_sections + arg_locals_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -1705,6 +1751,11 @@ def main() -> int:
         help="evaluate dotted reference expressions and commands at login",
     )
     parser.add_argument(
+        "--arg-locals-probe",
+        action="store_true",
+        help="exercise named ARG locals, positional object roots, and LASTNEW",
+    )
+    parser.add_argument(
         "--timer-lifetime-item-first-probe",
         action="store_true",
         help="exercise item-first timer removal with reentrant owner removal",
@@ -1787,6 +1838,7 @@ def main() -> int:
         named_resource_id_probe=args.named_resource_ids,
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
+        arg_locals_probe=args.arg_locals_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,

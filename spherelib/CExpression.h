@@ -253,9 +253,16 @@ public:
 					psz++;
 				if ( *psz == '0' && (*(psz+1) == 'x' || *(psz+1) == 'X') )
 					return true; // hex
+				if ( *psz == '0' && isxdigit((unsigned char)psz[1]) )
+				{
+					psz += 2;
+					while ( isxdigit((unsigned char)*psz) )
+						psz++;
+					return *psz == '\0';
+				}
 				while ( *psz )
 				{
-					if ( !isdigit(*psz) )
+					if ( !isdigit((unsigned char)*psz) )
 						return false;
 					psz++;
 				}
@@ -368,7 +375,18 @@ public:
 		case CGVT_UID:    return m_dwVal;
 		case CGVT_DWORD:  return m_dwVal;
 		case CGVT_INT:    return (UID_INDEX) m_iVal;
-		case CGVT_STR:    return (UID_INDEX) strtoul((LPCTSTR)m_str, NULL, 0);
+		case CGVT_STR:
+			{
+				LPCTSTR psz = (LPCTSTR)m_str;
+				if ( !psz || !*psz )
+					return 0;
+				int iBase = 0;
+				if ( psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X') )
+					iBase = 16;
+				else if ( psz[0] == '0' && isxdigit((unsigned char)psz[1]) )
+					iBase = 16;
+				return (UID_INDEX) strtoul(psz, NULL, iBase);
+			}
 		default:          return 0;
 		}
 	}
@@ -1012,6 +1030,25 @@ public:
 					if (ResolveReferenceOperand(szOperand, iValue))
 					{
 						pStr = pEnd;
+						return fNeg ? -iValue : iValue;
+					}
+				}
+			}
+			else
+			{
+				// A named ARG local is a valid numeric operand even without a
+				// dotted reference suffix. Let the execution context resolve it;
+				// unresolved names still fall through to DEFNAME parsing below.
+				char szOperand[EXPRESSION_MAX_OPERAND_LEN];
+				size_t iLen = pName - p;
+				if ( iLen < sizeof(szOperand) )
+				{
+					memcpy(szOperand, p, iLen);
+					szOperand[iLen] = '\0';
+					int iValue = 0;
+					if ( ResolveReferenceOperand(szOperand, iValue) )
+					{
+						pStr = pName;
 						return fNeg ? -iValue : iValue;
 					}
 				}

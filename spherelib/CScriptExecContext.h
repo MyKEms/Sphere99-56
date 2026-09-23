@@ -100,8 +100,22 @@ protected:
 	CResourceObj* ResolveObjectResult(const CGVariant& value, LPCTSTR pszFunctionRoot)
 	{
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(value.GetRef());
-		if ( pObj == NULL && pszFunctionRoot && value.IsNumeric() && IsScriptFunction(pszFunctionRoot) )
-			pObj = ResolveUIDObject(value.GetUID());
+		if ( pObj == NULL && pszFunctionRoot && value.IsNumeric() )
+		{
+			// Script functions and the reference-valued argument helpers return
+			// object UIDs as strings. Named ARG locals can hold the same UID after
+			// ARGV() copies a function argument, so all of these roots use the
+			// engine's UID resolver before property chaining continues.
+			bool fUIDRoot = IsScriptFunction(pszFunctionRoot) ||
+				!_stricmp(pszFunctionRoot, "ARG") ||
+				!_stricmp(pszFunctionRoot, "ARGV") ||
+				!_stricmp(pszFunctionRoot, "LASTNEW") ||
+				!_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
+				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
+				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
+			if ( fUIDRoot )
+				pObj = ResolveUIDObject(value.GetUID());
+		}
 		return pObj;
 	}
 
@@ -582,7 +596,19 @@ public:
 				LPCTSTR pszValue = pszComma + 1;
 				while ( *pszValue == ' ' || *pszValue == '\t' )
 					pszValue++;
-				m_LocalArgs.SetKeyStr(pszName, pszValue);
+				if ( *pszValue == '#' )
+				{
+					// Sphere's # prefix means "the current value". Evaluate the
+					// suffix as an expression so #+1, #-1 and #*2 retain their
+					// normal arithmetic meaning.
+					CGVariant vCurrent;
+					m_LocalArgs.FindKeyVar(pszName, vCurrent);
+					TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+					snprintf(szExpression, sizeof(szExpression), "%d%s", vCurrent.GetInt(), pszValue + 1);
+					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(szExpression));
+				}
+				else
+					m_LocalArgs.SetKeyStr(pszName, pszValue);
 			}
 			if ( !m_LocalArgs.FindKeyVar(pszName, vValRet) )
 				vValRet.SetStr("");
@@ -597,6 +623,12 @@ public:
 				vValRet.SetStr("");
 			return NO_ERROR;
 		}
+		// Bare ARG locals are valid in both escape tags (<i>) and numeric
+		// expressions (WHILE (i < 5)). Keep legacy DEFNAME/object lookup as
+		// the fallback for names that are not local to this context.
+		if ( strchr(pszKey, '.') == NULL && strchr(pszKey, '(') == NULL &&
+			m_LocalArgs.FindKeyVar(pszKey, vValRet) )
+			return NO_ERROR;
 
 		// Subclasses override this for additional functions.
 		return HRES_UNKNOWN_PROPERTY;
