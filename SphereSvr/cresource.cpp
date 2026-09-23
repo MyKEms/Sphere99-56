@@ -983,9 +983,14 @@ static void RecordWorldLoadDiagnostic( CObjBase* pObj, bool fLoaded, bool fDefau
 		g_World.RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
 		return;
 	}
-	if ( fDefaulted )
+	if ( fDefaulted || pObj->HasLoadDefaulted())
 	{
 		g_World.RecordLoadDiagnostic( LOAD_DIAG_DEFAULTED );
+		return;
+	}
+	if ( pObj->HasLoadRejectedProperty())
+	{
+		g_World.RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
 		return;
 	}
 	if ( pObj->HasLoadToleratedLegacy())

@@ -223,21 +223,39 @@ HRESULT CCharPlayer::s_PropSetPlayer( CChar* pChar, int iProp, CGVariant& vVal )
 	switch ( iProp )
 	{
 	case P_SkillLock:	// "SkillLock[alchemy]"
-		if ( vVal.MakeArraySize() < 2 )
-			return HRES_BAD_ARG_QTY;
 		{
-			// SKILLLOCK[x]=
-			SKILL_TYPE skill = g_Cfg.FindSkillKey( vVal.GetArrayPSTR(0), true );
-			if ( skill <= SKILL_NONE )
-				return( HRES_INVALID_INDEX );
-			int bState;
-			if ( vVal.GetArrayElement(1).IsNumeric())
+			int iArgs = vVal.MakeArraySize();
+			LPCTSTR pszSkill = NULL;
+			CGVariant vState;
+			char szSkill[64];
+			char szState[64];
+			if ( iArgs >= 2 )
 			{
-				bState = vVal.GetArrayInt(1);
+				pszSkill = vVal.GetArrayPSTR(0);
+				vState = vVal.GetArrayElement(1);
 			}
 			else
 			{
-				bState = FindTable( vVal.GetArrayElement(1), sm_szLockStates );
+				// s_WritePlayer emits SkillLock.N=state.  The extended-property
+				// normalizer presents that legacy spelling as "N state" rather
+				// than the comma-separated pair used by script methods.
+				if ( std::sscanf( vVal.GetPSTR(), "%63s %63s", szSkill, szState ) != 2 )
+					return HRES_BAD_ARG_QTY;
+				pszSkill = szSkill;
+				vState = szState;
+			}
+			// SKILLLOCK[x]=
+			SKILL_TYPE skill = g_Cfg.FindSkillKey( pszSkill, true );
+			if ( skill <= SKILL_NONE )
+				return( HRES_INVALID_INDEX );
+			int bState;
+			if ( vState.IsNumeric())
+			{
+				bState = vState.GetInt();
+			}
+			else
+			{
+				bState = FindTable( vState, sm_szLockStates );
 			}
 			if ( bState < SKILLLOCK_UP || bState > SKILLLOCK_LOCK )
 				return( HRES_BAD_ARGUMENTS );
@@ -498,4 +516,3 @@ void CCharNPC::s_WriteNPC( CChar* pChar, CScript& s )
 		s.WriteKey( "NEED", szTmp );
 	}
 }
-

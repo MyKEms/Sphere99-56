@@ -1263,8 +1263,12 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			CREID_TYPE id = (CREID_TYPE) g_Cfg.ResourceGetIndexType( RES_CharDef, vVal.GetStr());
 			if ( ! g_Cfg.FindCharDef( id ))
 			{
-				DEBUG_ERR(( "OBODY Invalid Char 0%x" LOG_CR, id ));
-				return( HRES_BAD_ARGUMENTS );
+				if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDCHAR_PROPERTY_DETAIL ))
+					DEBUG_ERR(( "OBODY Invalid Char 0%x; using default body" LOG_CR, id ));
+				CREID_TYPE defaultId = (CREID_TYPE) g_Cfg.ResourceGetIndexType( RES_CharDef, "DEFAULTCHAR" );
+				m_prev_id = g_Cfg.FindCharDef( defaultId ) ? defaultId : GetID();
+				SetLoadDefaulted( true );
+				break;
 			}
 			m_prev_id = id;
 		}
@@ -2110,7 +2114,6 @@ void CChar::s_WriteParity( CScript& s )
 bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 {
 	// Read all properties directly through CChar's virtual s_PropSet.
-	bool fRejected = false;
 	bool fToleratedLegacy = false;
 	while (s.ReadKeyParse())
 	{
@@ -2122,20 +2125,18 @@ bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 		{
 			fToleratedLegacy = true;
 		}
-		else if ( hRes != NO_ERROR )
+		else if ( FAILED(hRes) )
 		{
-			if ( !fRejected )
+			SetLoadRejectedProperty( true );
+			if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDCHAR_PROPERTY ))
 			{
 				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
 					"WORLDCHAR property rejected: uid=0%x key='%s' hresult=%ld" LOG_CR,
 					(DWORD)GetUID(), pszKey, (long)hRes );
 			}
-			fRejected = true;
 		}
 	}
 	SetLoadToleratedLegacy( fToleratedLegacy );
-	if ( fRejected )
-		return false;
 
 	// Init the STATF_SaveParity flag.
 	// StatFlag_Mod( STATF_SaveParity, g_World.m_fSaveParity );
@@ -2153,7 +2154,7 @@ bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 	{
 		DEBUG_ERR(( "Char 0%x Invalid, id='%s', code=0%x" LOG_CR, GetUID(), (LPCTSTR) GetResourceName(), iResultCode ));
 		DeleteThis();
-		return( false );
+		return( true );
 	}
 
 	return( true );
