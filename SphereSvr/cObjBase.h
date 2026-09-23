@@ -1341,13 +1341,19 @@ public:
 		}
 		else
 		{
-			// A child may still be linked while its unequip callback reenters
-			// this container. Advance through the saved next link so a pending
-			// in-flight child cannot make this loop retry forever.
-			CItemPtr pItemNext;
-			for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItemNext )
+			// Snapshot the source list before callbacks can move a sibling. A saved
+			// next pointer alone is unsafe: if @UnEquip reparents that sibling, its
+			// next link now belongs to the destination list. Keep only children that
+			// still belong to this container, while allowing a pending in-flight
+			// child to remain linked until its callback unwinds.
+			CGRefArray<CItem> aItems;
+			for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItem->GetNext() )
+				aItems.Add( pItem );
+			for ( size_t i = 0; i < aItems.GetCount(); ++i )
 			{
-				pItemNext = pItem->GetNext();
+				CItemPtr pItem = aItems[i];
+				if ( pItem == NULL || pItem->GetParent() != this )
+					continue;
 				pItem->DeleteThis();
 			}
 		}
