@@ -1338,7 +1338,12 @@ void CClient::Event_Profile( BYTE fWriteMode, CSphereUID uid, const CUOEvent* pE
 
 	len += (iWLen+1)*sizeof(NCHAR);
 
-	LPCTSTR pszProfile = fIncognito ? "" : ((LPCTSTR) pChar->m_TagDefs.FindKeyStr( "PROFILE" ));
+	CGString sProfile;
+	if ( ! fIncognito )
+	{
+		sProfile = pChar->m_TagDefs.FindKeyStr( "PROFILE" );
+	}
+	LPCTSTR pszProfile = sProfile;
 
 	TCHAR szProfile2[CSTRING_MAX_LEN-16];
 	Str_EscSeqRemove( szProfile2, pszProfile, COUNTOF(szProfile2));

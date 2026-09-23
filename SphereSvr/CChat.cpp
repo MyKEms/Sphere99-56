@@ -714,10 +714,10 @@ void CChatChannel::Member_Kick( CClient* pSrc, CClient* pClient )
 {
 	ASSERT( pClient );
 
-	LPCTSTR pszChatNameBy;
+	CGString sChatNameBy;
 	if (pSrc) // If NULL, then an ADMIN or a GM did it
 	{
-		pszChatNameBy = pSrc->Chat_GetName();
+		sChatNameBy = pSrc->Chat_GetName();
 		if (!Moderator_Is(pSrc))
 		{
 			pSrc->Chat_SendMsg(CHATMSG_MustHaveOps);
@@ -726,10 +726,12 @@ void CChatChannel::Member_Kick( CClient* pSrc, CClient* pClient )
 	}
 	else
 	{
-		pszChatNameBy = "SYSTEM";
+		sChatNameBy = "SYSTEM";
 	}
+	LPCTSTR pszChatNameBy = sChatNameBy;
 
-	LPCTSTR pszName = pClient->Chat_GetName();
+	CGString sName = pClient->Chat_GetName();
+	LPCTSTR pszName = sName;
 
 	// Kicking this person...remove from list of moderators first
 	if (Moderator_Is(pClient))

@@ -1606,10 +1606,13 @@ CGString CItem::GetName() const
 	CItemDefPtr pItemDef = Item_GetDef();
 	ASSERT(pItemDef);
 
+	// pszNameBase must point at storage that outlives this function:
+	// the object's own name or the item definition's type name.
+	// CObjBase::GetName() returns a temporary copy and must not be used here.
 	LPCTSTR pszNameBase;
 	if ( IsIndividualName())
 	{
-		pszNameBase = CObjBase::GetName();
+		pszNameBase = GetIndividualName();
 	}
 	else if ( pItemDef->HasTypeName())
 	{

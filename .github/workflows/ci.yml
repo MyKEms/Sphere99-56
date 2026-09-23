@@ -207,6 +207,14 @@ jobs:
             --port 2718 \
             --multi-property
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-named-item-names" \
+            --world-load-counts \
+            --named-item-names
+          python3 tools/fixtures/test_item_name_lifetime.py \
+            "$RUNNER_TEMP/sphere-asan-named-item-names" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2724
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-named-resource-ids" \
             --world-load-counts \
             --named-resource-ids
@@ -319,6 +327,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-world-counts-truncated/server.log
             ${{ runner.temp }}/sphere-asan-world-counts-rejected-property/server.log
             ${{ runner.temp }}/sphere-asan-world-counts-weird-item/server.log
+            ${{ runner.temp }}/sphere-asan-named-item-names/server.log
             ${{ runner.temp }}/sphere-asan-named-resource-ids/server.log
             ${{ runner.temp }}/sphere-asan-timer-lifetime/server.log
             ${{ runner.temp }}/sphere-asan-timer-lifetime-item-first/server.log
@@ -540,6 +549,14 @@ jobs:
             --port 2718 \
             --multi-property
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-named-item-names" \
+            --world-load-counts \
+            --named-item-names
+          python3 tools/fixtures/test_item_name_lifetime.py \
+            "$RUNNER_TEMP/sphere-named-item-names" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2724
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-named-resource-ids" \
             --world-load-counts \
             --named-resource-ids
@@ -641,6 +658,7 @@ jobs:
             ${{ runner.temp }}/sphere-world-counts-truncated/server.log
             ${{ runner.temp }}/sphere-world-counts-rejected-property/server.log
             ${{ runner.temp }}/sphere-world-counts-weird-item/server.log
+            ${{ runner.temp }}/sphere-named-item-names/server.log
             ${{ runner.temp }}/sphere-timer-lifetime/server.log
             ${{ runner.temp }}/sphere-timer-lifetime-item-first/server.log
             ${{ runner.temp }}/sphere-timer-sibling-mutation/server.log

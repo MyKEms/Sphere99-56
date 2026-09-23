@@ -27,6 +27,9 @@ TIMER_LIFETIME_ITEM_SERIALS = (101, 102, 103, 104, 105)
 UID_F_ITEM = 0x40000000
 TIMER_LIFETIME_DELAY_SECONDS = 15
 TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
+NAMED_TIMER_ITEM_ID = 0x0E8B
+NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
+NAMED_MULTI_NAME = "synthetic named multi"
 
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
@@ -694,6 +697,7 @@ def write_scripts(
     unresolved_worldchar_type: bool = False,
     typedef_container_probe: bool = False,
     multi_property_probe: bool = False,
+    named_item_name_probe: bool = False,
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
     dotted_expression_probe: bool = False,
@@ -883,6 +887,7 @@ def write_scripts(
         if typedef_container_probe
         else ""
     )
+    multi_property_probe = multi_property_probe or named_item_name_probe
     multi_property_typedef = (
         "\n[TYPEDEF 47]\nDEFNAME=T_MULTI\n"
         if multi_property_probe
@@ -895,6 +900,18 @@ def write_scripts(
         "TYPE=T_MULTI\n"
         "MULTIREGION=-1,-1,1,1\n"
         if multi_property_probe
+        else ""
+    )
+    # An @Timer handler that falls through lets the default timer path log the
+    # item's name instead of silently deleting the item.
+    named_item_name_sections = (
+        f"\n[ITEMDEF 0x{NAMED_TIMER_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_NAMED_TIMER\n"
+        "NAME=synthetic timer item\n"
+        "TYPE=T_NORMAL\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_NAMED_TIMER_TICK\n"
+        if named_item_name_probe
         else ""
     )
     named_resource_id_probe_sections = ""
@@ -1129,7 +1146,7 @@ ITEMNEWBIE=0x0E72
 
 [NEWBIE resist]
 ITEMNEWBIE=0x0E73
-""" + unknown_newbie_section + named_resource_id_probe_sections,
+""" + unknown_newbie_section + named_resource_id_probe_sections + named_item_name_sections,
     )
 
 
@@ -1189,6 +1206,7 @@ def write_world_load_counts_save(
     noncontainer_reference: bool,
     typedef_container_reference: bool,
     multi_property_reference: bool,
+    named_item_names: bool,
     named_container_reference: bool,
     rejected_property: bool,
     weird_item: bool,
@@ -1256,6 +1274,22 @@ def write_world_load_counts_save(
                 "[WORLDITEM SYNTHETIC_OBJECT]",
                 "SERIAL=5",
                 "CONT=4",
+            ]
+        )
+    elif named_item_names:
+        # Individually named items whose names are read while the save loads
+        # (multi region realization) and when the saved timer expires.
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_NAMED_TIMER]",
+                "SERIAL=4",
+                f"NAME={NAMED_TIMER_ITEM_NAME}",
+                "TIMER=1",
+                "P=128,128,0",
+                "[WORLDITEM SYNTHETIC_MULTI]",
+                "SERIAL=5",
+                f"NAME={NAMED_MULTI_NAME}",
+                "P=128,128,0",
             ]
         )
     elif multi_property_reference:
@@ -1641,6 +1675,11 @@ def main() -> int:
         help="load one synthetic IT_MULTI item through its P property",
     )
     parser.add_argument(
+        "--named-item-names",
+        action="store_true",
+        help="load a named IT_MULTI item and a named item whose saved timer expires",
+    )
+    parser.add_argument(
         "--named-resource-ids",
         action="store_true",
         help="add named ITEMDEF/CHARDEF entries and a nested named-container save",
@@ -1688,6 +1727,7 @@ def main() -> int:
         args.noncontainer_reference,
         args.typedef_container_reference,
         args.multi_property,
+        args.named_item_names,
         args.named_resource_ids,
         args.rejected_property,
         args.weird_item,
@@ -1743,6 +1783,7 @@ def main() -> int:
         unresolved_worldchar_type=args.unresolved_worldchar_type,
         typedef_container_probe=args.typedef_container_reference,
         multi_property_probe=args.multi_property,
+        named_item_name_probe=args.named_item_names,
         named_resource_id_probe=args.named_resource_ids,
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
@@ -1758,6 +1799,7 @@ def main() -> int:
             noncontainer_reference=args.noncontainer_reference,
             typedef_container_reference=args.typedef_container_reference,
             multi_property_reference=args.multi_property,
+            named_item_names=args.named_item_names,
             named_container_reference=args.named_resource_ids,
             rejected_property=args.rejected_property,
             weird_item=args.weird_item,
