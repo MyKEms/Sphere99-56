@@ -4,7 +4,8 @@
 Generate the fixture with ``make_fixture.py --dotted-expression-probe
 --unknown-keyword-report``.  The probe evaluates every row of
 ``DOTTED_EXPRESSION_ROWS`` in a character trigger and in an item trigger and
-runs a set of reference commands; this test compares the reported values with
+runs a set of reference commands and numeric conditions with bare reference
+operands (``DOTTED_CONDITION_ROWS``); this test compares the reported values with
 the expectations below and checks the unknown-keyword report for keys that only
 a misparsed expression would produce.  The fixture's @EnvironChange handler
 writes SECTOR.LIGHT behind a guard that never matches; the test bounds how
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Callable, Optional, Union
 
 from make_fixture import (
+    DOTTED_CONDITION_ROWS,
     DOTTED_EXPRESSION_ROWS,
     DOTTED_PROBE_ACCOUNT,
     DOTTED_PROBE_MARKER,
@@ -61,6 +63,28 @@ def positive_at_most(limit: int) -> Check:
         if value.isdigit() and 1 <= int(value) <= limit:
             return None
         return f"expected 1 to {limit}"
+
+    return check
+
+
+def sum_of(*keys: str, offset: int = 0) -> Check:
+    def check(value: str, values: dict[str, str]) -> Optional[str]:
+        parts = [values.get(key) for key in keys]
+        if any(part is None or not part.lstrip("-").isdigit() for part in parts):
+            return f"reference rows {keys} are missing"
+        expected = str(sum(int(part) for part in parts) + offset)
+        return None if value == expected else f"expected {expected!r}"
+
+    return check
+
+
+def negated(key: str) -> Check:
+    def check(value: str, values: dict[str, str]) -> Optional[str]:
+        base = values.get(key)
+        if base is None or not base.isdigit():
+            return f"reference row {key} is missing"
+        expected = str(-int(base))
+        return None if value == expected else f"expected {expected!r}"
 
     return check
 
@@ -137,6 +161,50 @@ EXPECTED: dict[str, Expectation] = {
     "C|src_sector_light": str(DOTTED_PROBE_SECTOR_LIGHT),
     "C|deferred_finduid_name": DOTTED_PROBE_ACCOUNT,
     "C|deferred_findlayer_serial": Same("I|serial"),
+    # Chains rooted at a reference property of the default object, and
+    # dotted TAG.name / TAG0.name reads.
+    "C|sector_light": str(DOTTED_PROBE_SECTOR_LIGHT),
+    "I|cont_name": DOTTED_PROBE_ACCOUNT,
+    "I|cont_tag": "chartext",
+    "I|topobj_name": DOTTED_PROBE_ACCOUNT,
+    "C|tag_dot": "chartext",
+    "I|tag_dot": "itemtext",
+    "C|src_tag_dot": "chartext",
+    "I|src_tag_dot": "chartext",
+    "C|src_tag_dot_missing": "",
+    "C|src_tag0_dot_missing": "0",
+    "C|src_tag0_dot_num": "7",
+    # Bare reference operands in EVAL.
+    "C|eval_bare": sum_of("C|src_str", offset=1),
+    "C|eval_bare_mixed": Same("C|eval_bracket_str_dex"),
+    "C|eval_bracket_str_dex": number,
+    "C|eval_bare_negative": negated("C|src_str"),
+    "C|eval_bare_tag": "14",
+    "I|eval_bare_tag": "14",
+    "I|eval_bare_function": Same("C|function_plain"),
+    "C|eval_defname": "1234",
+    "C|eval_unknown_reference": "0",
+    # Bare reference operands in IF conditions.
+    "C|cond_src_str_eq": "1",
+    "C|cond_src_str_gt": "1",
+    "C|cond_src_str_lt": "0",
+    "C|cond_chain_arith": "1",
+    "C|cond_sector_light": "1",
+    "C|cond_tag_set": "1",
+    "C|cond_tag_paren": "1",
+    "C|cond_tag_unset": "0",
+    "C|cond_tag0_unset": "1",
+    "C|cond_base_tag": "1",
+    "C|cond_findlayer": "1",
+    "C|cond_findlayer_empty": "0",
+    "C|cond_finduid_name": "1",
+    # Non-numeric values compare the way a substituted <...> value does.
+    "C|cond_bare_name_other": Same("C|cond_bracket_name_other"),
+    "C|cond_defname": "1",
+    "C|cond_unknown_reference": "0",
+    "C|cond_function_root_count": "1",
+    "C|cond_function_call_count": "1",
+    "C|while_bare_reference": "3",
     # Commands: base TAG, SRC.TAG, F_FUNC.TAG, FINDUID(uid).TAG, and the
     # item trigger's SRC.TAG, then SRC.NAME= and F_FUNC.REMOVE.
     "C|cmd_src_method": "reached",
@@ -163,12 +231,17 @@ EXPECTED: dict[str, Expectation] = {
     "C|environ_max_depth": positive_at_most(2),
 }
 
-# Rows reported but deliberately not asserted: the unresolved_* rows are not
-# implemented on any build yet, getter_unknown/getter_malformed stay literal,
-# and dupe_reference prints an object reference.
+# Rows reported but deliberately not asserted: VAR.name reads, &&/||,
+# parenthesized sub-expressions and unary ! are not implemented yet,
+# getter_unknown/getter_malformed stay literal, dupe_reference prints an
+# object reference, and cond_bracket_name_other is the reference value for
+# cond_bare_name_other.
 NOT_ASSERTED = {
-    "C|unresolved_src_tag_dot",
     "C|unresolved_var_dot",
+    "C|cond_unsupported_and",
+    "C|cond_unsupported_paren",
+    "C|cond_unsupported_not",
+    "C|cond_bracket_name_other",
     "C|getter_unknown",
     "C|getter_malformed",
     "C|dupe_reference",
@@ -222,6 +295,7 @@ def expected_keys() -> set[str]:
         for key, _expression, contexts in DOTTED_EXPRESSION_ROWS
         for context in contexts
     }
+    keys |= {f"C|{key}" for key, _condition in DOTTED_CONDITION_ROWS}
     return keys | set(EXPECTED) | NOT_ASSERTED
 
 
