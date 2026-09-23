@@ -54,6 +54,14 @@ DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
+# Sphere accepts 0-prefixed hexadecimal values for DWORD resource properties.
+# The probe reads these values back through a CHARDEF reference so it covers
+# both property loading and the script-facing property getter.
+DWORD_HEX_ACCOUNT = "DwordHexProbe"
+DWORD_HEX_MARKER = "SPHERE_DWORD_HEX"
+DWORD_HEX_HIGH_NAME = "SYNTHETIC_DWORD_HEX_HIGH"
+DWORD_HEX_LOW_NAME = "SYNTHETIC_DWORD_HEX_LOW"
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -446,6 +454,34 @@ ARG(scratch_obj,<ARGV(0)>)
 SYSMESSAGE SPHERE_ARG_LOCALS C|scratch|[<SCRATCH_1>|<scratch_2>|<SCRATCH_3>|<scratch_4>|<SCRATCH_5>|<scratch_6>]
 SYSMESSAGE SPHERE_ARG_LOCALS C|scratch_object|[<SCRATCH_OBJ.NAME>|<scratch_obj.type>]
 RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
+"""
+    return "\n".join(login) + "\n", sections
+
+
+def dword_hex_scripts() -> tuple[str, str]:
+    """Return login lines and definitions for Sphere DWORD hex parsing."""
+
+    marker = DWORD_HEX_MARKER
+    login = [
+        (
+            f"SYSMESSAGE {marker} C|high|[<FINDUID(<{DWORD_HEX_HIGH_NAME}>).ANIM>]"
+        ),
+        (
+            f"SYSMESSAGE {marker} C|low|[<FINDUID(<{DWORD_HEX_LOW_NAME}>).ANIM>]"
+        ),
+        f"SYSMESSAGE {marker} C_END",
+    ]
+    sections = "\n" + f"""[CHARDEF 0x0193]
+DEFNAME={DWORD_HEX_HIGH_NAME}
+NAME=synthetic DWORD hex high
+ID=0x0193
+ANIM=0FFC78C7F
+
+[CHARDEF 0x0194]
+DEFNAME={DWORD_HEX_LOW_NAME}
+NAME=synthetic DWORD hex low
+ID=0x0194
+ANIM=03fbc7f
 """
     return "\n".join(login) + "\n", sections
 
@@ -846,6 +882,7 @@ def write_scripts(
     timer_lifetime_probe: bool = False,
     dotted_expression_probe: bool = False,
     arg_locals_probe: bool = False,
+    dword_hex_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
@@ -863,6 +900,9 @@ def write_scripts(
     )
     arg_locals_login, arg_locals_sections = (
         arg_locals_scripts() if arg_locals_probe else ("", "")
+    )
+    dword_hex_login, dword_hex_sections = (
+        dword_hex_scripts() if dword_hex_probe else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1242,7 +1282,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + world_save_probe_script + """
@@ -1282,7 +1322,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -1861,6 +1901,11 @@ def main() -> int:
         help="exercise named ARG locals, positional object roots, and LASTNEW",
     )
     parser.add_argument(
+        "--dword-hex-probe",
+        action="store_true",
+        help="read 0-prefixed hexadecimal DWORD CHARDEF properties",
+    )
+    parser.add_argument(
         "--timer-lifetime-item-first-probe",
         action="store_true",
         help="exercise item-first timer removal with reentrant owner removal",
@@ -1958,6 +2003,7 @@ def main() -> int:
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
         arg_locals_probe=args.arg_locals_probe,
+        dword_hex_probe=args.dword_hex_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,

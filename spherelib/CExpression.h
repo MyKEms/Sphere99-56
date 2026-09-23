@@ -335,6 +335,13 @@ public:
 				LPCTSTR psz = (LPCTSTR)m_str;
 				if ( !psz || !*psz )
 					return 0;
+				// Sphere treats a leading 0 followed by a hex digit as
+				// hexadecimal, including values whose high bit is set.  The
+				// C library's base-0 parser treats that form as octal instead.
+				if ( psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X') )
+					return (DWORD) Exp_GetHexValue(psz);
+				if ( psz[0] == '0' && isxdigit((unsigned char)psz[1]) )
+					return (DWORD) Exp_GetHexValue(psz);
 				return (DWORD) strtoul(psz, NULL, 0);
 			}
 		default:          return 0;
