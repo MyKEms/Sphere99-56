@@ -337,7 +337,9 @@ def write_scripts(
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
     dotted_expression_probe: bool = False,
+    timer_lifetime_item_first_probe: bool = False,
 ) -> None:
+    timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
         if unknown_newbie
@@ -422,6 +424,7 @@ def write_scripts(
         f"ON=@Create\nSERV.B SPHERE_TIMER_OBSERVER_CREATED\nTIMER={TIMER_LIFETIME_OBSERVER_DELAY_SECONDS}\n"
         f"ON=@Equip\nSERV.B SPHERE_TIMER_OBSERVER_EQUIPPED <TIMER>|<LAYER>\nTIMER={TIMER_LIFETIME_OBSERVER_DELAY_SECONDS}\nSERV.B SPHERE_TIMER_OBSERVER_ARMED <TIMER>|<LAYER>\n"
         "ON=@Timer\n"
+        "SERV.B SPHERE_TIMER_LISTENER_ALIVE\n"
         "SERV.SAVE 1\n"
         "SERV.B SPHERE_TIMER_COUNTS_AFTER <SERV.ITEMS>|<SERV.CHARS>\n"
         "SERV.B SPHERE_TIMER_UIDS_AFTER "
@@ -462,6 +465,8 @@ def write_scripts(
         if timer_lifetime_probe
         else "TYPE=T_EQ_SCRIPT\nLAYER=30\n"
     )
+    timer_remove = "REMOVE" if timer_lifetime_item_first_probe else "CONT.REMOVE"
+    unequip_remove = "CONT.REMOVE" if timer_lifetime_item_first_probe else "REMOVE"
     typedef_container_table = (
         "\n[TYPEDEFS]\nT_NORMAL 0\nT_CONTAINER 1\n"
         if typedef_container_probe or timer_lifetime_probe
@@ -603,12 +608,12 @@ NAME=synthetic timer lifetime item
 SERV.B SPHERE_TIMER_ITEM_CREATED
 ON=@Timer
 SERV.B SPHERE_TIMER_LIFETIME_TRIGGERED
-""" + timer_lifetime_before_markers + """CONT.REMOVE
+""" + timer_lifetime_before_markers + timer_remove + """
 SERV.B SPHERE_TIMER_REMOVE_RETURNED
 RETURN 1
 ON=@UnEquip
 SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
-REMOVE
+""" + unequip_remove + """
 SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
 
 """ + timer_lifetime_probe_itemdefs + """
@@ -1057,6 +1062,11 @@ def main() -> int:
         action="store_true",
         help="evaluate dotted reference expressions and commands at login",
     )
+    parser.add_argument(
+        "--timer-lifetime-item-first-probe",
+        action="store_true",
+        help="exercise item-first timer removal with reentrant owner removal",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -1071,8 +1081,10 @@ def main() -> int:
         parser.error("world-load options require --world-load-counts")
     if sum(world_load_modes) > 1:
         parser.error("choose only one world-load fixture mode")
-    if args.timer_lifetime_probe and any(world_load_modes):
+    if (args.timer_lifetime_probe or args.timer_lifetime_item_first_probe) and any(world_load_modes):
         parser.error("timer-lifetime probe cannot be combined with a world-load mode")
+    if args.timer_lifetime_probe and args.timer_lifetime_item_first_probe:
+        parser.error("choose only one timer-lifetime probe mode")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -1083,7 +1095,7 @@ def main() -> int:
         root,
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
-        force_garbage_collect=args.timer_lifetime_probe,
+        force_garbage_collect=args.timer_lifetime_probe or args.timer_lifetime_item_first_probe,
     )
     write_scripts(
         root,
@@ -1102,6 +1114,7 @@ def main() -> int:
         named_resource_id_probe=args.named_resource_ids,
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
+        timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -1113,7 +1126,7 @@ def main() -> int:
             multi_property_reference=args.multi_property,
             named_container_reference=args.named_resource_ids,
         )
-    if args.timer_lifetime_probe:
+    if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
     write_mul_fixture(root)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
