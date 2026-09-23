@@ -38,6 +38,9 @@ DOTTED_PROBE_ITEM_ID = 0x0E7B
 DOTTED_PROBE_DISPOSABLE_ID = 0x0E7C
 DOTTED_PROBE_LAYER = 30
 DOTTED_PROBE_SECTOR_LIGHT = 4
+# Loops in the probe that run into the WHILE/FOR iteration limit.
+DOTTED_PROBE_CAPPED_WHILE = "WHILE (2>1)"
+DOTTED_PROBE_CAPPED_FOR = "FOR 20000"
 DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 DOTTED_EXPRESSION_ROWS = (
     # Forms without a function-root chain; their results must not change.
@@ -284,6 +287,31 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SYSMESSAGE " + marker + " C|disposable_before|[<isuidvalid <f_dotted_disposable>>]",
         "F_DOTTED_DISPOSABLE.REMOVE",
         "SYSMESSAGE " + marker + " C|disposable_after|[<isuidvalid <f_dotted_disposable>>]",
+        # Statements written as calls, NAME(args) and REF.NAME(args), with
+        # arguments that hold spaces and <...> expressions, and a statement
+        # key that holds an expression.
+        "VAR probe_call_count,0",
+        "VAR probe_call_log,start",
+        "F_DOTTED_CALL(3,4)",
+        "F_DOTTED_CALL(5, 6)",
+        "F_DOTTED_CALL(<src.str>)",
+        "F_DOTTED_CALL(<eval 1+2>)",
+        "SYSMESSAGE " + marker + " C|call_count|[<VAR(probe_call_count)>]",
+        "SYSMESSAGE " + marker + " C|call_log|[<VAR(probe_call_log)>]",
+        "SYSMESSAGE(" + marker + " C|builtin_call|[reached])",
+        "TAG(probe_call_tag,9)",
+        "SRC.TAG(probe_src_call_tag,8)",
+        "VAR(probe_var_call,7)",
+        "FINDUID(<src.serial>).TAG.probe_key_escape=12",
+        "SYSMESSAGE " + marker + " C|call_readback|[<tag(probe_call_tag)>|<tag(probe_src_call_tag)>|"
+        "<var(probe_var_call)>|<tag(probe_key_escape)>]",
+        # Loops that reach the iteration limit, each run twice: the limit is
+        # logged once per loop.
+        "F_DOTTED_CAPPED_WHILE",
+        "F_DOTTED_CAPPED_WHILE",
+        "F_DOTTED_CAPPED_FOR",
+        "F_DOTTED_CAPPED_FOR",
+        "SYSMESSAGE " + marker + " C|capped_loops_returned|[yes]",
         # A reference-returning function root is evaluated exactly once per
         # expression, including when its suffix does not resolve or is a
         # method with side effects (DUPE creates one character per call).
@@ -388,6 +416,16 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "RETURN <ARGS>\n"
         "\n[FUNCTION f_dotted_disposable]\n"
         "RETURN <VAR(dotted_disposable)>\n"
+        "\n[FUNCTION f_dotted_call]\n"
+        "VAR probe_call_count,<EVAL <VAR(probe_call_count)>+1>\n"
+        "VAR probe_call_log,<VAR(probe_call_log)>[<ARGS>]\n"
+        "RETURN 1\n"
+        "\n[FUNCTION f_dotted_capped_while]\n"
+        f"{DOTTED_PROBE_CAPPED_WHILE}\n"
+        "ENDWHILE\n"
+        "\n[FUNCTION f_dotted_capped_for]\n"
+        f"{DOTTED_PROBE_CAPPED_FOR}\n"
+        "ENDFOR\n"
     )
     return "\n".join(login) + "\n", sections, environ_change
 

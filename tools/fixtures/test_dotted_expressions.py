@@ -25,6 +25,8 @@ from typing import Callable, Optional, Union
 
 from make_fixture import (
     DOTTED_CONDITION_ROWS,
+    DOTTED_PROBE_CAPPED_FOR,
+    DOTTED_PROBE_CAPPED_WHILE,
     DOTTED_EXPRESSION_ROWS,
     DOTTED_PROBE_ACCOUNT,
     DOTTED_PROBE_MARKER,
@@ -213,6 +215,12 @@ EXPECTED: dict[str, Expectation] = {
     "C|cmd_src_name_set": "DottedRenamed",
     "C|disposable_before": "1",
     "C|disposable_after": "0",
+    # Statements written as calls run once each with their arguments.
+    "C|call_count": "4",
+    "C|call_log": "start[3,4][5, 6][{src_str}][3]",
+    "C|builtin_call": "reached",
+    "C|call_readback": "9|8|7|12",
+    "C|capped_loops_returned": "yes",
     # Exactly-once evaluation of a reference-returning function root.
     "C|getter_unknown_count": "1",
     "C|getter_malformed_count": "1",
@@ -307,6 +315,8 @@ def check_rows(values: dict[str, str]) -> tuple[list[str], int]:
             failures.append(f"{key}: no value reported")
             continue
         value = values[key]
+        if isinstance(expectation, str) and "{src_str}" in expectation:
+            expectation = expectation.replace("{src_str}", values.get("C|src_str", "?"))
         if isinstance(expectation, Same):
             reference = values.get(expectation.key)
             error = None if reference is not None and value == reference else (
@@ -331,6 +341,36 @@ def check_rows(values: dict[str, str]) -> tuple[list[str], int]:
             "expected exactly 3 new characters"
         )
     return failures, passed
+
+
+LOOP_LIMIT_RE = re.compile(r"(\S+)\((\d+)\): (WHILE|FOR) loop stopped after (\d+) iterations")
+
+
+def loop_limit_failures(fixture: Path, log_contents: str) -> list[str]:
+    """Each probe loop that reaches the limit is logged exactly once."""
+
+    lines = (fixture / "scripts" / "spheretables.scp").read_text(encoding="ascii").splitlines()
+    expected = {}
+    for kind, text in (("WHILE", DOTTED_PROBE_CAPPED_WHILE), ("FOR", DOTTED_PROBE_CAPPED_FOR)):
+        numbers = [index + 1 for index, line in enumerate(lines) if line.strip() == text]
+        if len(numbers) != 1:
+            return [f"fixture has {len(numbers)} '{text}' lines; expected 1"]
+        expected[kind] = numbers[0]
+
+    reported = LOOP_LIMIT_RE.findall(log_contents)
+    failures = []
+    for kind, line in expected.items():
+        matches = [entry for entry in reported if entry[2] == kind]
+        if len(matches) != 1:
+            failures.append(f"{kind} loop limit logged {len(matches)} times; expected once")
+            continue
+        source, number, _kind, iterations = matches[0]
+        if source != "spheretables.scp" or int(number) != line or iterations != "10000":
+            failures.append(
+                f"{kind} loop limit logged as {source}({number}) after {iterations}; "
+                f"expected spheretables.scp({line}) after 10000"
+            )
+    return failures
 
 
 def report_failures(report_path: Path) -> list[str]:
@@ -445,8 +485,12 @@ def main() -> int:
     row_failures, passed = check_rows(values)
     failures.extend(row_failures)
     failures.extend(report_failures(fixture / "logs" / "unknown-keywords.json"))
+    loop_failures = loop_limit_failures(fixture, log_contents)
+    failures.extend(loop_failures)
+    if not loop_failures:
+        passed += 1
 
-    total = len(EXPECTED) + 1
+    total = len(EXPECTED) + 2
     if failures:
         print(f"dotted-expression probe failed: {passed}/{total} checks passed", file=sys.stderr)
         for failure in failures:
