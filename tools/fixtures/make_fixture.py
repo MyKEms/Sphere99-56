@@ -54,6 +54,18 @@ DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
+# Dialog button probe.  The login trigger opens a dialog whose BUTTON section
+# holds an ON=@anybutton fallback ahead of numbered ON=<n> entries (cancel
+# included), so order in the section must not decide which entry runs.
+# tools/fixtures/test_dialog_buttons.py presses each kind of button.
+DIALOG_BUTTON_ACCOUNT = "DialogButtonProbe"
+DIALOG_BUTTON_MARKER = "SPHERE_DIALOG_BUTTON"
+DIALOG_BUTTON_NAME = "d_synthetic_button_probe"
+DIALOG_BUTTON_NUMBERED = 5
+DIALOG_BUTTON_FALLBACK = 7
+DIALOG_BUTTON_SWITCH = 11
+DIALOG_BUTTON_TEXT_ID = 3
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -448,6 +460,37 @@ SYSMESSAGE SPHERE_ARG_LOCALS C|scratch_object|[<SCRATCH_OBJ.NAME>|<scratch_obj.t
 RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
 """
     return "\n".join(login) + "\n", sections
+
+
+def dialog_button_scripts() -> tuple[str, str]:
+    """Return the login line and the sections of the dialog button probe."""
+
+    marker = DIALOG_BUTTON_MARKER
+    name = DIALOG_BUTTON_NAME
+    sections = f"""
+[DIALOG {name}]
+0 0
+resizepic 0 0 5054 240 200
+button 20 20 2151 2152 1 0 {DIALOG_BUTTON_NUMBERED}
+button 20 60 2151 2152 1 0 {DIALOG_BUTTON_FALLBACK}
+checkbox 20 100 210 211 0 {DIALOG_BUTTON_SWITCH}
+textentry 20 140 180 20 0 {DIALOG_BUTTON_TEXT_ID} 0
+
+[DIALOG {name} TEXT]
+initial text
+
+[DIALOG {name} BUTTON]
+ON=@anybutton
+TAG.dialog_button_seen=any/<ARGN>
+SYSMESSAGE {marker} any|<ARGN>|<ARGCHK({DIALOG_BUTTON_SWITCH})>|<ARGTXT({DIALOG_BUTTON_TEXT_ID})>|<ARGO.NAME>
+DIALOG {name}
+ON={DIALOG_BUTTON_NUMBERED}
+SYSMESSAGE {marker} numbered|<ARGN>
+DIALOG {name}
+ON=0
+SYSMESSAGE {marker} cancel|<ARGN>|<TAG.dialog_button_seen>
+"""
+    return f"DIALOG {name}\n", sections
 
 
 def dotted_expression_scripts() -> tuple[str, str, str]:
@@ -851,6 +894,7 @@ def write_scripts(
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
     book_pages_probe: bool = False,
+    dialog_button_probe: bool = False,
     suppress_login_item: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
@@ -865,6 +909,9 @@ def write_scripts(
     )
     arg_locals_login, arg_locals_sections = (
         arg_locals_scripts() if arg_locals_probe else ("", "")
+    )
+    dialog_button_login, dialog_button_sections = (
+        dialog_button_scripts() if dialog_button_probe else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1265,7 +1312,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -1305,7 +1352,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dialog_button_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -1964,6 +2011,11 @@ def main() -> int:
         action="store_true",
         help="load a BOOK with more than 127 pages and a full resource-ID ITEMDEF",
     )
+    parser.add_argument(
+        "--dialog-button-probe",
+        action="store_true",
+        help="open a dialog with numbered and ON=@anybutton button entries at login",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2050,6 +2102,7 @@ def main() -> int:
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
         book_pages_probe=args.book_pages_probe,
+        dialog_button_probe=args.dialog_button_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
     )
     if args.world_load_counts:

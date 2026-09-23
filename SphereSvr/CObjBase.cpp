@@ -1127,7 +1127,20 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 		{
 			if ( pClientSrc == NULL )
 				return( HRES_PRIVILEGE_NOT_HELD );
-			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, vArgs.GetUID(), this ))
+			// The dialog is named by its DIALOG section name or its resource ID.
+			// Only the first argument names the dialog.
+			CSphereUID rid( vArgs.GetUID());
+			TCHAR szName[SCRIPT_MAX_LINE_LEN];
+			strncpy( szName, vArgs.GetPSTR(), sizeof(szName) - 1 );
+			szName[sizeof(szName) - 1] = '\0';
+			TCHAR* pszName = szName;
+			GETNONWHITESPACE( pszName );
+			size_t iLen = strcspn( pszName, ", \t" );
+			pszName[iLen] = '\0';
+			CSphereUID ridName = g_Cfg.ResourceCheckIDType( RES_Dialog, pszName );
+			if ( ridName.IsValidRID())
+				rid = ridName;
+			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, rid, this ))
 				return(HRES_BAD_ARGUMENTS);
 		}
 		break;

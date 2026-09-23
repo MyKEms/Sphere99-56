@@ -60,10 +60,25 @@ void CResourceLink::SetLinkSection(
 		{
 			if (!script.IsLineTrigger())
 				continue;
-			DWORD button = static_cast<DWORD>(atoi(script.GetArgRaw()));
-			SCRIPT_EXECUTION_COVERAGE_TOKEN coverageToken = ScriptExecutionCoverageRegister(
-				static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
-				pszResourceName, "dialog_button", "button", button, pszSourceFile);
+			LPCTSTR pszArg = script.GetArgRaw();
+			SCRIPT_EXECUTION_COVERAGE_TOKEN coverageToken;
+			DWORD button;
+			if (IsTriggerNumberArg(pszArg))
+			{
+				button = static_cast<DWORD>(atoi(pszArg));
+				coverageToken = ScriptExecutionCoverageRegister(
+					static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+					pszResourceName, "dialog_button", "button", button, pszSourceFile);
+			}
+			else if (pszArg && !_stricmp(pszArg, DIALOG_ANYBUTTON_TRIGGER))
+			{
+				button = DIALOG_ANYBUTTON_COVERAGE_KEY;
+				coverageToken = ScriptExecutionCoverageRegister(
+					static_cast<int>(restype), rid.GetResIndex(), rid.GetResPage(),
+					pszResourceName, "dialog_button", DIALOG_ANYBUTTON_TRIGGER, 0, pszSourceFile);
+			}
+			else
+				continue;
 			AddScriptCoverageOption(button, coverageToken);
 		}
 		return;

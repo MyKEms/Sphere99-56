@@ -2402,32 +2402,46 @@ void CClient::Event_GumpDialogRet( const CUOEvent* pEvent )
 	}
 
 	// package up the gump response info.
-	CSphereExpArgs exec(pObj,this);
+	// ARGN = the button pressed, ARGO = the object the dialog was opened on.
+	CSphereExpArgs exec( pObj, this, (int) dwButtonID, 0, static_cast<CResourceObj*>( pObj ));
+
+	// The variable part is read by byte offset up to the packet length:
+	// switch ids (DWORD each), then text entries (WORD id, WORD length in
+	// characters, unicode text).  A reply with no switches is common.
+	const BYTE* pPacket = reinterpret_cast<const BYTE*>( pEvent );
+	const size_t iPacketLen = pEvent->GumpDialogRet.m_len;
+	size_t iOffset = reinterpret_cast<const BYTE*>( pEvent->GumpDialogRet.m_checkIds ) - pPacket;
 
 	DWORD iCheckQty = pEvent->GumpDialogRet.m_checkQty; // this has the total of all checked boxes and radios
-	int i = 0;
-	for ( ; i < iCheckQty; i++ ) // Store the returned checked boxes' ids for possible later use
+	DWORD i = 0;
+	for ( ; i < iCheckQty && iOffset + sizeof(NDWORD) <= iPacketLen; i++ ) // Store the returned checked boxes' ids for possible later use
 	{
-		exec.AddCheck( i, pEvent->GumpDialogRet.m_checkIds[i] );
+		exec.AddCheck( i, *reinterpret_cast<const NDWORD*>( pPacket + iOffset ));
+		iOffset += sizeof(NDWORD);
 	}
 
 	// Find out how many textentry boxes we have that returned data
-	CUOEvent* pMsg = (CUOEvent *)(((BYTE*)(pEvent))+(iCheckQty-1)*sizeof(pEvent->GumpDialogRet.m_checkIds[0]));
-	DWORD iTextQty = pMsg->GumpDialogRet.m_textQty;
-	for ( i = 0; i < iTextQty; i++)
+	DWORD iTextQty = 0;
+	if ( i == iCheckQty && iOffset + sizeof(NDWORD) <= iPacketLen )
 	{
-		// Get the length....no need to store this permanently
-		int lenstr = pMsg->GumpDialogRet.m_texts[0].m_len;
+		iTextQty = *reinterpret_cast<const NDWORD*>( pPacket + iOffset );
+		iOffset += sizeof(NDWORD);
+	}
+	for ( i = 0; i < iTextQty && iOffset + 2 * sizeof(NWORD) <= iPacketLen; i++ )
+	{
+		WORD wTextID = *reinterpret_cast<const NWORD*>( pPacket + iOffset );
+		size_t lenstr = *reinterpret_cast<const NWORD*>( pPacket + iOffset + sizeof(NWORD) );
+		iOffset += 2 * sizeof(NWORD);
+		if ( lenstr * sizeof(NCHAR) > iPacketLen - iOffset )
+			break;
 
 		TCHAR szTmp2[CSTRING_MAX_LEN]; // use this as szTmp2 storage
 
 		// Do a loop and "convert" from unicode to normal ascii
-		CvtNUNICODEToSystem( szTmp2, sizeof(szTmp2), pMsg->GumpDialogRet.m_texts[0].m_utext, lenstr );
+		CvtNUNICODEToSystem( szTmp2, sizeof(szTmp2), reinterpret_cast<const NCHAR*>( pPacket + iOffset ), (int) lenstr );
 
-		exec.AddText( pMsg->GumpDialogRet.m_texts[0].m_id, szTmp2 );
-
-		lenstr = sizeof(pMsg->GumpDialogRet.m_texts[0]) + ( lenstr - 1 )* sizeof(NCHAR);
-		pMsg = (CUOEvent *)(((BYTE*)pMsg)+lenstr);
+		exec.AddText( wTextID, szTmp2 );
+		iOffset += lenstr * sizeof(NCHAR);
 	}
 
 	ClearTargMode();

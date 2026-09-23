@@ -139,6 +139,21 @@ typedef CRefPtr<CResourceDef> CResourceDefPtr;
 
 #define XTRIG_UNKNOWN 0	// bit 0 is reserved to say there are triggers here that do not conform.
 
+// Dialog BUTTON sections: ON=<n> handles button n, and ON=@anybutton
+// handles every button that has no ON=<n> of its own.
+#define DIALOG_ANYBUTTON_TRIGGER "@anybutton"
+// Coverage key of the ON=@anybutton entry (never a numbered entry's key).
+#define DIALOG_ANYBUTTON_COVERAGE_KEY ((DWORD) 0xFFFFFFFF)
+
+inline bool IsTriggerNumberArg(LPCTSTR pszArg)
+{
+	if ( pszArg == NULL )
+		return false;
+	while ( *pszArg == ' ' || *pszArg == '\t' )
+		pszArg++;
+	return *pszArg >= '0' && *pszArg <= '9';
+}
+
 class CResourceScript;
 struct CResourceCoverageOption
 {
@@ -528,24 +543,17 @@ public:
 		return false;
 	}
 
-	// Scan forward looking for a trigger by number.
-	// Trigger numbers map to sm_Triggers table indices.
+	// Scan forward looking for a numbered entry: ON=<n>.
+	// Named entries such as ON=@anybutton never match a number.
 	bool FindTriggerNumber(DWORD dwNumber)
 	{
-		// We iterate and check the arg as a number.
 		while ( ReadKeyParse() )
 		{
 			if ( !IsLineTrigger() )
 				continue;
 			LPCTSTR pszArg = GetArgRaw();
-			if ( pszArg )
-			{
-				// The arg might be "@TriggerName" or a number.
-				// For now just try number comparison.
-				int iNum = atoi(pszArg);
-				if ( (DWORD) iNum == dwNumber )
-					return true;
-			}
+			if ( IsTriggerNumberArg(pszArg) && (DWORD) atoi(pszArg) == dwNumber )
+				return true;
 		}
 		return false;
 	}

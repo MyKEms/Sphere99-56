@@ -25,7 +25,8 @@ int CvtNUNICODEToSystem( TCHAR* pOut, int iSizeOutBytes, const NCHAR* pInp, int 
 	// Convert a network order UNICODE string to UTF8 string.
 	WCHAR szBuffer[ CSTRING_MAX_LEN+1 ];
 	int iInp;
-	for ( iInp=0; pInp[iInp] && iInp < COUNTOF(szBuffer)-1 && iInp < iInpMaxLen; iInp++ )
+	// Check the length before reading: a packet string need not be terminated.
+	for ( iInp=0; iInp < iInpMaxLen && iInp < COUNTOF(szBuffer)-1 && pInp[iInp]; iInp++ )
 	{
 		szBuffer[iInp] = pInp[iInp];
 	}

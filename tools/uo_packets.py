@@ -8,7 +8,7 @@ command is deliberately treated as unknown instead of being guessed.
 
 from __future__ import annotations
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Sequence
 
 
 # Standard classic-client packet lengths.  The table is intentionally kept in
@@ -350,3 +350,33 @@ def find_packet(data: bytes, command: int) -> Optional[UOPacket]:
         if packet.command == command:
             return packet
     return None
+
+
+def parse_gump_dialog(data: bytes) -> Optional[tuple[int, int]]:
+    """Return (serial, context) of a 0xB0 generic gump packet."""
+
+    if len(data) < 21 or data[0] != 0xB0:
+        return None
+    return int.from_bytes(data[3:7], "big"), int.from_bytes(data[7:11], "big")
+
+
+def make_gump_reply(
+    serial: int,
+    context: int,
+    button: int,
+    switches: Sequence[int] = (),
+    texts: Sequence[tuple[int, str]] = (),
+) -> bytes:
+    """Build a 0xB1 gump reply: button, switch ids and (id, text) entries."""
+
+    body = bytearray()
+    body += serial.to_bytes(4, "big") + context.to_bytes(4, "big")
+    body += button.to_bytes(4, "big")
+    body += len(switches).to_bytes(4, "big")
+    for switch in switches:
+        body += switch.to_bytes(4, "big")
+    body += len(texts).to_bytes(4, "big")
+    for text_id, text in texts:
+        encoded = text.encode("utf-16-be")
+        body += text_id.to_bytes(2, "big") + (len(encoded) // 2).to_bytes(2, "big") + encoded
+    return bytes([0xB1]) + (3 + len(body)).to_bytes(2, "big") + bytes(body)
