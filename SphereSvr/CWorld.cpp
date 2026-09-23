@@ -241,6 +241,11 @@ bool CWorld::ShouldLogLoadDetail( LOAD_LOG_CATEGORY category )
 {
 	if ( category < 0 || category >= LOAD_LOG_QTY )
 		return true;
+	// The counters bound noisy world-load diagnostics.  Runtime property and
+	// placement failures must remain visible after loading, even if the load
+	// phase exhausted a category's budget.
+	if ( !g_Serv.IsLoading())
+		return true;
 	static const int sm_iLoadLogLimit = 8;
 	if ( m_iLoadLogEmitted[category] < sm_iLoadLogLimit )
 	{
