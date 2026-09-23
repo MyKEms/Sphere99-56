@@ -63,6 +63,11 @@ DOTTED_EXPRESSION_ROWS = (
     ("eval_decimal_zero", "<eval 30.0>", "C"),
     ("eval_paren_decimal", "<eval(2.5)>", "C"),
     ("eval_nested", "<eval <src.str>*1.5>", "C"),
+    # Nested results are deliberately longer than their source tags.  The
+    # trailing text must survive the outer replacement in both trigger
+    # contexts.
+    ("nested_escape_suffix", "prefix <STRMATCH <NAME>,*> suffix", "CI"),
+    ("nested_escape_after_nested", "left <STRLEN <NAME>> right", "CI"),
     ("strlen_dot", "<strlen a.b>", "CI"),
     ("strcmp_dot", "<strcmp a.b,a.b>", "C"),
     ("strindexof_dot", "<strindexof abc.def,def>", "C"),

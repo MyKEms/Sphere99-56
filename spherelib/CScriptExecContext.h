@@ -763,7 +763,16 @@ public:
 
 				// Extract content between <? and ?>
 				pszBuf[iEnd - 1] = '\0'; // null-terminate at '?' of '?>'
-				TCHAR* pszExpr = pszBuf + iBegin + 2; // skip '<? '
+				// Resolve nested expressions in a separate buffer.  A nested result can
+				// be longer than its source text; parsing it in pszBuf would shift the
+				// outer suffix before this replacement gets a chance to copy it.
+				TCHAR szNestedExpr[SCRIPT_MAX_LINE_LEN];
+				size_t iNestedLen = strlen(pszBuf + iBegin + 2);
+				if ( iNestedLen >= SCRIPT_MAX_LINE_LEN )
+					iNestedLen = SCRIPT_MAX_LINE_LEN - 1;
+				memcpy(szNestedExpr, pszBuf + iBegin + 2, iNestedLen);
+				szNestedExpr[iNestedLen] = '\0';
+				TCHAR* pszExpr = szNestedExpr; // skip '<?'
 
 				// Recursively resolve inner <...> and <?...?> tags.
 				s_ParseEscapes(pszExpr, dwFlags);
@@ -851,7 +860,16 @@ public:
 
 			// Extract the expression between < and >.
 			pszBuf[iEnd] = '\0';
-			TCHAR* pszExpr = pszBuf + iBegin + 1;
+			// Resolve nested expressions in a separate buffer.  A nested result can
+			// be longer than its source text; parsing it in pszBuf would shift the
+			// outer suffix before this replacement gets a chance to copy it.
+			TCHAR szNestedExpr[SCRIPT_MAX_LINE_LEN];
+			size_t iNestedLen = strlen(pszBuf + iBegin + 1);
+			if ( iNestedLen >= SCRIPT_MAX_LINE_LEN )
+				iNestedLen = SCRIPT_MAX_LINE_LEN - 1;
+			memcpy(szNestedExpr, pszBuf + iBegin + 1, iNestedLen);
+			szNestedExpr[iNestedLen] = '\0';
+			TCHAR* pszExpr = szNestedExpr;
 
 			// Recursively resolve any nested <...> first.
 			s_ParseEscapes(pszExpr, dwFlags);
