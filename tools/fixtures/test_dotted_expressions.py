@@ -3,13 +3,14 @@
 
 Generate the fixture with ``make_fixture.py --dotted-expression-probe
 --unknown-keyword-report``.  The probe evaluates every row of
-``DOTTED_EXPRESSION_ROWS`` in a character trigger and in an item trigger and
-runs a set of reference commands and numeric conditions with bare reference
-operands (``DOTTED_CONDITION_ROWS``); this test compares the reported values with
-the expectations below and checks the unknown-keyword report for keys that only
+``DOTTED_EXPRESSION_ROWS`` in a character trigger and in an item trigger,
+runs a set of reference commands, and evaluates the numeric conditions of
+``DOTTED_CONDITION_ROWS`` (bare reference operands, parentheses, unary !,
+>= and <=, && and ||).  This test compares the reported values with the
+expectations below and checks the unknown-keyword report for keys that only
 a misparsed expression would produce.  The fixture's @EnvironChange handler
-writes SECTOR.LIGHT behind a guard that never matches; the test bounds how
-often and how deeply that handler runs.
+writes SECTOR.LIGHT behind a SECTOR.LIGHT guard; the test bounds how often
+and how deeply that handler runs.
 """
 
 from __future__ import annotations
@@ -202,6 +203,43 @@ EXPECTED: dict[str, Expectation] = {
     "C|cond_bare_name_other": Same("C|cond_bracket_name_other"),
     "C|cond_defname": "1",
     "C|cond_unknown_reference": "0",
+    "C|cond_bare_and": "1",
+    "C|cond_bare_paren": "1",
+    "C|cond_bare_not": "1",
+    # Expression grammar: parentheses, unary !, >= and <=, && above ||.
+    "C|eval_paren_group": "9",
+    "C|eval_paren_right": "14",
+    "C|eval_not": "1",
+    "C|eval_and": "1",
+    "C|eval_or_false": "0",
+    "C|eval_chain_left": "5",
+    "C|eval_chain_no_precedence": "9",
+    "C|eval_chain_compare": "2",
+    "C|grammar_and_true": "1",
+    "C|grammar_and_false": "0",
+    "C|grammar_or_true": "1",
+    "C|grammar_or_false": "0",
+    "C|grammar_not_zero": "1",
+    "C|grammar_not_one": "0",
+    "C|grammar_not_paren": "1",
+    "C|grammar_paren_arith": "1",
+    "C|grammar_and_or": "1",
+    "C|grammar_or_and": "1",
+    "C|grammar_ge": "1",
+    "C|grammar_ge_equal": "1",
+    "C|grammar_ge_false": "0",
+    "C|grammar_le_equal": "1",
+    "C|grammar_le_false": "0",
+    "C|grammar_unparenthesized": "1",
+    "C|grammar_escape_terms": "1",
+    "C|grammar_bare_terms": "1",
+    "C|grammar_bare_terms_false": "0",
+    "C|grammar_not_bare_set": "0",
+    "C|grammar_and_operand_count": "1",
+    "C|grammar_or_operand_count": "1",
+    "C|grammar_escape_operand_count": "1",
+    "C|grammar_elif": "elif",
+    "C|grammar_while": "3",
     "C|cond_function_root_count": "1",
     "C|cond_function_call_count": "1",
     "C|while_bare_reference": "3",
@@ -231,16 +269,12 @@ EXPECTED: dict[str, Expectation] = {
     "C|environ_max_depth": positive_at_most(2),
 }
 
-# Rows reported but deliberately not asserted: VAR.name reads, &&/||,
-# parenthesized sub-expressions and unary ! are not implemented yet,
-# getter_unknown/getter_malformed stay literal, dupe_reference prints an
-# object reference, and cond_bracket_name_other is the reference value for
-# cond_bare_name_other.
+# Rows reported but deliberately not asserted: VAR.name reads are not
+# implemented yet, getter_unknown/getter_malformed stay literal,
+# dupe_reference prints an object reference, and cond_bracket_name_other is
+# the reference value for cond_bare_name_other.
 NOT_ASSERTED = {
     "C|unresolved_var_dot",
-    "C|cond_unsupported_and",
-    "C|cond_unsupported_paren",
-    "C|cond_unsupported_not",
     "C|cond_bracket_name_other",
     "C|getter_unknown",
     "C|getter_malformed",
