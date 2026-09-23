@@ -496,6 +496,13 @@ public:
 		iValue = 0;
 		if ( m_pBaseObj == NULL )
 			return false;
+		// Bare names are handed here only for ARG locals. Keep the legacy
+		// DEFNAME/global lookup order for every other bare identifier, so a
+		// condition cannot execute a zero-argument script function as a side
+		// effect merely because it has no dotted suffix.
+		if ( strchr(pszOperand, '.') == NULL && strchr(pszOperand, '(') == NULL &&
+			m_LocalArgs.FindKeyPtr(pszOperand) == NULL )
+			return false;
 
 		CGVariant vValue;
 		CScriptUnknownRejectTracker rejected;
