@@ -4,6 +4,7 @@
 import io
 import struct
 import unittest
+import zlib
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
@@ -16,7 +17,43 @@ from uo_test_client import (
     make_server_select,
 )
 from uo_packets import PacketStreamError, split_packet_stream
+from uo_gumps import (
+    GumpPacketError,
+    make_gump_reply,
+    make_skill_use,
+    parse_gump_dialog,
+    parse_gump_reply,
+    parse_skill_use,
+)
 from test_suite import TestResult, test_char_create
+
+
+def recorded_gump_packet(command=0xB0):
+    layout = (
+        b"{resizepic 0 0 5054 240 120}"
+        b"{button 20 20 4005 4006 1 0 7}"
+        b"{text 60 20 0 0}"
+    )
+    text = "Choose class".encode("utf-16-be")
+    text_lines = struct.pack(">H", 1) + struct.pack(">H", len(text) // 2) + text
+    if command == 0xB0:
+        header = struct.pack(">BHIIIIH", 0xB0, 0, 0x01020304, 0x05060708, 10, 20, len(layout) + 1)
+        packet = header + layout + b"\0" + text_lines
+        return packet[:1] + struct.pack(">H", len(packet)) + packet[3:]
+
+    compressed_layout = zlib.compress(layout)
+    compressed_text = zlib.compress(text_lines[2:])
+    # The compressed-text header is after the text count; keep the explicit
+    # count/length fields separate so the packet mirrors the wire format.
+    body = (
+        struct.pack(">II", 4 + len(compressed_layout), len(layout))
+        + compressed_layout
+        + struct.pack(">III", 1, 4 + len(compressed_text), len(text_lines[2:]))
+        + compressed_text
+    )
+    header = struct.pack(">BHIIII", 0xDD, 0, 0x01020304, 0x05060708, 10, 20)
+    packet = header + body
+    return packet[:1] + struct.pack(">H", len(packet)) + packet[3:]
 
 
 class ProtocolPacketTests(unittest.TestCase):
@@ -96,6 +133,51 @@ class ProtocolPacketTests(unittest.TestCase):
         encoded = huffman_compress(first) + huffman_compress(second)
 
         self.assertEqual(huffman_decompress(encoded), first + second)
+
+    def test_uncompressed_gump_layout_text_and_label(self):
+        gump = parse_gump_dialog(recorded_gump_packet())
+        self.assertEqual(
+            (gump.serial, gump.context, gump.x, gump.y),
+            (0x01020304, 0x05060708, 10, 20),
+        )
+        self.assertEqual(gump.texts, ("Choose class",))
+        self.assertEqual(gump.find_button(button_id=7).page, 0)
+        self.assertEqual(gump.find_button(label="choose class").button_id, 7)
+
+    def test_compressed_gump_decodes_the_same_layout(self):
+        gump = parse_gump_dialog(recorded_gump_packet(0xDD))
+        self.assertEqual(gump.command, 0xDD)
+        self.assertEqual(gump.texts, ("Choose class",))
+        self.assertEqual(gump.find_button(label="class").button_id, 7)
+
+    def test_gump_reply_round_trip_includes_switches_and_unicode_text(self):
+        packet = make_gump_reply(
+            0x01020304,
+            0x05060708,
+            7,
+            switches=(11, 12),
+            texts=((3, "Grüß"),),
+        )
+        reply = parse_gump_reply(packet)
+        self.assertEqual(reply.serial, 0x01020304)
+        self.assertEqual(reply.context, 0x05060708)
+        self.assertEqual(reply.button_id, 7)
+        self.assertEqual(reply.switches, (11, 12))
+        self.assertEqual(reply.texts[0].text, "Grüß")
+
+    def test_gump_parser_rejects_bad_lengths(self):
+        packet = recorded_gump_packet()
+        with self.assertRaises(GumpPacketError):
+            parse_gump_dialog(packet[:-1])
+        with self.assertRaises(GumpPacketError):
+            parse_gump_dialog(packet[:1] + b"\x00\x01" + packet[3:])
+
+    def test_skill_request_uses_extended_command_0x12(self):
+        packet = make_skill_use(42)
+        self.assertEqual(packet[:4], b"\x12\x00\x09\x24")
+        request = parse_skill_use(packet)
+        self.assertEqual(request.skill_id, 42)
+        self.assertEqual(request.arguments, ("0",))
 
 
 class FixtureOnlyProtocolAssertionTests(unittest.TestCase):
