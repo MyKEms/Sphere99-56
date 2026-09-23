@@ -24,6 +24,7 @@ PREFIXES = (
     "SPHERE_TIMER_REMOVE_RETURNED",
     "SPHERE_TIMER_UNEQUIP_TRIGGERED",
     "SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED",
+    "SPHERE_TIMER_LISTENER_ALIVE",
 )
 
 
@@ -103,6 +104,11 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2794)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--item-first",
+        action="store_true",
+        help="use the bounded item-first reentrant-removal acceptance window",
+    )
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
@@ -150,7 +156,7 @@ def main() -> int:
             messages = collect_markers(
                 sock,
                 response,
-                26.0,
+                10.0 if args.item_first else 26.0,
                 PREFIXES + ("SPHERE_TIMER_COUNTS_AFTER", "SPHERE_TIMER_UIDS_AFTER"),
             )
             observed_messages = all_system_messages(messages)
@@ -187,6 +193,7 @@ def main() -> int:
                 "SPHERE_TIMER_UIDS_BEFORE",
                 "SPHERE_TIMER_COUNTS_AFTER",
                 "SPHERE_TIMER_UIDS_AFTER",
+                "SPHERE_TIMER_LISTENER_ALIVE",
             ):
                 count = marker_count(observed_messages, prefix)
                 if count != 1:
