@@ -1111,6 +1111,13 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 				pFailureReason->Copy( "character type does not resolve to a resource index" );
 			if ( restype == RES_WorldChar || restype == RES_WorldItem )
 				g_World.RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
+			if ( restype == RES_Book || restype == RES_Dialog || restype == RES_ItemDef )
+			{
+				g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+					"Skipping invalid %s block index '%s'" LOG_CR,
+					(LPCTSTR) s.GetSection(), (LPCTSTR) s.GetArgRaw());
+				return( false );
+			}
 			DEBUG_ERR(( "Invalid %s block index '%s'" LOG_CR, (LPCTSTR) s.GetSection(), (LPCTSTR) s.GetArgRaw()));
 			return( false );
 		}
@@ -1871,9 +1878,12 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 			{
 				iPage = RES_GET_INDEX( Exp_GetValue( pArg2 ));
 			}
-			if ( iPage > 255 )
+			if ( iPage >= RID_PAGE_MASK )
 			{
-				DEBUG_ERR(( "Bad resource index page %d" LOG_CR, iPage ));
+				g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+					"Skipping %s resource page %d: page exceeds the %d-page resource limit" LOG_CR,
+					(restype == RES_Book) ? "BOOK" : "DIALOG", iPage, RID_PAGE_MASK );
+				return( ridinvalid );
 			}
 		}
 		break;
@@ -1917,6 +1927,13 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		if ( isdigit(pszName[0]))	// Its just an index.
 		{
 			index = Exp_GetValue(pszName);
+			if ( index < 0 || index >= RID_INDEX_MASK )
+			{
+				g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+					"Skipping %s resource index '%s': value %d is outside the %d-entry resource limit" LOG_CR,
+					(LPCTSTR) GetResourceBlockName(restype), pszName, index, RID_INDEX_MASK );
+				return( ridinvalid );
+			}
 
 			rid = CSphereUID( restype, index );
 
@@ -2585,7 +2602,7 @@ void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
 		try {
 			pMgr->LoadScriptSection(script);
 		} catch (...) {
-			SPHERE_LOG_ERR("Exception loading section '%s' in '%s'", script.GetSection(), (LPCTSTR)script.GetFilePath());
+			SPHERE_LOG_ERR("Exception loading section '%s %s' line %d in '%s'", script.GetSection(), script.GetArgRaw(), script.GetContext().m_iLineNum, (LPCTSTR)script.GetFilePath());
 		}
 		nSections++;
 	}

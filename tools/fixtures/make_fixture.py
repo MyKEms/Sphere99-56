@@ -462,6 +462,7 @@ def write_scripts(
     typedef_container_probe: bool = False,
     multi_property_probe: bool = False,
     named_resource_id_probe: bool = False,
+    book_itemdef_probe: bool = False,
     timer_lifetime_probe: bool = False,
     dotted_expression_probe: bool = False,
 ) -> None:
@@ -670,6 +671,18 @@ def write_scripts(
             ]
         )
         named_resource_id_probe_sections = "\n" + "\n".join(sections)
+    book_itemdef_probe_sections = (
+        "\n[BOOK SYNTHETIC_BOOK]\n"
+        "TITLE=synthetic book\n"
+        "\n[BOOK SYNTHETIC_BOOK 127]\n"
+        "Synthetic page beyond the resource page field.\n"
+        "\n[ITEMDEF 0FFFFFFF0]\n"
+        "DEFNAME=SYNTHETIC_OVERSIZED_ITEM\n"
+        "NAME=synthetic oversized item\n"
+        "TYPE=T_NORMAL\n"
+        if book_itemdef_probe
+        else ""
+    )
     default_char_definition = ""
     default_char_defname2 = "DEFNAME2=DEFAULTCHAR\n"
     if unresolved_worldchar_type:
@@ -854,7 +867,7 @@ ITEMNEWBIE=0x0E72
 
 [NEWBIE resist]
 ITEMNEWBIE=0x0E73
-""" + unknown_newbie_section + named_resource_id_probe_sections,
+""" + unknown_newbie_section + named_resource_id_probe_sections + book_itemdef_probe_sections,
     )
 
 
@@ -1245,6 +1258,11 @@ def main() -> int:
         help="add named ITEMDEF/CHARDEF entries and a nested named-container save",
     )
     parser.add_argument(
+        "--book-itemdef-probe",
+        action="store_true",
+        help="add an oversized BOOK page and ITEMDEF fixture for bounded resource-load checks",
+    )
+    parser.add_argument(
         "--rejected-property",
         action="store_true",
         help="include one saved meaningful property rejected by the item loader",
@@ -1309,6 +1327,7 @@ def main() -> int:
         typedef_container_probe=args.typedef_container_reference,
         multi_property_probe=args.multi_property,
         named_resource_id_probe=args.named_resource_ids,
+        book_itemdef_probe=args.book_itemdef_probe,
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
     )
