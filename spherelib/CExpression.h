@@ -19,6 +19,14 @@ typedef int VARTYPE;
 // a numeric expression resolves.
 #define EXPRESSION_MAX_OPERAND_LEN 512
 
+// Read a hex literal and keep its low 32 bits, as 0.99 does: 0FFFFFFFF and
+// full resource IDs such as 0A2000E76 are 32-bit patterns. strtol() would
+// saturate them at 0x7FFFFFFF wherever long is 32 bits (i386).
+inline int Exp_GetHexValue( const char* psz, char** ppszEnd = NULL )
+{
+	return (int)(unsigned int) strtoull( psz, ppszEnd, 16 );
+}
+
 // Internal type tag for CGVariant
 enum CGVARIANT_TYPE
 {
@@ -306,9 +314,9 @@ public:
 					return 0;
 				// Support hex (0x...) and Sphere convention (leading 0 + hex digit = hex)
 				if ( psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X') )
-					return (int) strtoul(psz, NULL, 16);
+					return Exp_GetHexValue(psz);
 				if ( psz[0] == '0' && isxdigit(psz[1]) )
-					return (int) strtol(psz, NULL, 16);
+					return Exp_GetHexValue(psz);
 				return atoi(psz);
 			}
 		default:          return 0;
@@ -688,9 +696,9 @@ public:
 		if (!psz || !*psz) return 0;
 		// Sphere 0.99 convention: values starting with 0 followed by hex digit are hex
 		if (psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X'))
-			return (int)strtol(psz, NULL, 16);
+			return Exp_GetHexValue(psz);
 		if (psz[0] == '0' && isxdigit(psz[1]))
-			return (int)strtol(psz, NULL, 16);
+			return Exp_GetHexValue(psz);
 		return atoi(psz);
 	}
 	void SetValStr(LPCTSTR pszVal) { m_sVal = pszVal; }
@@ -934,14 +942,14 @@ public:
 
 		// Handle hex
 		if (pStr[0] == '0' && (pStr[1] == 'x' || pStr[1] == 'X'))
-			return (int)strtol(pStr, (char**)&pStr, 16);
+			return Exp_GetHexValue(pStr, (char**)&pStr);
 		// Handle negative
 		bool fNeg = false;
 		if (*pStr == '-') { fNeg = true; pStr++; }
 		else if (*pStr == '+') { pStr++; }
 		// Handle hex without 0x prefix — Sphere 0.99 convention: 0xxx values are hex
 		if (*pStr == '0' && isxdigit(pStr[1]))
-			return (int)strtol(pStr, (char**)&pStr, 16);
+			return Exp_GetHexValue(pStr, (char**)&pStr);
 		// Handle DEFNAME identifiers (starts with letter or underscore)
 		if (isalpha(*pStr) || *pStr == '_')
 		{

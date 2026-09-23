@@ -167,6 +167,14 @@ public:
 			m_eSeverity, m_pExp, m_pFile, m_uLine );
 		return( true );
 	}
+	virtual void GetErrorMessage( char* pBuf, int iBufLen )
+	{
+		if ( pBuf == NULL || iBufLen <= 0 )
+			return;
+		const char* pszFile = strrchr( m_pFile, '/' );
+		snprintf( pBuf, iBufLen, "assertion '%s' failed at %s:%u",
+			m_pExp, pszFile ? pszFile + 1 : m_pFile, m_uLine );
+	}
 	CSphereAssert( LOGL_TYPE eSeverity, const char* pExp,
 		const char* pFile, unsigned uLine ) :
 	CGException( eSeverity, 0, _TEXT("Assert")),

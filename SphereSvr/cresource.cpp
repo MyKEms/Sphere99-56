@@ -1790,6 +1790,14 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 
 //*************************************************************
 
+static CSphereUID GetPagedResourceID( RES_TYPE restype, int index, int iPage )
+{
+	// A resource with a sub page. BOOK pages go past the 7 bit page field.
+	if ( restype == RES_Book )
+		return CSphereUID::GetBookPageID( index, iPage );
+	return CSphereUID( restype, index, iPage );
+}
+
 CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszName, CVarDefPtr& pVarNum )
 {
 	// We are reading in a script block.
@@ -1871,9 +1879,10 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 			{
 				iPage = RES_GET_INDEX( Exp_GetValue( pArg2 ));
 			}
-			if ( iPage > 255 )
+			if ( iPage > (( restype == RES_Book ) ? RID_BOOK_PAGE_MAX : ( RID_PAGE_MASK - 1 )))
 			{
 				DEBUG_ERR(( "Bad resource index page %d" LOG_CR, iPage ));
+				return( ridinvalid );
 			}
 		}
 		break;
@@ -1911,12 +1920,23 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		if ( pszName[0] == '\0' )	// absense of resourceid = index 0
 		{
 			// This might be ok.
-			return( CSphereUID( restype, 0, iPage ) );
+			return( GetPagedResourceID( restype, 0, iPage ) );
 		}
 
 		if ( isdigit(pszName[0]))	// Its just an index.
 		{
 			index = Exp_GetValue(pszName);
+			if ( index & RID_F_RESOURCE )
+			{
+				// A complete resource ID. 0.99 merges the section type into it,
+				// so its index field selects the entry.
+				index = CSphereUID( (UID_INDEX) index ).GetResIndex();
+			}
+			if ( index < 0 || index >= RID_INDEX_MASK )
+			{
+				DEBUG_ERR(( "Resource index '%s' is out of range" LOG_CR, (LPCTSTR) pszName ));
+				return( ridinvalid );
+			}
 
 			rid = CSphereUID( restype, index );
 
@@ -1925,7 +1945,7 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 			case RES_Book:			// A book or a page from a book.
 			case RES_Dialog:			// A scriptable gump dialog: text or handler block.
 			case RES_RegionType:	// Triggers etc. that can be assinged to a RES_Area
-				rid = CSphereUID( restype, index, iPage );
+				rid = GetPagedResourceID( restype, index, iPage );
 				break;
 
 			case RES_Events:		// An Event handler block with the trigger type in it. ON=@Death etc.
@@ -1997,7 +2017,7 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 				}
 			}
 
-			return( CSphereUID( restype, rid.GetResIndex(), iPage ));
+			return( GetPagedResourceID( restype, rid.GetResIndex(), iPage ));
 		}
 	}
 
@@ -2104,6 +2124,8 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		if ( ! freeKey )
 			return( ridinvalid );
 		rid = freeKey;
+		if ( restype == RES_Book && rid.GetResIndex() >= RID_BOOK_INDEX_LIMIT )
+			return( ridinvalid );	// its pages would not fit. see GetBookPageID()
 	}
 	else
 	{
@@ -2584,8 +2606,12 @@ void CResourceMgr::LoadResourcesOpen(CResourceScript &script)
 		CSphereResourceMgr* pMgr = static_cast<CSphereResourceMgr*>(this);
 		try {
 			pMgr->LoadScriptSection(script);
+		} catch (CGException& e) {
+			char szReason[256];
+			e.GetErrorMessage(szReason, sizeof(szReason));
+			SPHERE_LOG_ERR("Exception loading section '%s' in '%s': %s", script.GetSection(), (LPCTSTR)script.GetFilePath(), szReason);
 		} catch (...) {
-			SPHERE_LOG_ERR("Exception loading section '%s' in '%s'", script.GetSection(), (LPCTSTR)script.GetFilePath());
+			SPHERE_LOG_ERR("Exception loading section '%s' in '%s': unknown exception", script.GetSection(), (LPCTSTR)script.GetFilePath());
 		}
 		nSections++;
 	}

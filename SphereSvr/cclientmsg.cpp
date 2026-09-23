@@ -1782,7 +1782,7 @@ void CClient::addBookPage( const CItem* pBook, int iPage )
 
 	if ( pBook->IsBookSystem())
 	{
-		CResourceLock s( g_Cfg.ResourceGetDef( CSphereUID( RES_Book, pBook->m_itBook.m_ResID.GetResIndex(), iPage )));
+		CResourceLock s( g_Cfg.ResourceGetDef( CSphereUID::GetBookPageID( pBook->m_itBook.m_ResID.GetResIndex(), iPage )));
 		if ( ! s.IsFileOpen())
 			return;
 
