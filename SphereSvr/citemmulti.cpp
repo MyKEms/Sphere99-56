@@ -133,6 +133,20 @@ bool CItemMulti::Multi_Region_Realize()
 	dwFlags |= pMultiDef->m_dwRegionFlags;
 	m_pRegion->SetRegionFlags( dwFlags );
 
+	// Older saves store the multi's region flags as REGION.FLAGS on the item.
+	// The region is created only after all item properties have been loaded, so
+	// apply that preserved value now and remove it from the item-side passthrough
+	// set.  Otherwise the writer emits the stale key and the region's defaults,
+	// producing duplicate REGION.FLAGS values and letting the default win next
+	// time the save is loaded.
+	CVarDef* pLoadedFlags = m_LoadedProps.FindKeyPtr( "REGION.FLAGS" );
+	if ( pLoadedFlags )
+	{
+		CGVariant vLoadedFlags( pLoadedFlags->GetValStr());
+		m_pRegion->SetRegionFlagsExact( static_cast<DWORD>( vLoadedFlags.GetInt()));
+		m_LoadedProps.RemoveKey( "REGION.FLAGS" );
+	}
+
 	CGString sName;
 	sName.Format( "%s (%s)", (LPCTSTR) pRegionBack->GetName(), (LPCTSTR) GetName());
 	m_pRegion->SetName( sName );
