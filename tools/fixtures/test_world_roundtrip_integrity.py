@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import re
 import shutil
 import sys
@@ -43,6 +44,12 @@ def normalized_save(text: str) -> str:
     return "\n".join(normalized)
 
 
+def normalized_format_save(text: str) -> str:
+    """Canonicalize item section order for the format fixture."""
+
+    return "\n\n".join(sorted(normalized_save(text).split("\n\n")))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -50,6 +57,11 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2724)
     parser.add_argument("--startup-timeout", type=float, default=120.0)
+    parser.add_argument(
+        "--format-compat",
+        action="store_true",
+        help="assert multi REGION.* and map PIN properties survive each save",
+    )
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
@@ -72,6 +84,14 @@ def main() -> int:
     failures: list[str] = []
     saved_worlds: list[str] = []
     startup_logs: list[str] = []
+    temporary_copies: list[Path] = []
+
+    def cleanup_temp_copies() -> None:
+        for temporary_copy in temporary_copies:
+            shutil.rmtree(temporary_copy, ignore_errors=True)
+        temporary_copies.clear()
+
+    atexit.register(cleanup_temp_copies)
 
     def login_existing_character(login_fixture: Path, login_port: int) -> None:
         sock, _, initial = game_relogin(
@@ -108,12 +128,23 @@ def main() -> int:
             except OSError:
                 time.sleep(0.1)
                 continue
-            if (
-                current != previous_world
-                and "[EOF]" in current
-                and "LEGACY_UNKNOWN=preserve-me" in current
-                and "REGION.FLAGS=0d2" in current
-                and "[WORLDITEM SYNTHETIC_OBJECT]" in current
+            if args.format_compat:
+                required_markers = (
+                    "LEGACY_UNKNOWN=preserve-me",
+                    "REGION.FLAGS=",
+                    "[WORLDITEM SYNTHETIC_MULTI]",
+                    "[WORLDITEM SYNTHETIC_MAP]",
+                    "PIN=100,200,5",
+                    "PIN=300,400,6",
+                )
+            else:
+                required_markers = (
+                    "LEGACY_UNKNOWN=preserve-me",
+                    "REGION.FLAGS=0d2",
+                    "[WORLDITEM SYNTHETIC_OBJECT]",
+                )
+            if current != previous_world and "[EOF]" in current and all(
+                marker in current for marker in required_markers
             ):
                 return
             time.sleep(0.1)
@@ -122,7 +153,8 @@ def main() -> int:
     current_fixture = fixture
     for generation in range(3):
         if generation:
-            next_fixture = Path(tempfile.mkdtemp(prefix="sphere63-roundtrip-copy."))
+            next_fixture = Path(tempfile.mkdtemp(prefix="sphere-roundtrip-copy."))
+            temporary_copies.append(next_fixture)
             shutil.copytree(current_fixture, next_fixture, dirs_exist_ok=True)
             current_fixture = next_fixture
         log_name = "server.log" if generation == 0 else f"server-round-{generation}.log"
@@ -148,9 +180,12 @@ def main() -> int:
             port=args.port + generation,
             startup_timeout=args.startup_timeout,
             log_path=current_fixture / log_name,
-            action=lambda port=args.port + generation, run_fixture=current_fixture: (
-                login_existing_character(run_fixture, port),
-                wait_for_new_save(run_fixture, previous_world),
+            action=(
+                lambda port=args.port + generation, run_fixture=current_fixture,
+                saved_world=previous_world: (
+                    login_existing_character(run_fixture, port),
+                    wait_for_new_save(run_fixture, saved_world),
+                )
             ),
         )
         if error:
@@ -200,21 +235,36 @@ def main() -> int:
     for generation, world in enumerate(saved_worlds, start=1):
         if world.count("LEGACY_UNKNOWN=preserve-me") != 1:
             failures.append(f"generation {generation} dropped the unknown legacy property")
-        if world.count("REGION.FLAGS=0d2") != 1:
+        if args.format_compat:
+            if world.count("REGION.FLAGS=") < 1:
+                failures.append(f"generation {generation} dropped REGION.FLAGS")
+        elif world.count("REGION.FLAGS=0d2") != 1:
             failures.append(f"generation {generation} dropped REGION.FLAGS")
-        if world.count("[WORLDITEM SYNTHETIC_OBJECT]") != 1:
-            failures.append(f"generation {generation} lost the contained synthetic item")
-        if not re.search(
-            r"\[WORLDITEM SYNTHETIC_OBJECT\].*?\nCONT=",
-            world,
-            flags=re.DOTALL,
-        ):
-            failures.append(f"generation {generation} did not retain the child CONT relation")
+        if args.format_compat:
+            if world.count("[WORLDITEM SYNTHETIC_MULTI]") != 1:
+                failures.append(f"generation {generation} lost the synthetic multi")
+            if world.count("[WORLDITEM SYNTHETIC_MAP]") != 1:
+                failures.append(f"generation {generation} lost the synthetic map")
+            for pin in ("PIN=100,200,5", "PIN=300,400,6"):
+                if world.count(pin) != 1:
+                    failures.append(f"generation {generation} did not retain {pin}")
+        else:
+            if world.count("[WORLDITEM SYNTHETIC_OBJECT]") != 1:
+                failures.append(f"generation {generation} lost the contained synthetic item")
+            if not re.search(
+                r"\[WORLDITEM SYNTHETIC_OBJECT\].*?\nCONT=",
+                world,
+                flags=re.DOTALL,
+            ):
+                failures.append(f"generation {generation} did not retain the child CONT relation")
 
     if len(saved_worlds) == 3:
-        if normalized_save(saved_worlds[1]) != normalized_save(saved_worlds[2]):
+        normalize = normalized_format_save if args.format_compat else normalized_save
+        if normalize(saved_worlds[1]) != normalize(saved_worlds[2]):
             failures.append("normalized second and third saves differ")
 
+    cleanup_temp_copies()
+    atexit.unregister(cleanup_temp_copies)
     if failures:
         print("world round-trip integrity probe failed:", file=sys.stderr)
         for failure in failures:

@@ -2502,7 +2502,7 @@ HRESULT CItem::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item Script
 {
-	if ( ! _strnicmp(pszKey, "REGION.", 7) )
+	if ( g_Serv.IsLoading() && ! _strnicmp(pszKey, "REGION.", 7) )
 	{
 		// Older saves persisted dynamic region pseudo-properties. They have no
 		// item-side setter, but retaining the raw key/value makes the next save
