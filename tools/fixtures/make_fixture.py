@@ -86,11 +86,58 @@ DOTTED_EXPRESSION_ROWS = (
     ("src_sector_light", "<src.sector.light>", "C"),
     ("deferred_finduid_name", "<?finduid(<src.serial>).name?>", "C"),
     ("deferred_findlayer_serial", "<?src.findlayer(30).serial?>", "C"),
-    # Unresolved on every build so far (TAG.name and VAR.name reads are not
-    # implemented).  Their values are not asserted; they only check that the
-    # unknown-keyword report keeps the normalized legacy keys.
-    ("unresolved_src_tag_dot", "<src.tag.probe_text>", "C"),
+    # Chains rooted at a reference property of the default object, and
+    # dotted TAG.name / TAG0.name reads.
+    ("sector_light", "<sector.light>", "C"),
+    ("cont_name", "<cont.name>", "I"),
+    ("cont_tag", "<cont.tag(probe_text)>", "I"),
+    ("topobj_name", "<topobj.name>", "I"),
+    ("tag_dot", "<tag.probe_text>", "CI"),
+    ("src_tag_dot", "<src.tag.probe_text>", "CI"),
+    ("src_tag_dot_missing", "<src.tag.probe_missing>", "C"),
+    ("src_tag0_dot_missing", "<src.tag0.probe_missing>", "C"),
+    ("src_tag0_dot_num", "<src.tag0.probe_num>", "C"),
+    # Bare reference operands in numeric expressions.
+    ("eval_bare", "<eval src.str+1>", "C"),
+    ("eval_bare_mixed", "<eval <src.str>+src.dex>", "C"),
+    ("eval_bare_negative", "<eval -src.str>", "C"),
+    ("eval_bare_tag", "<eval src.tag.probe_num*2>", "CI"),
+    ("eval_bare_function", "<eval src.f_dotted_serial>", "I"),
+    ("eval_bracket_str_dex", "<eval <src.str>+<src.dex>>", "C"),
+    ("eval_defname", "<eval dotted_probe_const>", "C"),
+    ("eval_unknown_reference", "<eval foo.bar>", "C"),
+    # Unresolved on every build so far (VAR.name reads are not implemented).
+    # Not asserted; it checks that the unknown-keyword report keeps the
+    # normalized legacy key.
     ("unresolved_var_dot", "<var.dotted_probe_var>", "C"),
+)
+
+# Numeric conditions with bare reference operands: (key, condition).  The
+# probe prints 1 when IF takes the condition as true and 0 otherwise.
+DOTTED_CONDITION_ROWS = (
+    ("cond_src_str_eq", "(src.str==<src.str>)"),
+    ("cond_src_str_gt", "(src.str>10)"),
+    ("cond_src_str_lt", "(src.str<10)"),
+    ("cond_chain_arith", "(src.str+5>src.dex)"),
+    ("cond_sector_light", "(sector.light==4)"),
+    ("cond_tag_set", "(src.tag.probe_num==7)"),
+    ("cond_tag_paren", "(src.tag(probe_num)==7)"),
+    ("cond_tag_unset", "(src.tag.probe_missing==1)"),
+    ("cond_tag0_unset", "(src.tag0.probe_missing==0)"),
+    ("cond_base_tag", "(tag.probe_num==7)"),
+    ("cond_findlayer", "(src.findlayer(30))"),
+    ("cond_findlayer_empty", "(src.findlayer(9))"),
+    ("cond_finduid_name", "(finduid(<src.serial>).name==<src.name>)"),
+    ("cond_bare_name_other", "(src.name==Other)"),
+    ("cond_bracket_name_other", "(<src.name>==Other)"),
+    ("cond_defname", "(dotted_probe_const==1234)"),
+    ("cond_unknown_reference", "(foo.bar)"),
+    # Not implemented by the expression reader yet: && / || between
+    # parenthesized terms, parenthesized sub-expressions and unary !.  These
+    # read as 0 with any operand form and are reported, not asserted.
+    ("cond_unsupported_and", "(src.str>10) && (src.dex>10)"),
+    ("cond_unsupported_paren", "((src.str+5)>src.dex)"),
+    ("cond_unsupported_not", "(!src.tag.probe_missing)"),
 )
 
 
@@ -260,16 +307,40 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SYSMESSAGE " + marker + " C|dupe_value_valid|[<ISUIDVALID 0x<f_fixture_getter.DUPE.SERIAL>>]",
         "SYSMESSAGE " + marker + " C|dupe_value_valid_count|[<VAR(dotted_getter_calls)>]",
         "SYSMESSAGE " + marker + " C|dupe_chars_after|[<SERV.CHARS>]",
+    ]
+    for key, condition in DOTTED_CONDITION_ROWS:
+        login += [
+            f"IF {condition}",
+            f"SYSMESSAGE {marker} C|{key}|[1]",
+            "ELSE",
+            f"SYSMESSAGE {marker} C|{key}|[0]",
+            "ENDIF",
+        ]
+    login += [
+        # A bare reference operand runs a script-function root once per
+        # evaluation, and a WHILE condition re-reads the reference each time.
+        "VAR dotted_getter_calls,0",
+        "IF (f_fixture_getter.name==<src.name>)",
+        "ENDIF",
+        "SYSMESSAGE " + marker + " C|cond_function_root_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "IF (f_fixture_getter(1))",
+        "ENDIF",
+        "SYSMESSAGE " + marker + " C|cond_function_call_count|[<VAR(dotted_getter_calls)>]",
+        "WHILE (src.tag0.probe_loop<3)",
+        "SRC.TAG.probe_loop=<EVAL <src.tag0.probe_loop>+1>",
+        "ENDWHILE",
+        "SYSMESSAGE " + marker + " C|while_bare_reference|[<src.tag0.probe_loop>]",
         "SYSMESSAGE " + marker + " C|environ_calls|[<VAR(environ_calls)>]",
         "SYSMESSAGE " + marker + " C|environ_max_depth|[<VAR(environ_max_depth)>]",
         "SYSMESSAGE " + marker + "_END",
     ]
 
     # An @EnvironChange handler that keeps its sector at a fixed light level
-    # behind a guard that never matches (the bare SECTOR.LIGHT reference in
-    # the condition is not evaluated as a property).  Setting a sector light
-    # re-runs @EnvironChange for the characters there, so every write must
-    # stop once the level is already in effect.
+    # behind a bare SECTOR.LIGHT guard.  Setting a sector light re-runs
+    # @EnvironChange for the characters there, so the handler must stop
+    # re-entering itself once the level is in effect, whether or not its
+    # guard reads the level.
     light = DOTTED_PROBE_SECTOR_LIGHT
     environ_change = "\n".join(
         [
@@ -309,6 +380,8 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         f"LAYER={DOTTED_PROBE_LAYER}\n"
         "ON=@Create\n"
         "VAR dotted_disposable,<SERIAL>\n"
+        "\n[DEFNAMES dotted_probe]\n"
+        "dotted_probe_const 1234\n"
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
         "\n[FUNCTION f_dotted_arg]\n"
