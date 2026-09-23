@@ -975,6 +975,15 @@ HRESULT CItemMulti::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsol
 
 HRESULT CItemMulti::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	// REGION.* is a legacy save-only pseudo-property.  CItemMulti handles the
+	// REGION extension before CItem::s_PropSet, so retain the raw form while
+	// loading instead of converting it to a space-separated argument list.
+	if ( g_Serv.IsLoading() && ! _strnicmp(pszKey, "REGION.", 7) )
+	{
+		PreserveLoadProperty( pszKey, vVal.GetPSTR());
+		return HRES_UNKNOWN_PROPERTY;
+	}
+
 	s_FixExtendedProp( pszKey, "Region", vVal );
 
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);

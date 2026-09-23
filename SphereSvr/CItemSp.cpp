@@ -75,9 +75,13 @@ HRESULT CItemMap::s_PropSet( LPCTSTR pszKey, CGVariant& vVal ) // Load an item S
 	if ( iProp == 0 )
 	{
 		int i = vVal.MakeArraySize();
-		if ( i != 2 )
+		// Saves written by current Sphere use CPointMap::v_Get(), which emits
+		// x,y,z (and may include mapplane).  Keep accepting the old two-field
+		// form while reading the 0.99 three-coordinate format.
+		if ( i < 2 || i > 4 )
 			return( HRES_BAD_ARG_QTY );
-		CPointMap pntTemp( vVal.GetArrayInt(0), vVal.GetArrayInt(1));
+		CPointMap pntTemp;
+		pntTemp.v_Set( vVal );
 		m_Pins.Add(pntTemp);
 		return( NO_ERROR );
 	}

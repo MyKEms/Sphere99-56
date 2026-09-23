@@ -246,6 +246,28 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2727
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-format-compat-counts" \
+            --world-load-counts \
+            --format-compat-probe \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-format-compat-counts" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2728 \
+            --format-compat
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-format-compat-roundtrip" \
+            --world-load-counts \
+            --format-compat-probe \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_roundtrip_integrity.py \
+            "$RUNNER_TEMP/sphere-asan-format-compat-roundtrip" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2729 \
+            --format-compat
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -624,6 +646,28 @@ jobs:
             "$RUNNER_TEMP/sphere-world-roundtrip" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2727
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-format-compat-counts" \
+            --world-load-counts \
+            --format-compat-probe \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-format-compat-counts" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2728 \
+            --format-compat
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-format-compat-roundtrip" \
+            --world-load-counts \
+            --format-compat-probe \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_roundtrip_integrity.py \
+            "$RUNNER_TEMP/sphere-format-compat-roundtrip" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2729 \
+            --format-compat
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \

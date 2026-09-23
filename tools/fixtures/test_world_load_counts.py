@@ -108,6 +108,11 @@ def main() -> int:
         action="store_true",
         help="expect a contained item saved before its container to be restored",
     )
+    parser.add_argument(
+        "--format-compat",
+        action="store_true",
+        help="expect multi REGION.* and map PIN properties to load",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -121,6 +126,7 @@ def main() -> int:
             args.rejected_property,
             args.weird_item,
             args.child_before_parent,
+            args.format_compat,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -135,7 +141,12 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    if args.child_before_parent:
+    if args.format_compat:
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
+        )
+    elif args.child_before_parent:
         expected_line = (
             "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=1"
@@ -176,7 +187,12 @@ def main() -> int:
             "allocated_items=2 allocated_chars=1"
         )
 
-    if args.child_before_parent:
+    if args.format_compat:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=0 "
+            "defaulted=0 deleted=0"
+        )
+    elif args.child_before_parent:
         expected_diagnostics = (
             "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=0 "
             "defaulted=0 deleted=0"
@@ -255,7 +271,7 @@ def main() -> int:
                     for line in startup_log.splitlines()
                     if line.startswith("[ERROR]") or line.startswith("[CRITICAL]")
                 ]
-                if args.child_before_parent:
+                if args.format_compat or args.child_before_parent:
                     allowed_startup_error_fragments = ()
                 elif args.truncated:
                     allowed_startup_error_fragments = (
@@ -531,6 +547,7 @@ def main() -> int:
             or args.rejected_property
             or args.weird_item
             or args.child_before_parent
+            or args.format_compat
         )
         else [expected_line, expected_line]
     )
@@ -558,6 +575,7 @@ def main() -> int:
         and not args.rejected_property
         and not args.weird_item
         and not args.child_before_parent
+        and not args.format_compat
     ):
         admin_lines = [
             message

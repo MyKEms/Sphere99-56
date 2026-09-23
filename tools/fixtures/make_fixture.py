@@ -845,6 +845,7 @@ def write_scripts(
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
     dotted_expression_probe: bool = False,
+    format_compat_probe: bool = False,
     arg_locals_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
@@ -1026,6 +1027,7 @@ def write_scripts(
             or timer_lifetime_probe
             or timer_sibling_mutation_probe
             or timer_sibling_mutation_owner_first_probe
+            or format_compat_probe
         )
         else ""
     )
@@ -1043,10 +1045,17 @@ def write_scripts(
         if typedef_container_probe
         else ""
     )
-    multi_property_probe = multi_property_probe or named_item_name_probe
+    multi_property_probe = (
+        multi_property_probe or named_item_name_probe or format_compat_probe
+    )
     multi_property_typedef = (
         "\n[TYPEDEF 47]\nDEFNAME=T_MULTI\n"
         if multi_property_probe
+        else ""
+    )
+    map_property_typedef = (
+        "\n[TYPEDEF 73]\nDEFNAME=T_MAP\n"
+        if format_compat_probe
         else ""
     )
     multi_property_itemdef = (
@@ -1056,6 +1065,14 @@ def write_scripts(
         "TYPE=T_MULTI\n"
         "MULTIREGION=-1,-1,1,1\n"
         if multi_property_probe
+        else ""
+    )
+    map_property_itemdef = (
+        "\n[ITEMDEF 0x4001]\n"
+        "DEFNAME=SYNTHETIC_MAP\n"
+        "NAME=synthetic map\n"
+        "TYPE=T_MAP\n"
+        if format_compat_probe
         else ""
     )
     # An @Timer handler that falls through lets the default timer path log the
@@ -1248,7 +1265,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -1368,6 +1385,7 @@ def write_world_load_counts_save(
     rejected_property: bool,
     weird_item: bool,
     child_before_parent: bool,
+    format_compat_probe: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -1376,7 +1394,22 @@ def write_world_load_counts_save(
         "VERSION=0.99",
         "SAVECOUNT=0",
     ]
-    if child_before_parent:
+    if format_compat_probe:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_MULTI]",
+                "SERIAL=6",
+                "P=128,128,0",
+                "LEGACY_UNKNOWN=preserve-me",
+                "REGION.FLAGS=0d2",
+                "[WORLDITEM SYNTHETIC_MAP]",
+                "SERIAL=7",
+                "P=129,128,0",
+                "PIN=100,200,5",
+                "PIN=300,400,6",
+            ]
+        )
+    elif child_before_parent:
         world_sections.extend(
             [
                 "[WORLDITEM SYNTHETIC_OBJECT]",
@@ -1494,7 +1527,7 @@ def write_world_load_counts_save(
         )
     world_sections.append("[EOF]")
     write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
-    if rejected_property or child_before_parent:
+    if rejected_property or child_before_parent or format_compat_probe:
         write_text(
             root / "accounts" / "sphereaccu.scp",
             "\n".join(
@@ -1892,6 +1925,11 @@ def main() -> int:
         help="write a contained item section before its saved container section",
     )
     parser.add_argument(
+        "--format-compat-probe",
+        action="store_true",
+        help="write a multi REGION.* and map PIN round-trip fixture",
+    )
+    parser.add_argument(
         "--timer-lifetime-probe",
         action="store_true",
         help="seed a timer-owner, nested-item, sibling, and UID-cleanup probe",
@@ -1939,6 +1977,7 @@ def main() -> int:
         args.rejected_property,
         args.weird_item,
         args.child_before_parent,
+        args.format_compat_probe,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -1967,6 +2006,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.format_compat_probe
     ):
         parser.error("book-pages probe writes its own world and cannot be combined")
 
@@ -2004,6 +2044,7 @@ def main() -> int:
         named_resource_id_probe=args.named_resource_ids,
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
+        format_compat_probe=args.format_compat_probe,
         arg_locals_probe=args.arg_locals_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
@@ -2024,6 +2065,7 @@ def main() -> int:
             rejected_property=args.rejected_property,
             weird_item=args.weird_item,
             child_before_parent=args.child_before_parent,
+            format_compat_probe=args.format_compat_probe,
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
