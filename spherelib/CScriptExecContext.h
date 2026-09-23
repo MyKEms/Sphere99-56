@@ -1,6 +1,9 @@
 #ifndef _INC_CSCRIPTEXECCONTEXT_H
 #define _INC_CSCRIPTEXECCONTEXT_H
 
+// A WHILE or FOR loop stops after this many iterations.
+#define SCRIPT_MAX_LOOP_ITERATIONS 10000
+
 // Script control-flow keywords recognized by ExecuteScript.
 enum SK_TYPE
 {
@@ -879,6 +882,91 @@ public:
 	// The line is "KEY VALUE" or "KEY=VALUE" or just "METHOD args".
 	// Returns NO_ERROR on success, or an HRESULT error code.
 	//
+	// A WHILE or FOR loop that reaches SCRIPT_MAX_LOOP_ITERATIONS stops there.
+	// Report each such loop once (file and line), and at most
+	// MAX_REPORTED_LOOPS different loops, so a loop that keeps reaching the
+	// limit cannot flood the log.
+	static void ReportLoopLimit(CScript& script, const CScriptLineContext& ctx, LPCTSTR pszLoop)
+	{
+		enum { MAX_REPORTED_LOOPS = 64, MAX_SITE_FILE = 64 };
+		struct LoopSite
+		{
+			TCHAR m_szFile[MAX_SITE_FILE];
+			int m_iLine;
+		};
+		static LoopSite s_Reported[MAX_REPORTED_LOOPS];
+		static int s_iReported = 0;
+		static bool s_fMoreNotReported = false;
+
+		LPCTSTR pszFile = script.GetFileTitle();
+		if ( pszFile == NULL )
+			pszFile = "";
+		for ( int i = 0; i < s_iReported; i++ )
+		{
+			if ( s_Reported[i].m_iLine == ctx.m_iLineNum &&
+				!strncmp(s_Reported[i].m_szFile, pszFile, MAX_SITE_FILE - 1) )
+				return;
+		}
+		if ( s_iReported >= MAX_REPORTED_LOOPS )
+		{
+			if ( !s_fMoreNotReported )
+			{
+				s_fMoreNotReported = true;
+				DEBUG_ERR(( "More script loops stopped after %d iterations; they are not reported" LOG_CR,
+					SCRIPT_MAX_LOOP_ITERATIONS ));
+			}
+			return;
+		}
+		strncpy(s_Reported[s_iReported].m_szFile, pszFile, MAX_SITE_FILE - 1);
+		s_Reported[s_iReported].m_szFile[MAX_SITE_FILE - 1] = '\0';
+		s_Reported[s_iReported].m_iLine = ctx.m_iLineNum;
+		s_iReported++;
+		DEBUG_ERR(( "%s(%d): %s loop stopped after %d iterations" LOG_CR,
+			pszFile, ctx.m_iLineNum, pszLoop, SCRIPT_MAX_LOOP_ITERATIONS ));
+	}
+
+	// Split a statement key of the form NAME(args) or REF.NAME(args) (the
+	// parentheses closing at the end of the key) into NAME or REF.NAME and
+	// the argument text.  Returns false for any other key.
+	static bool SplitCallStatement(TCHAR* pszKey, TCHAR*& pszArg)
+	{
+		size_t iLen = strlen(pszKey);
+		if ( iLen < 3 || pszKey[iLen - 1] != ')' )
+			return false;
+
+		// Find the '(' that matches the final ')'.
+		int iDepth = 0;
+		TCHAR* pOpen = NULL;
+		for ( TCHAR* q = pszKey + iLen - 1; q >= pszKey; q-- )
+		{
+			if ( *q == ')' )
+				iDepth++;
+			else if ( *q == '(' && --iDepth == 0 )
+			{
+				pOpen = q;
+				break;
+			}
+		}
+		if ( pOpen == NULL || pOpen == pszKey )
+			return false;
+
+		// The name before it must be a plain identifier segment.
+		TCHAR* pName = pOpen;
+		while ( pName > pszKey && (isalnum((unsigned char)pName[-1]) || pName[-1] == '_') )
+			pName--;
+		if ( pName == pOpen || !(isalpha((unsigned char)*pName) || *pName == '_') )
+			return false;
+		if ( pName != pszKey && pName[-1] != '.' )
+			return false;
+
+		pszKey[iLen - 1] = '\0';
+		*pOpen = '\0';
+		pszArg = pOpen + 1;
+		while ( ISWHITESPACE(*pszArg) )
+			pszArg++;
+		return true;
+	}
+
 	HRESULT ExecuteCommand(LPCTSTR pszCmd, bool fScriptKeyEquals = false)
 	{
 		if ( !pszCmd || !*pszCmd )
@@ -928,7 +1016,8 @@ public:
 			}
 		}
 
-		// Split into key and arg at first space or '='
+		// Split into key and arg at the first space or '=' outside
+		// parentheses, so KEY(a, b) and ROOT(a, b).KEY stay one key.
 		TCHAR szLine[SCRIPT_MAX_LINE_LEN];
 		strncpy(szLine, pszCmd, sizeof(szLine) - 1);
 		szLine[sizeof(szLine) - 1] = '\0';
@@ -939,8 +1028,19 @@ public:
 
 		// Find the split point
 		TCHAR* p = pszKey;
-		while ( *p && !ISWHITESPACE(*p) && *p != '=' )
-			p++;
+		int iKeyDepth = 0;
+		for ( ; *p; p++ )
+		{
+			if ( *p == '(' )
+				iKeyDepth++;
+			else if ( *p == ')' )
+			{
+				if ( iKeyDepth > 0 )
+					iKeyDepth--;
+			}
+			else if ( iKeyDepth == 0 && (ISWHITESPACE(*p) || *p == '=') )
+				break;
+		}
 		if ( *p )
 		{
 			bool fHasEquals = (*p == '=');
@@ -970,16 +1070,40 @@ public:
 		if ( !pszArg )
 			pszArg = const_cast<TCHAR*>("");
 
+		// A statement written as a call, NAME(args) or REF.NAME(args), runs
+		// NAME with those arguments exactly as "NAME args" does.  Gump
+		// commands keep their own parenthesized form.
+		bool fCallForm = false;
+		TCHAR szCallArgs[SCRIPT_MAX_LINE_LEN];
+		if ( !fPropertySet && *pszArg == '\0' && !(sm_pGumpControls != NULL &&
+			(IsGumpCommand(pszKey) || !_strnicmp(pszKey, "settext", 7))) )
+		{
+			fCallForm = SplitCallStatement(pszKey, pszArg);
+			if ( fCallForm && strchr(pszArg, '<') )
+			{
+				// An expression can start in the part of the line that was
+				// read as the key, as in F_FUNC(<STRMATCH a,b>).
+				strncpy(szCallArgs, pszArg, sizeof(szCallArgs) - 1);
+				szCallArgs[sizeof(szCallArgs) - 1] = '\0';
+				s_ParseEscapes(szCallArgs, 0);
+				pszArg = szCallArgs;
+			}
+		}
+
 		// Try dispatching to the base object.
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
 		if ( pObj && ( !strchr(pszKey, '.') || fPropertySet ))
 		{
-			// Try as a property set (KEY=VALUE).
-			CGVariant vVal(pszArg);
-			HRESULT hRes = pObj->s_PropSet(pszKey, vVal);
-			rejected.Observe(hRes, pszKey, m_pBaseObj);
-			if ( hRes == NO_ERROR )
-				return NO_ERROR;
+			HRESULT hRes;
+			if ( !fCallForm )
+			{
+				// Try as a property set (KEY=VALUE).
+				CGVariant vVal(pszArg);
+				hRes = pObj->s_PropSet(pszKey, vVal);
+				rejected.Observe(hRes, pszKey, m_pBaseObj);
+				if ( hRes == NO_ERROR )
+					return NO_ERROR;
+			}
 
 			// Try as a method call (KEY args).
 			CGVariant vArgs(pszArg);
@@ -1141,7 +1265,7 @@ public:
 		{
 			ScriptUnknownRecord(
 				fPropertySet ? SCRIPT_UNKNOWN_SET :
-					(strchr(pszKey, '(') ? SCRIPT_UNKNOWN_FUNCTION : SCRIPT_UNKNOWN_METHOD),
+					((fCallForm || strchr(pszKey, '(')) ? SCRIPT_UNKNOWN_FUNCTION : SCRIPT_UNKNOWN_METHOD),
 				pszKey,
 				m_pBaseObj);
 		}
@@ -1311,8 +1435,11 @@ public:
 					int iLoops = 0;
 					for (;;)
 					{
-						if ( ++iLoops > 10000 )
+						if ( ++iLoops > SCRIPT_MAX_LOOP_ITERATIONS )
+						{
+							ReportLoopLimit(script, ctxStart, "WHILE");
 							break; // safety limit
+						}
 
 						// Re-expand the original condition so changed local values are seen.
 						TCHAR szConditionEval[SCRIPT_MAX_LINE_LEN];
@@ -1355,8 +1482,11 @@ public:
 					int iLoops = 0;
 					for ( int i = iMin; i <= iMax; i++ )
 					{
-						if ( ++iLoops > 10000 )
+						if ( ++iLoops > SCRIPT_MAX_LOOP_ITERATIONS )
+						{
+							ReportLoopLimit(script, ctxStart, "FOR");
 							break;
+						}
 						iRet = ExecuteScript(script, TRIGRUN_SECTION_TRUE);
 						if ( iRet == TRIGRET_BREAK )
 						{
@@ -1416,22 +1546,45 @@ public:
 			default:
 				// Regular command line -- dispatch it.
 				{
-					// Expand script expressions before dispatching the command.  This is
-					// the path used by server-side triggers such as SYSMESSAGE, and it
-					// is also what makes table-backed expressions (EVAL, STRLEN, etc.)
-					// observable from a fixture without a graphical client.
+					// Expand script expressions before dispatching the command: in
+					// the key first (FINDUID(<VAR.x>).REMOVE, F_FUNC(<ARGS>)), then
+					// in the arguments.  This is the path used by server-side
+					// triggers such as SYSMESSAGE, and it is also what makes
+					// table-backed expressions (EVAL, STRLEN, etc.) observable from
+					// a fixture without a graphical client.
+					TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+					strncpy(szKey, pszKey, sizeof(szKey) - 1);
+					szKey[sizeof(szKey) - 1] = '\0';
+					if ( strchr(szKey, '<') )
+						s_ParseEscapes( szKey, 0 );
 					if ( script.GetArgMod() && *script.GetArgMod() )
 						s_ParseEscapes( script.GetArgMod(), 0 );
 
-					// Build the full command: "KEY VALUE"
+					// Rebuild the statement: "KEY VALUE", or "KEY=VALUE" for an
+					// assignment.  The line reader splits at the first space or '=',
+					// which can fall inside the parentheses of KEY(a, b); then
+					// ExecuteCommand() splits the rebuilt text again outside the
+					// parentheses.
+					bool fKeyEquals = script.WasKeyValueAssignment();
+					int iKeyDepth = 0;
+					for ( LPCTSTR q = szKey; *q; q++ )
+					{
+						if ( *q == '(' )
+							iKeyDepth++;
+						else if ( *q == ')' && iKeyDepth > 0 )
+							iKeyDepth--;
+					}
 					TCHAR szCmd[SCRIPT_MAX_LINE_LEN];
 					LPCTSTR pszArgStr = script.GetArgRaw();
+					LPCTSTR pszSeparator = " ";
+					if ( iKeyDepth != 0 && fKeyEquals )
+						pszSeparator = "=";
 					if ( pszArgStr && *pszArgStr )
-						snprintf(szCmd, sizeof(szCmd), "%s %s", pszKey, pszArgStr);
+						snprintf(szCmd, sizeof(szCmd), "%s%s%s", szKey, pszSeparator, pszArgStr);
 					else
-						strncpy(szCmd, pszKey, sizeof(szCmd) - 1);
+						strncpy(szCmd, szKey, sizeof(szCmd) - 1);
 					szCmd[sizeof(szCmd) - 1] = '\0';
-					ExecuteCommand(szCmd, script.WasKeyValueAssignment());
+					ExecuteCommand(szCmd, fKeyEquals && iKeyDepth == 0);
 				}
 				break;
 			}
