@@ -131,7 +131,7 @@ def main() -> int:
             if args.format_compat:
                 required_markers = (
                     "LEGACY_UNKNOWN=preserve-me",
-                    "REGION.FLAGS=",
+                    "REGION.FLAGS=0d2",
                     "[WORLDITEM SYNTHETIC_MULTI]",
                     "[WORLDITEM SYNTHETIC_MAP]",
                     "PIN=100,200,5",
@@ -236,8 +236,13 @@ def main() -> int:
         if world.count("LEGACY_UNKNOWN=preserve-me") != 1:
             failures.append(f"generation {generation} dropped the unknown legacy property")
         if args.format_compat:
-            if world.count("REGION.FLAGS=") < 1:
-                failures.append(f"generation {generation} dropped REGION.FLAGS")
+            region_flags_count = world.count("REGION.FLAGS=")
+            exact_region_flags_count = world.count("REGION.FLAGS=0d2")
+            if region_flags_count != 1 or exact_region_flags_count != 1:
+                failures.append(
+                    f"generation {generation} did not preserve exactly one REGION.FLAGS=0d2 "
+                    f"(keys={region_flags_count}, exact={exact_region_flags_count})"
+                )
         elif world.count("REGION.FLAGS=0d2") != 1:
             failures.append(f"generation {generation} dropped REGION.FLAGS")
         if args.format_compat:

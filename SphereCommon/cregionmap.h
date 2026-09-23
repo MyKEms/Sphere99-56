@@ -111,6 +111,10 @@ public:
 	{
 		m_dwFlags |= dwFlags;
 	}
+	void SetRegionFlagsExact( DWORD dwFlags )
+	{
+		m_dwFlags = dwFlags;
+	}
 	void TogRegionFlags( DWORD dwFlags, bool fSet )
 	{
 		if ( fSet )
