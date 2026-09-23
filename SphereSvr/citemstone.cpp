@@ -1519,16 +1519,17 @@ void CItemStone::addStoneList( CClient* pClient, STONEDISP_TYPE iStoneMenu )
 
 	CGStringArray asText;
 
+	CGString sName = GetName();
 	const char* pszTitle;
 	const char* pszArg = "";
 	switch ( iStoneMenu )
 	{
 	case STONEDISP_ROSTER:
-		pszTitle = GetName(); 
+		pszTitle = sName;
 		pszArg = " Roster";
 		break;
 	case STONEDISP_CANDIDATES:
-		pszTitle = GetName(); 
+		pszTitle = sName;
 		pszArg = " Candidates";
 		break;
 	case STONEDISP_FEALTY:
@@ -1536,23 +1537,23 @@ void CItemStone::addStoneList( CClient* pClient, STONEDISP_TYPE iStoneMenu )
 		break;
 	case STONEDISP_ACCEPTCANDIDATE:
 		pszTitle = "Accept candidate for ";
-		pszArg = GetName();
+		pszArg = sName;
 		break;
 	case STONEDISP_REFUSECANDIDATE:
 		pszTitle = "Refuse candidate for ";
-		pszArg = GetName();
+		pszArg = sName;
 		break;
 	case STONEDISP_DISMISSMEMBER:
 		pszTitle = "Dismiss member from ";
-		pszArg = GetName();
+		pszArg = sName;
 		break;
 	case STONEDISP_DECLAREWAR:
 		pszTitle = "Declaration of war by ";
-		pszArg = GetName();
+		pszArg = sName;
 		break;
 	case STONEDISP_DECLAREPEACE:
 		pszTitle = "Declaration of peace by ";
-		pszArg = GetName();
+		pszArg = sName;
 		break;
 	case STONEDISP_GRANTTITLE:
 		pszTitle = "To whom do you wish to grant a title?";

@@ -2853,11 +2853,16 @@ bool CClient::addBBoardMessage( const CItemContainer* pBoard, BBOARDF_TYPE flag,
 			pMsgItem->DeleteThis();
 			return false;
 		}
-		LPCTSTR pszAuthor = pMsgItem->m_sAuthor;
+		CGString sAuthor;
 		if ( IsPrivFlag(PRIV_GM))
 		{
-			pszAuthor = (LPCTSTR) m_pChar->GetName();
+			sAuthor = m_pChar->GetName();
 		}
+		else
+		{
+			sAuthor = pMsgItem->m_sAuthor;
+		}
+		LPCTSTR pszAuthor = sAuthor;
 		int lenstr = strlen(pszAuthor) + 1;
 		cmd.BBoard.m_data[len++] = lenstr;
 		strcpy( (TCHAR*) &cmd.BBoard.m_data[len], pszAuthor);

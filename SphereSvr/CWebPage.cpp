@@ -594,11 +594,14 @@ bool CWebPageDef::IsMatch( LPCTSTR pszMatch ) const
 	if ( pszMatch == NULL )	// match all.
 		return( true );
 
-	LPCTSTR pszDstName = GetDstName();
-
 	// Page is generated periodically. match the output name
 	// else match the source name
-	LPCTSTR pszTry = CScript::GetFileNameTitle( pszDstName[0] ? pszDstName : (LPCTSTR)GetName() );
+	CGString sName = GetDstName();
+	if ( sName.IsEmpty())
+	{
+		sName = GetName();
+	}
+	LPCTSTR pszTry = CScript::GetFileNameTitle( sName );
 
 	return( ! _stricmp( pszTry, pszMatch ));
 }
@@ -880,11 +883,12 @@ int CWebPageDef::ServePageRequest( CClient* pClient, const char* pszURLArgs, CGT
 			return( 403 );	// Forbidden
 	}
 
-	LPCTSTR pszDstName;
+	CGString sDstName;
 
 	if ( m_type == WEBPAGE_TEMPLATE ) // my version of cgi
 	{
-		pszDstName = GetDstName();
+		sDstName = GetDstName();
+		LPCTSTR pszDstName = sDstName;
 
 		// The page must be generated on demand.
 		if ( pszDstName[0] == '\0' || ! m_iUpdatePeriod )
@@ -895,10 +899,10 @@ int CWebPageDef::ServePageRequest( CClient* pClient, const char* pszURLArgs, CGT
 	}
 	else
 	{
-		pszDstName = GetName();
+		sDstName = GetName();
 	}
 
-	return ServeFile( pClient, pszDstName, pdateIfModifiedSince );
+	return ServeFile( pClient, sDstName, pdateIfModifiedSince );
 }
 
 bool CWebPageDef::ServePagePost( CClient* pClient, LPCTSTR pszURLArgs, TCHAR* pContentData, int iContentLength )

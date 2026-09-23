@@ -126,7 +126,8 @@ int CChar::NPC_OnHearName( LPCTSTR pszText ) const
 	// RETURN:
 	//  index to skip past the name.
 
-	LPCTSTR pszName = (LPCTSTR) GetName();
+	CGString sName = GetName();
+	LPCTSTR pszName = sName;
 
 	int i = Str_FindWord( pszText, pszName );
 	if ( i )
