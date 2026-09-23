@@ -226,6 +226,7 @@ void CWorld::ResetLoadIntegrity()
 	m_iLoadRejected = 0;
 	m_iLoadDefaulted = 0;
 	m_iLoadDeleted = 0;
+	m_iLoadDuplicateSerials = 0;
 	for ( int i = 0; i < LOAD_LOG_QTY; ++i )
 	{
 		m_iLoadLogEmitted[i] = 0;
@@ -331,6 +332,18 @@ void CWorld::RecordLoadDiagnostic( LOAD_DIAGNOSTIC_TYPE type )
 	}
 }
 
+void CWorld::RecordLoadDuplicateSerial( UID_INDEX dwSerial, bool fWorldItem )
+{
+	m_iLoadDuplicateSerials++;
+	RecordLoadDiagnostic( LOAD_DIAG_REJECTED );
+	if ( ShouldLogLoadDetail( LOAD_LOG_DUPLICATE_SERIAL ))
+	{
+		g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+			"%s load duplicate serial: uid=0x%x keeping first object" LOG_CR,
+			fWorldItem ? "WORLDITEM" : "WORLDCHAR", dwSerial );
+	}
+}
+
 void CWorld::FormatLoadDiagnostics( CGString& s ) const
 {
 	s.Format( "world load diagnostics: accepted=%d tolerated_legacy=%d rejected=%d "
@@ -344,6 +357,16 @@ void CWorld::LogLoadDiagnostics() const
 	CGString sDiagnostics;
 	FormatLoadDiagnostics( sDiagnostics );
 	g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT, "%s" LOG_CR, (LPCTSTR) sDiagnostics );
+	if ( m_iLoadDuplicateSerials )
+	{
+		g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,
+			"world load duplicate serials: count=%d (first object kept)" LOG_CR,
+			m_iLoadDuplicateSerials );
+#ifndef _WIN32
+		fprintf( stderr, "[INFO] world load duplicate serials: count=%d (first object kept)\n",
+			m_iLoadDuplicateSerials );
+#endif
+	}
 	static LPCTSTR const sm_szLoadLogCategories[LOAD_LOG_QTY] =
 	{
 		"WORLDCHAR property rejected",
@@ -352,6 +375,7 @@ void CWorld::LogLoadDiagnostics() const
 		"WORLDITEM property detail",
 		"WORLDCHAR load failed",
 		"WORLDITEM load failed",
+		"duplicate serial",
 	};
 	for ( int i = 0; i < LOAD_LOG_QTY; ++i )
 	{

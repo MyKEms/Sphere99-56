@@ -69,6 +69,8 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	m_fLoadToleratedLegacy = false;
 	m_fLoadRejectedProperty = false;
 	m_fLoadDefaulted = false;
+	m_fSaveParity = false;
+	m_fSaveParityValid = false;
 	m_wHue=HUE_DEFAULT;
 	// A zero timeout means that no timer is scheduled.  InitTime() would set
 	// the timeout to the current tick and make a freshly loaded item expire on
@@ -228,10 +230,18 @@ void CObjBase::s_WriteSafe( CScript& s )
 	try
 	{
 		uid = GetUID();
+		if ( g_World.IsSaving() && m_fSaveParityValid &&
+			m_fSaveParity == g_World.m_fSaveParity )
+			return;
 		if ( ! g_Cfg.m_fSaveGarbageCollect )
 		{
 			if ( g_World.FixObj( this ))
 				return;
+		}
+		if ( g_World.IsSaving())
+		{
+			m_fSaveParity = g_World.m_fSaveParity;
+			m_fSaveParityValid = true;
 		}
 		s_WriteProps(s);
 	}
@@ -688,9 +698,21 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			{
 				dwUID |= UID_F_ITEM;
 			}
-			if ( g_World.LoadUID( dwUID, this ) == 0 )
+			// UID_F_ITEM is part of the saved object UID.  The world table is
+			// indexed by the shared serial portion, so an item and a character
+			// may legitimately arrive at the same index; only a same-kind object
+			// is a duplicate serial.  Keep the first object for that case instead
+			// of allowing AllocUID to silently move it.
+			CObjBase* pExisting = STATIC_CAST(CObjBase, g_World.FindUIDObj( dwUID ));
+			if ( pExisting != NULL && pExisting->IsItem() == IsItem())
+			{
+				g_World.RecordLoadDuplicateSerial( dwUID & UID_INDEX_MASK, IsItem());
 				return HRES_INVALID_INDEX;
-			SetUIDIndex( dwUID );  // register the UID on the object so IsValidUID() passes
+			}
+			DWORD dwAssigned = g_World.LoadUID( dwUID, this );
+			if ( dwAssigned == 0 )
+				return HRES_INVALID_INDEX;
+			SetUIDIndex( dwAssigned | (dwUID & (UID_F_ITEM|RID_F_RESOURCE)) );
 		}
 		break;
 	default:

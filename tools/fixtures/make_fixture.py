@@ -30,6 +30,8 @@ TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
 NAMED_MULTI_NAME = "synthetic named multi"
+SPAWN_GEM_SERIALS = tuple(range(100, 110))
+SPAWN_GEM_ITEM_ID = 0x1EA7
 
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
@@ -925,6 +927,7 @@ def write_scripts(
     dialog_button_probe: bool = False,
     dialog_argo_layout_probe: bool = False,
     suppress_login_item: bool = False,
+    spawn_gem_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1096,16 +1099,26 @@ def write_scripts(
         if timer_lifetime_probe
         else "TYPE=T_EQ_SCRIPT\nLAYER=30\n"
     )
+    spawn_gem_itemdef = (
+        f"\n[ITEMDEF 0x{SPAWN_GEM_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_SPAWN_GEM\n"
+        "NAME=synthetic spawn gem\n"
+        "TYPE=T_SPAWN_ITEM\n"
+        if spawn_gem_probe
+        else ""
+    )
     timer_remove = "REMOVE" if timer_lifetime_item_first_probe else "CONT.REMOVE"
     unequip_remove = "CONT.REMOVE" if timer_lifetime_item_first_probe else "REMOVE"
     typedef_container_table = (
         "\n[TYPEDEFS]\nT_NORMAL 0\nT_CONTAINER 1\n"
+        + ("T_SPAWN_ITEM 69\n" if spawn_gem_probe else "")
         if (
             typedef_container_probe
             or timer_lifetime_probe
             or timer_sibling_mutation_probe
             or timer_sibling_mutation_owner_first_probe
             or format_compat_probe
+            or spawn_gem_probe
         )
         else ""
     )
@@ -1398,6 +1411,7 @@ ITEMNEWBIE=0x0E72
 [NEWBIE resist]
 ITEMNEWBIE=0x0E73
 """ + unknown_newbie_section + named_resource_id_probe_sections + named_item_name_sections
+        + spawn_gem_itemdef
         + book_pages_probe_sections,
     )
 
@@ -1693,6 +1707,42 @@ def write_world_load_counts_save(
                 "SAVECOUNT=0",
             ]
             + char_sections
+        ),
+    )
+
+
+def write_spawn_gem_save(root: Path, *, duplicate_serials: bool) -> None:
+    """Seed top-level spawn gems, optionally repeating each saved serial."""
+
+    world_sections = [
+        "TITLE=Sphere synthetic spawn-gem serialization fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+    ]
+    for serial in SPAWN_GEM_SERIALS:
+        repeats = 2 if duplicate_serials else 1
+        for _ in range(repeats):
+            world_sections.extend(
+                [
+                    "[WORLDITEM SYNTHETIC_SPAWN_GEM]",
+                    f"SERIAL={UID_F_ITEM | serial}",
+                    "TIMER=0",
+                    'MORE1="SYNTHETIC_OBJECT"',
+                    "MORE2=1",
+                    "P=128,128,0",
+                ]
+            )
+    world_sections.append("[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic spawn-gem serialization fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
         ),
     )
 
@@ -2052,6 +2102,16 @@ def main() -> int:
         action="store_true",
         help="open, by name, a dialog laid out with argo.<gump>(...) calls at login",
     )
+    parser.add_argument(
+        "--spawn-gem-probe",
+        action="store_true",
+        help="seed top-level spawn gems with an explicit zero timer",
+    )
+    parser.add_argument(
+        "--spawn-gem-duplicate-serial-probe",
+        action="store_true",
+        help="seed duplicate spawn-gem serial sections for load handling",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2071,6 +2131,16 @@ def main() -> int:
         parser.error("world-load options require --world-load-counts")
     if sum(world_load_modes) > 1:
         parser.error("choose only one world-load fixture mode")
+    if args.spawn_gem_duplicate_serial_probe:
+        args.spawn_gem_probe = True
+    if (args.spawn_gem_probe or args.spawn_gem_duplicate_serial_probe) and (
+        any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+    ):
+        parser.error("spawn-gem probe cannot be combined with another world fixture mode")
     if (
         args.timer_lifetime_probe
         or args.timer_lifetime_item_first_probe
@@ -2095,6 +2165,8 @@ def main() -> int:
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
         or args.format_compat_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
     ):
         parser.error("book-pages probe writes its own world and cannot be combined")
 
@@ -2141,6 +2213,7 @@ def main() -> int:
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
+        spawn_gem_probe=args.spawn_gem_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -2161,6 +2234,11 @@ def main() -> int:
         write_timer_lifetime_save(root)
     if args.book_pages_probe:
         write_book_pages_save(root)
+    if args.spawn_gem_probe:
+        write_spawn_gem_save(
+            root,
+            duplicate_serials=args.spawn_gem_duplicate_serial_probe,
+        )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     write_mul_fixture(
