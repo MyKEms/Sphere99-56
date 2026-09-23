@@ -510,6 +510,7 @@ void CSector::SetLight( int light )
 
 	// DEBUG_MSG(( "CSector.SetLight(%d)" LOG_CR, light ));
 
+	BYTE bPrevLight = GetLight();
 	if ( light < LIGHT_BRIGHT || light > LIGHT_DARK )
 	{
 		m_Env.m_Light &= ~LIGHT_OVERRIDE;
@@ -519,6 +520,13 @@ void CSector::SetLight( int light )
 	{
 		m_Env.m_Light = (BYTE) ( light | LIGHT_OVERRIDE );
 	}
+
+	// Like SetWeather() and SetSeason(), stop when the level in effect does
+	// not change.  SetLightNow() re-runs @EnvironChange for every character
+	// here, so a handler that sets the level it already has would otherwise
+	// re-enter itself without end.
+	if ( GetLight() == bPrevLight )
+		return;
 	SetLightNow(false);
 }
 
