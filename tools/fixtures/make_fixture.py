@@ -106,6 +106,17 @@ DOTTED_EXPRESSION_ROWS = (
     ("eval_bracket_str_dex", "<eval <src.str>+<src.dex>>", "C"),
     ("eval_defname", "<eval dotted_probe_const>", "C"),
     ("eval_unknown_reference", "<eval foo.bar>", "C"),
+    # Expression grammar: parentheses, unary !, && and ||.  Arithmetic and
+    # comparison operators still chain from left to right without
+    # precedence.
+    ("eval_paren_group", "<eval (1+2)*3>", "C"),
+    ("eval_paren_right", "<eval 2*(3+4)>", "C"),
+    ("eval_not", "<eval !0>", "C"),
+    ("eval_and", "<eval 1 && 1>", "C"),
+    ("eval_or_false", "<eval 0 || 0>", "C"),
+    ("eval_chain_left", "<eval 10-3-2>", "C"),
+    ("eval_chain_no_precedence", "<eval 1+2*3>", "C"),
+    ("eval_chain_compare", "<eval 3==1+2>", "C"),
     # Unresolved on every build so far (VAR.name reads are not implemented).
     # Not asserted; it checks that the unknown-keyword report keeps the
     # normalized legacy key.
@@ -132,12 +143,30 @@ DOTTED_CONDITION_ROWS = (
     ("cond_bracket_name_other", "(<src.name>==Other)"),
     ("cond_defname", "(dotted_probe_const==1234)"),
     ("cond_unknown_reference", "(foo.bar)"),
-    # Not implemented by the expression reader yet: && / || between
-    # parenthesized terms, parenthesized sub-expressions and unary !.  These
-    # read as 0 with any operand form and are reported, not asserted.
-    ("cond_unsupported_and", "(src.str>10) && (src.dex>10)"),
-    ("cond_unsupported_paren", "((src.str+5)>src.dex)"),
-    ("cond_unsupported_not", "(!src.tag.probe_missing)"),
+    ("cond_bare_and", "(src.str>10) && (src.dex>10)"),
+    ("cond_bare_paren", "((src.str+5)>src.dex)"),
+    ("cond_bare_not", "(!src.tag.probe_missing)"),
+    # Expression grammar in conditions.
+    ("grammar_and_true", "(1>0) && (2>1)"),
+    ("grammar_and_false", "(1>0) && (2<1)"),
+    ("grammar_or_true", "(0) || (1)"),
+    ("grammar_or_false", "(0) || (0)"),
+    ("grammar_not_zero", "(!0)"),
+    ("grammar_not_one", "(!1)"),
+    ("grammar_not_paren", "(!(1>2))"),
+    ("grammar_paren_arith", "(((2+3)*4)==20)"),
+    ("grammar_and_or", "(0) && (1) || (1)"),
+    ("grammar_or_and", "(1) || (0) && (0)"),
+    ("grammar_ge", "(5 >= 3)"),
+    ("grammar_ge_equal", "(3 >= 3)"),
+    ("grammar_ge_false", "(2 >= 3)"),
+    ("grammar_le_equal", "(3 <= 3)"),
+    ("grammar_le_false", "(4 <= 3)"),
+    ("grammar_unparenthesized", "(1 < 2 && 3 > 2)"),
+    ("grammar_escape_terms", "(<src.str> > 10) && (<src.tag(probe_num)> == 7)"),
+    ("grammar_bare_terms", "(src.str>10) && (src.tag.probe_num==7)"),
+    ("grammar_bare_terms_false", "(src.str>10) && (src.tag.probe_num==8)"),
+    ("grammar_not_bare_set", "(!src.tag.probe_num)"),
 )
 
 
@@ -327,6 +356,31 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "IF (f_fixture_getter(1))",
         "ENDIF",
         "SYSMESSAGE " + marker + " C|cond_function_call_count|[<VAR(dotted_getter_calls)>]",
+        # && and || evaluate both operands, as <...> operands on one line
+        # are all expanded before the condition is read.
+        "VAR dotted_getter_calls,0",
+        "IF (0) && (f_fixture_getter.name)",
+        "ENDIF",
+        "SYSMESSAGE " + marker + " C|grammar_and_operand_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "IF (1) || (f_fixture_getter.name)",
+        "ENDIF",
+        "SYSMESSAGE " + marker + " C|grammar_or_operand_count|[<VAR(dotted_getter_calls)>]",
+        "VAR dotted_getter_calls,0",
+        "IF (0) && (<f_fixture_getter.name>)",
+        "ENDIF",
+        "SYSMESSAGE " + marker + " C|grammar_escape_operand_count|[<VAR(dotted_getter_calls)>]",
+        "IF (0)",
+        "SYSMESSAGE " + marker + " C|grammar_elif|[if]",
+        "ELIF (1) && (2>1)",
+        "SYSMESSAGE " + marker + " C|grammar_elif|[elif]",
+        "ELSE",
+        "SYSMESSAGE " + marker + " C|grammar_elif|[else]",
+        "ENDIF",
+        "WHILE (src.tag0.probe_grammar_loop<3) && (1)",
+        "SRC.TAG.probe_grammar_loop=<EVAL <src.tag0.probe_grammar_loop>+1>",
+        "ENDWHILE",
+        "SYSMESSAGE " + marker + " C|grammar_while|[<src.tag0.probe_grammar_loop>]",
         "WHILE (src.tag0.probe_loop<3)",
         "SRC.TAG.probe_loop=<EVAL <src.tag0.probe_loop>+1>",
         "ENDWHILE",
