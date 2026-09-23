@@ -158,13 +158,19 @@ void CChar::DeleteThis()
 		// An equipped item's timer script can delete this character while the
 		// item's OnTick() callback is still running. Queue the contents for the
 		// world garbage collector instead of destructing that active item here.
-		// Keep the next link before deleting each item: the current item can be
-		// pending while its unequip trigger is still unwinding, so retrying
-		// GetHead() would spin on that same item forever.
-		CItemPtr pItemNext;
-		for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItemNext )
+		// Snapshot the source list before callbacks can move a sibling. A saved
+		// next pointer alone is unsafe: if @UnEquip reparents that sibling, its
+		// next link now belongs to the destination list. Keep only children that
+		// still belong to this character, while allowing a pending in-flight
+		// child to remain linked until its callback unwinds.
+		CGRefArray<CItem> aItems;
+		for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItem->GetNext() )
+			aItems.Add( pItem );
+		for ( size_t i = 0; i < aItems.GetCount(); ++i )
 		{
-			pItemNext = pItem->GetNext();
+			CItemPtr pItem = aItems[i];
+			if ( pItem == NULL || pItem->GetParent() != this )
+				continue;
 			pItem->DeleteThis();
 		}
 	}
