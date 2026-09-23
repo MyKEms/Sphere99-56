@@ -15,6 +15,10 @@ typedef int VARTYPE;
 #define EXPRESSION_MAX_KEY_LEN 128
 #endif
 
+// Longest reference operand (SRC.TAG.NAME, FINDUID(uid).CONT.NAME, ...) that
+// a numeric expression resolves.
+#define EXPRESSION_MAX_OPERAND_LEN 512
+
 // Internal type tag for CGVariant
 enum CGVARIANT_TYPE
 {
@@ -952,12 +956,76 @@ public:
 		return fNeg ? -val : val;
 	}
 
+	// Resolve a reference operand such as SRC.STR or FINDUID(uid).NAME.
+	// The plain reader knows no objects; script execution contexts override
+	// this.  Return false to read the operand as a number or DEFNAME.
+	virtual bool ResolveReferenceOperand(LPCTSTR pszOperand, int& iValue)
+	{
+		(void)pszOperand;
+		iValue = 0;
+		return false;
+	}
+
+	// Read one operand.  An identifier followed by '.' or '(' is a reference
+	// operand: it extends over names, dots and balanced parentheses up to the
+	// first operator, whitespace or unmatched ')' and is resolved through
+	// ResolveReferenceOperand().  Everything else is read by GetSingle().
+	int GetOperand(LPCTSTR& pStr)
+	{
+		if (!pStr) return 0;
+		LPCTSTR p = pStr;
+		while (ISWHITESPACE(*p)) p++;
+		bool fNeg = false;
+		if (*p == '-' || *p == '+')
+		{
+			fNeg = (*p == '-');
+			p++;
+		}
+		if (isalpha((unsigned char)*p) || *p == '_')
+		{
+			LPCTSTR pName = p;
+			while (isalnum((unsigned char)*pName) || *pName == '_') pName++;
+			if (*pName == '.' || *pName == '(')
+			{
+				int iDepth = 0;
+				LPCTSTR pEnd = pName;
+				for (; *pEnd; pEnd++)
+				{
+					if (*pEnd == '(')
+						iDepth++;
+					else if (*pEnd == ')')
+					{
+						if (iDepth == 0)
+							break;
+						iDepth--;
+					}
+					else if (iDepth == 0 && !isalnum((unsigned char)*pEnd) && *pEnd != '_' && *pEnd != '.')
+						break;
+				}
+				char szOperand[EXPRESSION_MAX_OPERAND_LEN];
+				size_t iLen = pEnd - p;
+				if (iDepth == 0 && iLen < sizeof(szOperand))
+				{
+					memcpy(szOperand, p, iLen);
+					szOperand[iLen] = '\0';
+					int iValue = 0;
+					if (ResolveReferenceOperand(szOperand, iValue))
+					{
+						pStr = pEnd;
+						return fNeg ? -iValue : iValue;
+					}
+				}
+			}
+		}
+		return GetSingle(pStr);
+	}
+
 	// Evaluate a simple numeric expression (right-to-left, no precedence - 0.99 behavior!)
 	// and leave pStr at the first character that is not part of it.
 	int GetComplexAdvance(LPCTSTR& pStr)
 	{
 		if (!pStr || !*pStr) return 0;
-		int val = GetSingle(pStr);
+		int val = GetOperand(pStr);
 		while (*pStr)
 		{
 			LPCTSTR pOp = pStr;
@@ -972,7 +1040,7 @@ public:
 			LPCTSTR p = pOp + 1;
 			if ((op == '>' || op == '<') && *p == op) p++;
 			else if ((op == '!' || op == '=') && *p == '=') p++;
-			int val2 = GetSingle(p);
+			int val2 = GetOperand(p);
 			switch (op)
 			{
 			case '+': val = val + val2; break;

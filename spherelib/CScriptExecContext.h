@@ -151,12 +151,16 @@ protected:
 		return true;
 	}
 
-	// Resolve a reference chain whose root is a context function, for example
-	// SRC.FINDLAYER(30).NAME, FINDUID(uid).TAG(name) or F_FUNC(arg).CONT.UID.
+	// Resolve a reference chain such as SRC.FINDLAYER(30).NAME,
+	// FINDUID(uid).TAG(name), F_FUNC(arg).CONT.UID or SECTOR.LIGHT.  The root
+	// is a context function or, failing that, a reference property or method
+	// of the default object (CONT, TOPOBJ, SECTOR, REGION, ACT, LINK, ...).
 	// Each segment keeps its own arguments.  A segment is looked up on the
 	// current object as a property, then as a method, then as a function with
 	// the object as its base -- the order the single-level reference path has
-	// always used.
+	// always used.  When that fails, the rest of the chain is offered to the
+	// object as one property name, for properties that are dotted themselves
+	// (TAG.name, TAG0.name).
 	//
 	// Returns true when the whole chain resolved.  fEffect reports whether a
 	// script function or an object method already ran; the caller must then
@@ -213,12 +217,31 @@ protected:
 		CGVariant vCurrent;
 		HRESULT hRes = Function_Dispatch(szRoot, vArgs, vCurrent);
 		rejected.Observe(hRes, szRoot, m_pBaseObj);
-		if ( hRes != NO_ERROR )
-			return false;
-		if ( IsScriptFunction(szRoot) )
-			fEffect = true;
+		bool fRootFromFunction = (hRes == NO_ERROR);
+		if ( fRootFromFunction )
+		{
+			if ( IsScriptFunction(szRoot) )
+				fEffect = true;
+		}
+		else
+		{
+			CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
+			if ( pBase == NULL )
+				return false;
+			hRes = pBase->s_PropGet(szRoot, vCurrent, m_pSrc);
+			rejected.Observe(hRes, szRoot, m_pBaseObj);
+			if ( hRes != NO_ERROR )
+			{
+				hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
+				rejected.Observe(hRes, szRoot, m_pBaseObj);
+				if ( hRes == NO_ERROR )
+					fEffect = true;
+			}
+			if ( hRes != NO_ERROR )
+				return false;
+		}
 
-		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, szRoot);
+		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
 			// A script function that returned no object (empty or a UID that
@@ -264,7 +287,18 @@ protected:
 				}
 			}
 			if ( hRes != NO_ERROR )
-				return false;
+			{
+				// Offer the rest of the chain as one dotted property name.
+				LPCTSTR pszRest = pszExpr + aStart[iSegment];
+				if ( iSegment == iSegments - 1 || strchr(pszRest, '(') != NULL )
+					return false;
+				hRes = pCurrent->s_PropGet(pszRest, vNext, m_pSrc);
+				rejected.Observe(hRes, pszRest, pCurrent);
+				if ( hRes != NO_ERROR )
+					return false;
+				vValRet = vNext;
+				return true;
+			}
 
 			if ( iSegment == iSegments - 1 )
 			{
@@ -289,10 +323,14 @@ protected:
 	}
 
 	// Evaluate the text of one <...> or <?...?> escape (without delimiters
-	// and without a SAFE prefix).  Returns true and sets sResult when the
-	// expression resolved.
-	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult, CScriptUnknownRejectTracker& rejected)
+	// and without a SAFE prefix).  Returns true and sets vResult when the
+	// expression resolved; pfChainResolved reports whether the reference
+	// chain walker produced the value.
+	bool EvaluateEscapeValue(LPCTSTR pszExpr, CGVariant& vResult, CScriptUnknownRejectTracker& rejected, bool* pfChainResolved = NULL)
 	{
+		if ( pfChainResolved )
+			*pfChainResolved = false;
+
 		// Split function name from arguments: "FUNC(args)" or "FUNC args" or "OBJ.PROP"
 		TCHAR szKey[SCRIPT_MAX_LINE_LEN];
 		strncpy(szKey, pszExpr, sizeof(szKey)-1);
@@ -332,7 +370,9 @@ protected:
 		CScriptUnknownRejectTracker chainRejected;
 		if ( ResolveDottedChain(pszExpr, vValRet, chainRejected, fChainEffect) )
 		{
-			sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+			if ( pfChainResolved )
+				*pfChainResolved = true;
+			vResult = vValRet;
 			return true;
 		}
 
@@ -357,7 +397,7 @@ protected:
 			TCHAR* pDot = strchr(szKey, '.');
 			if ( pRef == NULL || pDot == NULL )
 			{
-				sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+				vResult = vValRet;
 				return true;
 			}
 
@@ -385,7 +425,7 @@ protected:
 				}
 				if ( hRes == NO_ERROR )
 				{
-					sResult = vSubRet.IsEmpty() ? "" : vSubRet.GetPSTR();
+					vResult = vSubRet;
 					return true;
 				}
 			}
@@ -400,7 +440,7 @@ protected:
 		rejected.Observe(hRes, pszExpr, m_pBaseObj);
 		if ( hRes == NO_ERROR )
 		{
-			sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+			vResult = vValRet;
 			return true;
 		}
 
@@ -411,12 +451,60 @@ protected:
 			rejected.Observe(hRes, szKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 			{
-				sResult = vValRet.IsEmpty() ? "" : vValRet.GetPSTR();
+				vResult = vValRet;
 				return true;
 			}
 		}
 		return false;
 	}
+
+	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult, CScriptUnknownRejectTracker& rejected)
+	{
+		CGVariant vResult;
+		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
+			return false;
+		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
+		return true;
+	}
+
+public:
+	// Numeric expressions (IF, ELIF, WHILE, RETURN, EVAL) read a bare
+	// reference operand such as SRC.STR, SECTOR.LIGHT or FINDUID(uid).NAME
+	// through the same evaluator as <...>.  A string result is read the way
+	// a substituted <...> value would be; an object reference reads as its
+	// UID.  Operands that do not resolve are left to the plain number and
+	// DEFNAME reader, as before.
+	virtual bool ResolveReferenceOperand(LPCTSTR pszOperand, int& iValue)
+	{
+		iValue = 0;
+		if ( m_pBaseObj == NULL )
+			return false;
+
+		CGVariant vValue;
+		CScriptUnknownRejectTracker rejected;
+		bool fChainResolved = false;
+		if ( !EvaluateEscapeValue(pszOperand, vValue, rejected, &fChainResolved) )
+			return false;
+
+		CScriptObj* pRef = vValue.GetRef();
+		if ( pRef != NULL )
+		{
+			// Without the chain walker, a dotted operand can only have been
+			// matched by its first name (the rest ignored), so its object is
+			// not the one asked for.
+			CResourceObj* pObj = dynamic_cast<CResourceObj*>(pRef);
+			if ( pObj && (fChainResolved || strchr(pszOperand, '.') == NULL) )
+				iValue = (int) pObj->GetUIDIndex();
+			return true;
+		}
+		if ( vValue.IsEmpty() )
+			return true;
+		LPCTSTR pszValue = vValue.GetPSTR();
+		iValue = GetSingle(pszValue);
+		return true;
+	}
+
+protected:
 
 public:
 	// Gump command table for dialog construction.
