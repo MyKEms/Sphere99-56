@@ -698,16 +698,21 @@ HRESULT CObjBase::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			{
 				dwUID |= UID_F_ITEM;
 			}
-			// AllocUID assigns a fresh slot on collision; reject the section first
-			// so a duplicate saved serial cannot silently replace its first object.
-			if ( g_World.FindUIDObj( dwUID ) != NULL )
+			// UID_F_ITEM is part of the saved object UID.  The world table is
+			// indexed by the shared serial portion, so an item and a character
+			// may legitimately arrive at the same index; only a same-kind object
+			// is a duplicate serial.  Keep the first object for that case instead
+			// of allowing AllocUID to silently move it.
+			CObjBase* pExisting = STATIC_CAST(CObjBase, g_World.FindUIDObj( dwUID ));
+			if ( pExisting != NULL && pExisting->IsItem() == IsItem())
 			{
 				g_World.RecordLoadDuplicateSerial( dwUID & UID_INDEX_MASK, IsItem());
 				return HRES_INVALID_INDEX;
 			}
-			if ( g_World.LoadUID( dwUID, this ) == 0 )
+			DWORD dwAssigned = g_World.LoadUID( dwUID, this );
+			if ( dwAssigned == 0 )
 				return HRES_INVALID_INDEX;
-			SetUIDIndex( dwUID );  // register the UID on the object so IsValidUID() passes
+			SetUIDIndex( dwAssigned | (dwUID & (UID_F_ITEM|RID_F_RESOURCE)) );
 		}
 		break;
 	default:
