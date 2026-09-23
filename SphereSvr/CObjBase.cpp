@@ -458,6 +458,25 @@ HRESULT CObjBase::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole*
 {
 	DEBUG_CHECK(pSrc);
 
+	// TAG.name reads a tag ("" when it is not set); TAG0.name reads 0 when
+	// it is not set.  The TAG(name) method form is unchanged.
+	bool fTagZero = !_strnicmp(pszKey, "TAG0.", 5);
+	if ( fTagZero || !_strnicmp(pszKey, "TAG.", 4))
+	{
+		LPCTSTR pszTag = pszKey + (fTagZero ? 5 : 4);
+		if ( *pszTag )
+		{
+			CVarDefPtr pVar = m_TagDefs.FindKeyPtr( pszTag );
+			if ( pVar )
+				vValRet.SetStr( pVar->GetValStr());
+			else if ( fTagZero )
+				vValRet.SetInt( 0 );
+			else
+				vValRet.SetStr( "" );
+			return( NO_ERROR );
+		}
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
