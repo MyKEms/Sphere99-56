@@ -1020,27 +1020,58 @@ public:
 		return GetSingle(pStr);
 	}
 
-	// Evaluate a simple numeric expression (right-to-left, no precedence - 0.99 behavior!)
-	// and leave pStr at the first character that is not part of it.
-	int GetComplexAdvance(LPCTSTR& pStr)
+	// Read one primary: a parenthesized sub-expression, a unary ! applied to
+	// one primary, or an operand (GetOperand).
+	int GetPrimary(LPCTSTR& pStr)
+	{
+		if (!pStr) return 0;
+		LPCTSTR p = pStr;
+		while (ISWHITESPACE(*p)) p++;
+		if (*p == '(')
+		{
+			p++;
+			int val = GetComplexAdvance(p);
+			while (ISWHITESPACE(*p)) p++;
+			if (*p == ')')
+				p++;
+			pStr = p;
+			return val;
+		}
+		if (*p == '!' && p[1] != '=')
+		{
+			p++;
+			int val = GetPrimary(p);
+			pStr = p;
+			return !val;
+		}
+		return GetOperand(pStr);
+	}
+
+	// Evaluate a chain of arithmetic, bitwise and comparison operators from
+	// left to right without precedence, and leave pStr at the first
+	// character that is not part of it.  && and || end the chain.
+	int GetOperatorChain(LPCTSTR& pStr)
 	{
 		if (!pStr || !*pStr) return 0;
-		int val = GetOperand(pStr);
+		int val = GetPrimary(pStr);
 		while (*pStr)
 		{
 			LPCTSTR pOp = pStr;
 			while (ISWHITESPACE(*pOp)) pOp++;
 			if (!*pOp) { pStr = pOp; break; }
 			char op = *pOp;
-			if (!strchr("+-*/%|&^<>!=", op) || (op == '!' && pOp[1] != '='))
+			if (!strchr("+-*/%|&^<>!=", op) || (op == '!' && pOp[1] != '=') ||
+				((op == '&' || op == '|') && pOp[1] == op))
 			{
-				pStr = pOp;	// not an operator: the expression ends here
+				pStr = pOp;	// not an operator of this chain: it ends here
 				break;
 			}
 			LPCTSTR p = pOp + 1;
+			bool fOrEqual = false;
 			if ((op == '>' || op == '<') && *p == op) p++;
+			else if ((op == '>' || op == '<') && *p == '=') { p++; fOrEqual = true; }
 			else if ((op == '!' || op == '=') && *p == '=') p++;
-			int val2 = GetOperand(p);
+			int val2 = GetPrimary(p);
 			switch (op)
 			{
 			case '+': val = val + val2; break;
@@ -1051,11 +1082,51 @@ public:
 			case '|': val = val | val2; break;
 			case '&': val = val & val2; break;
 			case '^': val = val ^ val2; break;
-			case '>': val = (pOp[1] == '>') ? (val >> val2) : (val > val2); break;
-			case '<': val = (pOp[1] == '<') ? (val << val2) : (val < val2); break;
+			case '>': val = (pOp[1] == '>') ? (val >> val2) : (fOrEqual ? (val >= val2) : (val > val2)); break;
+			case '<': val = (pOp[1] == '<') ? (val << val2) : (fOrEqual ? (val <= val2) : (val < val2)); break;
 			case '!': val = (val != val2); break;
 			case '=': val = (val == val2); break;
 			}
+			pStr = p;
+		}
+		return val;
+	}
+
+	// Combine operator chains with && and then ||.  Both operands of && and
+	// || are always evaluated, as <...> operands on the same line are all
+	// expanded before the condition is evaluated.
+	int GetLogicalAnd(LPCTSTR& pStr)
+	{
+		int val = GetOperatorChain(pStr);
+		for (;;)
+		{
+			LPCTSTR p = pStr;
+			while (ISWHITESPACE(*p)) p++;
+			if (p[0] != '&' || p[1] != '&')
+				break;
+			p += 2;
+			int val2 = GetOperatorChain(p);
+			val = (val && val2) ? 1 : 0;
+			pStr = p;
+		}
+		return val;
+	}
+
+	// Evaluate a numeric expression and leave pStr at the first character
+	// that is not part of it.
+	int GetComplexAdvance(LPCTSTR& pStr)
+	{
+		if (!pStr || !*pStr) return 0;
+		int val = GetLogicalAnd(pStr);
+		for (;;)
+		{
+			LPCTSTR p = pStr;
+			while (ISWHITESPACE(*p)) p++;
+			if (p[0] != '|' || p[1] != '|')
+				break;
+			p += 2;
+			int val2 = GetLogicalAnd(p);
+			val = (val || val2) ? 1 : 0;
 			pStr = p;
 		}
 		return val;
