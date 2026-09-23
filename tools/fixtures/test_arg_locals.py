@@ -4,7 +4,8 @@
 The fixture deliberately uses all three local read forms (``ARG.i``,
 ``ARG(i)`` and a bare ``i``), updates the counter with Sphere's ``#+1``
 current-value form, and passes a UID through ``ARGV(0)``.  It also exercises
-the legacy ``LASTNEW`` root and an ``ARGV(0).TYPE`` property write.
+the legacy ``LASTNEW`` root and an ``ARGV(0).TYPE`` property write.  The
+scratch row mirrors six underscore-named locals read without ``ARG`` syntax.
 """
 
 from __future__ import annotations
@@ -33,6 +34,10 @@ EXPECTED = {
     "bare_after": "5",
     "object_before": "synthetic object|synthetic object|T_NORMAL",
     "object_after": "T_NORMAL|T_NORMAL",
+    "scratch": "101|202|303|404|505|606",
+    "scratch_object": "synthetic object|T_NORMAL",
+    # RETURN parses the hyphens as arithmetic, just as the legacy helper does.
+    "scratch_return": "-1919",
 }
 
 

@@ -48,8 +48,9 @@ DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 
 # Named ARG locals and positional-object probe.  The generated login trigger
 # creates one synthetic item through a script-level NEWITEMSAFE wrapper, then
-# passes its UID into a nested function so ARG/ARGV resolution is exercised in
-# the same context shape as a real function call.
+# passes its UID into nested functions so ARG/ARGV resolution is exercised in
+# the same context shape as a real function call.  The scratch probe mirrors
+# the underscore-named locals used by legacy script helpers.
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
@@ -409,6 +410,7 @@ def arg_locals_scripts() -> tuple[str, str]:
         "NEWITEMSAFE SYNTHETIC_OBJECT",
         f"SYSMESSAGE {marker} C|lastnew_name|[<LASTNEW.NAME>]",
         "F_ARG_LOCALS_PROBE(<LASTNEW.SERIAL>)",
+        f"SYSMESSAGE {marker} C|scratch_return|[<F_ARG_SCRATCH_PROBE(<LASTNEW.SERIAL>)>]",
         f"SYSMESSAGE {marker} C_END",
     ]
     sections = """
@@ -432,6 +434,18 @@ SYSMESSAGE SPHERE_ARG_LOCALS C|object_before|[<argobj.name>|<ARG(argobj).name>|<
 ARGV(0).TYPE=T_NORMAL
 SYSMESSAGE SPHERE_ARG_LOCALS C|object_after|[<argobj.type>|<ARGV(0).TYPE>]
 RETURN <i>
+
+[FUNCTION f_arg_scratch_probe]
+ARG(scratch_1,101)
+ARG(scratch_2,202)
+ARG(scratch_3,303)
+ARG(scratch_4,404)
+ARG(scratch_5,505)
+ARG(scratch_6,606)
+ARG(scratch_obj,<ARGV(0)>)
+SYSMESSAGE SPHERE_ARG_LOCALS C|scratch|[<SCRATCH_1>|<scratch_2>|<SCRATCH_3>|<scratch_4>|<SCRATCH_5>|<scratch_6>]
+SYSMESSAGE SPHERE_ARG_LOCALS C|scratch_object|[<SCRATCH_OBJ.NAME>|<scratch_obj.type>]
+RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
 """
     return "\n".join(login) + "\n", sections
 
