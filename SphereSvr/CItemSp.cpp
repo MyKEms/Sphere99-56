@@ -396,7 +396,7 @@ bool CItemMessage::LoadSystemPages()
 	TCHAR szTemp[ 16*1024 ];
 	for ( int iPage=1; iPage<=iPages; iPage++ )
 	{
-		CResourceLock sPage( g_Cfg.ResourceGetDef( CSphereUID( RES_Book, m_itBook.m_ResID.GetResIndex(), iPage )));
+		CResourceLock sPage( g_Cfg.ResourceGetDef( CSphereUID::GetBookPageID( m_itBook.m_ResID.GetResIndex(), iPage )));
 		if ( ! sPage.IsFileOpen())
 			break;
 

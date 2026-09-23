@@ -52,6 +52,27 @@ DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 # the same context shape as a real function call.
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
+
+# Book probe.  BOOKs with more pages than the 7-bit resource page field holds
+# (0.99 reads pages up to 255), a page above that limit that must be rejected
+# cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
+# (resource flag, the 0.99 ITEMDEF type bits, index 0x0E76).  The long book
+# has a named header and every page; the read book has a fixed index so the
+# saved book item can refer to it, and only the pages the client reads.
+# tools/fixtures/test_book_pages.py holds the checks.
+BOOK_PROBE_ACCOUNT = "BookProbe"
+BOOK_PROBE_ITEM_ID = 0x0E8E
+BOOK_PROBE_ITEM_SERIAL = 400
+BOOK_PROBE_NAME = "SYNTHETIC_LONG_BOOK"
+BOOK_PROBE_PAGES = 200
+BOOK_PROBE_REJECTED_PAGE = 256
+BOOK_READ_INDEX = 0x0200
+BOOK_READ_NAME = "SYNTHETIC_READ_BOOK"
+BOOK_READ_TITLE = "synthetic read book"
+BOOK_READ_PAGES = (1, 126, 127, 128, BOOK_PROBE_PAGES)
+RES_BOOK_TYPE = 6
+FULL_RID_ITEMDEF = "0A2000E76"
+FULL_RID_ALIAS = "SYNTHETIC_FULL_RID_ALIAS"
 DOTTED_EXPRESSION_ROWS = (
     # Forms without a function-root chain; their results must not change.
     ("src_name", "<src.name>", "CI"),
@@ -278,6 +299,68 @@ def write_mul_fixture(root: Path, *, extra_item_id: int = 0) -> None:
     # placeholder makes the generated MUL directory explicit and complete for
     # tools that inspect the fixture.
     write_bytes(muls / "hues.mul", b"\0\0\0\0")
+
+
+def book_page_lines(page: int) -> list[str]:
+    return [f"synthetic page {page}", f"second line of page {page}"]
+
+
+def book_pages_sections() -> str:
+    sections = [
+        "[TYPEDEF 19]\nDEFNAME=T_BOOK\n",
+        f"[ITEMDEF 0x{BOOK_PROBE_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_BOOK_ITEM\n"
+        "NAME=synthetic book\n"
+        "TYPE=T_BOOK\n",
+        f"[BOOK {BOOK_PROBE_NAME}]\n"
+        f"PAGES={BOOK_PROBE_PAGES}\n"
+        "TITLE=synthetic long book\n"
+        "AUTHOR=fixture\n",
+        f"[BOOK 0{BOOK_READ_INDEX:x}]\n"
+        f"DEFNAME={BOOK_READ_NAME}\n"
+        f"PAGES={BOOK_PROBE_PAGES}\n"
+        f"TITLE={BOOK_READ_TITLE}\n"
+        "AUTHOR=fixture\n",
+    ]
+    for page in range(1, BOOK_PROBE_PAGES + 1):
+        sections.append(
+            f"[BOOK {BOOK_PROBE_NAME} {page}]\n" + "\n".join(book_page_lines(page)) + "\n"
+        )
+    for page in BOOK_READ_PAGES:
+        # The last page is addressed by the numeric index, the others by name.
+        book = f"0{BOOK_READ_INDEX:x}" if page == BOOK_READ_PAGES[-1] else BOOK_READ_NAME
+        sections.append(
+            f"[BOOK {book} {page}]\n" + "\n".join(book_page_lines(page)) + "\n"
+        )
+    sections.append(
+        f"[BOOK {BOOK_PROBE_NAME} {BOOK_PROBE_REJECTED_PAGE}]\n"
+        "this page number is out of range\n"
+    )
+    sections.append(
+        f"[ITEMDEF {FULL_RID_ITEMDEF}]\n"
+        f"DEFNAME2={FULL_RID_ALIAS}\n"
+    )
+    return "\n" + "\n".join(sections)
+
+
+def write_book_pages_save(root: Path) -> None:
+    """Place the probe book at the synthetic starting point."""
+
+    header = ["TITLE=Sphere synthetic book fixture", "VERSION=0.99", "SAVECOUNT=0"]
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            header
+            + [
+                "[WORLDITEM SYNTHETIC_BOOK_ITEM]",
+                f"SERIAL={BOOK_PROBE_ITEM_SERIAL}",
+                f"MORE1=0{0x80000000 | (RES_BOOK_TYPE << 25) | BOOK_READ_INDEX:x}",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(root / "save" / "spherechars.scp", "\n".join(header + ["[EOF]"]))
 
 
 def skill_sections() -> str:
@@ -747,8 +830,10 @@ def write_scripts(
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
+    book_pages_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
+    book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
     unknown_newbie_section = (
         "\n[NEWBIE SYNTHETIC_UNKNOWN_SKILL]\nITEMNEWBIE=0x0E72\n"
         if unknown_newbie
@@ -1192,7 +1277,8 @@ ITEMNEWBIE=0x0E72
 
 [NEWBIE resist]
 ITEMNEWBIE=0x0E73
-""" + unknown_newbie_section + named_resource_id_probe_sections + named_item_name_sections,
+""" + unknown_newbie_section + named_resource_id_probe_sections + named_item_name_sections
+        + book_pages_probe_sections,
     )
 
 
@@ -1770,6 +1856,11 @@ def main() -> int:
         action="store_true",
         help="exercise owner-first delete/reparent callbacks across three sibling lists",
     )
+    parser.add_argument(
+        "--book-pages-probe",
+        action="store_true",
+        help="load a BOOK with more than 127 pages and a full resource-ID ITEMDEF",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -1803,6 +1894,15 @@ def main() -> int:
         )
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
+
+    if args.book_pages_probe and (
+        args.world_load_counts
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+    ):
+        parser.error("book-pages probe writes its own world and cannot be combined")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -1842,6 +1942,7 @@ def main() -> int:
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
+        book_pages_probe=args.book_pages_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -1858,6 +1959,8 @@ def main() -> int:
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
+    if args.book_pages_probe:
+        write_book_pages_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     write_mul_fixture(

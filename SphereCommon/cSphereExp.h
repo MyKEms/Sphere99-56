@@ -44,6 +44,8 @@ struct CSphereUIDBase
 #define RID_PAGE_MASK	127
 #define RID_INDEX_SHIFT	0	// 18 bits = 262144 entries.
 #define RID_INDEX_MASK	0x3FFFF		// max number of any given type. (not valid value)
+#define RID_BOOK_PAGE_MAX		255		// 0.99 reads BOOK pages up to this number.
+#define RID_BOOK_INDEX_LIMIT	0x20000	// BOOK indexes stay below this; see GetBookPageID().
 
 public:
 
@@ -171,6 +173,20 @@ struct CSphereUID : public CSphereUIDBase
 		ASSERT( index < RID_INDEX_MASK );
 		ASSERT( iPage < RID_PAGE_MASK );
 		m_dwUIDVal = RID_F_RESOURCE|((restype)<<RID_TYPE_SHIFT)|((iPage)<<RID_PAGE_SHIFT)|(index);
+	}
+	static CSphereUID GetBookPageID( int index, int iPage )
+	{
+		// A BOOK header (page 0) or page. The page field holds 7 bits but
+		// books have up to RID_BOOK_PAGE_MAX pages, so the page's high bit
+		// moves to the top bit of the index field. Book indexes stay below
+		// RID_BOOK_INDEX_LIMIT, so a page never aliases another book or type.
+		// RETURN: an invalid ID when the index or page is out of range.
+		if ( index < 0 || index >= RID_BOOK_INDEX_LIMIT ||
+			iPage < 0 || iPage > RID_BOOK_PAGE_MAX )
+			return CSphereUID();
+		return CSphereUID( (UID_INDEX)( RID_F_RESOURCE | ( RES_Book << RID_TYPE_SHIFT ) |
+			(( iPage & RID_PAGE_MASK ) << RID_PAGE_SHIFT ) |
+			(( iPage / ( RID_PAGE_MASK + 1 )) * RID_BOOK_INDEX_LIMIT ) | index ));
 	}
 	CSphereUID()
 	{

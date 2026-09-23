@@ -247,11 +247,18 @@ class CGException
 {
 public:
 	LOGL_TYPE m_eSeverity;
-	CGException() : m_eSeverity(LOGL_EVENT) {}
-	CGException(LOGL_TYPE level, int lastError, LPCTSTR pszMessage) : m_eSeverity(level) {}
+	LPCTSTR m_pszMessage;	// static text or NULL
+	CGException() : m_eSeverity(LOGL_EVENT), m_pszMessage(NULL) {}
+	CGException(LOGL_TYPE level, int lastError, LPCTSTR pszMessage) : m_eSeverity(level), m_pszMessage(pszMessage) {}
+	virtual ~CGException() {}
 
 	LOGL_TYPE GetSeverity() const { return m_eSeverity; }
-	void GetErrorMessage(char* pBuf, int iBufLen) { /* STUB */ }
+	virtual void GetErrorMessage(char* pBuf, int iBufLen)
+	{
+		// Bounded and always terminated.
+		if (pBuf && iBufLen > 0)
+			snprintf(pBuf, iBufLen, "%s", m_pszMessage ? m_pszMessage : "exception");
+	}
 };
 
 class CGSystemInfo
