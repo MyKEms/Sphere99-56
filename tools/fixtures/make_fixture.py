@@ -850,6 +850,7 @@ def write_scripts(
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
     book_pages_probe: bool = False,
+    suppress_login_item: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -920,6 +921,11 @@ def write_scripts(
     world_save_probe_script = (
         "SERV.SAVE\n"
         if world_save_probe
+        else ""
+    )
+    world_save_login_probe_script = (
+        world_save_probe_script
+        if world_save_probe and suppress_login_item
         else ""
     )
     timer_lifetime_before_markers = (
@@ -1215,7 +1221,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_login_probe_script + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
@@ -1241,11 +1247,11 @@ SYSMESSAGE SPHERE_TRIGGER_RETURN <TRIGGER(@FixtureReturn)>
 HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
-""" + ("" if timer_lifetime_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
+""" + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
-""" + world_save_probe_script + """
+""" + ("" if suppress_login_item else world_save_probe_script) + """
 RETURN 0
 ON=@FixtureCustom
 SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
@@ -1361,6 +1367,7 @@ def write_world_load_counts_save(
     named_container_reference: bool,
     rejected_property: bool,
     weird_item: bool,
+    child_before_parent: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -1369,7 +1376,20 @@ def write_world_load_counts_save(
         "VERSION=0.99",
         "SAVECOUNT=0",
     ]
-    if rejected_property:
+    if child_before_parent:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                "SERIAL=5",
+                "CONT=4",
+                "LEGACY_UNKNOWN=preserve-me",
+                "REGION.FLAGS=0d2",
+                "[WORLDITEM DEFAULTITEM]",
+                "SERIAL=4",
+                "P=128,128,0",
+            ]
+        )
+    elif rejected_property:
         world_sections.extend(
             [
                 "[WORLDITEM SYNTHETIC_OBJECT]",
@@ -1474,46 +1494,62 @@ def write_world_load_counts_save(
         )
     world_sections.append("[EOF]")
     write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
-    if rejected_property:
+    if rejected_property or child_before_parent:
         write_text(
             root / "accounts" / "sphereaccu.scp",
             "\n".join(
                 [
                     "[ACCOUNT FixturePlayer]",
                     "PASSWORD=fixture-pw",
-                    "LASTCHARUID=4",
-                    "CHARUID=4",
+                    "LASTCHARUID=4" if rejected_property else "LASTCHARUID=3",
+                    "CHARUID=4" if rejected_property else "CHARUID=3",
                     "[EOF]",
                 ]
             ),
         )
-        char_sections = [
-            "[WORLDCHAR c_MAN]",
-            "SERIAL=3",
-            "NPC=2",
-            "ACTION=MAGERY",
-            "STR=100",
-            "INT=100",
-            "DEX=100",
-            "HITS=100",
-            "MAXHITS=100",
-            "MANA=100",
-            "STAM=100",
-            "P=130,128,0",
-            "[WORLDCHAR c_MAN]",
-            "SERIAL=4",
-            "ACCOUNT=FixturePlayer",
-            "STR=100",
-            "INT=100",
-            "DEX=100",
-            "HITS=100",
-            "MAXHITS=100",
-            "MANA=100",
-            "STAM=100",
-            "SkillLock.5=1",
-            "P=131,128,0",
-            "[EOF]",
-        ]
+        if rejected_property:
+            char_sections = [
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                "NPC=2",
+                "ACTION=MAGERY",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=4",
+                "ACCOUNT=FixturePlayer",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "SkillLock.5=1",
+                "P=131,128,0",
+                "[EOF]",
+            ]
+        else:
+            char_sections = [
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                "ACCOUNT=FixturePlayer",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[EOF]",
+            ]
     else:
         char_sections = [
             "[WORLDCHAR SYNTHETIC_MISSING_CHARDEF]"
@@ -1801,6 +1837,11 @@ def main() -> int:
         help="save the newly logged-in fixture character from its login event",
     )
     parser.add_argument(
+        "--roundtrip-integrity-probe",
+        action="store_true",
+        help="keep the login fixture focused on repeated save/load integrity",
+    )
+    parser.add_argument(
         "--truncate-world-item",
         action="store_true",
         help="append one incomplete world item section to the synthetic save",
@@ -1844,6 +1885,11 @@ def main() -> int:
         "--weird-item",
         action="store_true",
         help="include one saved item that is deleted as invalid during load",
+    )
+    parser.add_argument(
+        "--child-before-parent",
+        action="store_true",
+        help="write a contained item section before its saved container section",
     )
     parser.add_argument(
         "--timer-lifetime-probe",
@@ -1892,6 +1938,7 @@ def main() -> int:
         args.named_resource_ids,
         args.rejected_property,
         args.weird_item,
+        args.child_before_parent,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -1962,6 +2009,7 @@ def main() -> int:
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
         book_pages_probe=args.book_pages_probe,
+        suppress_login_item=args.roundtrip_integrity_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -1975,6 +2023,7 @@ def main() -> int:
             named_container_reference=args.named_resource_ids,
             rejected_property=args.rejected_property,
             weird_item=args.weird_item,
+            child_before_parent=args.child_before_parent,
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)

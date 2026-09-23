@@ -70,6 +70,10 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	m_fLoadRejectedProperty = false;
 	m_fLoadDefaulted = false;
 	m_wHue=HUE_DEFAULT;
+	// A zero timeout means that no timer is scheduled.  InitTime() would set
+	// the timeout to the current tick and make a freshly loaded item expire on
+	// the first sector pulse.
+	m_timeout.Init();
 	m_timeCreate.InitTimeCurrent();
 
 	if ( ! g_Serv.IsLoading())
@@ -252,7 +256,7 @@ void CObjBase::SetTimeout( int iDelayInTicks )
 
 	if ( iDelayInTicks < 0 )
 	{
-		m_timeout.InitTime();
+		m_timeout.Init();
 	}
 	else
 	{
@@ -266,7 +270,15 @@ void CObjBase::DupeCopy( const CObjBase* pObj )
 	m_wHue = pObj->GetHue();
 	// m_timeout = pObj->m_timeout;
 	m_TagDefs = pObj->m_TagDefs;
+	m_LoadedProps = pObj->m_LoadedProps;
 	m_Events.CopyArray( pObj->m_Events );
+}
+
+void CObjBase::PreserveLoadProperty( LPCTSTR pszKey, LPCTSTR pszValue )
+{
+	if ( pszKey == NULL || pszKey[0] == '\0' )
+		return;
+	m_LoadedProps.SetKeyStr( pszKey, pszValue ? pszValue : "" );
 }
 
 void CObjBase::Sound( SOUND_TYPE id, int iOnce ) const // Play sound effect for player
@@ -705,6 +717,13 @@ void CObjBase::s_WriteProps( CScript& s )
 		s.WriteKeyInt( "TIMER", GetTimerAdjusted());
 	s.WriteKeyDWORD( "AGE", m_timeCreate.GetCacheAge() / TICKS_PER_SEC );
 	m_TagDefs.s_WriteTags(s,NULL);
+	for ( int i = 0; i < (int)m_LoadedProps.GetSize(); i++ )
+	{
+		CVarDef* pVar = m_LoadedProps.GetAt(i);
+		if ( pVar == NULL || pVar->GetKey() == NULL || pVar->GetKey()[0] == '\0' )
+			continue;
+		s.WriteKey( pVar->GetKey(), pVar->GetValStr() ? pVar->GetValStr() : "" );
+	}
 	m_Events.s_WriteProps( s, "EVENTS" );
 }
 
