@@ -246,6 +246,14 @@ MUTATION_RELATION_TIMER_SECONDS = 18
 MUTATION_KEEP_TIMER_SECONDS = 19
 MUTATION_OBSERVER_DELAY_SECONDS = 22
 
+# Save-generation fixture for current-format object metadata.  The item and
+# NPC intentionally use the writer's leading-zero hexadecimal values so the
+# test covers the exact 0.99 text representation on the next load.
+EVENTS_ATTR_ITEM_SERIAL = 4
+EVENTS_ATTR_CHAR_SERIAL = 3
+EVENTS_ATTR_CHANGER = 1234
+EVENTS_ATTR_MASK = 0x001C
+
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
 DOTTED_CONDITION_ROWS = (
@@ -2154,6 +2162,54 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(chars))
 
 
+def write_events_attr_save(root: Path) -> None:
+    """Seed one item and one NPC with current-format metadata."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic EVENTS/ATTR fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                f"SERIAL={EVENTS_ATTR_ITEM_SERIAL}",
+                "P=128,128,0",
+                "EVENTS=e_AllPlayers",
+                f"CHANGER={EVENTS_ATTR_CHANGER}",
+                f"ATTR=0x{EVENTS_ATTR_MASK:04X}",
+                "LEGACY_UNKNOWN=keep-item",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic EVENTS/ATTR fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                f"SERIAL={EVENTS_ATTR_CHAR_SERIAL}",
+                "NPC=2",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "EVENTS=e_AllPlayers",
+                f"CHANGER={EVENTS_ATTR_CHANGER}",
+                "LEGACY_UNKNOWN=keep-char",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -2343,6 +2399,11 @@ def main() -> int:
         action="store_true",
         help="seed duplicate spawn-gem serial sections for load handling",
     )
+    parser.add_argument(
+        "--events-attr-probe",
+        action="store_true",
+        help="exercise EVENTS, CHANGER, and ATTR across repeated save generations",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2389,12 +2450,23 @@ def main() -> int:
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
 
+    if args.events_attr_probe and (
+        args.world_load_counts
+        or any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+    ):
+        parser.error("events/attr probe cannot be combined with another fixture mode")
+
     if args.book_pages_probe and (
         args.world_load_counts
         or args.timer_lifetime_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.events_attr_probe
         or args.format_compat_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
@@ -2487,6 +2559,18 @@ def main() -> int:
         )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
+    if args.events_attr_probe:
+        # A zero-minute period causes the normal world-save path to run as
+        # soon as the server has loaded.  The round-trip test stops after each
+        # completed generation and restarts the same disposable fixture.
+        ini_path = root / "sphere.ini"
+        ini_path.write_text(
+            ini_path.read_text(encoding="ascii").replace(
+                "SAVEPERIOD=1440", "SAVEPERIOD=0"
+            ),
+            encoding="ascii",
+        )
+        write_events_attr_save(root)
     write_mul_fixture(
         root,
         extra_item_id=(0x0E8A

@@ -738,6 +738,8 @@ void CObjBase::s_WriteProps( CScript& s )
 	if ( m_timeout.IsTimeValid() )
 		s.WriteKeyInt( "TIMER", GetTimerAdjusted());
 	s.WriteKeyDWORD( "AGE", m_timeCreate.GetCacheAge() / TICKS_PER_SEC );
+	if ( m_uidChanger.IsValidUID())
+		s.WriteKeyDWORD( "CHANGER", m_uidChanger );
 	m_TagDefs.s_WriteTags(s,NULL);
 	for ( int i = 0; i < (int)m_LoadedProps.GetSize(); i++ )
 	{

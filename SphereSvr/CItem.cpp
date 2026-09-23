@@ -2567,7 +2567,12 @@ HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item 
 		SetAmountUpdate( vVal.GetInt());
 		break;
 	case P_Attr:
-		m_AttrMask = vVal.GetDWORD();
+		// WriteKeyDWORD emits Sphere's leading-zero hexadecimal form
+		// (for example "01c").  GetDWORD() parses strings with base 0,
+		// so that form is interpreted as octal and loses ATTR_NEWBIE,
+		// ATTR_MOVE_ALWAYS, and ATTR_MOVE_NEVER on reload.  GetInt()
+		// follows the Sphere expression parser and preserves the bit mask.
+		m_AttrMask = static_cast<WORD>( vVal.GetInt());
 		break;
 	case P_Cont:	// needs special processing.
 		// Loading or import.
