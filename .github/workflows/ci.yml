@@ -219,6 +219,25 @@ jobs:
             --port 2719 \
             --named-container-reference
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-child-before-parent" \
+            --world-load-counts \
+            --child-before-parent
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-asan-world-counts-child-before-parent" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2724 \
+            --child-before-parent
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-world-roundtrip" \
+            --world-load-counts \
+            --child-before-parent \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_roundtrip_integrity.py \
+            "$RUNNER_TEMP/sphere-asan-world-roundtrip" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2727
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -523,6 +542,25 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2719 \
             --named-container-reference
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-counts-child-before-parent" \
+            --world-load-counts \
+            --child-before-parent
+          python3 tools/fixtures/test_world_load_counts.py \
+            "$RUNNER_TEMP/sphere-world-counts-child-before-parent" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2724 \
+            --child-before-parent
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-world-roundtrip" \
+            --world-load-counts \
+            --child-before-parent \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_roundtrip_integrity.py \
+            "$RUNNER_TEMP/sphere-world-roundtrip" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2727
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \

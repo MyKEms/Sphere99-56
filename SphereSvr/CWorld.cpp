@@ -1050,6 +1050,8 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 		LoadFile( g_Cfg.m_sWorldStatics );
 	}
 
+	ResolveLoadContainers();
+
 	ReportLoadIntegrity();
 
 	m_timeStartup.InitTimeCurrent();
@@ -1082,6 +1084,28 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	g_Serv.OnTriggerEvent( SERVTRIG_LoadDone );
 
 	return( true );
+}
+
+void CWorld::ResolveLoadContainers()
+{
+	// A save normally writes parents before children, but older or interrupted
+	// saves can reverse that order. Retry deferred CONT links after every section
+	// has been constructed, allowing nested chains to settle in bounded passes.
+	const int iMaxPasses = static_cast<int>(GetUIDCount());
+	for ( int iPass = 0; iPass < iMaxPasses; ++iPass )
+	{
+		bool fProgress = false;
+		for ( int i = 1; i < static_cast<int>(GetUIDCount()); ++i )
+		{
+			CItem* pItem = PTR_CAST(CItem, FindUIDObj(i));
+			if ( pItem == NULL || ! pItem->HasPendingLoadContainer())
+				continue;
+			if ( pItem->ResolveLoadContainer())
+				fProgress = true;
+		}
+		if ( ! fProgress )
+			break;
+	}
 }
 
 #if 0

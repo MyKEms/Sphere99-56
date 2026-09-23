@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Check containment and unknown saved-property stability across repeated saves."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+from run_suite import shutdown_failures
+from test_world_save_roundtrip import run_server
+
+
+DIAGNOSTICS_RE = re.compile(
+    r"world load diagnostics: accepted=\d+ tolerated_legacy=\d+ "
+    r"rejected=(\d+) defaulted=\d+ deleted=\d+"
+)
+LOAD_COUNTS_RE = re.compile(
+    r"world load: created_items=(\d+) created_chars=(\d+) "
+    r"read_items=(\d+) read_chars=(\d+) allocated_items=(\d+) allocated_chars=(\d+)"
+)
+
+
+def normalized_save(text: str) -> str:
+    """Remove fields that intentionally change on every completed save."""
+
+    normalized: list[str] = []
+    in_varnames = False
+    for line in text.splitlines():
+        if line == "[VARNAMES]":
+            in_varnames = True
+            continue
+        if in_varnames and line.startswith("["):
+            in_varnames = False
+        if in_varnames:
+            continue
+        if line.startswith(("TIME=", "SAVECOUNT=", "AGE=", "TIMER=")):
+            continue
+        normalized.append(line)
+    return "\n".join(normalized)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("fixture", type=Path)
+    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=2724)
+    parser.add_argument("--startup-timeout", type=float, default=120.0)
+    args = parser.parse_args()
+
+    fixture = args.fixture.resolve()
+    binary = args.binary.resolve()
+    if not fixture.is_dir():
+        parser.error(f"fixture directory does not exist: {fixture}")
+    if not binary.is_file():
+        parser.error(f"server binary does not exist: {binary}")
+
+    tools_path = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(tools_path))
+    from uo_test_client import (  # pylint: disable=import-outside-toplevel
+        decode_game_response,
+        find_start_packet,
+        game_relogin,
+        make_char_play,
+        recv_until_game_start,
+    )
+
+    failures: list[str] = []
+    saved_worlds: list[str] = []
+    startup_logs: list[str] = []
+
+    def login_existing_character(login_fixture: Path, login_port: int) -> None:
+        sock, _, initial = game_relogin(
+            args.host,
+            login_port,
+            "FixturePlayer",
+            "fixture-pw",
+            game_port=login_port + 1000,
+        )
+        if sock is None:
+            raise RuntimeError("fixture account did not reach the character list")
+        try:
+            if find_start_packet(initial) is None:
+                sock.sendall(make_char_play(0))
+                response = recv_until_game_start(sock, timeout=30.0)
+                response_valid = bool(
+                    response and find_start_packet(decode_game_response(response))
+                )
+            else:
+                response_valid = True
+            if not response_valid:
+                raise RuntimeError("fixture character did not enter the world")
+        finally:
+            sock.close()
+
+    def wait_for_new_save(save_fixture: Path, previous_world: str) -> None:
+        import time
+
+        world_path = save_fixture / "save" / "sphereworld.scp"
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            try:
+                current = world_path.read_text(encoding="ascii", errors="replace")
+            except OSError:
+                time.sleep(0.1)
+                continue
+            if (
+                current != previous_world
+                and "[EOF]" in current
+                and "LEGACY_UNKNOWN=preserve-me" in current
+                and "REGION.FLAGS=0d2" in current
+                and "[WORLDITEM SYNTHETIC_OBJECT]" in current
+            ):
+                return
+            time.sleep(0.1)
+        raise RuntimeError("logout-triggered save did not produce a new world file")
+
+    current_fixture = fixture
+    for generation in range(3):
+        if generation:
+            next_fixture = Path(tempfile.mkdtemp(prefix="sphere63-roundtrip-copy."))
+            shutil.copytree(current_fixture, next_fixture, dirs_exist_ok=True)
+            current_fixture = next_fixture
+        log_name = "server.log" if generation == 0 else f"server-round-{generation}.log"
+        if generation:
+            account_path = current_fixture / "accounts" / "sphereaccu.scp"
+            try:
+                account_text = account_path.read_text(encoding="ascii", errors="replace")
+                account_path.write_text(
+                    re.sub(r"(?m)^LASTCHARUID=.*$", "LASTCHARUID=0", account_text),
+                    encoding="ascii",
+                )
+            except OSError as error:
+                failures.append(f"generation {generation + 1} could not reset login slot: {error}")
+        world_path = current_fixture / "save" / "sphereworld.scp"
+        try:
+            previous_world = world_path.read_text(encoding="ascii", errors="replace")
+        except OSError:
+            previous_world = ""
+        returncode, error, log_contents = run_server(
+            fixture=current_fixture,
+            binary=binary,
+            host=args.host,
+            port=args.port + generation,
+            startup_timeout=args.startup_timeout,
+            log_path=current_fixture / log_name,
+            action=lambda port=args.port + generation, run_fixture=current_fixture: (
+                login_existing_character(run_fixture, port),
+                wait_for_new_save(run_fixture, previous_world),
+            ),
+        )
+        if error:
+            failures.append(f"generation {generation + 1} failed: {error}")
+        failures.extend(shutdown_failures(returncode, log_contents))
+        startup_logs.append(log_contents)
+        try:
+            saved_worlds.append(
+                (current_fixture / "save" / "sphereworld.scp").read_text(
+                    encoding="ascii", errors="replace"
+                )
+            )
+        except OSError as error:
+            failures.append(f"generation {generation + 1} save could not be read: {error}")
+
+    load_counts: list[tuple[str, ...]] = []
+    rejected_counts: list[int] = []
+    for generation, log_contents in enumerate(startup_logs, start=1):
+        count_matches = LOAD_COUNTS_RE.findall(log_contents)
+        if len(count_matches) != 1:
+            failures.append(
+                f"generation {generation} did not report exactly one load count line: "
+                f"{count_matches!r}"
+            )
+        else:
+            load_counts.append(count_matches[0])
+        diagnostics = DIAGNOSTICS_RE.findall(log_contents)
+        if len(diagnostics) != 1:
+            failures.append(
+                f"generation {generation} did not report exactly one diagnostics line: "
+                f"{diagnostics!r}"
+            )
+        else:
+            rejected_counts.append(int(diagnostics[0]))
+        for marker in ("property rejected", "Invalid container", "Non container", "orphaned objects"):
+            if marker in log_contents:
+                failures.append(f"generation {generation} logged {marker!r}")
+
+    if load_counts and any(count != load_counts[0] for count in load_counts[1:]):
+        failures.append(f"object counts changed across reloads: {load_counts!r}")
+    if rejected_counts and any(rejected > rejected_counts[0] for rejected in rejected_counts[1:]):
+        failures.append(
+            "reload rejected more properties than the first load: "
+            f"{rejected_counts!r}"
+        )
+
+    for generation, world in enumerate(saved_worlds, start=1):
+        if world.count("LEGACY_UNKNOWN=preserve-me") != 1:
+            failures.append(f"generation {generation} dropped the unknown legacy property")
+        if world.count("REGION.FLAGS=0d2") != 1:
+            failures.append(f"generation {generation} dropped REGION.FLAGS")
+        if world.count("[WORLDITEM SYNTHETIC_OBJECT]") != 1:
+            failures.append(f"generation {generation} lost the contained synthetic item")
+        if not re.search(
+            r"\[WORLDITEM SYNTHETIC_OBJECT\].*?\nCONT=",
+            world,
+            flags=re.DOTALL,
+        ):
+            failures.append(f"generation {generation} did not retain the child CONT relation")
+
+    if len(saved_worlds) == 3:
+        if normalized_save(saved_worlds[1]) != normalized_save(saved_worlds[2]):
+            failures.append("normalized second and third saves differ")
+
+    if failures:
+        print("world round-trip integrity probe failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"- {failure}", file=sys.stderr)
+        return 1
+
+    print(
+        "world round-trip integrity probe passed: "
+        "three bounded saves across two reloads retained counts, containment, and unknown properties"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

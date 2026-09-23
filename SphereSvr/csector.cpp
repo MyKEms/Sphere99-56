@@ -35,6 +35,7 @@ CSCRIPT_CLASS_IMP1(Sector,CSector::sm_Props,CSector::sm_Methods,NULL,ResourceObj
 CSector::CSector()
 {
 	IncRefCount();		// static part of another.
+	m_fSaveParity = false;
 	m_ListenItems = 0;
 	m_RainChance = 0;		// 0 to 100%
 	m_ColdChance = 0;		// Will be snow if rain chance success.

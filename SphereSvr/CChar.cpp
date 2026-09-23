@@ -2123,6 +2123,7 @@ bool CChar::s_LoadProps( CScript& s ) // Load a character from script
 		HRESULT hRes = s_PropSet( pszKey, vArg );
 		if ( hRes == HRES_UNKNOWN_PROPERTY )
 		{
+			PreserveLoadProperty( pszKey, vArg.GetPSTR());
 			fToleratedLegacy = true;
 		}
 		else if ( FAILED(hRes) )
