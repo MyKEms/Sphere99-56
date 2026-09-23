@@ -37,6 +37,7 @@ DOTTED_PROBE_ACCOUNT = "DottedProbe"
 DOTTED_PROBE_ITEM_ID = 0x0E7B
 DOTTED_PROBE_DISPOSABLE_ID = 0x0E7C
 DOTTED_PROBE_LAYER = 30
+DOTTED_PROBE_SECTOR_LIGHT = 4
 DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 DOTTED_EXPRESSION_ROWS = (
     # Forms without a function-root chain; their results must not change.
@@ -82,6 +83,7 @@ DOTTED_EXPRESSION_ROWS = (
     ("src_findlayer_name", "<src.findlayer(30).name>", "CI"),
     ("src_findlayer_serial", "<src.findlayer(30).serial>", "CI"),
     ("src_findlayer_tag", "<src.findlayer(30).tag(probe_text)>", "C"),
+    ("src_sector_light", "<src.sector.light>", "C"),
     ("deferred_finduid_name", "<?finduid(<src.serial>).name?>", "C"),
     ("deferred_findlayer_serial", "<?src.findlayer(30).serial?>", "C"),
     # Unresolved on every build so far (TAG.name and VAR.name reads are not
@@ -206,8 +208,8 @@ def dotted_expression_lines(context: str, emit: str) -> list[str]:
     ]
 
 
-def dotted_expression_scripts() -> tuple[str, str]:
-    """Return the login-trigger lines and the extra sections of the probe."""
+def dotted_expression_scripts() -> tuple[str, str, str]:
+    """Return the login lines, extra sections and @EnvironChange body."""
 
     marker = DOTTED_PROBE_MARKER
     login = [
@@ -258,8 +260,32 @@ def dotted_expression_scripts() -> tuple[str, str]:
         "SYSMESSAGE " + marker + " C|dupe_value_valid|[<ISUIDVALID 0x<f_fixture_getter.DUPE.SERIAL>>]",
         "SYSMESSAGE " + marker + " C|dupe_value_valid_count|[<VAR(dotted_getter_calls)>]",
         "SYSMESSAGE " + marker + " C|dupe_chars_after|[<SERV.CHARS>]",
+        "SYSMESSAGE " + marker + " C|environ_calls|[<VAR(environ_calls)>]",
+        "SYSMESSAGE " + marker + " C|environ_max_depth|[<VAR(environ_max_depth)>]",
         "SYSMESSAGE " + marker + "_END",
     ]
+
+    # An @EnvironChange handler that keeps its sector at a fixed light level
+    # behind a guard that never matches (the bare SECTOR.LIGHT reference in
+    # the condition is not evaluated as a property).  Setting a sector light
+    # re-runs @EnvironChange for the characters there, so every write must
+    # stop once the level is already in effect.
+    light = DOTTED_PROBE_SECTOR_LIGHT
+    environ_change = "\n".join(
+        [
+            "VAR environ_calls,<EVAL <VAR(environ_calls)>+1>",
+            "VAR environ_depth,<EVAL <VAR(environ_depth)>+1>",
+            "IF (<VAR(environ_depth)> > <EVAL <VAR(environ_max_depth)>>)",
+            "VAR environ_max_depth,<VAR(environ_depth)>",
+            "ENDIF",
+            f"IF (sector.light=={light})",
+            "ELSE",
+            f"SECTOR.LIGHT={light}",
+            "ENDIF",
+            "VAR environ_depth,<EVAL <VAR(environ_depth)>-1>",
+            "RETURN",
+        ]
+    ) + "\n"
 
     equip = ["TAG.probe_text=itemtext"]
     equip += dotted_expression_lines("I", "SRC.SYSMESSAGE")
@@ -290,7 +316,7 @@ def dotted_expression_scripts() -> tuple[str, str]:
         "\n[FUNCTION f_dotted_disposable]\n"
         "RETURN <VAR(dotted_disposable)>\n"
     )
-    return "\n".join(login) + "\n", sections
+    return "\n".join(login) + "\n", sections, environ_change
 
 
 def write_scripts(
@@ -317,8 +343,8 @@ def write_scripts(
         if unknown_newbie
         else ""
     )
-    dotted_expression_login, dotted_expression_sections = (
-        dotted_expression_scripts() if dotted_expression_probe else ("", "")
+    dotted_expression_login, dotted_expression_sections, environ_change_body = (
+        dotted_expression_scripts() if dotted_expression_probe else ("", "", "RETURN\n")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -649,8 +675,7 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + typedef_container_itemdef + multi_property_typedef + multi_property_itemdef + """
 ON=@EnvironChange
-RETURN
-ON=@Logout
+""" + environ_change_body + """ON=@Logout
 """ + world_save_probe_script + """
 RETURN 0
 ON=@FixtureCustom
