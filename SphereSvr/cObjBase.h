@@ -254,6 +254,8 @@ private:
 	bool m_fLoadToleratedLegacy;	// An unknown saved property was tolerated during load.
 	bool m_fLoadRejectedProperty;	// A meaningful saved property was rejected but the object stayed loaded.
 	bool m_fLoadDefaulted;		// A saved value was replaced with a documented default.
+	bool m_fSaveParity;			// This object has been written in the current world-save generation.
+	bool m_fSaveParityValid;		// The save parity marker has been initialized by a completed write.
 	CServTime m_timeout;		// when does this rot away ? or other action. 0 = never, else system time
 	HUE_TYPE m_wHue;		// Hue or skin color. (WORD w/High 2 bits reserved)
 };

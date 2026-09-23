@@ -308,6 +308,7 @@ enum LOAD_LOG_CATEGORY
 	LOAD_LOG_WORLDITEM_PROPERTY_DETAIL,
 	LOAD_LOG_WORLDCHAR_FAILURE,
 	LOAD_LOG_WORLDITEM_FAILURE,
+	LOAD_LOG_DUPLICATE_SERIAL,
 	LOAD_LOG_QTY,
 };
 
@@ -342,6 +343,7 @@ private:
 	int		m_iLoadRejected;
 	int		m_iLoadDefaulted;
 	int		m_iLoadDeleted;
+	int		m_iLoadDuplicateSerials;
 	int		m_iLoadLogEmitted[LOAD_LOG_QTY];
 	int		m_iLoadLogSuppressed[LOAD_LOG_QTY];
 	bool	m_fSaveBlockedByLoad;
@@ -507,10 +509,12 @@ public:
 	int GetLoadRejected() const { return m_iLoadRejected; }
 	int GetLoadDefaulted() const { return m_iLoadDefaulted; }
 	int GetLoadDeleted() const { return m_iLoadDeleted; }
+	int GetLoadDuplicateSerials() const { return m_iLoadDuplicateSerials; }
 	bool HasLoadCounts() const { return m_fLoadCountsCaptured; }
 	void FormatLoadCounts( CGString& s ) const;
 	void LogLoadCounts() const;
 	void RecordLoadDiagnostic( LOAD_DIAGNOSTIC_TYPE type );
+	void RecordLoadDuplicateSerial( UID_INDEX dwSerial, bool fWorldItem );
 	bool ShouldLogLoadDetail( LOAD_LOG_CATEGORY category );
 	void FormatLoadDiagnostics( CGString& s ) const;
 	void LogLoadDiagnostics() const;
