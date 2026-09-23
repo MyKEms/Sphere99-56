@@ -163,7 +163,10 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 			}
 
 			// Check if sub-command is a gump command (argo.text, argo.button, etc.)
-			TCHAR szGumpKey[128];
+			// Split "key(args)" or "key args" in place: the key and its
+			// arguments stay in this buffer, which holds a whole script line,
+			// for every use below.
+			TCHAR szGumpKey[SCRIPT_MAX_LINE_LEN];
 			strncpy(szGumpKey, pszSub, sizeof(szGumpKey)-1);
 			szGumpKey[sizeof(szGumpKey)-1] = '\0';
 			TCHAR* pParen = strchr(szGumpKey, '(');
@@ -171,13 +174,10 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 			if ( pParen )
 			{
 				*pParen = '\0';
-				pGumpArgs = pParen + 1;
-				TCHAR szGA[SCRIPT_MAX_LINE_LEN];
-				strncpy(szGA, pGumpArgs, sizeof(szGA)-1);
-				szGA[sizeof(szGA)-1] = '\0';
-				int len2 = strlen(szGA);
-				if ( len2 > 0 && szGA[len2-1] == ')' ) szGA[len2-1] = '\0';
-				pGumpArgs = szGA;
+				TCHAR* pszArgs = pParen + 1;
+				size_t len2 = strlen(pszArgs);
+				if ( len2 > 0 && pszArgs[len2-1] == ')' ) pszArgs[len2-1] = '\0';
+				pGumpArgs = pszArgs;
 			}
 			else
 			{

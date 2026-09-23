@@ -65,6 +65,16 @@ DIALOG_BUTTON_NUMBERED = 5
 DIALOG_BUTTON_FALLBACK = 7
 DIALOG_BUTTON_SWITCH = 11
 DIALOG_BUTTON_TEXT_ID = 3
+# A second dialog lays out its controls with argo.<gump>(...) calls, one of
+# them written with aligned columns that make it longer than 128 bytes.
+DIALOG_ARGO_LAYOUT_NAME = "d_synthetic_argo_layout"
+DIALOG_ARGO_BUTTON = 9
+DIALOG_ARGO_LONG_FIELDS = (10, 130, 200, 60, 1, 0, 1)
+DIALOG_ARGO_CONTROLS = (
+    "htmlgump 10 10 200 60 0 1 0",
+    f"button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
+    "htmlgump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
+)
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
@@ -462,11 +472,16 @@ RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
     return "\n".join(login) + "\n", sections
 
 
-def dialog_button_scripts() -> tuple[str, str]:
-    """Return the login line and the sections of the dialog button probe."""
+def dialog_button_scripts(argo_layout: bool = False) -> tuple[str, str]:
+    """Return the login line and the sections of the dialog button probe.
+
+    ``argo_layout`` opens the argo.<gump>(...) layout dialog at login instead.
+    """
 
     marker = DIALOG_BUTTON_MARKER
     name = DIALOG_BUTTON_NAME
+    argo_name = DIALOG_ARGO_LAYOUT_NAME
+    long_args = ",".join(f"{field:>20}" for field in DIALOG_ARGO_LONG_FIELDS)
     sections = f"""
 [DIALOG {name}]
 0 0
@@ -489,8 +504,21 @@ SYSMESSAGE {marker} numbered|<ARGN>
 DIALOG {name}
 ON=0
 SYSMESSAGE {marker} cancel|<ARGN>|<TAG.dialog_button_seen>
+
+[DIALOG {argo_name}]
+0 0
+argo.htmlgump(10,10,200,60,0,1,0)
+argo.button(20,80,2151,2152,1,0,{DIALOG_ARGO_BUTTON})
+argo.htmlgump({long_args})
+
+[DIALOG {argo_name} TEXT]
+argo layout text
+
+[DIALOG {argo_name} BUTTON]
+ON={DIALOG_ARGO_BUTTON}
+SYSMESSAGE {marker} argo|<ARGN>|<ARGO.NAME>
 """
-    return f"DIALOG {name}\n", sections
+    return f"DIALOG {argo_name if argo_layout else name}\n", sections
 
 
 def dotted_expression_scripts() -> tuple[str, str, str]:
@@ -895,6 +923,7 @@ def write_scripts(
     timer_sibling_mutation_owner_first_probe: bool = False,
     book_pages_probe: bool = False,
     dialog_button_probe: bool = False,
+    dialog_argo_layout_probe: bool = False,
     suppress_login_item: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
@@ -911,7 +940,9 @@ def write_scripts(
         arg_locals_scripts() if arg_locals_probe else ("", "")
     )
     dialog_button_login, dialog_button_sections = (
-        dialog_button_scripts() if dialog_button_probe else ("", "")
+        dialog_button_scripts(argo_layout=dialog_argo_layout_probe)
+        if dialog_button_probe or dialog_argo_layout_probe
+        else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -2016,6 +2047,11 @@ def main() -> int:
         action="store_true",
         help="open a dialog with numbered and ON=@anybutton button entries at login",
     )
+    parser.add_argument(
+        "--dialog-argo-layout-probe",
+        action="store_true",
+        help="open, by name, a dialog laid out with argo.<gump>(...) calls at login",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2103,6 +2139,7 @@ def main() -> int:
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
         book_pages_probe=args.book_pages_probe,
         dialog_button_probe=args.dialog_button_probe,
+        dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
     )
     if args.world_load_counts:

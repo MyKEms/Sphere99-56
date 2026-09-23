@@ -7,6 +7,10 @@ then ``ON=<numbered>`` and ``ON=0``.  A numbered button and cancel must run
 their own entries; any other button falls back to ``ON=@anybutton``.  Every
 handler reports ``ARGN``; the fallback also reports the checked switch, the
 text entry and ``ARGO``, and stores a TAG that the cancel handler reads back.
+
+``--argo-layout`` uses ``--dialog-argo-layout-probe`` instead: the dialog is
+opened by name and laid out with ``argo.<gump>(...)`` calls, one longer than
+128 bytes.  The layout must reach the client whole, and its button must run.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from make_fixture import (
+    DIALOG_ARGO_BUTTON,
+    DIALOG_ARGO_CONTROLS,
     DIALOG_BUTTON_ACCOUNT,
     DIALOG_BUTTON_FALLBACK,
     DIALOG_BUTTON_MARKER,
@@ -54,6 +60,9 @@ PRESSES = (
         f"cancel|0|any/{DIALOG_BUTTON_FALLBACK}",
     ),
 )
+ARGO_PRESSES = (
+    (DIALOG_ARGO_BUTTON, (), (), f"argo|{DIALOG_ARGO_BUTTON}|{DIALOG_BUTTON_ACCOUNT}"),
+)
 
 
 def system_message(data: bytes) -> Optional[str]:
@@ -66,7 +75,12 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
     # pylint: disable=import-outside-toplevel
-    from uo_packets import make_gump_reply, parse_gump_dialog, split_packet_stream
+    from uo_packets import (
+        gump_dialog_controls,
+        make_gump_reply,
+        parse_gump_dialog,
+        split_packet_stream,
+    )
     from uo_test_client import (
         decode_game_response,
         find_start_packet,
@@ -123,7 +137,17 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 raw.extend(chunk)
 
         gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
-        for button, switches, texts, expected in PRESSES:
+        presses = PRESSES
+        if args.argo_layout:
+            presses = ARGO_PRESSES
+            controls = [] if gump is None else [
+                " ".join(control.split()) for control in gump_dialog_controls(gump)
+            ]
+            if controls != list(DIALOG_ARGO_CONTROLS):
+                failures.append(f"argo layout sent {controls!r}")
+            else:
+                passed.append("argo layout")
+        for button, switches, texts, expected in presses:
             if gump is None:
                 failures.append(f"no dialog was open for button {button}")
                 return
@@ -137,7 +161,7 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 failures.append(f"button {button} ran {report!r}; expected {expected!r}")
             else:
                 passed.append(f"button {button}")
-            if button:
+            if button and not args.argo_layout:
                 gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
 
         # Nothing else reports: a numbered or cancel press ran one entry only.
@@ -157,6 +181,11 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2734)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
+    parser.add_argument(
+        "--argo-layout",
+        action="store_true",
+        help="check the argo.<gump>(...) layout fixture (--dialog-argo-layout-probe)",
+    )
     args = parser.parse_args()
 
     args.fixture = args.fixture.resolve()
@@ -185,7 +214,7 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
 
-    total = len(PRESSES)
+    total = 1 + len(ARGO_PRESSES) if args.argo_layout else len(PRESSES)
     if failures:
         print(f"dialog-button probe failed: {len(passed)}/{total} checks passed", file=sys.stderr)
         for failure in failures:

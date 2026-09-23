@@ -360,6 +360,16 @@ def parse_gump_dialog(data: bytes) -> Optional[tuple[int, int]]:
     return int.from_bytes(data[3:7], "big"), int.from_bytes(data[7:11], "big")
 
 
+def gump_dialog_controls(data: bytes) -> list[str]:
+    """Return the layout controls of a 0xB0 packet without their braces."""
+
+    if parse_gump_dialog(data) is None:
+        return []
+    length = int.from_bytes(data[19:21], "big")
+    layout = data[21:21 + length].split(b"\0", 1)[0].decode("latin-1")
+    return [control.strip() for control in layout.strip("{}").split("}{") if control.strip()]
+
+
 def make_gump_reply(
     serial: int,
     context: int,

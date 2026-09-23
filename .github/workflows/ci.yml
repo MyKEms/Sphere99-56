@@ -376,6 +376,14 @@ jobs:
             "$RUNNER_TEMP/sphere-asan-dialog-buttons" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2734
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-dialog-argo-layout" \
+            --dialog-argo-layout-probe
+          python3 tools/fixtures/test_dialog_buttons.py \
+            "$RUNNER_TEMP/sphere-asan-dialog-argo-layout" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2735 \
+            --argo-layout
 
       - name: Upload ASan fixture server log on failure
         if: failure()
@@ -402,6 +410,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-asan-arg-locals/server.log
             ${{ runner.temp }}/sphere-asan-dialog-buttons/server.log
+            ${{ runner.temp }}/sphere-asan-dialog-argo-layout/server.log
           if-no-files-found: warn
 
   load-safety:
@@ -772,6 +781,14 @@ jobs:
             "$RUNNER_TEMP/sphere-dialog-buttons" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2734
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-dialog-argo-layout" \
+            --dialog-argo-layout-probe
+          python3 tools/fixtures/test_dialog_buttons.py \
+            "$RUNNER_TEMP/sphere-dialog-argo-layout" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2735 \
+            --argo-layout
 
       - name: Upload server log on failure
         if: failure()
@@ -797,4 +814,5 @@ jobs:
             ${{ runner.temp }}/sphere-arg-locals/server.log
             ${{ runner.temp }}/sphere-book-pages/server.log
             ${{ runner.temp }}/sphere-dialog-buttons/server.log
+            ${{ runner.temp }}/sphere-dialog-argo-layout/server.log
           if-no-files-found: warn
