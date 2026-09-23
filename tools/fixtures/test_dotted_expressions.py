@@ -6,7 +6,9 @@ Generate the fixture with ``make_fixture.py --dotted-expression-probe
 ``DOTTED_EXPRESSION_ROWS`` in a character trigger and in an item trigger and
 runs a set of reference commands; this test compares the reported values with
 the expectations below and checks the unknown-keyword report for keys that only
-a misparsed expression would produce.
+a misparsed expression would produce.  The fixture's @EnvironChange handler
+writes SECTOR.LIGHT behind a guard that never matches; the test bounds how
+often and how deeply that handler runs.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from make_fixture import (
     DOTTED_EXPRESSION_ROWS,
     DOTTED_PROBE_ACCOUNT,
     DOTTED_PROBE_MARKER,
+    DOTTED_PROBE_SECTOR_LIGHT,
 )
 from run_suite import shutdown_failures
 
@@ -51,6 +54,15 @@ def number(value: str, _values: dict[str, str]) -> Optional[str]:
 
 def nonempty(value: str, _values: dict[str, str]) -> Optional[str]:
     return None if value else "expected a value"
+
+
+def positive_at_most(limit: int) -> Check:
+    def check(value: str, _values: dict[str, str]) -> Optional[str]:
+        if value.isdigit() and 1 <= int(value) <= limit:
+            return None
+        return f"expected 1 to {limit}"
+
+    return check
 
 
 def decimal_times(key: str, factor: int) -> Check:
@@ -122,6 +134,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|src_findlayer_serial": Same("I|serial"),
     "I|src_findlayer_serial": Same("I|serial"),
     "C|src_findlayer_tag": "itemtext",
+    "C|src_sector_light": str(DOTTED_PROBE_SECTOR_LIGHT),
     "C|deferred_finduid_name": DOTTED_PROBE_ACCOUNT,
     "C|deferred_findlayer_serial": Same("I|serial"),
     # Commands: base TAG, SRC.TAG, F_FUNC.TAG, FINDUID(uid).TAG, and the
@@ -142,6 +155,12 @@ EXPECTED: dict[str, Expectation] = {
     "C|dupe_value_count": "1",
     "C|dupe_value_valid": "1",
     "C|dupe_value_valid_count": "1",
+    # The @EnvironChange handler sets its sector light behind a guard that
+    # never matches.  Entering the world runs it once; its own write may run
+    # it once more, nested, but a write of the level already in effect must
+    # not re-enter it again.
+    "C|environ_calls": positive_at_most(2),
+    "C|environ_max_depth": positive_at_most(2),
 }
 
 # Rows reported but deliberately not asserted: the unresolved_* rows are not
