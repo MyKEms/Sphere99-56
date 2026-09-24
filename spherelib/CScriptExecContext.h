@@ -1377,6 +1377,11 @@ public:
 		return false;
 	}
 
+	// Called when a RETURN statement ends the section, with or without a value.
+	virtual void OnScriptReturn()
+	{
+	}
+
 	//
 	// ExecuteScript -- execute a block of script lines from a CScript.
 	// This is the main script execution loop with control flow.
@@ -1492,6 +1497,7 @@ public:
 			case SK_RETURN:
 				{
 					// RETURN [value]
+					OnScriptReturn();
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					if ( *pszArg )
 					{

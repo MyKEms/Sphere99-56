@@ -74,6 +74,24 @@ TRIGRET_TYPE CClient::Dialog_OnButton( CSphereUID rid, DWORD dwButtonID, CSphere
 	return exec.ExecuteScript( s, TRIGRUN_SECTION_TRUE );
 }
 
+static bool IsDialogPositionLine( LPCTSTR pszLine )
+{
+	// "x,y" or "x y": decimal or 0-prefixed hex numbers.  No statement or
+	// gump control starts with a digit.
+	GETNONWHITESPACE( pszLine );
+	if ( *pszLine == '-' || *pszLine == '+' )
+		pszLine++;
+	if ( ! isdigit( (unsigned char) *pszLine ))
+		return false;
+	for ( ; *pszLine; pszLine++ )
+	{
+		TCHAR ch = *pszLine;
+		if ( ! isxdigit( (unsigned char) ch ) && ch != ',' && ch != '-' && ch != '+' && ! ISWHITESPACE( ch ))
+			return false;
+	}
+	return true;
+}
+
 class CDialogLayoutExec : public CSphereExpArgs
 {
 	// Runs a [DIALOG name] layout section through the script executor, so
@@ -85,11 +103,22 @@ public:
 		CGStringArray& asControls, CGStringArray& asText, int& x, int& y ) :
 		CSphereExpArgs( pObj, pSrc, pObj ),
 		m_pDialogObj( pObj ), m_pLayoutSrc( pSrc ), m_asControls( asControls ), m_asText( asText ),
-		m_x( x ), m_y( y )
+		m_x( x ), m_y( y ), m_fReturned( false )
 	{
 	}
 
+	// A RETURN statement ended the layout.
+	bool WasReturned() const
+	{
+		return m_fReturned;
+	}
+
 protected:
+	virtual void OnScriptReturn()
+	{
+		m_fReturned = true;
+	}
+
 	virtual bool OnScriptStatement( CScript& script )
 	{
 		// The line reader split the line into key and argument: rebuild it
@@ -109,6 +138,13 @@ protected:
 		if ( !_strnicmp( szLine, "argo.", 5 ))
 		{
 			s_ParseEscapes( szLine, 0 );
+			AddArgoLine( szLine + 5 );
+			return true;
+		}
+		if ( IsSetLocation( szLine ))
+		{
+			// A bare setlocation also moves the dialog (argo is the default object).
+			s_ParseEscapes( szLine, 0 );
 			AddArgoLine( szLine );
 			return true;
 		}
@@ -124,11 +160,19 @@ protected:
 	}
 
 private:
-	void AddArgoLine( TCHAR* pszLine )
+	static bool IsSetLocation( LPCTSTR pszLine )
 	{
-		// Sphere 0.99-style dialog commands: argo.<gump>(...), argo.settext,
-		// argo.setlocation, or a method or function on the dialog object.
-		TCHAR* pszSub = pszLine + 5;
+		if ( _strnicmp( pszLine, "setlocation", 11 ))
+			return false;
+		// setlocation=x,y, setlocation(x,y), or x,y written right after it.
+		TCHAR ch = pszLine[11];
+		return ! ( isalpha( (unsigned char) ch ) || ch == '_' || ch == '.' );
+	}
+
+	void AddArgoLine( TCHAR* pszSub )
+	{
+		// Sphere 0.99-style dialog commands, after "argo.": <gump>(...),
+		// settext, setlocation, or a method or function on the dialog object.
 
 		// Handle argo.settext(id,text) / argo.setText(id,text)
 		if ( !_strnicmp(pszSub, "settext", 7) || !_strnicmp(pszSub, "setText", 7) )
@@ -149,12 +193,13 @@ private:
 			return;
 		}
 
-		// Handle argo.setlocation=x,y / argo.SetLocation=x,y
-		if ( !_strnicmp(pszSub, "setlocation", 11) )
+		// Handle argo.setlocation=x,y / argo.setlocation(x,y)
+		if ( IsSetLocation(pszSub) )
 		{
 			LPCTSTR pArgs = pszSub + 11;
-			if ( *pArgs == '=' ) pArgs++;
-			else if ( *pArgs == ' ' ) pArgs++;
+			GETNONWHITESPACE( pArgs );
+			if ( *pArgs == '=' || *pArgs == '(' ) pArgs++;
+			GETNONWHITESPACE( pArgs );
 			int px = atoi(pArgs);
 			while ( *pArgs && *pArgs != ',' ) pArgs++;
 			if ( *pArgs == ',' ) pArgs++;
@@ -247,6 +292,7 @@ private:
 	CGStringArray& m_asText;
 	int& m_x;
 	int& m_y;
+	bool m_fReturned;
 };
 
 bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
@@ -260,7 +306,10 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 		return false;
 	}
 
-	// read the size.
+	// The layout may start with its x,y position: two numbers.  Otherwise
+	// the dialog starts at 0,0 (argo.setlocation moves it) and the first
+	// line is already part of the layout.
+	CScriptLineContext ctxLayout = sDialog.GetContext();
 	if ( ! sDialog.ReadLine())
 	{
 		return( false );
@@ -268,11 +317,19 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	if (sDialog.GetLinkResource())
 		ScriptExecutionCoverageHit(sDialog.GetLinkResource()->GetScriptCoverageToken());
 
-	// starting x,y location.
-	int piArgs[2];
-	int iArgQty = Exp_ParseCmds( sDialog.GetLineBuffer(), piArgs, COUNTOF(piArgs));
-	int x = piArgs[0];
-	int y = piArgs[1];
+	int x = 0;
+	int y = 0;
+	if ( IsDialogPositionLine( sDialog.GetLineBuffer()))
+	{
+		int piArgs[2] = { 0, 0 };
+		Exp_ParseCmds( sDialog.GetLineBuffer(), piArgs, COUNTOF(piArgs));
+		x = piArgs[0];
+		y = piArgs[1];
+	}
+	else
+	{
+		sDialog.SeekContext( ctxLayout );
+	}
 
 	CGStringArray asControls;
 	CGStringArray asText;
@@ -292,8 +349,10 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	CScriptExecContext::sm_pGumpControls = pPrevControls;
 	CScriptExecContext::sm_pGumpTexts = pPrevTexts;
 
-	// RETURN 1 in the layout keeps the dialog closed.
-	if ( iRet == TRIGRET_RET_TRUE )
+	// RETURN 1 in the layout keeps the dialog closed, and so does any other
+	// RETURN before the layout added a control (a guard such as
+	// "IF <condition> / SYSMESSAGE ... / RETURN / ENDIF").
+	if ( iRet == TRIGRET_RET_TRUE || ( exec.WasReturned() && asControls.GetSize() == 0 ))
 		return true;
 
 	// Now get the RES_DIALOG_TEXT for pre-defined text entries.

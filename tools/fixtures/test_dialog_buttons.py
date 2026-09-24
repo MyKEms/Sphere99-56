@@ -14,8 +14,10 @@ opened by name and laid out with ``argo.<gump>(...)`` calls, one longer than
 
 ``--flow-layout`` uses ``--dialog-flow-layout-probe``: the layout runs
 IF/ELSEIF/ELSE, a nested IF(...), WHILE over an ARG local and DOSWITCH, so
-only the chosen controls may reach the client; a dialog opened before it
-returns 1 from its layout and must not be sent at all.
+only the chosen controls may reach the client.  Dialogs opened before it
+return from their layouts before adding a control and must not be sent;
+two more start with IF or an argo.<gump>(...) call instead of their
+position, and must arrive whole, at the position their layout sets.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from make_fixture import (
     DIALOG_FLOW_BUTTON,
     DIALOG_FLOW_CONTROLS,
     DIALOG_FLOW_DECLINED_CONTROLS,
+    DIALOG_FLOW_GUMPS,
 )
 from run_suite import shutdown_failures
 
@@ -152,24 +155,42 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 return []
             return [" ".join(control.split()) for control in gump_dialog_controls(data)]
 
-        if args.flow_layout:
-            if controls_of(gump) == list(DIALOG_FLOW_DECLINED_CONTROLS):
-                failures.append("a layout that returned 1 was sent")
-                gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
-            else:
-                passed.append("declined layout")
         presses = PRESSES
-        if args.argo_layout or args.flow_layout:
-            presses, expected_controls, label = (
-                (FLOW_PRESSES, DIALOG_FLOW_CONTROLS, "flow layout")
-                if args.flow_layout
-                else (ARGO_PRESSES, DIALOG_ARGO_CONTROLS, "argo layout")
-            )
-            controls = controls_of(gump)
-            if controls != list(expected_controls):
-                failures.append(f"{label} sent {controls!r}")
+        if args.flow_layout:
+            presses = FLOW_PRESSES
+            # Every dialog sent up to the flow layout, whose button comes
+            # from its IF/ELSE, as (x, y, controls).
+            flow_button = DIALOG_FLOW_CONTROLS[1]
+            sent = []
+            while gump is not None:
+                sent.append((
+                    int.from_bytes(gump[11:15], "big"),
+                    int.from_bytes(gump[15:19], "big"),
+                    tuple(controls_of(gump)),
+                ))
+                if flow_button in sent[-1][2]:
+                    break
+                gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
+            declined = [
+                entry for entry in sent
+                if not entry[2] or entry[2] == DIALOG_FLOW_DECLINED_CONTROLS
+            ]
+            if declined:
+                failures.append(f"layouts that returned were sent: {declined!r}")
             else:
-                passed.append(label)
+                passed.append("declined layouts")
+            opened = [entry for entry in sent if entry not in declined]
+            if opened != list(DIALOG_FLOW_GUMPS):
+                failures.append(f"flow layouts sent {opened!r}")
+            else:
+                passed.append("flow layouts")
+        elif args.argo_layout:
+            presses = ARGO_PRESSES
+            controls = controls_of(gump)
+            if controls != list(DIALOG_ARGO_CONTROLS):
+                failures.append(f"argo layout sent {controls!r}")
+            else:
+                passed.append("argo layout")
         for button, switches, texts, expected in presses:
             if gump is None:
                 failures.append(f"no dialog was open for button {button}")
