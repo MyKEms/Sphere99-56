@@ -119,7 +119,10 @@ DWORD_HEX_MARKER = "SPHERE_DWORD_HEX"
 DWORD_HEX_HIGH_NAME = "SYNTHETIC_DWORD_HEX_HIGH"
 DWORD_HEX_LOW_NAME = "SYNTHETIC_DWORD_HEX_LOW"
 DWORD_HEX_AGE = 0xFABC
-DWORD_HEX_MAGERY_UID = 0xCE000019
+# Resource UID of [SKILL 25]: resource flag | (RES_Skill << 25) | index.
+# RES_Skill follows the resource tag table order (SphereCommon/cresourcetag.tbl).
+RES_SKILL_TYPE = 41
+DWORD_HEX_MAGERY_UID = 0x80000000 | (RES_SKILL_TYPE << 25) | 25
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
