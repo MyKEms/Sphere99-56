@@ -326,7 +326,7 @@ HRESULT CWebPageDef::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vVal
 
 				exec.SetBaseObject( REF_CAST(CChar,pChar));
 				strcpy( szTmp2, pszArgs );
-				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP );
+				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP, COUNTOF(szTmp2) );
 				pSrc->WriteString( szTmp2 );
 			}
 		}
@@ -366,7 +366,7 @@ HRESULT CWebPageDef::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vVal
 
 				exec.SetBaseObject( REF_CAST(CServerDef,pServ));
 				strcpy( szTmp2, pszArgs );
-				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP );
+				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP, COUNTOF(szTmp2) );
 				pSrc->WriteString( szTmp2 );
 			}
 		}
@@ -406,7 +406,7 @@ HRESULT CWebPageDef::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vVal
 				sm_iListColIndex++;
 				strcpy( szTmp2, vArgs.GetPSTR() );
 				exec.SetBaseObject( REF_CAST(CItemStone,pStone));
-				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP );
+				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP, COUNTOF(szTmp2) );
 				pSrc->WriteString( szTmp2 );
 			}
 		}
@@ -423,7 +423,7 @@ HRESULT CWebPageDef::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vVal
 				sm_iListColIndex++;
 				strcpy( szTmp2, vArgs.GetPSTR() );
 				exec.SetBaseObject( REF_CAST(CGMPage,pPage));
-				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP );
+				exec.s_ParseEscapes( szTmp2, CSCRIPT_PARSE_HTML|CSCRIPT_PARSE_NBSP, COUNTOF(szTmp2) );
 				pSrc->WriteString( szTmp2 );
 			}
 		}

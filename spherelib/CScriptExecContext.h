@@ -704,7 +704,24 @@ public:
 		return m_pSrc;
 	}
 
-	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags)
+	// Check the complete replacement size before shifting the suffix.  The
+	// expression itself is temporarily NUL-terminated while it is evaluated,
+	// so strlen(pszBuf) cannot be used for this check; iBegin and iTrailLen
+	// describe the prefix and suffix explicitly.
+	static bool IsEscapeExpansionWithinCapacity(size_t iBegin, size_t iResultLen,
+		size_t iTrailLen, size_t iBufCapacity)
+	{
+		size_t iNewLen = iBegin + iResultLen + iTrailLen;
+		if ( iNewLen < iBufCapacity )
+			return true;
+
+		DEBUG_ERR(( "Script escape expansion exceeds line buffer (required=%lu capacity=%lu)" LOG_CR,
+			(unsigned long) (iNewLen + 1), (unsigned long) iBufCapacity ));
+		return false;
+	}
+
+	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags,
+		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		// Resolve <...> expression tags in a text buffer, in-place.
 		// <eval 1+2>  → "3"
@@ -825,6 +842,13 @@ public:
 				int iExprLen = iEnd - iBegin + 1;
 				int iResultLen = sResult.GetLength();
 				int iTrailLen = strlen(pszBuf + iEnd + 1);
+				if ( !IsEscapeExpansionWithinCapacity(
+					(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity) )
+				{
+					pszBuf[iEnd - 1] = '?';
+					i = iEnd;
+					continue;
+				}
 				// pszBuf[iEnd-1] is '\0', pszBuf[iEnd] is '>', trailing starts at iEnd+1
 				memmove(pszBuf + iBegin + iResultLen, pszBuf + iEnd + 1, iTrailLen + 1);
 				memcpy(pszBuf + iBegin, (LPCTSTR)sResult, iResultLen);
@@ -923,6 +947,16 @@ public:
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
 			int iResultLen = sResult.GetLength();
 			int iTrailLen = strlen(pszBuf + iEnd + 1); // chars after '>'
+			if ( !IsEscapeExpansionWithinCapacity(
+				(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity) )
+			{
+				// Restore the '>' and leave the original escape visible to the
+				// command handler.  It is safer than silently truncating a valid
+				// script line after an expansion does not fit.
+				pszBuf[iEnd] = chEnd;
+				i = iEnd;
+				continue;
+			}
 
 			// Restore the null we placed at iEnd for the trailing copy.
 			// pszBuf[iEnd] is already '\0', the trailing starts at iEnd+1.
