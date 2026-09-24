@@ -941,6 +941,16 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		}
 		break;
 
+	case F_HVal:
+		{
+			// 0.99 HVAL evaluates an expression and emits its unsigned 32-bit
+			// value in the script convention: a leading zero and lower-case hex.
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			DWORD dwVal = pszStr ? static_cast<DWORD>(GetValue(pszStr)) : 0;
+			vValRet.SetStrFormat("0%x", dwVal);
+		}
+		break;
+
 	case F_Safe:
 		{
 			// Error-safe wrapper: try to resolve the expression, return 0 on failure.

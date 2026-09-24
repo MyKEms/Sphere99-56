@@ -12,6 +12,7 @@ GLOBALMETHOD(Srv,			CSCRIPTPROP_DUPE|CSCRIPTPROP_RETREF|CSCRIPTPROP_NARGS, "SERV
 //GLOBALMETHOD(UID,			CSCRIPTPROP_DUPE|CSCRIPTPROP_RETREF|CSCRIPTPROP_NARG1, "FINDUID")
 GLOBALMETHOD(Var,			CSCRIPTPROP_RETREF|CSCRIPTPROP_ARG1, "get/set a global variable" )
 GLOBALMETHOD(Eval,			CSCRIPTPROP_NARG1, "evaluate a numeric expression")
+GLOBALMETHOD(HVal,			CSCRIPTPROP_NARG1, "evaluate an expression and return 32-bit hexadecimal")
 GLOBALMETHOD(Safe,			CSCRIPTPROP_NARG1, "error-safe expression wrapper, returns 0 on failure")
 GLOBALMETHOD(StrLen,		CSCRIPTPROP_NARG1, "get string length")
 GLOBALMETHOD(StrCmp,		CSCRIPTPROP_NARG1, "compare strings case-sensitive")

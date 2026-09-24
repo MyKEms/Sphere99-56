@@ -155,6 +155,10 @@ DOTTED_EXPRESSION_ROWS = (
     ("eval_decimal_zero", "<eval 30.0>", "C"),
     ("eval_paren_decimal", "<eval(2.5)>", "C"),
     ("eval_nested", "<eval <src.str>*1.5>", "C"),
+    # HVAL keeps 0.99's 32-bit, leading-zero lower-case hexadecimal format
+    # in both space-separated and parenthesized function forms.
+    ("hval_space", "<hval 0xBEEF>", "CI"),
+    ("hval_paren", "<hval(-1)>", "C"),
     # Nested results are deliberately longer than their source tags.  The
     # trailing text must survive the outer replacement in both trigger
     # contexts.
