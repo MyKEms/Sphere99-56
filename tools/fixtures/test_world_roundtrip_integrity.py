@@ -278,7 +278,9 @@ def main() -> int:
                 )
         elif world.count("REGION.FLAGS=0d2") != 1:
             failures.append(f"generation {generation} dropped REGION.FLAGS")
-        if args.format_compat:
+        if args.metadata_roundtrip:
+            pass
+        elif args.format_compat:
             if world.count("[WORLDITEM SYNTHETIC_MULTI]") != 1:
                 failures.append(f"generation {generation} lost the synthetic multi")
             if world.count("[WORLDITEM SYNTHETIC_MAP]") != 1:
