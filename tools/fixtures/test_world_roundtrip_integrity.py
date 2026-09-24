@@ -50,6 +50,24 @@ def normalized_format_save(text: str) -> str:
     return "\n\n".join(sorted(normalized_save(text).split("\n\n")))
 
 
+def normalized_metadata_char_save(text: str) -> str:
+    """Compare persistent character metadata across login save generations.
+
+    Client attach/detach updates EVENTS and the connected FLAGS bit as part of
+    each login.  The metadata probe checks those lifecycle paths separately;
+    its idempotence comparison must focus on saved character data and TAGs.
+    """
+
+    normalized: list[str] = []
+    for line in text.splitlines():
+        if line.startswith(("TIME=", "SAVECOUNT=", "AGE=", "TIMER=")):
+            continue
+        if line.startswith(("EVENTS=", "FLAGS=")):
+            continue
+        normalized.append(line)
+    return "\n".join(normalized)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -303,7 +321,9 @@ def main() -> int:
         if normalize(saved_worlds[1]) != normalize(saved_worlds[2]):
             failures.append("normalized second and third saves differ")
         if args.metadata_roundtrip and len(saved_chars) == 3:
-            if normalized_save(saved_chars[1]) != normalized_save(saved_chars[2]):
+            if normalized_metadata_char_save(saved_chars[1]) != normalized_metadata_char_save(
+                saved_chars[2]
+            ):
                 failures.append("normalized second and third character saves differ")
 
     cleanup_temp_copies()
