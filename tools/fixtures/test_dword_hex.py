@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Check Sphere's 0-prefixed hexadecimal DWORD resource properties.
+"""Check Sphere's 0-prefixed hexadecimal script values.
 
 The fixture comes from ``make_fixture.py --dword-hex-probe``.  It reads two
-synthetic CHARDEF ``ANIM`` properties through ``FINDUID(...).ANIM`` so the
-test covers both resource loading and the script-facing property getter.
+synthetic CHARDEF ``ANIM`` properties through ``FINDUID(...).ANIM``, a skill
+curve, object age, speech color and the ``ATTR`` method.
 """
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ import sys
 import time
 from pathlib import Path
 
-from make_fixture import DWORD_HEX_ACCOUNT, DWORD_HEX_MARKER
+from make_fixture import DWORD_HEX_ACCOUNT, DWORD_HEX_AGE, DWORD_HEX_MARKER
 from run_suite import shutdown_failures
 
 
-LOGIN_VALUE = "dword-hex-probe-pw"
+LOGIN_VALUE = "dword-hex-pw"
 END_MARKER = DWORD_HEX_MARKER + " C_END"
 MARKER_RE = re.compile(
     re.escape(DWORD_HEX_MARKER) + r" C\|([a-z0-9_]+)\|\[(.*)\]$"
@@ -28,6 +28,9 @@ MARKER_RE = re.compile(
 EXPECTED = {
     "high": "0ffc78c7f",
     "low": "03fbc7f",
+    "speechcolor": "0fabc",
+    "advrate": "268435455,0,0",
+    "attr": "0fabc",
 }
 
 
@@ -52,6 +55,21 @@ def parse_rows(messages: list[str]) -> dict[str, str]:
     return rows
 
 
+def wait_for_world_load(log_path: Path, timeout: float = 60.0) -> None:
+    """Do not log in until the listener has finished loading the saved world."""
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            log = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            log = ""
+        if "world load:" in log:
+            return
+        time.sleep(0.1)
+    raise RuntimeError("server did not finish world load before the bounded timeout")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -70,7 +88,7 @@ def main() -> int:
         decode_game_response,
         find_start_packet,
         game_connect,
-        make_char_create,
+        make_char_play,
         recv_until_game_start,
     )
 
@@ -78,6 +96,7 @@ def main() -> int:
     failures: list[str] = []
 
     def exercise() -> None:
+        wait_for_world_load(fixture / "server.log")
         sock, _ = game_connect(
             args.host,
             args.port,
@@ -86,21 +105,9 @@ def main() -> int:
             game_port=args.port + 1000,
         )
         if sock is None:
-            raise RuntimeError("DWORD-hex probe account did not reach the character list")
+            raise RuntimeError("DWORD-hex probe account did not reach its character list")
         try:
-            sock.sendall(
-                make_char_create(
-                    name=DWORD_HEX_ACCOUNT,
-                    sex=0,
-                    start_loc=1,
-                    skill1=25,
-                    val1=40,
-                    skill2=26,
-                    val2=40,
-                    skill3=1,
-                    val3=20,
-                )
-            )
+            sock.sendall(make_char_play(0))
             response = recv_until_game_start(sock, timeout=30.0)
             if not response or find_start_packet(decode_game_response(response)) is None:
                 raise RuntimeError("DWORD-hex probe character did not enter the world")
@@ -144,16 +151,27 @@ def main() -> int:
         value = rows.get(key)
         if value != expected:
             failures.append(f"{key}: got {value!r}; expected {expected!r}")
+    age_value = rows.get("age")
+    try:
+        age_seconds = int(age_value) if age_value is not None else None
+    except ValueError:
+        age_seconds = None
+    if age_seconds is None or not (DWORD_HEX_AGE <= age_seconds <= DWORD_HEX_AGE + 30):
+        failures.append(
+            f"age: got {age_value!r}; expected {DWORD_HEX_AGE}..{DWORD_HEX_AGE + 30}"
+        )
+    if "attr_set" not in rows:
+        failures.append("attr_set: ATTR setter method did not execute")
 
     if failures:
         print(
-            f"DWORD-hex probe failed: {len(EXPECTED) - len(failures)}/{len(EXPECTED)} checks passed",
+            f"DWORD-hex probe failed: {len(EXPECTED) + 2 - len(failures)}/{len(EXPECTED) + 2} checks passed",
             file=sys.stderr,
         )
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print(f"DWORD-hex probe passed: {len(EXPECTED)}/{len(EXPECTED)} checks")
+    print(f"DWORD-hex probe passed: {len(EXPECTED) + 2}/{len(EXPECTED) + 2} checks")
     return 0
 
 

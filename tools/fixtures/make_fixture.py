@@ -61,6 +61,8 @@ DWORD_HEX_ACCOUNT = "DwordHexProbe"
 DWORD_HEX_MARKER = "SPHERE_DWORD_HEX"
 DWORD_HEX_HIGH_NAME = "SYNTHETIC_DWORD_HEX_HIGH"
 DWORD_HEX_LOW_NAME = "SYNTHETIC_DWORD_HEX_LOW"
+DWORD_HEX_AGE = 0xFABC
+DWORD_HEX_MAGERY_UID = 0xCE000019
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
@@ -377,7 +379,7 @@ def write_book_pages_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(header + ["[EOF]"]))
 
 
-def skill_sections() -> str:
+def skill_sections(*, dword_hex_probe: bool = False) -> str:
     sections = []
     for skill_id in range(50):
         skill_key = {
@@ -397,7 +399,11 @@ def skill_sections() -> str:
             "BONUS_DEX=0\n"
             "DELAY=1\n"
             "EFFECT=0\n"
-            "ADV_RATE=0,0,0\n"
+            + (
+                "ADVRATE=0fffffff,0,0\n"
+                if dword_hex_probe and skill_id == 25
+                else "ADVRATE=0,0,0\n"
+            )
         )
     return "\n".join(sections)
 
@@ -469,6 +475,14 @@ def dword_hex_scripts() -> tuple[str, str]:
         (
             f"SYSMESSAGE {marker} C|low|[<FINDUID(<{DWORD_HEX_LOW_NAME}>).ANIM>]"
         ),
+        "SRC.SPEECHCOLOR=0fabc",
+        f"SYSMESSAGE {marker} C|speechcolor|[<SRC.SPEECHCOLOR>]",
+        f"SYSMESSAGE {marker} C|advrate|[<FINDUID({DWORD_HEX_MAGERY_UID}).ADVRATE>]",
+        f"SYSMESSAGE {marker} C|age|[<SRC.AGE>]",
+        "NEWITEM SYNTHETIC_DWORD_HEX_ITEM",
+        "LASTNEW.ATTR(0fabc)",
+        f"SYSMESSAGE {marker} C|attr_set|[done]",
+        f"SYSMESSAGE {marker} C|attr|[<LASTNEW.ATTR>]",
         f"SYSMESSAGE {marker} C_END",
     ]
     sections = "\n" + f"""[CHARDEF 0x0193]
@@ -482,6 +496,11 @@ DEFNAME={DWORD_HEX_LOW_NAME}
 NAME=synthetic DWORD hex low
 ID=0x0194
 ANIM=03fbc7f
+
+[ITEMDEF 0x0E7D]
+DEFNAME=SYNTHETIC_DWORD_HEX_ITEM
+NAME=synthetic DWORD hex item
+TYPE=T_NORMAL
 """
     return "\n".join(login) + "\n", sections
 
@@ -1329,7 +1348,7 @@ RETURN <SRC.SERIAL>
 P=128,128,0
 RECT=1,1,6143,4096
 
-""" + skill_sections() + timer_sibling_mutation_sections + """
+""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -1586,6 +1605,58 @@ def write_world_load_counts_save(
                 "SAVECOUNT=0",
             ]
             + char_sections
+        ),
+    )
+
+
+def write_dword_hex_save(root: Path) -> None:
+    """Seed an existing account/character whose AGE uses Sphere hexadecimal."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic DWORD hex fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {DWORD_HEX_ACCOUNT}]",
+                "PASSWORD=dword-hex-pw",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic DWORD hex fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={DWORD_HEX_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                f"AGE=0{DWORD_HEX_AGE:x}",
+                "P=128,128,0",
+                "[EOF]",
+            ]
         ),
     )
 
@@ -1967,6 +2038,15 @@ def main() -> int:
         or args.timer_sibling_mutation_owner_first_probe
     ):
         parser.error("book-pages probe writes its own world and cannot be combined")
+    if args.dword_hex_probe and (
+        args.world_load_counts
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.book_pages_probe
+    ):
+        parser.error("dword-hex probe writes its own world and cannot be combined")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -2026,6 +2106,8 @@ def main() -> int:
         write_timer_lifetime_save(root)
     if args.book_pages_probe:
         write_book_pages_save(root)
+    if args.dword_hex_probe:
+        write_dword_hex_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     write_mul_fixture(
