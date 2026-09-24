@@ -2238,7 +2238,11 @@ void CItem::s_WriteProps( CScript& s )
 
 	if ( GetDispID() != GetID())	// the item is flipped.
 	{
-		s.WriteKey( "DISPID", g_Cfg.ResourceGetName( CSphereUID( RES_ItemDef, GetDispID())));
+		LPCTSTR pszDispName = g_Cfg.ResourceGetName( CSphereUID( RES_ItemDef, GetDispID()));
+		if ( pszDispName && _stricmp(pszDispName, "?") != 0 )
+			s.WriteKey( "DISPID", pszDispName);
+		else
+			s.WriteKeyDWORD( "DISPID", GetDispID());
 	}
 	if ( GetAmount() != 1 )
 		s.WriteKeyInt( "AMOUNT", GetAmount());

@@ -30,6 +30,8 @@ TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
 NAMED_MULTI_NAME = "synthetic named multi"
+ROUNDTRIP_ITEM_ID = 0x0E9A
+ROUNDTRIP_DISP_ID = 0x0E9B
 SPAWN_GEM_SERIALS = tuple(range(100, 110))
 SPAWN_GEM_ITEM_ID = 0x1EA7
 SPAWN_POINT_SERIAL = UID_F_ITEM | 120
@@ -1254,6 +1256,7 @@ def write_scripts(
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
     spawn_point_probe: bool = False,
+    metadata_roundtrip_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1544,6 +1547,14 @@ def write_scripts(
         if format_compat_probe
         else ""
     )
+    metadata_roundtrip_itemdef = (
+        f"\n[ITEMDEF 0x{ROUNDTRIP_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_ROUNDTRIP_ITEM\n"
+        "NAME=synthetic round-trip item\n"
+        "TYPE=T_NORMAL\n"
+        if metadata_roundtrip_probe
+        else ""
+    )
     # An @Timer handler that falls through lets the default timer path log the
     # item's name instead of silently deleting the item.
     named_item_name_sections = (
@@ -1684,7 +1695,7 @@ DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
 TYPE=T_NORMAL
 
-""" + default_char_definition + """
+""" + default_char_definition + metadata_roundtrip_itemdef + """
 [CHARDEF 0x0190]
 DEFNAME=c_MAN
 """ + default_char_defname2 + """NAME=synthetic human
@@ -1875,6 +1886,7 @@ def write_world_load_counts_save(
     weird_item: bool,
     child_before_parent: bool,
     format_compat_probe: bool,
+    metadata_roundtrip_probe: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -1883,7 +1895,19 @@ def write_world_load_counts_save(
         "VERSION=0.99",
         "SAVECOUNT=0",
     ]
-    if format_compat_probe:
+    if metadata_roundtrip_probe:
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_ROUNDTRIP_ITEM]",
+                "SERIAL=4",
+                "P=128,128,0",
+                f"DISPID={ROUNDTRIP_DISP_ID:04x}",
+                'Tag.roundtrip="value with trailing space "',
+                'Tag.empty=""',
+                "Tag.numeric=42",
+            ]
+        )
+    elif format_compat_probe:
         world_sections.extend(
             [
                 "[WORLDITEM SYNTHETIC_MULTI]",
@@ -2016,7 +2040,7 @@ def write_world_load_counts_save(
         )
     world_sections.append("[EOF]")
     write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
-    if rejected_property or child_before_parent or format_compat_probe:
+    if rejected_property or child_before_parent or format_compat_probe or metadata_roundtrip_probe:
         write_text(
             root / "accounts" / "sphereaccu.scp",
             "\n".join(
@@ -2055,6 +2079,23 @@ def write_world_load_counts_save(
                 "STAM=100",
                 "SkillLock.5=1",
                 "P=131,128,0",
+                "[EOF]",
+            ]
+        elif metadata_roundtrip_probe:
+            char_sections = [
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                "ACCOUNT=FixturePlayer",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                'Tag.roundtrip="character trailing space "',
+                "Tag.numeric=7",
+                "P=130,128,0",
                 "[EOF]",
             ]
         else:
@@ -2763,6 +2804,11 @@ def main() -> int:
         help="keep the login fixture focused on repeated save/load integrity",
     )
     parser.add_argument(
+        "--metadata-roundtrip-probe",
+        action="store_true",
+        help="seed quoted TAG values and an explicit display id for save/reload checks",
+    )
+    parser.add_argument(
         "--truncate-world-item",
         action="store_true",
         help="append one incomplete world item section to the synthetic save",
@@ -2926,6 +2972,7 @@ def main() -> int:
         args.weird_item,
         args.child_before_parent,
         args.format_compat_probe,
+        args.metadata_roundtrip_probe,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -3070,6 +3117,7 @@ def main() -> int:
         multi_property_probe=args.multi_property,
         named_item_name_probe=args.named_item_names,
         named_resource_id_probe=args.named_resource_ids,
+        metadata_roundtrip_probe=args.metadata_roundtrip_probe,
         timer_lifetime_probe=args.timer_lifetime_probe,
         dotted_expression_probe=args.dotted_expression_probe,
         format_compat_probe=args.format_compat_probe,
@@ -3103,6 +3151,7 @@ def main() -> int:
             weird_item=args.weird_item,
             child_before_parent=args.child_before_parent,
             format_compat_probe=args.format_compat_probe,
+            metadata_roundtrip_probe=args.metadata_roundtrip_probe,
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)

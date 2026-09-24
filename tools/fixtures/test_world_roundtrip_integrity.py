@@ -62,6 +62,11 @@ def main() -> int:
         action="store_true",
         help="assert multi REGION.* and map PIN properties survive each save",
     )
+    parser.add_argument(
+        "--metadata-roundtrip",
+        action="store_true",
+        help="assert quoted TAG bytes and an explicit DISPID survive the first save",
+    )
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
@@ -83,6 +88,7 @@ def main() -> int:
 
     failures: list[str] = []
     saved_worlds: list[str] = []
+    saved_chars: list[str] = []
     startup_logs: list[str] = []
     temporary_copies: list[Path] = []
 
@@ -128,7 +134,11 @@ def main() -> int:
             except OSError:
                 time.sleep(0.1)
                 continue
-            if args.format_compat:
+            if args.metadata_roundtrip:
+                required_markers = (
+                    "[WORLDITEM SYNTHETIC_ROUNDTRIP_ITEM]",
+                )
+            elif args.format_compat:
                 required_markers = (
                     "LEGACY_UNKNOWN=preserve-me",
                     "REGION.FLAGS=0d2",
@@ -198,6 +208,11 @@ def main() -> int:
                     encoding="ascii", errors="replace"
                 )
             )
+            saved_chars.append(
+                (current_fixture / "save" / "spherechars.scp").read_text(
+                    encoding="ascii", errors="replace"
+                )
+            )
         except OSError as error:
             failures.append(f"generation {generation + 1} save could not be read: {error}")
 
@@ -233,9 +248,27 @@ def main() -> int:
         )
 
     for generation, world in enumerate(saved_worlds, start=1):
-        if world.count("LEGACY_UNKNOWN=preserve-me") != 1:
+        if not args.metadata_roundtrip and world.count("LEGACY_UNKNOWN=preserve-me") != 1:
             failures.append(f"generation {generation} dropped the unknown legacy property")
-        if args.format_compat:
+        if args.metadata_roundtrip:
+            combined = world + (
+                saved_chars[generation - 1] if generation <= len(saved_chars) else ""
+            )
+            for marker in (
+                'Tag.roundtrip="value with trailing space "',
+                'Tag.roundtrip="character trailing space "',
+                'Tag.empty=""',
+                "Tag.numeric=42",
+                "Tag.numeric=7",
+                "DISPID=0e9b",
+            ):
+                if combined.count(marker) != 1:
+                    failures.append(
+                        f"generation {generation} did not preserve exactly one {marker!r}"
+                    )
+            if "DISPID=?" in combined:
+                failures.append(f"generation {generation} rewrote explicit DISPID as '?'")
+        elif args.format_compat:
             region_flags_count = world.count("REGION.FLAGS=")
             exact_region_flags_count = world.count("REGION.FLAGS=0d2")
             if region_flags_count != 1 or exact_region_flags_count != 1:
@@ -267,6 +300,9 @@ def main() -> int:
         normalize = normalized_format_save if args.format_compat else normalized_save
         if normalize(saved_worlds[1]) != normalize(saved_worlds[2]):
             failures.append("normalized second and third saves differ")
+        if args.metadata_roundtrip and len(saved_chars) == 3:
+            if normalized_save(saved_chars[1]) != normalized_save(saved_chars[2]):
+                failures.append("normalized second and third character saves differ")
 
     cleanup_temp_copies()
     atexit.unregister(cleanup_temp_copies)
@@ -278,7 +314,11 @@ def main() -> int:
 
     print(
         "world round-trip integrity probe passed: "
-        "three bounded saves across two reloads retained counts, containment, and unknown properties"
+        + (
+            "three bounded saves across two reloads retained TAG bytes and DISPID"
+            if args.metadata_roundtrip
+            else "three bounded saves across two reloads retained counts, containment, and unknown properties"
+        )
     )
     return 0
 
