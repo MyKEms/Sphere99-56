@@ -919,7 +919,7 @@ void CAccount::s_WriteProps( CScript& s, bool fTitle )
 
 	if ( fTitle )
 	{
-		s.WriteSection( "ACCOUNT %s", m_sName );
+		s.WriteSection( "ACCOUNT %s", (LPCTSTR) m_sName );
 	}
 	else
 	{

@@ -134,7 +134,7 @@ public:
 	bool FindKey(LPCTSTR pszName);
 
 	// Writing
-	bool WriteSection(LPCTSTR pszSection, ...);
+	bool WriteSection(LPCTSTR pszSection, ...) __printfargs(2, 3);
 	bool WriteKey(LPCTSTR pszKey, LPCTSTR lpszVal);
 	void WriteKeyInt(LPCTSTR pszKey, int iValue);
 	void WriteKeyDWORD(LPCTSTR pszKey, DWORD iValue);

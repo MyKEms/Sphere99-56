@@ -194,7 +194,7 @@ class CLogBase
 public:
 	virtual int EventStr(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg) = 0;
 
-	void Event(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg, ...)
+	void Event(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg, ...) __printfargs(4, 5)
 	{
 		va_list vargs;
 		va_start(vargs, pszMsg);
@@ -203,7 +203,7 @@ public:
 		va_end(vargs);
 		EventStr(dwGroupMask, level, szBuf);
 	}
-	void EventEvent(LPCTSTR pszFormat, ...)
+	void EventEvent(LPCTSTR pszFormat, ...) __printfargs(2, 3)
 	{
 		va_list vargs;
 		va_start(vargs, pszFormat);
@@ -212,7 +212,7 @@ public:
 		va_end(vargs);
 		EventStr(0, LOGL_EVENT, szBuf);
 	}
-	void EventTrace(LPCTSTR pszFormat, ...)
+	void EventTrace(LPCTSTR pszFormat, ...) __printfargs(2, 3)
 	{
 		va_list vargs;
 		va_start(vargs, pszFormat);
@@ -221,7 +221,7 @@ public:
 		va_end(vargs);
 		EventStr(0, LOGL_TRACE, szBuf);
 	}
-	void EventError(LPCTSTR pszFormat, ...)
+	void EventError(LPCTSTR pszFormat, ...) __printfargs(2, 3)
 	{
 		va_list vargs;
 		va_start(vargs, pszFormat);
@@ -230,7 +230,7 @@ public:
 		va_end(vargs);
 		EventStr(0, LOGL_ERROR, szBuf);
 	}
-	void EventWarn(LPCTSTR pszFormat, ...)
+	void EventWarn(LPCTSTR pszFormat, ...) __printfargs(2, 3)
 	{
 		va_list vargs;
 		va_start(vargs, pszFormat);

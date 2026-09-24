@@ -2196,7 +2196,7 @@ bool CChar::Death()
 
 			iKillStrLen += sprintf( pszKillStr+iKillStrLen, "%s%c'%s'",
 				iKillers ? ", " : "",
-				(pKiller->m_pPlayer.IsValidNewObj())?'P':'N', pKiller->GetName() );
+				(pKiller->m_pPlayer.IsValidNewObj())?'P':'N', (LPCTSTR) pKiller->GetName() );
 			iKillers ++;
 		}
 

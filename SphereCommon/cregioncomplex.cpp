@@ -134,7 +134,7 @@ void CRegionComplex::s_WriteBody( CScript &s, LPCTSTR pszPrefix )
 
 void CRegionComplex::s_WriteProps( CScript &s )
 {
-	s.WriteSection( "AREA %s", GetName());
+	s.WriteSection( "AREA %s", (LPCTSTR) GetName());
 	s_WriteBase( s );
 	s_WriteBody( s, "" );
 }

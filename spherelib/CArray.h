@@ -721,7 +721,7 @@ struct CHashArray : public CGSortedArray< TYPE*, TYPE*, HASH_INDEX>
 struct CGStringArray : public CGTypedArray<CGString, const CGString&>
 {
 public:
-	void AddFormat(LPCTSTR lpszFormat, ...)
+	void AddFormat(LPCTSTR lpszFormat, ...) __printfargs(2, 3)
 	{
 		TCHAR szBuf[1024];
 		va_list vargs;

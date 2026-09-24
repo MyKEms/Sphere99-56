@@ -425,7 +425,7 @@ void CRegionBasic::s_WriteBase( CScript& s )
 
 void CRegionBasic::s_WriteProps( CScript& s )
 {
-	s.WriteSection( "ROOM %s", GetName());
+	s.WriteSection( "ROOM %s", (LPCTSTR) GetName());
 	s_WriteBase( s );
 	s_WriteBody( s, "" );
 }

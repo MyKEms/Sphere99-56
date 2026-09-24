@@ -2376,7 +2376,7 @@ bool CSphereResourceMgr::SetLogIPBlock( LPCTSTR pszIP, LPCTSTR pszBlockReason, C
 	if ( pSrc )
 	{
 		g_Log.Event( LOG_GROUP_ACCOUNTS, LOGL_EVENT, "%sBlock IP %s by %s for '%s'" LOG_CR, 
-			pszBlockReason ? "" : "UN-", pszIP, pSrc->GetName(), pszBlockReason );
+			pszBlockReason ? "" : "UN-", pszIP, (LPCTSTR) pSrc->GetName(), pszBlockReason );
 
 		m_scpIni.WriteProfileStringSec( "BLOCKIP", pszIP, pszBlockReason ? "" : NULL );
 	}
