@@ -268,6 +268,15 @@ jobs:
             --port 2729 \
             --format-compat
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-events-attr" \
+            --events-attr-probe
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+          python3 tools/fixtures/test_events_attr_roundtrip.py \
+            "$RUNNER_TEMP/sphere-asan-events-attr" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2735
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -466,6 +475,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-dialog-argo-layout/server.log
             ${{ runner.temp }}/sphere-asan-dialog-flow-layout/server.log
             ${{ runner.temp }}/sphere-asan-gump-skill/server.log
+            ${{ runner.temp }}/sphere-asan-events-attr/events-attr-generation-*.log
           if-no-files-found: warn
 
   load-safety:
@@ -741,6 +751,13 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2729 \
             --format-compat
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-events-attr" \
+            --events-attr-probe
+          python3 tools/fixtures/test_events_attr_roundtrip.py \
+            "$RUNNER_TEMP/sphere-events-attr" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2735
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \

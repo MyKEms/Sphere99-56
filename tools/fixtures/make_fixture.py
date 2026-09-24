@@ -256,6 +256,15 @@ SHUTDOWN_DEST_SERIAL = 210
 SHUTDOWN_DEST_OWNER_SERIAL = 300
 SHUTDOWN_EVENT_NAME = "t_shutdown_nested"
 
+# Save-generation fixture for current-format object metadata.  The item and
+# NPC intentionally use the writer's leading-zero hexadecimal values so the
+# test covers the exact 0.99 text representation on the next load.
+EVENTS_ATTR_ITEM_SERIAL = 4
+EVENTS_ATTR_CHAR_SERIAL = 3
+EVENTS_ATTR_CHANGER = 1234
+EVENTS_ATTR_MASK = 0x001C
+EVENTS_ATTR_VALUES = ("e_AllPlayers", "t_fixture_events", "class_fixture")
+
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
 DOTTED_CONDITION_ROWS = (
@@ -953,7 +962,6 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
         "SPHERE_MUT_CASE1_B_REMOVE_RETURNED",
         "SPHERE_MUT_CASE1_OWNER_REMOVE_RETURNED",
     )
-
     case2 = action_item(
         0x0E7F,
         "SYNTHETIC_MUTATION_A_REPARENT",
@@ -1070,6 +1078,7 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
         + relation_item(0x0E8C, "SYNTHETIC_MUTATION_KEEP_2", "SPHERE_MUT_CASE2_KEEP_PARENT")
         + relation_item(0x0E8D, "SYNTHETIC_MUTATION_KEEP_3", "SPHERE_MUT_CASE3_KEEP_PARENT")
     )
+
 
 
 def container_shutdown_definitions() -> str:
@@ -1494,6 +1503,12 @@ DEFNAME=T_HAIR
 
 [TYPEDEF 176]
 DEFNAME=T_EQ_SCRIPT
+
+[TYPEDEF 177]
+DEFNAME=t_fixture_events
+
+[PROFESSION 11]
+DEFNAME=class_fixture
 
 [ITEMDEF 0x0E75]
 DEFNAME=DEFAULTITEM
@@ -2232,6 +2247,7 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(chars))
 
 
+
 def write_container_shutdown_save(root: Path) -> None:
     """Seed nested reparent, hook-insert, and final-ownership cases."""
 
@@ -2294,6 +2310,54 @@ def write_container_shutdown_save(root: Path) -> None:
     ]
     write_text(root / "save" / "sphereworld.scp", "TITLE=Sphere synthetic container shutdown fixture\nVERSION=0.99\nSAVECOUNT=0\n[EOF]")
     write_text(root / "save" / "spherechars.scp", "\n".join(chars))
+
+
+def write_events_attr_save(root: Path) -> None:
+    """Seed one item and one NPC with current-format metadata."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic EVENTS/ATTR fixture",
+                'VERSION="0.99z8"',
+                "SAVECOUNT=0",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                f"SERIAL={EVENTS_ATTR_ITEM_SERIAL}",
+                "P=128,128,0",
+                *(f"EVENTS={value}" for value in EVENTS_ATTR_VALUES),
+                f"CHANGER={EVENTS_ATTR_CHANGER}",
+                f"ATTR=0x{EVENTS_ATTR_MASK:04X}",
+                "LEGACY_UNKNOWN=keep-item",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic EVENTS/ATTR fixture",
+                'VERSION="0.99z8"',
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                f"SERIAL={EVENTS_ATTR_CHAR_SERIAL}",
+                "NPC=2",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                *(f"EVENTS={value}" for value in EVENTS_ATTR_VALUES),
+                f"CHANGER={EVENTS_ATTR_CHANGER}",
+                "LEGACY_UNKNOWN=keep-char",
+                "[EOF]",
+            ]
+        ),
+    )
 
 
 def main() -> int:
@@ -2490,6 +2554,11 @@ def main() -> int:
         action="store_true",
         help="seed duplicate spawn-gem serial sections for load handling",
     )
+    parser.add_argument(
+        "--events-attr-probe",
+        action="store_true",
+        help="exercise EVENTS, CHANGER, and ATTR across repeated save generations",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2539,6 +2608,16 @@ def main() -> int:
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
 
+    if args.events_attr_probe and (
+        args.world_load_counts
+        or any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+    ):
+        parser.error("events/attr probe cannot be combined with another fixture mode")
+
     if args.book_pages_probe and (
         args.world_load_counts
         or args.timer_lifetime_probe
@@ -2546,6 +2625,7 @@ def main() -> int:
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
         or args.container_shutdown_probe
+        or args.events_attr_probe
         or args.format_compat_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
@@ -2557,6 +2637,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.container_shutdown_probe
         or args.book_pages_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
@@ -2642,6 +2723,18 @@ def main() -> int:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:
         write_container_shutdown_save(root)
+    if args.events_attr_probe:
+        # A zero-minute period causes the normal world-save path to run as
+        # soon as the server has loaded.  The round-trip test stops after each
+        # completed generation and restarts the same disposable fixture.
+        ini_path = root / "sphere.ini"
+        ini_path.write_text(
+            ini_path.read_text(encoding="ascii").replace(
+                "SAVEPERIOD=1440", "SAVEPERIOD=0"
+            ),
+            encoding="ascii",
+        )
+        write_events_attr_save(root)
     write_mul_fixture(
         root,
         extra_item_id=(0x0E8A
