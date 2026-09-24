@@ -385,6 +385,21 @@ jobs:
             "$RUNNER_TEMP/sphere-asan-book-pages" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --load-only
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-dialog-buttons" \
+            --dialog-button-probe
+          python3 tools/fixtures/test_dialog_buttons.py \
+            "$RUNNER_TEMP/sphere-asan-dialog-buttons" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2734
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-dialog-argo-layout" \
+            --dialog-argo-layout-probe
+          python3 tools/fixtures/test_dialog_buttons.py \
+            "$RUNNER_TEMP/sphere-asan-dialog-argo-layout" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2736 \
+            --argo-layout
           python3 tools/fixtures/make_gump_skill_fixture.py \
             "$RUNNER_TEMP/sphere-asan-gump-skill"
           ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
@@ -420,6 +435,8 @@ jobs:
             ${{ runner.temp }}/sphere-asan-spawn-gem-duplicate/server.log
             ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-asan-arg-locals/server.log
+            ${{ runner.temp }}/sphere-asan-dialog-buttons/server.log
+            ${{ runner.temp }}/sphere-asan-dialog-argo-layout/server.log
             ${{ runner.temp }}/sphere-asan-gump-skill/server.log
           if-no-files-found: warn
 
@@ -800,6 +817,21 @@ jobs:
             "$RUNNER_TEMP/sphere-book-pages" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2733
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-dialog-buttons" \
+            --dialog-button-probe
+          python3 tools/fixtures/test_dialog_buttons.py \
+            "$RUNNER_TEMP/sphere-dialog-buttons" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2734
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-dialog-argo-layout" \
+            --dialog-argo-layout-probe
+          python3 tools/fixtures/test_dialog_buttons.py \
+            "$RUNNER_TEMP/sphere-dialog-argo-layout" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2736 \
+            --argo-layout
           python3 tools/fixtures/make_gump_skill_fixture.py \
             "$RUNNER_TEMP/sphere-gump-skill"
           python3 tools/fixtures/test_gump_skill.py \
@@ -833,5 +865,7 @@ jobs:
             ${{ runner.temp }}/sphere-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-arg-locals/server.log
             ${{ runner.temp }}/sphere-book-pages/server.log
+            ${{ runner.temp }}/sphere-dialog-buttons/server.log
+            ${{ runner.temp }}/sphere-dialog-argo-layout/server.log
             ${{ runner.temp }}/sphere-gump-skill/server.log
           if-no-files-found: warn

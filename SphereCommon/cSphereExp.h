@@ -277,7 +277,8 @@ public:
 
 public:
 	CSphereExpArgs( CResourceObj* pBaseObj, CScriptConsole* pSrc ) :
-		CSphereExpContext(pBaseObj,pSrc)
+		CSphereExpContext(pBaseObj,pSrc),
+		m_iN1(0), m_iN2(0), m_iN3(0)
 	{
 	}
 	CSphereExpArgs( CResourceObj* pBaseObj, CScriptConsole* pSrc, CResourceObj* pObj ) :
@@ -297,7 +298,7 @@ public:
 	}
 	CSphereExpArgs( CResourceObj* pBaseObj, CScriptConsole* pSrc, int iVal1, int iVal2, CResourceObj* pObj ) :
 		CSphereExpContext(pBaseObj,pSrc),
-		m_iN1(iVal1), m_iN2(iVal2), m_pO1(pObj)
+		m_iN1(iVal1), m_iN2(iVal2), m_iN3(0), m_pO1(pObj)
 	{
 	}
 

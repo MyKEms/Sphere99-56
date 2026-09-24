@@ -36,6 +36,9 @@ TRIGRET_TYPE CClient::Dialog_OnButton( CSphereUID rid, DWORD dwButtonID, CSphere
 	// CLIMODE_DIALOG
 	// one of the gump dialog buttons was pressed.
 	// NOTE: Button 0 = cancel.
+	// ON=<n> handles button n. ON=@anybutton is the fallback for every button
+	// without its own ON=<n>, cancel included, wherever it sits in the section.
+	// ARGN = the button, ARGCHK/ARGTXT = the switches and text entries.
 
 	CResourceLock s( g_Cfg.ResourceGetDef( CSphereUID( RES_Dialog, rid.GetResIndex(), RES_DIALOG_BUTTON )));
 	if ( ! s.IsFileOpen())
@@ -44,16 +47,29 @@ TRIGRET_TYPE CClient::Dialog_OnButton( CSphereUID rid, DWORD dwButtonID, CSphere
 		return TRIGRET_ENDIF;
 	}
 
+	DWORD dwCoverageKey = dwButtonID;
 	if ( ! s.FindTriggerNumber( dwButtonID ))
 	{
-		if ( dwButtonID )
+		CResourceLink* pLink = s.GetLinkResource();
+		bool fAnyButton = false;
+		if ( pLink )
 		{
-			DEBUG_WARN(("Dialog_OnButton '%s' No such button %d" LOG_CR, (LPCTSTR) g_Cfg.ResourceGetName(rid), dwButtonID ));
+			CScriptLineContext context = pLink->GetLinkContext();
+			s.SeekContext( context );
+			fAnyButton = s.FindTriggerName( DIALOG_ANYBUTTON_TRIGGER );
 		}
-		return TRIGRET_ENDIF;
+		if ( ! fAnyButton )
+		{
+			if ( dwButtonID )
+			{
+				DEBUG_WARN(("Dialog_OnButton '%s' No such button %d" LOG_CR, (LPCTSTR) g_Cfg.ResourceGetName(rid), dwButtonID ));
+			}
+			return TRIGRET_ENDIF;
+		}
+		dwCoverageKey = DIALOG_ANYBUTTON_COVERAGE_KEY;
 	}
 	if (s.GetLinkResource())
-		ScriptExecutionCoverageHit(s.GetLinkResource()->GetScriptCoverageOptionToken(dwButtonID));
+		ScriptExecutionCoverageHit(s.GetLinkResource()->GetScriptCoverageOptionToken(dwCoverageKey));
 
 	return exec.ExecuteScript( s, TRIGRUN_SECTION_TRUE );
 }
@@ -147,7 +163,10 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 			}
 
 			// Check if sub-command is a gump command (argo.text, argo.button, etc.)
-			TCHAR szGumpKey[128];
+			// Split "key(args)" or "key args" in place: the key and its
+			// arguments stay in this buffer, which holds a whole script line,
+			// for every use below.
+			TCHAR szGumpKey[SCRIPT_MAX_LINE_LEN];
 			strncpy(szGumpKey, pszSub, sizeof(szGumpKey)-1);
 			szGumpKey[sizeof(szGumpKey)-1] = '\0';
 			TCHAR* pParen = strchr(szGumpKey, '(');
@@ -155,13 +174,10 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 			if ( pParen )
 			{
 				*pParen = '\0';
-				pGumpArgs = pParen + 1;
-				TCHAR szGA[SCRIPT_MAX_LINE_LEN];
-				strncpy(szGA, pGumpArgs, sizeof(szGA)-1);
-				szGA[sizeof(szGA)-1] = '\0';
-				int len2 = strlen(szGA);
-				if ( len2 > 0 && szGA[len2-1] == ')' ) szGA[len2-1] = '\0';
-				pGumpArgs = szGA;
+				TCHAR* pszArgs = pParen + 1;
+				size_t len2 = strlen(pszArgs);
+				if ( len2 > 0 && pszArgs[len2-1] == ')' ) pszArgs[len2-1] = '\0';
+				pGumpArgs = pszArgs;
 			}
 			else
 			{

@@ -56,6 +56,28 @@ DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
+# Dialog button probe.  The login trigger opens a dialog whose BUTTON section
+# holds an ON=@anybutton fallback ahead of numbered ON=<n> entries (cancel
+# included), so order in the section must not decide which entry runs.
+# tools/fixtures/test_dialog_buttons.py presses each kind of button.
+DIALOG_BUTTON_ACCOUNT = "DialogButtonProbe"
+DIALOG_BUTTON_MARKER = "SPHERE_DIALOG_BUTTON"
+DIALOG_BUTTON_NAME = "d_synthetic_button_probe"
+DIALOG_BUTTON_NUMBERED = 5
+DIALOG_BUTTON_FALLBACK = 7
+DIALOG_BUTTON_SWITCH = 11
+DIALOG_BUTTON_TEXT_ID = 3
+# A second dialog lays out its controls with argo.<gump>(...) calls, one of
+# them written with aligned columns that make it longer than 128 bytes.
+DIALOG_ARGO_LAYOUT_NAME = "d_synthetic_argo_layout"
+DIALOG_ARGO_BUTTON = 9
+DIALOG_ARGO_LONG_FIELDS = (10, 130, 200, 60, 1, 0, 1)
+DIALOG_ARGO_CONTROLS = (
+    "htmlgump 10 10 200 60 0 1 0",
+    f"button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
+    "htmlgump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
+)
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -450,6 +472,55 @@ SYSMESSAGE SPHERE_ARG_LOCALS C|scratch_object|[<SCRATCH_OBJ.NAME>|<scratch_obj.t
 RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
 """
     return "\n".join(login) + "\n", sections
+
+
+def dialog_button_scripts(argo_layout: bool = False) -> tuple[str, str]:
+    """Return the login line and the sections of the dialog button probe.
+
+    ``argo_layout`` opens the argo.<gump>(...) layout dialog at login instead.
+    """
+
+    marker = DIALOG_BUTTON_MARKER
+    name = DIALOG_BUTTON_NAME
+    argo_name = DIALOG_ARGO_LAYOUT_NAME
+    long_args = ",".join(f"{field:>20}" for field in DIALOG_ARGO_LONG_FIELDS)
+    sections = f"""
+[DIALOG {name}]
+0 0
+resizepic 0 0 5054 240 200
+button 20 20 2151 2152 1 0 {DIALOG_BUTTON_NUMBERED}
+button 20 60 2151 2152 1 0 {DIALOG_BUTTON_FALLBACK}
+checkbox 20 100 210 211 0 {DIALOG_BUTTON_SWITCH}
+textentry 20 140 180 20 0 {DIALOG_BUTTON_TEXT_ID} 0
+
+[DIALOG {name} TEXT]
+initial text
+
+[DIALOG {name} BUTTON]
+ON=@anybutton
+TAG.dialog_button_seen=any/<ARGN>
+SYSMESSAGE {marker} any|<ARGN>|<ARGCHK({DIALOG_BUTTON_SWITCH})>|<ARGTXT({DIALOG_BUTTON_TEXT_ID})>|<ARGO.NAME>
+DIALOG {name}
+ON={DIALOG_BUTTON_NUMBERED}
+SYSMESSAGE {marker} numbered|<ARGN>
+DIALOG {name}
+ON=0
+SYSMESSAGE {marker} cancel|<ARGN>|<TAG.dialog_button_seen>
+
+[DIALOG {argo_name}]
+0 0
+argo.htmlgump(10,10,200,60,0,1,0)
+argo.button(20,80,2151,2152,1,0,{DIALOG_ARGO_BUTTON})
+argo.htmlgump({long_args})
+
+[DIALOG {argo_name} TEXT]
+argo layout text
+
+[DIALOG {argo_name} BUTTON]
+ON={DIALOG_ARGO_BUTTON}
+SYSMESSAGE {marker} argo|<ARGN>|<ARGO.NAME>
+"""
+    return f"DIALOG {argo_name if argo_layout else name}\n", sections
 
 
 def dotted_expression_scripts() -> tuple[str, str, str]:
@@ -853,6 +924,8 @@ def write_scripts(
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
     book_pages_probe: bool = False,
+    dialog_button_probe: bool = False,
+    dialog_argo_layout_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
 ) -> None:
@@ -868,6 +941,11 @@ def write_scripts(
     )
     arg_locals_login, arg_locals_sections = (
         arg_locals_scripts() if arg_locals_probe else ("", "")
+    )
+    dialog_button_login, dialog_button_sections = (
+        dialog_button_scripts(argo_layout=dialog_argo_layout_probe)
+        if dialog_button_probe or dialog_argo_layout_probe
+        else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1278,7 +1356,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -1318,7 +1396,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dialog_button_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -2015,6 +2093,16 @@ def main() -> int:
         help="load a BOOK with more than 127 pages and a full resource-ID ITEMDEF",
     )
     parser.add_argument(
+        "--dialog-button-probe",
+        action="store_true",
+        help="open a dialog with numbered and ON=@anybutton button entries at login",
+    )
+    parser.add_argument(
+        "--dialog-argo-layout-probe",
+        action="store_true",
+        help="open, by name, a dialog laid out with argo.<gump>(...) calls at login",
+    )
+    parser.add_argument(
         "--spawn-gem-probe",
         action="store_true",
         help="seed top-level spawn gems with an explicit zero timer",
@@ -2122,6 +2210,8 @@ def main() -> int:
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
         book_pages_probe=args.book_pages_probe,
+        dialog_button_probe=args.dialog_button_probe,
+        dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
         spawn_gem_probe=args.spawn_gem_probe,
     )
