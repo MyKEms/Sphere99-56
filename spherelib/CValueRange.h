@@ -134,7 +134,11 @@ public:
 		if ( pszVal == NULL ) return;
 		while ( *pszVal )
 		{
-			m_aiValues.Add( atoi(pszVal) );
+			// Skill curves are script values too.  Use CGVariant's Sphere
+			// numeric rules so values such as 0fffffff are hexadecimal rather
+			// than being truncated by atoi at the first letter.
+			CGVariant vNumber(pszVal);
+			m_aiValues.Add( vNumber.GetInt() );
 			while ( *pszVal && *pszVal != ',' ) pszVal++;
 			if ( *pszVal == ',' ) pszVal++;
 		}
