@@ -1082,7 +1082,7 @@ def ontick_content_mutation_definitions() -> str:
     victim_uid = ONTICK_VICTIM_SERIAL
     sibling_uid = UID_F_ITEM | ONTICK_SIBLING_SERIAL
     return (
-        "\n[ITEMDEF 0x0E90]\n"
+        "\n[ITEMDEF 0x0E97]\n"
         "DEFNAME=SYNTHETIC_ONTICK_MUTATOR\n"
         "NAME=synthetic OnTick mutator\n"
         "TYPE=T_EQ_SCRIPT\n"
@@ -1096,7 +1096,7 @@ def ontick_content_mutation_definitions() -> str:
         "ON=@UnEquip\n"
         "SERV.B SPHERE_ONTICK_MUTATOR_UNEQUIP\n"
         "RETURN 1\n"
-        "\n[ITEMDEF 0x0E91]\n"
+        "\n[ITEMDEF 0x0E98]\n"
         "DEFNAME=SYNTHETIC_ONTICK_SIBLING\n"
         "NAME=synthetic OnTick sibling\n"
         "TYPE=T_EQ_SCRIPT\n"
@@ -1104,7 +1104,7 @@ def ontick_content_mutation_definitions() -> str:
         "ON=@UnEquip\n"
         "SERV.B SPHERE_ONTICK_SIBLING_UNEQUIP\n"
         "RETURN 1\n"
-        "\n[ITEMDEF 0x0E92]\n"
+        "\n[ITEMDEF 0x0E99]\n"
         "DEFNAME=SYNTHETIC_ONTICK_LISTENER\n"
         "NAME=synthetic OnTick listener\n"
         "TYPE=T_EQ_SCRIPT\n"
