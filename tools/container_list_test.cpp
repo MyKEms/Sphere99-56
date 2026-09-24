@@ -14,6 +14,9 @@ class CProbeRecord : public CGObListRec
 {
 public:
 	static int sm_iDestructed;
+	int m_iMarker;
+
+	explicit CProbeRecord( int iMarker = 0 ) : m_iMarker( iMarker ) {}
 	~CProbeRecord() override { ++sm_iDestructed; }
 };
 
@@ -101,11 +104,67 @@ static bool TestReservedPointerArray()
 		"reserved pointer array does not grow while appending" );
 }
 
+static bool TestReserveReinitializesSlots()
+{
+	CProbeRecord first( 1 );
+	CProbeRecord second( 2 );
+	CProbeRecord replacement( 3 );
+	CGRefArray<CProbeRecord> records;
+	records.Reserve( 4 );
+	records.Add( &first );
+	records.Add( &second );
+	records.SetCount( 1 );
+	records.SetCount( 2 );
+	if ( !Expect( records.GetAt( 1 ) == NULL,
+		"growing a reserved array clears a previously removed slot" ))
+		return false;
+	records.SetAt( 1, &replacement );
+	records.SetCount( 1 );
+	records.SetCount( 2 );
+	return Expect( records.GetAt( 1 ) == NULL,
+		"reusing a reserved slot after another shrink clears it" );
+}
+
+static bool TestOwnedArrayRemoveAt()
+{
+	const int iDestructedBefore = CProbeRecord::sm_iDestructed;
+	bool fPassed = false;
+	CProbeRecord* pThird = NULL;
+	{
+		CGObArray<CProbeRecord> records;
+		records.Add( new CProbeRecord( 1 ));
+		records.Add( new CProbeRecord( 2 ));
+		pThird = new CProbeRecord( 3 );
+		records.Add( pThird );
+
+		records.DeleteAt( 0 );
+		const bool fRemovedOnlyFirst =
+			CProbeRecord::sm_iDestructed == iDestructedBefore + 1;
+		const bool fContentsMoved = records.GetCount() == 2 &&
+			records.GetAt( 0 ) != NULL && records.GetAt( 0 )->m_iMarker == 2 &&
+			records.GetAt( 1 ) == pThird;
+		// This member read is intentional: the old tail-destructor path leaves a
+		// dangling third pointer in the live range, and ASan must report it.
+		const bool fTailIsLive = fContentsMoved && pThird->m_iMarker == 3;
+		fPassed = Expect( fRemovedOnlyFirst && fContentsMoved && fTailIsLive,
+			"DeleteAt removes only the selected owned element" );
+		if ( !fPassed && records.GetCount() > 1 && records.GetAt( 1 ) == pThird )
+			// Keep the failing-first run from attempting to delete the known stale
+			// pointer a second time when ASan is not enabled.
+			records.ElementAt( 1 ) = NULL;
+	}
+	if ( fPassed )
+		fPassed = Expect( CProbeRecord::sm_iDestructed == iDestructedBefore + 3,
+			"DeleteAt and array teardown destroy each owned element once" );
+	return fPassed;
+}
+
 int main()
 {
 	if ( !TestInsertAfterFailure() || !TestDeleteAllBounded() ||
-		!TestReservedPointerArray() )
+		!TestReservedPointerArray() || !TestReserveReinitializesSlots() ||
+		!TestOwnedArrayRemoveAt() )
 		return 1;
-	std::printf( "container lists: retained insertion, bounded DeleteAll, and reserved array checks passed\n" );
+	std::printf( "container lists: reentrant ownership and array lifetime checks passed\n" );
 	return 0;
 }

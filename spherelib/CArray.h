@@ -350,10 +350,17 @@ public:
 			}
 			return;
 		}
+		if (nNewCount < m_nCount)
+		{
+			DestructElements(m_pData + nNewCount, m_nCount - nNewCount);
+			ConstructElements(m_pData + nNewCount, m_nCount - nNewCount);
+		}
 		if (nNewCount > m_nCount)
 		{
 			if ( nNewCount > m_nRealCount )
 				Reserve( nNewCount );
+			else
+				ConstructElements(m_pData + m_nCount, nNewCount - m_nCount);
 		}
 		m_nCount = nNewCount;
 	}
@@ -397,7 +404,7 @@ public:
 		DestructElements(&m_pData[nIndex], 1);
 		memmove(static_cast<void*>(&m_pData[nIndex]), &m_pData[nIndex + 1], sizeof(TYPE) * (m_nCount - nIndex - 1));
 		if ( nIndex + 1 < m_nCount )
-			DestructElements( &m_pData[m_nCount - 1], 1 );
+			ConstructElements( &m_pData[m_nCount - 1], 1 );
 		SetCount(m_nCount - 1);
 	}
 
