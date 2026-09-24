@@ -188,11 +188,28 @@ bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
 
 	CSphereScriptContext ScriptContext( &s );
 
-	int nAcct = 0;
+	int nSections = 0;
+	int nLoaded = 0;
+	int nRejected = 0;
 	while (s.FindNextSection())
 	{
-		Account_Load( s, fChanges );
-		nAcct++;
+		++nSections;
+		if ( Account_Load( s, fChanges ))
+			++nLoaded;
+		else
+			++nRejected;
+	}
+
+	if ( ! fChanges )
+	{
+		g_pLog->Event( LOG_GROUP_INIT, LOGL_EVENT,
+			"accounts load: format=0.99z8 sections=%d loaded=%d rejected=%d" LOG_CR,
+			nSections, nLoaded, nRejected );
+#ifndef _WIN32
+		fprintf( stderr, "[INFO] accounts load: format=0.99z8 sections=%d loaded=%d rejected=%d\n",
+			nSections, nLoaded, nRejected );
+		fflush( stderr );
+#endif
 	}
 
 	if ( ! fChanges )
@@ -649,4 +666,3 @@ HRESULT CAccountMgr::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vVal
 
 	return NO_ERROR;
 }
-

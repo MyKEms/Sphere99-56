@@ -30,7 +30,7 @@ public:
 	bool IsInParty( const CChar* pChar ) const
 	{
 		ASSERT(pChar);
-		return( m_Chars.FindObj( pChar ) >= 0 );
+		return( m_Chars.IsObjIn( pChar ) );
 	}
 	bool IsPartyMaster( const CChar* pChar ) const
 	{

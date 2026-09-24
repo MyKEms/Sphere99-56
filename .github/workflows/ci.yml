@@ -344,6 +344,9 @@ jobs:
             "$RUNNER_TEMP/sphere-asan-world-save" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2720
+          python3 tools/fixtures/test_account_files.py \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2750
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-spawn-gem" \
             --spawn-gem-probe \
@@ -788,6 +791,9 @@ jobs:
             "$RUNNER_TEMP/sphere-world-save" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2720
+          python3 tools/fixtures/test_account_files.py \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2751
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-spawn-gem" \
             --spawn-gem-probe \

@@ -281,7 +281,8 @@ int CAccount::DetachChar( CChar* pChar )
 		m_uidLastChar.InitUID();
 	}
 
-	return( m_Chars.DetachObj( pChar ));
+	const size_t i = m_Chars.DetachObj( pChar );
+	return i == m_Chars.BadIndex() ? -1 : static_cast<int>(i);
 }
 
 int CAccount::AttachChar( CChar* pChar )
@@ -291,8 +292,8 @@ int CAccount::AttachChar( CChar* pChar )
 	ASSERT(pChar);
 
 	// is it already linked ?
-	int i = m_Chars.AttachObj( pChar );
-	if ( i >= 0 )
+	const size_t i = m_Chars.AttachObj( pChar );
+	if ( i != m_Chars.BadIndex())
 	{
 		int iQty = m_Chars.GetSize();
 		if ( iQty > UO_MAX_CHARS_PER_ACCT )

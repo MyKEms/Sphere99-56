@@ -57,6 +57,49 @@ const CScriptMethod CObjBase::sm_Methods[CObjBase::M_QTY+1] =
 
 CSCRIPT_CLASS_IMP1(ObjBase,CObjBase::sm_Props,CObjBase::sm_Methods,NULL,ResourceObj);
 
+// CUIDRefArray keeps UIDs rather than owning object pointers.  These
+// CObjBase overloads live here, where the complete multiple-inheritance
+// definition is available; casting a forward-declared CObjBase to its
+// CResourceObj subobject in SphereCommon produced invalid UIDs for chars.
+size_t CUIDRefArray::FindObj(const CObjBase* pObj) const
+{
+	if ( pObj == NULL )
+		return BadIndex();
+	const CSphereUID uid = pObj->GetUID();
+	for ( size_t i = 0; i < GetCharCount(); ++i )
+	{
+		if ( GetChar(i) == uid )
+			return i;
+	}
+	return BadIndex();
+}
+
+size_t CUIDRefArray::AttachObj(const CObjBase* pObj)
+{
+	if ( pObj == NULL )
+		return BadIndex();
+	const size_t i = FindObj(pObj);
+	if ( i != BadIndex())
+		return i;
+	return AttachUID( pObj->GetUID());
+}
+
+size_t CUIDRefArray::DetachObj(const CObjBase* pObj)
+{
+	const size_t i = FindObj(pObj);
+	if ( i != BadIndex())
+		DetachObj(i);
+	return i;
+}
+
+size_t CUIDRefArray::InsertObj(const CObjBase* pObj, size_t i)
+{
+	if ( pObj == NULL )
+		return BadIndex();
+	m_uidCharArray.InsertAt(i, pObj->GetUID());
+	return i;
+}
+
 int CObjBase::sm_iCount = 0;	// UID table.
 bool CObjBase::sm_fDeleteReal = false;	// UID table.
 

@@ -219,7 +219,7 @@ onlyplayers:
 	}
 
 	CGString sStr;
-	if ( m_Bans.FindObj(pChar))
+	if ( m_Bans.IsObjIn(pChar))
 	{
 		// Only master can change this.
 		sStr.Format("%s has been banished.", (LPCTSTR) pChar->GetName());
@@ -236,7 +236,7 @@ onlyplayers:
 
 	if ( !fMember )
 	{
-		if ( m_Candidates.FindObj(pChar))
+		if ( m_Candidates.IsObjIn(pChar))
 		{
 			sStr.Format("%s is already a candidate for %s.", (LPCTSTR) pChar->GetName(), (LPCTSTR) GetName());
 			Speak(sStr);
@@ -1936,4 +1936,3 @@ void CItemStone::Use_Item( CClient* pClient )
 #endif
 
 }
-
