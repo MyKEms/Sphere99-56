@@ -37,8 +37,9 @@ int CPartyDef::DetachChar( CChar* pChar )
 {
 	// RETURN:
 	//  index of the char in the group. -1 = not in group.
+	const size_t iBadIndex = m_Chars.BadIndex();
 	const size_t i = m_Chars.DetachObj( pChar );
-	return i == m_Chars.BadIndex() ? -1 : static_cast<int>(i);
+	return i == iBadIndex ? -1 : static_cast<int>(i);
 }
 
 void CPartyDef::SetLootFlag( CChar* pChar, bool fSet )

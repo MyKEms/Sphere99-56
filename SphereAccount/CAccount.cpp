@@ -281,8 +281,9 @@ int CAccount::DetachChar( CChar* pChar )
 		m_uidLastChar.InitUID();
 	}
 
+	const size_t iBadIndex = m_Chars.BadIndex();
 	const size_t i = m_Chars.DetachObj( pChar );
-	return i == m_Chars.BadIndex() ? -1 : static_cast<int>(i);
+	return i == iBadIndex ? -1 : static_cast<int>(i);
 }
 
 int CAccount::AttachChar( CChar* pChar )
