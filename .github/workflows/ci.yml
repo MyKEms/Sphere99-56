@@ -485,6 +485,7 @@ jobs:
         run: |
           make value-range-test
           build/value-range/value_range_test
+          python3 tools/fixtures/test_resource_type_ids.py
 
   lint:
     name: Lint tools
