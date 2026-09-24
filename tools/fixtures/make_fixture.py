@@ -1212,7 +1212,7 @@ def container_shutdown_definitions() -> str:
         "\n[ITEMDEF 0x0E7D]\n"
         "DEFNAME=SYNTHETIC_SHUTDOWN_PACK\n"
         "NAME=synthetic shutdown pack\n"
-        "TYPE=T_CONTAINER\n"
+        "TYPE=CONTAINER\n"
         "TDATA2=1\n"
         "\n[ITEMDEF 0x0E8F]\n"
         "DEFNAME=SYNTHETIC_SHUTDOWN_RUNTIME_PACK\n"
@@ -1235,7 +1235,7 @@ def container_shutdown_definitions() -> str:
         "\n[ITEMDEF 0x0E88]\n"
         "DEFNAME=SYNTHETIC_SHUTDOWN_DEST\n"
         "NAME=synthetic shutdown destination\n"
-        "TYPE=T_CONTAINER\n"
+        "TYPE=CONTAINER\n"
         "TDATA2=1\n"
         f"\n[TYPEDEF {SHUTDOWN_EVENT_NAME}]\n"
         "ON=@UnEquip\n"
@@ -1746,6 +1746,11 @@ ARMOR=5,5
 ON=@FixtureTypeCustom
 SYSMESSAGE SPHERE_CHARDEF_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
+; ClientDetach removes e_AllPlayers before dispatching @Logout. Keep the
+; synthetic character's logout trigger handled so unknown-keyword probes only
+; report the keywords they intentionally exercise.
+ON=@Logout
+RETURN 0
 
 [CHARDEF 0x0191]
 DEFNAME=c_WOMAN
