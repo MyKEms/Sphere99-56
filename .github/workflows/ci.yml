@@ -338,6 +338,15 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2797
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-container-shutdown" \
+            --container-shutdown-probe
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+          python3 tools/fixtures/test_container_shutdown.py \
+            "$RUNNER_TEMP/sphere-asan-container-shutdown" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2798
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-world-save" \
             --world-save-probe
           python3 tools/fixtures/test_world_save_roundtrip.py \
@@ -448,6 +457,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-timer-lifetime-item-first/server.log
             ${{ runner.temp }}/sphere-asan-timer-sibling-mutation/server.log
             ${{ runner.temp }}/sphere-asan-timer-sibling-mutation-owner-first/server.log
+            ${{ runner.temp }}/sphere-asan-container-shutdown/server.log
             ${{ runner.temp }}/sphere-asan-world-save/server.log
             ${{ runner.temp }}/sphere-asan-spawn-gem/server.log
             ${{ runner.temp }}/sphere-asan-spawn-gem/server-reload.log
@@ -795,6 +805,13 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2797
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-container-shutdown" \
+            --container-shutdown-probe
+          python3 tools/fixtures/test_container_shutdown.py \
+            "$RUNNER_TEMP/sphere-container-shutdown" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2798
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-world-save" \
             --world-save-probe
           python3 tools/fixtures/test_world_save_roundtrip.py \
@@ -898,6 +915,7 @@ jobs:
             ${{ runner.temp }}/sphere-timer-lifetime-item-first/server.log
             ${{ runner.temp }}/sphere-timer-sibling-mutation/server.log
             ${{ runner.temp }}/sphere-timer-sibling-mutation-owner-first/server.log
+            ${{ runner.temp }}/sphere-container-shutdown/server.log
             ${{ runner.temp }}/sphere-world-save/server.log
             ${{ runner.temp }}/sphere-spawn-gem/server.log
             ${{ runner.temp }}/sphere-spawn-gem/server-reload.log
