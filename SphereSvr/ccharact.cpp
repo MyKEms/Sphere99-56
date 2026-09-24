@@ -3111,12 +3111,18 @@ bool CChar::OnTick()
 	if ( iTimeDiff >= TICKS_PER_SEC )	// don't bother with < 1 sec times.
 	{
 		// decay equipped items (spells)
-		CItemPtr pItemNext;
-		CItemPtr pItem=GetHead();
-		for ( ; pItem!=NULL; pItem=pItemNext )
+		// A timer trigger can remove or reparent a sibling while its owner's
+		// callback is running.  A saved next pointer would then follow the
+		// sibling's new list (including m_ObjDelete), where the base record may
+		// no longer be a CItem.  Snapshot the source list and revisit only items
+		// that still belong to this character.
+		CGRefArray<CItem> aItems;
+		for ( CItemPtr pItem=GetHead(); pItem!=NULL; pItem=pItem->GetNext())
+			aItems.Add( pItem );
+		for ( size_t i=0; i<aItems.GetCount(); ++i )
 		{
-			pItemNext = pItem->GetNext();
-			if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete))
+			CItemPtr pItem = aItems[i];
+			if ( pItem == NULL || pItem->GetParent() != this || pItem->IsDeletePending())
 				continue;
 
 			if ( pItem->IsType(IT_EQ_MEMORY_OBJ))

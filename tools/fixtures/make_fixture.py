@@ -248,6 +248,18 @@ MUTATION_TIMER_SECONDS = 5
 MUTATION_RELATION_TIMER_SECONDS = 18
 MUTATION_KEEP_TIMER_SECONDS = 19
 MUTATION_OBSERVER_DELAY_SECONDS = 22
+
+# OnTick content traversal probe.  The mutator is inserted before the sibling
+# in the owner's live list.  Its timer callback deletes an unrelated character
+# first, then the sibling, so the stale sibling next pointer crosses from an
+# item into the world delete list on an unsafe walk.
+ONTICK_OWNER_SERIAL = 400
+ONTICK_VICTIM_SERIAL = 401
+ONTICK_MUTATOR_SERIAL = 430
+ONTICK_SIBLING_SERIAL = 431
+ONTICK_LISTENER_SERIAL = 432
+ONTICK_MUTATOR_TIMER_SECONDS = 5
+ONTICK_LISTENER_TIMER_SECONDS = 15
 SHUTDOWN_PACK_SERIAL = 232
 SHUTDOWN_CHILD_SERIAL = 233
 SHUTDOWN_INSERT_SERIAL = 234
@@ -1080,6 +1092,51 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
     )
 
 
+def ontick_content_mutation_definitions() -> str:
+    """Return an equipped timer callback that mutates its owner's list."""
+
+    victim_uid = ONTICK_VICTIM_SERIAL
+    sibling_uid = UID_F_ITEM | ONTICK_SIBLING_SERIAL
+    return (
+        "\n[ITEMDEF 0x0EA0]\n"
+        "DEFNAME=SYNTHETIC_ONTICK_MUTATOR\n"
+        "NAME=synthetic OnTick mutator\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_ONTICK_MUTATOR_TIMER\n"
+        f"FINDUID({victim_uid}).REMOVE\n"
+        f"FINDUID({sibling_uid}).REMOVE\n"
+        "SERV.B SPHERE_ONTICK_MUTATOR_RETURNED\n"
+        "RETURN 1\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_ONTICK_MUTATOR_UNEQUIP\n"
+        "RETURN 1\n"
+        "\n[ITEMDEF 0x0EA1]\n"
+        "DEFNAME=SYNTHETIC_ONTICK_SIBLING\n"
+        "NAME=synthetic OnTick sibling\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_ONTICK_SIBLING_UNEQUIP\n"
+        "RETURN 1\n"
+        "\n[ITEMDEF 0x0EA2]\n"
+        "DEFNAME=SYNTHETIC_ONTICK_LISTENER\n"
+        "NAME=synthetic OnTick listener\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        f"ON=@Equip\nTIMER={ONTICK_LISTENER_TIMER_SECONDS}\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_ONTICK_LISTENER_ALIVE\n"
+        "SERV.B SPHERE_ONTICK_UIDS_AFTER "
+        f"<ISUIDVALID {ONTICK_OWNER_SERIAL}>|"
+        f"<ISUIDVALID {ONTICK_VICTIM_SERIAL}>|"
+        f"<ISUIDVALID {UID_F_ITEM | ONTICK_MUTATOR_SERIAL}>|"
+        f"<ISUIDVALID {sibling_uid}>|"
+        f"<ISUIDVALID {UID_F_ITEM | ONTICK_LISTENER_SERIAL}>\n"
+        "RETURN 1\n"
+    )
+
 
 def container_shutdown_definitions() -> str:
     """Return an event-backed nested-container teardown reproducer."""
@@ -1162,6 +1219,7 @@ def write_scripts(
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
+    ontick_content_mutation_probe: bool = False,
     container_shutdown_probe: bool = False,
     book_pages_probe: bool = False,
     dialog_button_probe: bool = False,
@@ -1334,6 +1392,11 @@ def write_scripts(
             owner_first=timer_sibling_mutation_owner_first_probe
         )
         if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
+        else ""
+    )
+    ontick_content_mutation_sections = (
+        ontick_content_mutation_definitions()
+        if ontick_content_mutation_probe
         else ""
     )
     container_shutdown_sections = (
@@ -1665,7 +1728,7 @@ RETURN <SRC.SERIAL>
 P=128,128,0
 RECT=1,1,6143,4096
 
-""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + container_shutdown_sections + """
+""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + ontick_content_mutation_sections + container_shutdown_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -2312,6 +2375,69 @@ def write_container_shutdown_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(chars))
 
 
+def write_ontick_content_mutation_save(root: Path) -> None:
+    """Seed A before B so A's timer mutates the owner's live list."""
+
+    owner = ONTICK_OWNER_SERIAL
+    victim = ONTICK_VICTIM_SERIAL
+    mutator = UID_F_ITEM | ONTICK_MUTATOR_SERIAL
+    sibling = UID_F_ITEM | ONTICK_SIBLING_SERIAL
+    listener = UID_F_ITEM | ONTICK_LISTENER_SERIAL
+    chars = [
+        "TITLE=Sphere synthetic OnTick content mutation fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+        "[WORLDCHAR c_MAN]",
+        f"SERIAL={victim}",
+        "NPC=2",
+        "STR=100",
+        "INT=100",
+        "DEX=100",
+        "HITS=100",
+        "MAXHITS=100",
+        "MANA=100",
+        "STAM=100",
+        "P=150,140,0",
+        "[WORLDCHAR c_MAN]",
+        f"SERIAL={owner}",
+        "NPC=2",
+        "STR=100",
+        "INT=100",
+        "DEX=100",
+        "HITS=100",
+        "MAXHITS=100",
+        "MANA=100",
+        "STAM=100",
+        "P=160,140,0",
+        # ContentAddPrivate inserts at the head while loading.  This file
+        # order therefore realizes A, B, listener in the owner's list.
+        "[WORLDITEM SYNTHETIC_ONTICK_LISTENER]",
+        f"SERIAL={listener}",
+        f"CONT={owner}",
+        "LAYER=30",
+        f"TIMER={ONTICK_LISTENER_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_ONTICK_SIBLING]",
+        f"SERIAL={sibling}",
+        f"CONT={owner}",
+        "LAYER=30",
+        "[WORLDITEM SYNTHETIC_ONTICK_MUTATOR]",
+        f"SERIAL={mutator}",
+        f"CONT={owner}",
+        "LAYER=30",
+        f"TIMER={ONTICK_MUTATOR_TIMER_SECONDS}",
+        "[EOF]",
+    ]
+    write_text(root / "save" / "sphereworld.scp", "\n".join(
+        [
+            "TITLE=Sphere synthetic OnTick content mutation fixture",
+            "VERSION=0.99",
+            "SAVECOUNT=0",
+            "[EOF]",
+        ]
+    ))
+    write_text(root / "save" / "spherechars.scp", "\n".join(chars))
+
+
 def write_events_attr_save(root: Path) -> None:
     """Seed one item and one NPC with current-format metadata."""
 
@@ -2520,6 +2646,11 @@ def main() -> int:
         help="exercise owner-first delete/reparent callbacks across three sibling lists",
     )
     parser.add_argument(
+        "--ontick-content-mutation-probe",
+        action="store_true",
+        help="exercise an equipped timer deleting a sibling during owner OnTick",
+    )
+    parser.add_argument(
         "--container-shutdown-probe",
         action="store_true",
         help="exercise an event-backed nested container reparent during shutdown",
@@ -2586,6 +2717,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
         or args.container_shutdown_probe
     ):
         parser.error("spawn-gem probe cannot be combined with another world fixture mode")
@@ -2594,6 +2726,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
         or args.container_shutdown_probe
     ) and any(world_load_modes):
         parser.error("timer-lifetime probe cannot be combined with a world-load mode")
@@ -2603,6 +2736,7 @@ def main() -> int:
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
             args.container_shutdown_probe,
         )
     ) > 1:
@@ -2624,6 +2758,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
         or args.container_shutdown_probe
         or args.events_attr_probe
         or args.format_compat_probe
@@ -2637,6 +2772,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
         or args.container_shutdown_probe
         or args.book_pages_probe
         or args.spawn_gem_probe
@@ -2658,6 +2794,7 @@ def main() -> int:
             or args.timer_lifetime_item_first_probe
             or args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
+            or args.ontick_content_mutation_probe
             or args.container_shutdown_probe
         ),
     )
@@ -2685,6 +2822,7 @@ def main() -> int:
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
+        ontick_content_mutation_probe=args.ontick_content_mutation_probe,
         container_shutdown_probe=args.container_shutdown_probe,
         book_pages_probe=args.book_pages_probe,
         dialog_button_probe=args.dialog_button_probe,
@@ -2723,6 +2861,8 @@ def main() -> int:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:
         write_container_shutdown_save(root)
+    if args.ontick_content_mutation_probe:
+        write_ontick_content_mutation_save(root)
     if args.events_attr_probe:
         # A zero-minute period causes the normal world-save path to run as
         # soon as the server has loaded.  The round-trip test stops after each
