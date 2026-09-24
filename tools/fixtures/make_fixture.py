@@ -246,6 +246,18 @@ MUTATION_RELATION_TIMER_SECONDS = 18
 MUTATION_KEEP_TIMER_SECONDS = 19
 MUTATION_OBSERVER_DELAY_SECONDS = 22
 
+# OnTick content traversal probe.  The mutator is inserted before the sibling
+# in the owner's live list.  Its timer callback deletes an unrelated character
+# first, then the sibling, so the stale sibling next pointer crosses from an
+# item into the world delete list on an unsafe walk.
+ONTICK_OWNER_SERIAL = 400
+ONTICK_VICTIM_SERIAL = 401
+ONTICK_MUTATOR_SERIAL = 430
+ONTICK_SIBLING_SERIAL = 431
+ONTICK_LISTENER_SERIAL = 432
+ONTICK_MUTATOR_TIMER_SECONDS = 5
+ONTICK_LISTENER_TIMER_SECONDS = 15
+
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
 DOTTED_CONDITION_ROWS = (
@@ -1061,6 +1073,52 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
     )
 
 
+def ontick_content_mutation_definitions() -> str:
+    """Return an equipped timer callback that mutates its owner's list."""
+
+    victim_uid = ONTICK_VICTIM_SERIAL
+    sibling_uid = UID_F_ITEM | ONTICK_SIBLING_SERIAL
+    return (
+        "\n[ITEMDEF 0x0E90]\n"
+        "DEFNAME=SYNTHETIC_ONTICK_MUTATOR\n"
+        "NAME=synthetic OnTick mutator\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_ONTICK_MUTATOR_TIMER\n"
+        f"FINDUID({victim_uid}).REMOVE\n"
+        f"FINDUID({sibling_uid}).REMOVE\n"
+        "SERV.B SPHERE_ONTICK_MUTATOR_RETURNED\n"
+        "RETURN 1\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_ONTICK_MUTATOR_UNEQUIP\n"
+        "RETURN 1\n"
+        "\n[ITEMDEF 0x0E91]\n"
+        "DEFNAME=SYNTHETIC_ONTICK_SIBLING\n"
+        "NAME=synthetic OnTick sibling\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_ONTICK_SIBLING_UNEQUIP\n"
+        "RETURN 1\n"
+        "\n[ITEMDEF 0x0E92]\n"
+        "DEFNAME=SYNTHETIC_ONTICK_LISTENER\n"
+        "NAME=synthetic OnTick listener\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        f"ON=@Equip\nTIMER={ONTICK_LISTENER_TIMER_SECONDS}\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_ONTICK_LISTENER_ALIVE\n"
+        "SERV.B SPHERE_ONTICK_UIDS_AFTER "
+        f"<ISUIDVALID {ONTICK_OWNER_SERIAL}>|"
+        f"<ISUIDVALID {ONTICK_VICTIM_SERIAL}>|"
+        f"<ISUIDVALID {UID_F_ITEM | ONTICK_MUTATOR_SERIAL}>|"
+        f"<ISUIDVALID {sibling_uid}>|"
+        f"<ISUIDVALID {UID_F_ITEM | ONTICK_LISTENER_SERIAL}>\n"
+        "RETURN 1\n"
+    )
+
+
 def write_scripts(
     root: Path,
     *,
@@ -1085,6 +1143,7 @@ def write_scripts(
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
+    ontick_content_mutation_probe: bool = False,
     book_pages_probe: bool = False,
     dialog_button_probe: bool = False,
     dialog_argo_layout_probe: bool = False,
@@ -1256,6 +1315,11 @@ def write_scripts(
             owner_first=timer_sibling_mutation_owner_first_probe
         )
         if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
+        else ""
+    )
+    ontick_content_mutation_sections = (
+        ontick_content_mutation_definitions()
+        if ontick_content_mutation_probe
         else ""
     )
     timer_lifetime_owner_create = (
@@ -1572,7 +1636,7 @@ RETURN <SRC.SERIAL>
 P=128,128,0
 RECT=1,1,6143,4096
 
-""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + """
+""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + ontick_content_mutation_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -2154,6 +2218,69 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(chars))
 
 
+def write_ontick_content_mutation_save(root: Path) -> None:
+    """Seed A before B so A's timer mutates the owner's live list."""
+
+    owner = ONTICK_OWNER_SERIAL
+    victim = ONTICK_VICTIM_SERIAL
+    mutator = UID_F_ITEM | ONTICK_MUTATOR_SERIAL
+    sibling = UID_F_ITEM | ONTICK_SIBLING_SERIAL
+    listener = UID_F_ITEM | ONTICK_LISTENER_SERIAL
+    chars = [
+        "TITLE=Sphere synthetic OnTick content mutation fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+        "[WORLDCHAR c_MAN]",
+        f"SERIAL={victim}",
+        "NPC=2",
+        "STR=100",
+        "INT=100",
+        "DEX=100",
+        "HITS=100",
+        "MAXHITS=100",
+        "MANA=100",
+        "STAM=100",
+        "P=150,140,0",
+        "[WORLDCHAR c_MAN]",
+        f"SERIAL={owner}",
+        "NPC=2",
+        "STR=100",
+        "INT=100",
+        "DEX=100",
+        "HITS=100",
+        "MAXHITS=100",
+        "MANA=100",
+        "STAM=100",
+        "P=160,140,0",
+        # ContentAddPrivate inserts at the head while loading.  This file
+        # order therefore realizes A, B, listener in the owner's list.
+        "[WORLDITEM SYNTHETIC_ONTICK_LISTENER]",
+        f"SERIAL={listener}",
+        f"CONT={owner}",
+        "LAYER=30",
+        f"TIMER={ONTICK_LISTENER_TIMER_SECONDS}",
+        "[WORLDITEM SYNTHETIC_ONTICK_SIBLING]",
+        f"SERIAL={sibling}",
+        f"CONT={owner}",
+        "LAYER=30",
+        "[WORLDITEM SYNTHETIC_ONTICK_MUTATOR]",
+        f"SERIAL={mutator}",
+        f"CONT={owner}",
+        "LAYER=30",
+        f"TIMER={ONTICK_MUTATOR_TIMER_SECONDS}",
+        "[EOF]",
+    ]
+    write_text(root / "save" / "sphereworld.scp", "\n".join(
+        [
+            "TITLE=Sphere synthetic OnTick content mutation fixture",
+            "VERSION=0.99",
+            "SAVECOUNT=0",
+            "[EOF]",
+        ]
+    ))
+    write_text(root / "save" / "spherechars.scp", "\n".join(chars))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -2314,6 +2441,11 @@ def main() -> int:
         help="exercise owner-first delete/reparent callbacks across three sibling lists",
     )
     parser.add_argument(
+        "--ontick-content-mutation-probe",
+        action="store_true",
+        help="exercise an equipped timer deleting a sibling during owner OnTick",
+    )
+    parser.add_argument(
         "--book-pages-probe",
         action="store_true",
         help="load a BOOK with more than 127 pages and a full resource-ID ITEMDEF",
@@ -2370,6 +2502,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
     ):
         parser.error("spawn-gem probe cannot be combined with another world fixture mode")
     if (
@@ -2377,6 +2510,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
     ) and any(world_load_modes):
         parser.error("timer-lifetime probe cannot be combined with a world-load mode")
     if sum(
@@ -2385,6 +2519,7 @@ def main() -> int:
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
         )
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
@@ -2395,6 +2530,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
         or args.format_compat_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
@@ -2426,6 +2562,7 @@ def main() -> int:
             or args.timer_lifetime_item_first_probe
             or args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
+            or args.ontick_content_mutation_probe
         ),
     )
     write_scripts(
@@ -2452,6 +2589,7 @@ def main() -> int:
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
+        ontick_content_mutation_probe=args.ontick_content_mutation_probe,
         book_pages_probe=args.book_pages_probe,
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
@@ -2487,6 +2625,8 @@ def main() -> int:
         )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
+    if args.ontick_content_mutation_probe:
+        write_ontick_content_mutation_save(root)
     write_mul_fixture(
         root,
         extra_item_id=(0x0E8A
