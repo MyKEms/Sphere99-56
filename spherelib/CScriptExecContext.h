@@ -1329,6 +1329,54 @@ public:
 		return HRES_UNKNOWN_PROPERTY;
 	}
 
+	// The control-flow keyword a statement key starts with, as a whole word:
+	// ELSEIF is not ELSE, and a name such as FOR_X or FORMAT is not FOR.  The
+	// keyword may be followed directly by its argument, as in IF(<x>).
+	// Returns SK_QTY for any other key; iLen is the keyword length.
+	static SK_TYPE FindScriptKeyword(LPCTSTR pszKey, size_t& iLen)
+	{
+		iLen = 0;
+		for ( int i = 0; sm_szScriptKeys[i]; i++ )
+		{
+			size_t iKeyLen = strlen(sm_szScriptKeys[i]);
+			if ( _strnicmp(pszKey, sm_szScriptKeys[i], iKeyLen) )
+				continue;
+			TCHAR ch = pszKey[iKeyLen];
+			if ( isalnum((unsigned char) ch) || ch == '_' || ch == '.' )
+				continue;
+			iLen = iKeyLen;
+			return (SK_TYPE) i;
+		}
+		return SK_QTY;
+	}
+
+	// The argument of the control-flow keyword that starts the current line.
+	// The line reader splits a line at its first space or '=', so in
+	// IF(<a>==<b>) the argument starts inside the key: rebuild it there.
+	static TCHAR* GetKeywordArg(CScript& script, size_t iKeywordLen, TCHAR* pszBuf, size_t iBufSize)
+	{
+		LPCTSTR pszKey = script.GetKey();
+		TCHAR* pszArg = script.GetArgMod();
+		if ( pszKey[iKeywordLen] == '\0' )
+			return pszArg ? pszArg : const_cast<TCHAR*>("");
+		LPCTSTR pszRest = pszKey + iKeywordLen;
+		if ( pszArg && *pszArg )
+			snprintf(pszBuf, iBufSize, "%s%c%s", pszRest,
+				script.WasKeyValueAssignment() ? '=' : ' ', pszArg);
+		else
+			snprintf(pszBuf, iBufSize, "%s", pszRest);
+		return pszBuf;
+	}
+
+	// A context that builds something from a section (a dialog layout) can
+	// take a statement line before the generic dispatch.  Control-flow lines
+	// never come here.  Returns true when the line was handled.
+	virtual bool OnScriptStatement(CScript& script)
+	{
+		(void) script;
+		return false;
+	}
+
 	//
 	// ExecuteScript -- execute a block of script lines from a CScript.
 	// This is the main script execution loop with control flow.
@@ -1345,6 +1393,7 @@ public:
 	{
 		CScriptUnknownContextScope scriptContextScope(&script);
 		bool fSectionFalse = (type == TRIGRUN_SECTION_FALSE || type == TRIGRUN_SINGLE_FALSE);
+		TCHAR szArg[SCRIPT_MAX_LINE_LEN];	// a keyword argument rebuilt by GetKeywordArg
 
 		LPCTSTR pszKey;
 
@@ -1372,7 +1421,8 @@ public:
 		jump_in:
 
 			// Identify control-flow keywords.
-			SK_TYPE index = (SK_TYPE) FindTableHeadSorted(pszKey, sm_szScriptKeys, SK_QTY);
+			size_t iKeywordLen;
+			SK_TYPE index = FindScriptKeyword(pszKey, iKeywordLen);
 
 			// Handle block terminators first (always, regardless of fSectionFalse).
 			switch ( index )
@@ -1442,10 +1492,10 @@ public:
 			case SK_RETURN:
 				{
 					// RETURN [value]
-					LPCTSTR pszArg = script.GetArgRaw();
-					if ( pszArg && *pszArg )
+					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
+					if ( *pszArg )
 					{
-						int iVal = GetScriptExpression(script.GetArgMod());
+						int iVal = GetScriptExpression(pszArg);
 						m_vValRet.SetInt(iVal);
 						return (TRIGRET_TYPE) iVal;
 					}
@@ -1455,10 +1505,10 @@ public:
 			case SK_IF:
 				{
 					// IF <condition>
-					LPCTSTR pszArg = script.GetArgRaw();
+					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					int fCondition = 0;
-					if ( pszArg && *pszArg )
-						fCondition = GetScriptExpression(script.GetArgMod());
+					if ( *pszArg )
+						fCondition = GetScriptExpression(pszArg);
 					bool fBeenTrue = false;
 
 					for (;;)
@@ -1475,8 +1525,10 @@ public:
 							fCondition = 1;
 						else if ( iRet == TRIGRET_ELSEIF )
 						{
-							LPCTSTR pszElseArg = script.GetArgRaw();
-							fCondition = (pszElseArg && *pszElseArg) ? GetScriptExpression(script.GetArgMod()) : 0;
+							size_t iElseLen;
+							FindScriptKeyword(script.GetKey(), iElseLen);
+							pszArg = GetKeywordArg(script, iElseLen, szArg, sizeof(szArg));
+							fCondition = *pszArg ? GetScriptExpression(pszArg) : 0;
 						}
 					}
 				}
@@ -1487,8 +1539,12 @@ public:
 					// WHILE <condition>
 					CScriptLineContext ctxStart = script.GetContext();
 					TCHAR szCondition[SCRIPT_MAX_LINE_LEN];
-					strncpy(szCondition, script.GetArgRaw(), sizeof(szCondition)-1);
-					szCondition[sizeof(szCondition)-1] = '\0';
+					LPCTSTR pszCondition = GetKeywordArg(script, iKeywordLen, szCondition, sizeof(szCondition));
+					if ( pszCondition != szCondition )
+					{
+						strncpy(szCondition, pszCondition, sizeof(szCondition)-1);
+						szCondition[sizeof(szCondition)-1] = '\0';
+					}
 					int iLoops = 0;
 					for (;;)
 					{
@@ -1530,11 +1586,11 @@ public:
 					// FOR <max> or FOR <min> <max>
 					CScriptLineContext ctxStart = script.GetContext();
 					CScriptLineContext ctxEnd = ctxStart;
-					LPCTSTR pszArg = script.GetArgRaw();
+					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					int iMin = 1, iMax = 0;
-					if ( pszArg && *pszArg )
+					if ( *pszArg )
 					{
-						iMax = GetComplex(pszArg);
+						iMax = GetScriptExpression(pszArg);
 					}
 					int iLoops = 0;
 					for ( int i = iMin; i <= iMax; i++ )
@@ -1566,8 +1622,8 @@ public:
 			case SK_DOSWITCH:
 				{
 					// DORAND <count> / DOSWITCH <index>
-					LPCTSTR pszArg = script.GetArgRaw();
-					int iVal = (pszArg && *pszArg) ? GetComplex(pszArg) : 0;
+					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
+					int iVal = *pszArg ? GetScriptExpression(pszArg) : 0;
 					if ( index == SK_DORAND && iVal > 0 )
 						iVal = Calc_GetRandVal(iVal);
 					for (;;)
@@ -1602,6 +1658,8 @@ public:
 
 			default:
 				// Regular command line -- dispatch it.
+				if ( OnScriptStatement(script) )
+					break;
 				{
 					// Expand script expressions before dispatching the command: in
 					// the key first (FINDUID(<VAR.x>).REMOVE, F_FUNC(<ARGS>)), then

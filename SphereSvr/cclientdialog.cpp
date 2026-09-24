@@ -74,6 +74,181 @@ TRIGRET_TYPE CClient::Dialog_OnButton( CSphereUID rid, DWORD dwButtonID, CSphere
 	return exec.ExecuteScript( s, TRIGRUN_SECTION_TRUE );
 }
 
+class CDialogLayoutExec : public CSphereExpArgs
+{
+	// Runs a [DIALOG name] layout section through the script executor, so
+	// IF/ELSEIF/ELSE, WHILE, FOR, DORAND/DOSWITCH, RETURN and ARG/VAR locals
+	// work as in any other section.  Each remaining line is a gump control
+	// (resizepic, button, ...), an argo.<name>(...) call, or a command.
+public:
+	CDialogLayoutExec( CObjBase* pObj, CScriptConsole* pSrc,
+		CGStringArray& asControls, CGStringArray& asText, int& x, int& y ) :
+		CSphereExpArgs( pObj, pSrc, pObj ),
+		m_pDialogObj( pObj ), m_pLayoutSrc( pSrc ), m_asControls( asControls ), m_asText( asText ),
+		m_x( x ), m_y( y )
+	{
+	}
+
+protected:
+	virtual bool OnScriptStatement( CScript& script )
+	{
+		// The line reader split the line into key and argument: rebuild it
+		// so the layout reads the line as written.
+		TCHAR szLine[SCRIPT_MAX_LINE_LEN];
+		LPCTSTR pszKey = script.GetKey();
+		size_t iKeyLen = strlen( pszKey );
+		TCHAR* pszArg = script.GetArgMod();
+		if ( pszArg != NULL && pszArg > pszKey + iKeyLen )
+			snprintf( szLine, sizeof(szLine), "%s%c%s", pszKey,
+				script.WasKeyValueAssignment() ? '=' : ' ', pszKey + iKeyLen + 1 );
+		else
+			snprintf( szLine, sizeof(szLine), "%s", pszKey );
+
+		if ( szLine[0] == '/' )
+			return true;	// comment
+		if ( !_strnicmp( szLine, "argo.", 5 ))
+		{
+			s_ParseEscapes( szLine, 0 );
+			AddArgoLine( szLine );
+			return true;
+		}
+		if ( FindTableHead( szLine, sm_pszDialogTags ) >= 0 )
+		{
+			// A gump control written directly (legacy format).
+			s_ParseEscapes( szLine, 0 );
+			m_asControls.Add( szLine );
+			return true;
+		}
+		// Anything else is an ordinary command (property, method, function).
+		return false;
+	}
+
+private:
+	void AddArgoLine( TCHAR* pszLine )
+	{
+		// Sphere 0.99-style dialog commands: argo.<gump>(...), argo.settext,
+		// argo.setlocation, or a method or function on the dialog object.
+		TCHAR* pszSub = pszLine + 5;
+
+		// Handle argo.settext(id,text) / argo.setText(id,text)
+		if ( !_strnicmp(pszSub, "settext", 7) || !_strnicmp(pszSub, "setText", 7) )
+		{
+			LPCTSTR pArgs = pszSub + 7;
+			if ( *pArgs == '(' ) pArgs++;
+			else if ( *pArgs == ' ' ) pArgs++;
+			int iTextID = atoi(pArgs);
+			while ( *pArgs && *pArgs != ',' ) pArgs++;
+			if ( *pArgs == ',' ) pArgs++;
+			TCHAR szText[SCRIPT_MAX_LINE_LEN];
+			strncpy(szText, pArgs, sizeof(szText)-1);
+			szText[sizeof(szText)-1] = '\0';
+			int len = strlen(szText);
+			if ( len > 0 && szText[len-1] == ')' ) szText[len-1] = '\0';
+			while ( m_asText.GetSize() <= iTextID ) m_asText.Add("");
+			m_asText.SetAt(iTextID, szText);
+			return;
+		}
+
+		// Handle argo.setlocation=x,y / argo.SetLocation=x,y
+		if ( !_strnicmp(pszSub, "setlocation", 11) )
+		{
+			LPCTSTR pArgs = pszSub + 11;
+			if ( *pArgs == '=' ) pArgs++;
+			else if ( *pArgs == ' ' ) pArgs++;
+			int px = atoi(pArgs);
+			while ( *pArgs && *pArgs != ',' ) pArgs++;
+			if ( *pArgs == ',' ) pArgs++;
+			int py = atoi(pArgs);
+			m_x = px; m_y = py;
+			return;
+		}
+
+		// Check if sub-command is a gump command (argo.text, argo.button, etc.)
+		// Split "key(args)" or "key args" in place: the key and its
+		// arguments stay in this buffer, which holds a whole script line,
+		// for every use below.
+		TCHAR szGumpKey[SCRIPT_MAX_LINE_LEN];
+		strncpy(szGumpKey, pszSub, sizeof(szGumpKey)-1);
+		szGumpKey[sizeof(szGumpKey)-1] = '\0';
+		TCHAR* pParen = strchr(szGumpKey, '(');
+		LPCTSTR pGumpArgs = "";
+		if ( pParen )
+		{
+			*pParen = '\0';
+			TCHAR* pszArgs = pParen + 1;
+			size_t len2 = strlen(pszArgs);
+			if ( len2 > 0 && pszArgs[len2-1] == ')' ) pszArgs[len2-1] = '\0';
+			pGumpArgs = pszArgs;
+		}
+		else
+		{
+			// Check for space-separated args
+			TCHAR* pSpace = strchr(szGumpKey, ' ');
+			if ( pSpace )
+			{
+				*pSpace = '\0';
+				pGumpArgs = pSpace + 1;
+			}
+		}
+
+		if ( CScriptExecContext::IsGumpCommand(szGumpKey) )
+		{
+			TCHAR szGump[SCRIPT_MAX_LINE_LEN];
+			if ( *pGumpArgs )
+			{
+				snprintf(szGump, sizeof(szGump), "%s %s", szGumpKey, pGumpArgs);
+				for ( TCHAR* pc = szGump + strlen(szGumpKey) + 1; *pc; pc++ )
+					if ( *pc == ',' ) *pc = ' ';
+			}
+			else
+				strncpy(szGump, szGumpKey, sizeof(szGump)-1);
+			m_asControls.Add(szGump);
+			return;
+		}
+
+		// Try as method/property on argo object (e.g., argo.tag(width,400))
+		if ( m_pDialogObj )
+		{
+			CGVariant vSubArgs(pGumpArgs);
+			CGVariant vSubRet;
+			HRESULT hRes = m_pDialogObj->s_PropSet(szGumpKey, vSubArgs);
+			if ( hRes != NO_ERROR )
+				hRes = m_pDialogObj->s_Method(szGumpKey, vSubArgs, vSubRet, m_pLayoutSrc);
+			if ( hRes == NO_ERROR )
+				return;
+		}
+
+		// Try as script function call with argo as base (e.g., argo.f_layout_part)
+		{
+			CGVariant vFuncArgs(pGumpArgs);
+			CGVariant vFuncRet;
+			CSphereUID ridFunc = g_Cfg.ResourceCheckIDType( RES_Function, szGumpKey );
+			if ( ridFunc.IsValidRID())
+			{
+				CResourceLock sFunction( g_Cfg.ResourceGetDef(ridFunc));
+				if ( sFunction.IsFileOpen())
+				{
+					if (sFunction.GetLinkResource())
+						ScriptExecutionCoverageHit(sFunction.GetLinkResource()->GetScriptCoverageToken());
+					CSphereExpArgs funcExec( m_pDialogObj, m_pLayoutSrc, vFuncArgs );
+					funcExec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
+					return;
+				}
+			}
+		}
+
+		// Unknown argo command: skip it.
+	}
+
+private:
+	CObjBase* m_pDialogObj;
+	CScriptConsole* m_pLayoutSrc;
+	CGStringArray& m_asControls;
+	CGStringArray& m_asText;
+	int& m_x;
+	int& m_y;
+};
+
 bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 {
 	if ( pObj == NULL )
@@ -99,12 +274,11 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	int x = piArgs[0];
 	int y = piArgs[1];
 
-	// Create execution context with argo support.
-	// In Sphere 0.99-style dialogs, pObj is both the base object and argo.
-	CSphereExpArgs exec( pObj, m_pChar, pObj );
-
 	CGStringArray asControls;
 	CGStringArray asText;
+
+	// In Sphere 0.99-style dialogs, pObj is both the base object and argo.
+	CDialogLayoutExec exec( pObj, m_pChar, asControls, asText, x, y );
 
 	// Set up gump accumulator so nested function calls can add gump commands.
 	CGStringArray* pPrevControls = CScriptExecContext::sm_pGumpControls;
@@ -112,149 +286,15 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	CScriptExecContext::sm_pGumpControls = &asControls;
 	CScriptExecContext::sm_pGumpTexts = &asText;
 
-	while ( sDialog.ReadLine())
-	{
-		TCHAR* pszCmd = sDialog.GetLineBuffer();
-		GETNONWHITESPACE( pszCmd );
-
-		// Skip comments and blank lines.
-		if ( !*pszCmd || *pszCmd == '/' )
-			continue;
-
-		// Resolve <...> and <?...?> expressions.
-		exec.s_ParseEscapes( pszCmd, 0 );
-
-		// Handle argo. prefix (Sphere 0.99-style dialog commands).
-		if ( !_strnicmp(pszCmd, "argo.", 5) )
-		{
-			TCHAR* pszSub = pszCmd + 5;
-
-			// Handle argo.settext(id,text) / argo.setText(id,text)
-			if ( !_strnicmp(pszSub, "settext", 7) || !_strnicmp(pszSub, "setText", 7) )
-			{
-				LPCTSTR pArgs = pszSub + 7;
-				if ( *pArgs == '(' ) pArgs++;
-				else if ( *pArgs == ' ' ) pArgs++;
-				int iTextID = atoi(pArgs);
-				while ( *pArgs && *pArgs != ',' ) pArgs++;
-				if ( *pArgs == ',' ) pArgs++;
-				TCHAR szText[SCRIPT_MAX_LINE_LEN];
-				strncpy(szText, pArgs, sizeof(szText)-1);
-				szText[sizeof(szText)-1] = '\0';
-				int len = strlen(szText);
-				if ( len > 0 && szText[len-1] == ')' ) szText[len-1] = '\0';
-				while ( asText.GetSize() <= iTextID ) asText.Add("");
-				asText.SetAt(iTextID, szText);
-				continue;
-			}
-
-			// Handle argo.setlocation=x,y / argo.SetLocation=x,y
-			if ( !_strnicmp(pszSub, "setlocation", 11) )
-			{
-				LPCTSTR pArgs = pszSub + 11;
-				if ( *pArgs == '=' ) pArgs++;
-				else if ( *pArgs == ' ' ) pArgs++;
-				int px = atoi(pArgs);
-				while ( *pArgs && *pArgs != ',' ) pArgs++;
-				if ( *pArgs == ',' ) pArgs++;
-				int py = atoi(pArgs);
-				x = px; y = py;
-				continue;
-			}
-
-			// Check if sub-command is a gump command (argo.text, argo.button, etc.)
-			// Split "key(args)" or "key args" in place: the key and its
-			// arguments stay in this buffer, which holds a whole script line,
-			// for every use below.
-			TCHAR szGumpKey[SCRIPT_MAX_LINE_LEN];
-			strncpy(szGumpKey, pszSub, sizeof(szGumpKey)-1);
-			szGumpKey[sizeof(szGumpKey)-1] = '\0';
-			TCHAR* pParen = strchr(szGumpKey, '(');
-			LPCTSTR pGumpArgs = "";
-			if ( pParen )
-			{
-				*pParen = '\0';
-				TCHAR* pszArgs = pParen + 1;
-				size_t len2 = strlen(pszArgs);
-				if ( len2 > 0 && pszArgs[len2-1] == ')' ) pszArgs[len2-1] = '\0';
-				pGumpArgs = pszArgs;
-			}
-			else
-			{
-				// Check for space-separated args
-				TCHAR* pSpace = strchr(szGumpKey, ' ');
-				if ( pSpace )
-				{
-					*pSpace = '\0';
-					pGumpArgs = pSpace + 1;
-				}
-			}
-
-			if ( CScriptExecContext::IsGumpCommand(szGumpKey) )
-			{
-				TCHAR szGump[SCRIPT_MAX_LINE_LEN];
-				if ( *pGumpArgs )
-				{
-					snprintf(szGump, sizeof(szGump), "%s %s", szGumpKey, pGumpArgs);
-					for ( TCHAR* pc = szGump + strlen(szGumpKey) + 1; *pc; pc++ )
-						if ( *pc == ',' ) *pc = ' ';
-				}
-				else
-					strncpy(szGump, szGumpKey, sizeof(szGump)-1);
-				asControls.Add(szGump);
-				continue;
-			}
-
-			// Try as method/property on argo object (e.g., argo.tag(sirka,400))
-			if ( pObj )
-			{
-				CGVariant vSubArgs(pGumpArgs);
-				CGVariant vSubRet;
-				HRESULT hRes = pObj->s_PropSet(szGumpKey, vSubArgs);
-				if ( hRes != NO_ERROR )
-					hRes = pObj->s_Method(szGumpKey, vSubArgs, vSubRet, m_pChar);
-				if ( hRes == NO_ERROR )
-					continue;
-			}
-
-			// Try as script function call with argo as base (e.g., argo.dialog_prvni)
-			{
-				CGVariant vFuncArgs(pGumpArgs);
-				CGVariant vFuncRet;
-				CSphereUID ridFunc = g_Cfg.ResourceCheckIDType( RES_Function, szGumpKey );
-				if ( ridFunc.IsValidRID())
-				{
-					CResourceLock sFunction( g_Cfg.ResourceGetDef(ridFunc));
-					if ( sFunction.IsFileOpen())
-					{
-						if (sFunction.GetLinkResource())
-							ScriptExecutionCoverageHit(sFunction.GetLinkResource()->GetScriptCoverageToken());
-						CSphereExpArgs funcExec( pObj, m_pChar, vFuncArgs );
-						funcExec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
-						continue;
-					}
-				}
-			}
-
-			// Unknown argo command — skip
-			continue;
-		}
-
-		// Check if it's a direct gump command (legacy format without argo. prefix).
-		int iCmd = FindTableHead( pszCmd, sm_pszDialogTags );
-		if ( iCmd >= 0 )
-		{
-			asControls.Add( pszCmd );
-			continue;
-		}
-
-		// Try as a script command (IF/WHILE/property set/method/function call).
-		exec.ExecuteCommand( pszCmd );
-	}
+	TRIGRET_TYPE iRet = exec.ExecuteScript( sDialog, TRIGRUN_SECTION_TRUE );
 
 	// Restore gump accumulator.
 	CScriptExecContext::sm_pGumpControls = pPrevControls;
 	CScriptExecContext::sm_pGumpTexts = pPrevTexts;
+
+	// RETURN 1 in the layout keeps the dialog closed.
+	if ( iRet == TRIGRET_RET_TRUE )
+		return true;
 
 	// Now get the RES_DIALOG_TEXT for pre-defined text entries.
 	CResourceLock sText( g_Cfg.ResourceGetDef( CSphereUID( RES_Dialog, rid.GetResIndex(), RES_DIALOG_TEXT )));
