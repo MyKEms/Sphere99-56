@@ -30,58 +30,10 @@ CResourceTriggered::CResourceTriggered(CSphereUID rid)
 {
 }
 
-// CUIDRefArray
-size_t CUIDRefArray::FindObj(const CObjBase* pChar) const
-{
-	if (!pChar)
-		return m_uidCharArray.BadIndex();
-
-	CSphereUID uid = ((const CResourceObj*)pChar)->GetUIDIndex();
-	for (size_t i = 0; i < m_uidCharArray.GetCount(); i++)
-	{
-		if (m_uidCharArray[i] == uid)
-			return i;
-	}
-	return m_uidCharArray.BadIndex();
-}
-
-size_t CUIDRefArray::AttachObj(const CObjBase* pChar)
-{
-	if (!pChar)
-		return m_uidCharArray.BadIndex();
-
-	size_t i = FindObj(pChar);
-	if (i != m_uidCharArray.BadIndex())
-		return i;
-
-	CSphereUID uid = ((const CResourceObj*)pChar)->GetUIDIndex();
-	return m_uidCharArray.Add(uid);
-}
-
-size_t CUIDRefArray::DetachObj(const CObjBase* pChar)
-{
-	size_t i = FindObj(pChar);
-	if (i != m_uidCharArray.BadIndex())
-	{
-		m_uidCharArray.RemoveAt(i);
-	}
-	return i;
-}
-
 void CUIDRefArray::DetachObj(size_t i)
 {
 	if (m_uidCharArray.IsValidIndex(i))
 		m_uidCharArray.RemoveAt(i);
-}
-
-size_t CUIDRefArray::InsertObj(const CObjBase* pChar, size_t i)
-{
-	if (!pChar)
-		return m_uidCharArray.BadIndex();
-
-	CSphereUID uid = ((const CResourceObj*)pChar)->GetUIDIndex();
-	m_uidCharArray.InsertAt(i, uid);
-	return i;
 }
 
 // CCryptBase

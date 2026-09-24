@@ -414,7 +414,7 @@ bool CChatClient::IgnoreList_Is( CClient* pClient ) const
 		return false;
 	CAccountPtr pAccount = pClient->GetAccount();
 	ASSERT(pAccount);
-	return( m_IgnoreList.FindObj( pAccount ) >= 0 );
+	return( m_IgnoreList.IsObjIn( pAccount ) );
 }
 
 int CChatClient::IgnoreList_FindIndex( LPCTSTR pszChatName ) const
@@ -426,7 +426,8 @@ int CChatClient::IgnoreList_FindIndex( LPCTSTR pszChatName ) const
 	if ( pAccount == NULL )
 		return -1;
 
-	return m_IgnoreList.FindObj(pAccount);
+	const size_t i = m_IgnoreList.FindObj(pAccount);
+	return i == m_IgnoreList.BadIndex() ? -1 : static_cast<int>(i);
 }
 
 void CChatClient::IgnoreList_Add( LPCTSTR pszChatName )
@@ -439,8 +440,8 @@ void CChatClient::IgnoreList_Add( LPCTSTR pszChatName )
 		Chat_SendMsg( CHATMSG_NoPlayer, pszChatName );
 		return;
 	}
-	int i = m_IgnoreList.AttachObj(pAccount);
-	if ( i < 0 )
+	const size_t i = m_IgnoreList.AttachObj(pAccount);
+	if ( i == m_IgnoreList.BadIndex())
 	{
 		Chat_SendMsg( CHATMSG_AlreadyIgnoringPlayer, pszChatName );
 	}
@@ -912,7 +913,7 @@ bool CChatChannel::Voice_Has( const CClient* pClient ) const
 		return false;
 	CAccountPtr pAccount = pClient->GetAccount();
 	ASSERT(pAccount);
-	return( m_NoVoices.FindObj( pAccount ) >= 0 );
+	return( m_NoVoices.IsObjIn( pAccount ) );
 }
 
 void CChatChannel::Voice_Set( CClient* pClient, bool fFlag )
@@ -994,7 +995,7 @@ bool CChatChannel::Moderator_Is( const CClient* pClient) const
 		return false;
 	CAccountPtr pAccount = pClient->GetAccount();
 	ASSERT(pAccount);
-	return( m_Moderators.FindObj( pAccount ) >= 0 );
+	return( m_Moderators.IsObjIn( pAccount ) );
 }
 
 void CChatChannel::Moderator_Set(CClient* pClient, bool fFlag)

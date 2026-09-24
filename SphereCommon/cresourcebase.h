@@ -388,7 +388,11 @@ public:
 
 	bool IsObjIn(const CObjBase* pChar) const
 	{
-		return (FindObj(pChar) != m_uidCharArray.BadIndex());
+		return (FindObj(pChar) != BadIndex());
+	}
+	bool IsObjIn(const CResourceObj* pObj) const
+	{
+		return (FindObj(pObj) != BadIndex());
 	}
 
 	bool IsValidIndex(size_t i) const
@@ -397,7 +401,10 @@ public:
 	}
 	inline size_t BadIndex() const
 	{
-		return m_uidCharArray.BadIndex();
+		// CGTypedArray uses zero as its invalid-index sentinel, which is also
+		// the first valid element in this reference list.  Keep the public
+		// index API unambiguous by using the current element count instead.
+		return m_uidCharArray.GetCount();
 	}
 
 private:
