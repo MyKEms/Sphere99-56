@@ -145,11 +145,22 @@ public:
 		return pRec;
 	}
 	// pPrev = NULL = first
-	virtual void InsertAfter(CGObListRec* pNewRec, CGObListRec* pPrev = NULL)
+	// Return false when a removal hook retains the record or the insertion is invalid.
+	virtual bool InsertAfter(CGObListRec* pNewRec, CGObListRec* pPrev = NULL)
 	{
-		if (pNewRec == NULL) return;
+		if (pNewRec == NULL) return false;
 		pNewRec->RemoveSelf();
-		if (pPrev == pNewRec) return;
+		// A removal hook can reparent the record while RemoveSelf() is
+		// unwinding.  Detach that transient owner before writing this list's
+		// links; otherwise the old destination keeps a pointer to a record that
+		// this insertion later queues for deletion.
+		if (pNewRec->GetParent() != NULL)
+		{
+			pNewRec->RemoveSelf();
+			if (pNewRec->GetParent() != NULL)
+				return false;
+		}
+		if (pPrev == pNewRec) return false;
 
 		pNewRec->m_pParent = this;
 
@@ -178,36 +189,22 @@ public:
 
 		pNewRec->m_pNext = pNext;
 		m_iCount++;
+		return true;
 	}
-	void InsertBefore(CGObListRec* pNewRec, CGObListRec* pNext)
+	bool InsertBefore(CGObListRec* pNewRec, CGObListRec* pNext)
 	{
 		// pPrev = NULL = last
-		InsertAfter(pNewRec, (pNext) ? (pNext->GetPrev()) : GetTail());
+		return InsertAfter(pNewRec, (pNext) ? (pNext->GetPrev()) : GetTail());
 	}
-	void InsertHead(CGObListRec* pNewRec)
+	bool InsertHead(CGObListRec* pNewRec)
 	{
-		InsertAfter(pNewRec, NULL);
+		return InsertAfter(pNewRec, NULL);
 	}
-	void InsertTail(CGObListRec* pNewRec)
+	bool InsertTail(CGObListRec* pNewRec)
 	{
-		InsertAfter(pNewRec, GetTail());
+		return InsertAfter(pNewRec, GetTail());
 	}
-	void DeleteAll()
-	{
-		for (;;)
-		{
-			CGObListRec* pRec = GetHead();
-			if (pRec == NULL) break;
-			// Run the typed removal hook while the record's derived type is
-			// still alive. Letting its base destructor detach it can make
-			// OnRemoveOb downcast an object that is already only CGObListRec.
-			pRec->RemoveSelf();
-			delete pRec;
-		}
-		m_iCount = 0;
-		m_pHead = NULL;
-		m_pTail = NULL;
-	}
+	void DeleteAll();
 	void Empty() { DeleteAll(); }
 	CGObListRec* GetHead(void) const { return(m_pHead); }
 	CGObListRec* GetTail(void) const { return(m_pTail); }
@@ -497,6 +494,27 @@ private:
 	CGRefArray<TYPE>(const CGRefArray<TYPE>& copy);
 	CGRefArray<TYPE>& operator=(const CGRefArray<TYPE>& other);
 };
+
+inline void CGObList::DeleteAll()
+{
+	for (;;)
+	{
+		CGObListRec* pRec = GetHead();
+		if (pRec == NULL)
+			break;
+
+		// Run the typed removal hook while the record's derived type is still
+		// alive. Letting its base destructor detach it can make OnRemoveOb
+		// downcast an object that is already only CGObListRec.
+		pRec->RemoveSelf();
+		if (pRec->GetParent() == NULL)
+			delete pRec;
+	}
+
+	m_iCount = 0;
+	m_pHead = NULL;
+	m_pTail = NULL;
+}
 
 //*************************************************
 // CGObArray
