@@ -11,6 +11,11 @@ text entry and ``ARGO``, and stores a TAG that the cancel handler reads back.
 ``--argo-layout`` uses ``--dialog-argo-layout-probe`` instead: the dialog is
 opened by name and laid out with ``argo.<gump>(...)`` calls, one longer than
 128 bytes.  The layout must reach the client whole, and its button must run.
+
+``--flow-layout`` uses ``--dialog-flow-layout-probe``: the layout runs
+IF/ELSEIF/ELSE, a nested IF(...), WHILE over an ARG local and DOSWITCH, so
+only the chosen controls may reach the client; a dialog opened before it
+returns 1 from its layout and must not be sent at all.
 """
 
 from __future__ import annotations
@@ -31,6 +36,9 @@ from make_fixture import (
     DIALOG_BUTTON_NUMBERED,
     DIALOG_BUTTON_SWITCH,
     DIALOG_BUTTON_TEXT_ID,
+    DIALOG_FLOW_BUTTON,
+    DIALOG_FLOW_CONTROLS,
+    DIALOG_FLOW_DECLINED_CONTROLS,
 )
 from run_suite import shutdown_failures
 
@@ -63,6 +71,7 @@ PRESSES = (
 ARGO_PRESSES = (
     (DIALOG_ARGO_BUTTON, (), (), f"argo|{DIALOG_ARGO_BUTTON}|{DIALOG_BUTTON_ACCOUNT}"),
 )
+FLOW_PRESSES = ((DIALOG_FLOW_BUTTON, (), (), f"flow|{DIALOG_FLOW_BUTTON}"),)
 
 
 def system_message(data: bytes) -> Optional[str]:
@@ -137,16 +146,30 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 raw.extend(chunk)
 
         gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
-        presses = PRESSES
-        if args.argo_layout:
-            presses = ARGO_PRESSES
-            controls = [] if gump is None else [
-                " ".join(control.split()) for control in gump_dialog_controls(gump)
-            ]
-            if controls != list(DIALOG_ARGO_CONTROLS):
-                failures.append(f"argo layout sent {controls!r}")
+
+        def controls_of(data: Optional[bytes]) -> list[str]:
+            if data is None:
+                return []
+            return [" ".join(control.split()) for control in gump_dialog_controls(data)]
+
+        if args.flow_layout:
+            if controls_of(gump) == list(DIALOG_FLOW_DECLINED_CONTROLS):
+                failures.append("a layout that returned 1 was sent")
+                gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
             else:
-                passed.append("argo layout")
+                passed.append("declined layout")
+        presses = PRESSES
+        if args.argo_layout or args.flow_layout:
+            presses, expected_controls, label = (
+                (FLOW_PRESSES, DIALOG_FLOW_CONTROLS, "flow layout")
+                if args.flow_layout
+                else (ARGO_PRESSES, DIALOG_ARGO_CONTROLS, "argo layout")
+            )
+            controls = controls_of(gump)
+            if controls != list(expected_controls):
+                failures.append(f"{label} sent {controls!r}")
+            else:
+                passed.append(label)
         for button, switches, texts, expected in presses:
             if gump is None:
                 failures.append(f"no dialog was open for button {button}")
@@ -161,7 +184,7 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 failures.append(f"button {button} ran {report!r}; expected {expected!r}")
             else:
                 passed.append(f"button {button}")
-            if button and not args.argo_layout:
+            if button and not (args.argo_layout or args.flow_layout):
                 gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
 
         # Nothing else reports: a numbered or cancel press ran one entry only.
@@ -185,6 +208,11 @@ def main() -> int:
         "--argo-layout",
         action="store_true",
         help="check the argo.<gump>(...) layout fixture (--dialog-argo-layout-probe)",
+    )
+    parser.add_argument(
+        "--flow-layout",
+        action="store_true",
+        help="check the flow-control layout fixture (--dialog-flow-layout-probe)",
     )
     args = parser.parse_args()
 
@@ -214,7 +242,12 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
 
-    total = 1 + len(ARGO_PRESSES) if args.argo_layout else len(PRESSES)
+    if args.flow_layout:
+        total = 2 + len(FLOW_PRESSES)
+    elif args.argo_layout:
+        total = 1 + len(ARGO_PRESSES)
+    else:
+        total = len(PRESSES)
     if failures:
         print(f"dialog-button probe failed: {len(passed)}/{total} checks passed", file=sys.stderr)
         for failure in failures:

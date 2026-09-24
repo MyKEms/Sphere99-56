@@ -77,6 +77,24 @@ DIALOG_ARGO_CONTROLS = (
     f"button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
     "htmlgump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
 )
+# A third dialog gates its layout with control flow on TAGs of the source
+# character: IF/ELSE picks one of two buttons, a nested IF(...) with ELSEIF
+# picks one text, a WHILE over an ARG local emits one text per row and a
+# DOSWITCH picks one picture.  Another dialog opened before it declines to
+# open with RETURN 1, so the flow dialog must be the first one sent.
+DIALOG_FLOW_LAYOUT_NAME = "d_synthetic_flow_layout"
+DIALOG_FLOW_DECLINED_NAME = "d_synthetic_flow_declined"
+DIALOG_FLOW_RANK = 1
+DIALOG_FLOW_ROWS = 3
+DIALOG_FLOW_BUTTON = 22
+DIALOG_FLOW_DECLINED_CONTROLS = ("resizepic 0 0 5054 100 100",)
+DIALOG_FLOW_CONTROLS = (
+    "resizepic 0 0 5054 240 300",
+    f"button 20 20 2151 2152 1 0 {DIALOG_FLOW_BUTTON}",
+    "text 20 40 0 1",
+    *(f"text 20 {60 + row * 20} 0 {4 + row}" for row in range(DIALOG_FLOW_ROWS)),
+    f"gumppic 200 20 {100 + DIALOG_FLOW_RANK}",
+)
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
@@ -474,10 +492,11 @@ RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
     return "\n".join(login) + "\n", sections
 
 
-def dialog_button_scripts(argo_layout: bool = False) -> tuple[str, str]:
-    """Return the login line and the sections of the dialog button probe.
+def dialog_button_scripts(argo_layout: bool = False, flow_layout: bool = False) -> tuple[str, str]:
+    """Return the login lines and the sections of the dialog button probe.
 
-    ``argo_layout`` opens the argo.<gump>(...) layout dialog at login instead.
+    ``argo_layout`` opens the argo.<gump>(...) layout dialog at login instead;
+    ``flow_layout`` opens the declining dialog and then the flow-control one.
     """
 
     marker = DIALOG_BUTTON_MARKER
@@ -519,7 +538,55 @@ argo layout text
 [DIALOG {argo_name} BUTTON]
 ON={DIALOG_ARGO_BUTTON}
 SYSMESSAGE {marker} argo|<ARGN>|<ARGO.NAME>
+
+[DIALOG {DIALOG_FLOW_DECLINED_NAME}]
+0 0
+IF (<SRC.TAG.flow_rank> == {DIALOG_FLOW_RANK})
+RETURN 1
+ENDIF
+{DIALOG_FLOW_DECLINED_CONTROLS[0]}
+
+[DIALOG {DIALOG_FLOW_LAYOUT_NAME}]
+0 0
+resizepic 0 0 5054 240 300
+IF (<SRC.TAG.flow_rank> >= 2)
+argo.button(20,20,2151,2152,1,0,21)
+ELSE
+argo.button(20,20,2151,2152,1,0,{DIALOG_FLOW_BUTTON})
+IF(<SRC.TAG.flow_rank>=={DIALOG_FLOW_RANK})&&(<SRC.TAG.flow_level> > 3)
+text 20 40 0 1
+ELSEIF (<SRC.TAG.flow_rank> == 0)
+text 20 40 0 2
+ELSE
+text 20 40 0 3
+ENDIF
+ENDIF
+ARG(flow_row,0)
+WHILE (<ARG.flow_row> < {DIALOG_FLOW_ROWS})
+argo.text(20,<eval 60+(<ARG.flow_row>*20)>,0,<eval 4+<ARG.flow_row>>)
+ARG(flow_row,#+1)
+ENDWHILE
+DOSWITCH <SRC.TAG.flow_rank>
+gumppic 200 20 100
+gumppic 200 20 101
+gumppic 200 20 102
+ENDDO
+
+[DIALOG {DIALOG_FLOW_LAYOUT_NAME} TEXT]
+flow layout text
+
+[DIALOG {DIALOG_FLOW_LAYOUT_NAME} BUTTON]
+ON={DIALOG_FLOW_BUTTON}
+SYSMESSAGE {marker} flow|<ARGN>
 """
+    if flow_layout:
+        login = (
+            f"TAG.flow_rank={DIALOG_FLOW_RANK}\n"
+            "TAG.flow_level=5\n"
+            f"DIALOG {DIALOG_FLOW_DECLINED_NAME}\n"
+            f"DIALOG {DIALOG_FLOW_LAYOUT_NAME}\n"
+        )
+        return login, sections
     return f"DIALOG {argo_name if argo_layout else name}\n", sections
 
 
@@ -926,6 +993,7 @@ def write_scripts(
     book_pages_probe: bool = False,
     dialog_button_probe: bool = False,
     dialog_argo_layout_probe: bool = False,
+    dialog_flow_layout_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
 ) -> None:
@@ -943,8 +1011,10 @@ def write_scripts(
         arg_locals_scripts() if arg_locals_probe else ("", "")
     )
     dialog_button_login, dialog_button_sections = (
-        dialog_button_scripts(argo_layout=dialog_argo_layout_probe)
-        if dialog_button_probe or dialog_argo_layout_probe
+        dialog_button_scripts(
+            argo_layout=dialog_argo_layout_probe, flow_layout=dialog_flow_layout_probe
+        )
+        if dialog_button_probe or dialog_argo_layout_probe or dialog_flow_layout_probe
         else ("", "")
     )
     unknown_keyword_probe_lines = []
@@ -2103,6 +2173,11 @@ def main() -> int:
         help="open, by name, a dialog laid out with argo.<gump>(...) calls at login",
     )
     parser.add_argument(
+        "--dialog-flow-layout-probe",
+        action="store_true",
+        help="open, by name, dialogs whose layouts use IF/WHILE/DOSWITCH/RETURN at login",
+    )
+    parser.add_argument(
         "--spawn-gem-probe",
         action="store_true",
         help="seed top-level spawn gems with an explicit zero timer",
@@ -2212,6 +2287,7 @@ def main() -> int:
         book_pages_probe=args.book_pages_probe,
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
+        dialog_flow_layout_probe=args.dialog_flow_layout_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
         spawn_gem_probe=args.spawn_gem_probe,
     )
