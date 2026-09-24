@@ -11,7 +11,17 @@ COMMON_CXXFLAGS = -std=c++14 -fpermissive -Wno-endif-labels -Wno-write-strings \
                   -I$(BASEDIR) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereCommon \
                   -I$(BASEDIR)/SphereAccount -I$(BASEDIR)/SphereSvr \
                   -Werror=return-type
-DEFAULT_CXXFLAGS = -g -m32 $(COMMON_CXXFLAGS)
+
+# GCC reports ABI-conditional constructs separately from ordinary warnings.
+# Keep that diagnostic visible in every GCC build; CI promotes only the
+# non-trivially-copyable-through-varargs wording to a failure.
+ifneq (,$(findstring clang,$(CXX)))
+GCC_CXXFLAGS =
+else
+GCC_CXXFLAGS = -Wconditionally-supported
+endif
+
+DEFAULT_CXXFLAGS = -g -m32 $(COMMON_CXXFLAGS) $(GCC_CXXFLAGS)
 DEFAULT_LDFLAGS = -m32 -lpthread
 
 CXXFLAGS ?= $(DEFAULT_CXXFLAGS)
@@ -28,7 +38,8 @@ STRICT_CXXFLAGS = $(COMMON_CXXFLAGS) \
 	-Wnon-pod-varargs -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast \
 	-Werror=shorten-64-to-32
 else
-STRICT_CXXFLAGS = $(COMMON_CXXFLAGS) -fno-permissive -Werror=int-to-pointer-cast
+STRICT_CXXFLAGS = $(COMMON_CXXFLAGS) $(GCC_CXXFLAGS) \
+	-fno-permissive -Werror=int-to-pointer-cast
 endif
 
 # Source files - excluding Windows-only files
