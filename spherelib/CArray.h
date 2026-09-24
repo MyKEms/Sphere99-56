@@ -149,6 +149,16 @@ public:
 	{
 		if (pNewRec == NULL) return;
 		pNewRec->RemoveSelf();
+		// A removal hook can reparent the record while RemoveSelf() is
+		// unwinding.  Detach that transient owner before writing this list's
+		// links; otherwise the old destination keeps a pointer to a record that
+		// this insertion later queues for deletion.
+		if (pNewRec->GetParent() != NULL)
+		{
+			pNewRec->RemoveSelf();
+			if (pNewRec->GetParent() != NULL)
+				return;
+		}
 		if (pPrev == pNewRec) return;
 
 		pNewRec->m_pParent = this;
@@ -192,22 +202,7 @@ public:
 	{
 		InsertAfter(pNewRec, GetTail());
 	}
-	void DeleteAll()
-	{
-		for (;;)
-		{
-			CGObListRec* pRec = GetHead();
-			if (pRec == NULL) break;
-			// Run the typed removal hook while the record's derived type is
-			// still alive. Letting its base destructor detach it can make
-			// OnRemoveOb downcast an object that is already only CGObListRec.
-			pRec->RemoveSelf();
-			delete pRec;
-		}
-		m_iCount = 0;
-		m_pHead = NULL;
-		m_pTail = NULL;
-	}
+	void DeleteAll();
 	void Empty() { DeleteAll(); }
 	CGObListRec* GetHead(void) const { return(m_pHead); }
 	CGObListRec* GetTail(void) const { return(m_pTail); }
@@ -497,6 +492,35 @@ private:
 	CGRefArray<TYPE>(const CGRefArray<TYPE>& copy);
 	CGRefArray<TYPE>& operator=(const CGRefArray<TYPE>& other);
 };
+
+inline void CGObList::DeleteAll()
+{
+	// Removal hooks can move the record being removed to another list.  Keep a
+	// stable snapshot and only destroy records that still belong to this list
+	// after their hook returns; otherwise the destination list retains a freed
+	// record and will dereference it during its own teardown.
+	CGRefArray<CGObListRec> aRecords;
+	for (CGObListRec* pRec = GetHead(); pRec != NULL; pRec = pRec->GetNext())
+		aRecords.Add(pRec);
+
+	for (size_t i = 0; i < aRecords.GetCount(); ++i)
+	{
+		CGObListRec* pRec = aRecords[i];
+		if (pRec == NULL || pRec->GetParent() != this)
+			continue;
+
+		// Run the typed removal hook while the record's derived type is still
+		// alive. Letting its base destructor detach it can make OnRemoveOb
+		// downcast an object that is already only CGObListRec.
+		pRec->RemoveSelf();
+		if (pRec->GetParent() == NULL)
+			delete pRec;
+	}
+
+	m_iCount = 0;
+	m_pHead = NULL;
+	m_pTail = NULL;
+}
 
 //*************************************************
 // CGObArray
