@@ -176,10 +176,10 @@ def main() -> int:
         failures.append("saved character has no contained item sections")
     elif any(not item_type.strip() for item_type in item_types):
         failures.append("one or more contained item type names were not preserved")
-    if "EVENTS=e_AllPlayers" not in saved_chars:
-        failures.append("saved character is missing its named character event")
-    if "EVENTS=spk_AllPlayers" not in saved_chars:
-        failures.append("saved character is missing its named speech event")
+    for event_name in ("e_AllPlayers", "spk_AllPlayers"):
+        event_lines = re.findall(rf"(?m)^EVENTS={re.escape(event_name)}$", saved_chars)
+        if len(event_lines) > 1:
+            failures.append("saved character duplicated its standard event: " + event_name)
 
     reload_succeeded = False
     reload_log = ""

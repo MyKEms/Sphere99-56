@@ -63,6 +63,12 @@ DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
+# Resource-reference array probe.  The login script adds the same event twice,
+# reports the resulting list, removes it by name, and saves the character so
+# the test covers both in-memory membership and serialized output.
+FINDARG_ACCOUNT = "FindArgProbe"
+FINDARG_MARKER = "SPHERE_FINDARG"
+
 # Dialog button probe.  The login trigger opens a dialog whose BUTTON section
 # holds an ON=@anybutton fallback ahead of numbered ON=<n> entries (cancel
 # included), so order in the section must not decide which entry runs.
@@ -574,6 +580,26 @@ ARG(scratch_obj,<ARGV(0)>)
 SYSMESSAGE SPHERE_ARG_LOCALS C|scratch|[<SCRATCH_1>|<scratch_2>|<SCRATCH_3>|<scratch_4>|<SCRATCH_5>|<scratch_6>]
 SYSMESSAGE SPHERE_ARG_LOCALS C|scratch_object|[<SCRATCH_OBJ.NAME>|<scratch_obj.type>]
 RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
+"""
+    return "\n".join(login) + "\n", sections
+
+
+def findarg_scripts() -> tuple[str, str]:
+    """Return a login probe for resource-reference add/remove semantics."""
+
+    login = [
+        "EVENTS=e_FindArgProbe",
+        "EVENTS=e_FindArgProbe",
+        f"SYSMESSAGE {FINDARG_MARKER} after_add|[<EVENTS>]",
+        "EVENTS=-e_FindArgProbe",
+        f"SYSMESSAGE {FINDARG_MARKER} after_remove|[<EVENTS>]",
+        "SERV.SAVE",
+        f"SYSMESSAGE {FINDARG_MARKER}_END",
+    ]
+    sections = """
+[EVENTS e_FindArgProbe]
+ON=@LogIn
+RETURN 0
 """
     return "\n".join(login) + "\n", sections
 
@@ -1242,6 +1268,7 @@ def write_scripts(
     dotted_expression_probe: bool = False,
     format_compat_probe: bool = False,
     arg_locals_probe: bool = False,
+    findarg_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
@@ -1270,6 +1297,9 @@ def write_scripts(
     )
     arg_locals_login, arg_locals_sections = (
         arg_locals_scripts() if arg_locals_probe else ("", "")
+    )
+    findarg_login, findarg_sections = (
+        findarg_scripts() if findarg_probe else ("", "")
     )
     dialog_button_login, dialog_button_sections = (
         dialog_button_scripts(
@@ -1343,6 +1373,16 @@ def write_scripts(
     )
     world_save_probe_script = (
         "SERV.SAVE\n"
+        if world_save_probe
+        else ""
+    )
+    world_save_logout_event_login = (
+        "EVENTS=e_WorldSaveProbe\n"
+        if world_save_probe
+        else ""
+    )
+    world_save_logout_event_sections = (
+        "\n[EVENTS e_WorldSaveProbe]\nON=@Logout\nSERV.SAVE\nRETURN 0\n"
         if world_save_probe
         else ""
     )
@@ -1724,7 +1764,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + world_save_login_probe_script + container_shutdown_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_logout_event_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
@@ -1808,7 +1848,7 @@ RECT=1,1,6143,4096
         else ""
     ) + """
 
-""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + ontick_content_mutation_sections + container_shutdown_sections + """
+""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + ontick_content_mutation_sections + container_shutdown_sections + findarg_sections + world_save_logout_event_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -2879,6 +2919,11 @@ def main() -> int:
         help="exercise named ARG locals, positional object roots, and LASTNEW",
     )
     parser.add_argument(
+        "--findarg-probe",
+        action="store_true",
+        help="exercise resource-reference event add, deduplication, and removal",
+    )
+    parser.add_argument(
         "--dword-hex-probe",
         action="store_true",
         help="exercise Sphere 0-prefixed hexadecimal script values",
@@ -3122,6 +3167,7 @@ def main() -> int:
         dotted_expression_probe=args.dotted_expression_probe,
         format_compat_probe=args.format_compat_probe,
         arg_locals_probe=args.arg_locals_probe,
+        findarg_probe=args.findarg_probe,
         dword_hex_probe=args.dword_hex_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
