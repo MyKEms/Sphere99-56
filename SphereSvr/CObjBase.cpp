@@ -1282,6 +1282,17 @@ void CObjBase::DeleteThis()
 		RemoveFromView();
 		// free up the UID slot.
 		g_World.FreeUID(this);
-		g_World.m_ObjDelete.InsertHead(this); // just get added to the list of stuff to delete later.
+		if ( ! g_World.m_ObjDelete.InsertHead(this) )
+		{
+			// A removal hook may have retained the object in another list. Do not
+			// leave it delete-pending with a freed UID outside the GC queue: force
+			// the final detach, then queue it through the ordinary deletion path.
+			Detach();
+			if ( ! g_World.m_ObjDelete.InsertHead(this) )
+			{
+				g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR,
+					"Unable to queue object 0%x for deletion" LOG_CR, GetUID());
+			}
+		}
 	}
 }

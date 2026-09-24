@@ -60,13 +60,13 @@ int CContainer::FixWeight()
 	return( m_totalweight );
 }
 
-void CContainer::ContentAddPrivate( CItemPtr pItem )
+bool CContainer::ContentAddPrivate( CItemPtr pItem )
 {
 	// We are adding to a CChar or a CItemContainer
 	ASSERT( pItem != NULL );
 	ASSERT( pItem->IsValidUID());	// it should be valid at this point.
 	if ( IsMyChild(pItem))
-		return;
+		return true;
 
 #if 0
 	if ( g_Log.IsLogged( LOGL_TRACE ))
@@ -75,8 +75,10 @@ void CContainer::ContentAddPrivate( CItemPtr pItem )
 	}
 #endif
 
-	CGObList::InsertHead( pItem );
+	if ( ! CGObList::InsertHead( pItem ))
+		return false;
 	OnWeightChange( pItem->GetWeight());
+	return true;
 }
 
 void CContainer::OnRemoveOb( CGObListRec* pObRec )	// Override this = called when removed from list.
@@ -431,4 +433,3 @@ HRESULT CContainer::s_MethodContainer( LPCTSTR pszKey, CGVariant& vArgs, CGVaria
 
 	return( NO_ERROR );
 }
-

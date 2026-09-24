@@ -85,6 +85,7 @@ public:
 		m_pPrev = NULL;
 	}
 	void RemoveSelf();      // remove myself from my parent list.
+	void Detach();          // unlink without running a removal hook.
 	virtual ~CGObListRec()
 	{
 		RemoveSelf();
@@ -99,22 +100,13 @@ private:
 	CGObListRec* m_pTail;  // Do we really care about tail ? (as it applies to lists anyhow)
 	int m_iCount;
 private:
-	void RemoveAtSpecial(CGObListRec* pObRec)
+	void RemoveAtNoHook(CGObListRec* pObRec)
 	{
-		// only called by pObRec->RemoveSelf()
-		OnRemoveOb(pObRec);   // call any approriate virtuals.
-	}
-protected:
-	// Override this to get called when an item is removed from this list.
-	// Never called directly. call pObRec->RemoveSelf()
-	virtual void OnRemoveOb(CGObListRec* pObRec)
-	{
-		// just remove from list. DON'T delete !
-		if (pObRec == NULL) return;
+		if (pObRec == NULL || pObRec->GetParent() != this)
+			return;
 
 		CGObListRec* pNext = pObRec->GetNext();
 		CGObListRec* pPrev = pObRec->GetPrev();
-
 		if (pNext != NULL)
 			pNext->m_pPrev = pPrev;
 		else
@@ -128,6 +120,21 @@ protected:
 		pObRec->m_pPrev = NULL;
 		pObRec->m_pParent = NULL;
 		m_iCount--;
+	}
+	void RemoveAtSpecial(CGObListRec* pObRec)
+	{
+		// only called by pObRec->RemoveSelf()
+		OnRemoveOb(pObRec);   // call any approriate virtuals.
+	}
+protected:
+	// Override this to get called when an item is removed from this list.
+	// Never called directly. call pObRec->RemoveSelf()
+	virtual void OnRemoveOb(CGObListRec* pObRec)
+	{
+		// just remove from list. DON'T delete !
+		if (pObRec == NULL) return;
+
+		RemoveAtNoHook( pObRec );
 	}
 public:
 	bool IsMyChild(const CGObListRec* pElement) const
@@ -232,9 +239,15 @@ inline void CGObListRec::RemoveSelf()       // remove myself from my parent list
 	if (pParent == NULL)
 		return;
 	pParent->RemoveAtSpecial(this);
-	// Removal hooks can move or delete this record reentrantly. The original
-	// parent must release it, but a hook may have attached it elsewhere.
-	ASSERT(GetParent() != pParent);
+	// Removal hooks can retain or move this record reentrantly. Callers that
+	// require a detached record inspect GetParent() and handle that outcome.
+}
+
+inline void CGObListRec::Detach()
+{
+	CGObList* pParent = GetParent();
+	if ( pParent != NULL )
+		pParent->RemoveAtNoHook( this );
 }
 
 template<class TYPE>
@@ -309,13 +322,28 @@ public:
 
 	bool IsValidIndex(size_t i) const { return (i < m_nCount); }
 
+	void Reserve(size_t nCapacity)
+	{
+		if ( nCapacity <= m_nRealCount )
+			return;
+
+		TYPE* pNewData = reinterpret_cast<TYPE*>(new BYTE[nCapacity * sizeof(TYPE)]);
+		if ( m_nCount )
+			memcpy( static_cast<void*>(pNewData), m_pData, sizeof(TYPE) * m_nCount );
+		ConstructElements( pNewData + m_nCount, nCapacity - m_nCount );
+		delete[] reinterpret_cast<BYTE*>(m_pData);
+		m_pData = pNewData;
+		m_nRealCount = nCapacity;
+	}
+
 	void SetCount(size_t nNewCount)
 	{
 		if (nNewCount == 0)
 		{
-			if (m_nCount > 0)
+			if (m_pData != NULL)
 			{
-				DestructElements(m_pData, m_nCount);
+				if ( m_nCount )
+					DestructElements(m_pData, m_nCount);
 				delete[] reinterpret_cast<BYTE*>(m_pData);
 				m_nCount = m_nRealCount = 0;
 				m_pData = NULL;
@@ -324,15 +352,8 @@ public:
 		}
 		if (nNewCount > m_nCount)
 		{
-			TYPE* pNewData = reinterpret_cast<TYPE*>(new BYTE[nNewCount * sizeof(TYPE)]);
-			if (m_nCount)
-			{
-				memcpy(static_cast<void*>(pNewData), m_pData, sizeof(TYPE) * m_nCount);
-				delete[] reinterpret_cast<BYTE*>(m_pData);
-			}
-			ConstructElements(pNewData + m_nCount, nNewCount - m_nCount);
-			m_pData = pNewData;
-			m_nRealCount = nNewCount;
+			if ( nNewCount > m_nRealCount )
+				Reserve( nNewCount );
 		}
 		m_nCount = nNewCount;
 	}
@@ -364,6 +385,8 @@ public:
 
 	size_t Add(ARG_TYPE newElement)
 	{
+		if ( m_nCount == m_nRealCount )
+			Reserve( m_nRealCount ? m_nRealCount * 2 : 1 );
 		SetAtGrow(GetCount(), newElement);
 		return (m_nCount - 1);
 	}
@@ -373,6 +396,8 @@ public:
 		if (!IsValidIndex(nIndex)) return;
 		DestructElements(&m_pData[nIndex], 1);
 		memmove(static_cast<void*>(&m_pData[nIndex]), &m_pData[nIndex + 1], sizeof(TYPE) * (m_nCount - nIndex - 1));
+		if ( nIndex + 1 < m_nCount )
+			DestructElements( &m_pData[m_nCount - 1], 1 );
 		SetCount(m_nCount - 1);
 	}
 
@@ -507,6 +532,8 @@ inline void CGObList::DeleteAll()
 		// alive. Letting its base destructor detach it can make OnRemoveOb
 		// downcast an object that is already only CGObListRec.
 		pRec->RemoveSelf();
+		if ( pRec->GetParent() == this )
+			RemoveAtNoHook( pRec );
 		if (pRec->GetParent() == NULL)
 			delete pRec;
 	}

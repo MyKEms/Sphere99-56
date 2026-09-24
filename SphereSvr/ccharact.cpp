@@ -269,7 +269,8 @@ bool CChar::LayerAdd( CItem* pItem, LAYER_TYPE layer )
 	pItem->RemoveSelf(); // make sure all triggers fire. T_UnEquip
 	if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete) )
 		return false;
-	CContainer::ContentAddPrivate( pItem );
+	if ( ! CContainer::ContentAddPrivate( pItem ))
+		return false;
 	pItem->SetEquipLayer( layerAct );
 
 	// update flags etc for having equipped this.
