@@ -111,6 +111,13 @@ DIALOG_FLOW_GUMPS = (
     (30, 60, DIALOG_FLOW_CONTROLS),
 )
 
+# Region weather probe.  The generated area applies weather overrides to the
+# sectors around the saved character, which reads the values back at login.
+REGION_WEATHER_ACCOUNT = "RegionWeather"
+REGION_WEATHER_MARKER = "SPHERE_REGION_WEATHER"
+REGION_WEATHER_RAIN = 37
+REGION_WEATHER_COLD = 23
+
 # Sphere accepts 0-prefixed hexadecimal values for DWORD resource properties.
 # The probe reads these values back through a CHARDEF reference so it covers
 # both property loading and the script-facing property getter.
@@ -1234,6 +1241,7 @@ def write_scripts(
     dialog_argo_layout_probe: bool = False,
     dialog_flow_layout_probe: bool = False,
     dword_hex_probe: bool = False,
+    region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
 ) -> None:
@@ -1259,6 +1267,13 @@ def write_scripts(
     )
     dword_hex_login, dword_hex_sections = (
         dword_hex_scripts() if dword_hex_probe else ("", "")
+    )
+    region_weather_login = (
+        f"SYSMESSAGE {REGION_WEATHER_MARKER} "
+        "<SRC.SECTOR.RAINCHANCE>|<SRC.SECTOR.COLDCHANCE>\n"
+        f"SYSMESSAGE {REGION_WEATHER_MARKER}_END\n"
+        if region_weather_probe
+        else ""
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1689,7 +1704,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -1735,6 +1750,16 @@ RETURN <SRC.SERIAL>
 [AREA Synthetic world]
 P=128,128,0
 RECT=1,1,6143,4096
+
+""" + (
+        f"[AREA Synthetic weather]\n"
+        "P=128,128,0\n"
+        "RECT=120,120,136,136\n"
+        f"RAINCHANCE={REGION_WEATHER_RAIN}\n"
+        f"COLDCHANCE={REGION_WEATHER_COLD}\n"
+        if region_weather_probe
+        else ""
+    ) + """
 
 """ + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + ontick_content_mutation_sections + container_shutdown_sections + """
 
@@ -2125,6 +2150,57 @@ def write_dword_hex_save(root: Path) -> None:
                 "MANA=100",
                 "STAM=100",
                 f"AGE=0{DWORD_HEX_AGE:x}",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
+def write_region_weather_save(root: Path) -> None:
+    """Seed an existing character inside the synthetic weather region."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic region weather fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {REGION_WEATHER_ACCOUNT}]",
+                "PASSWORD=region-pw",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic region weather fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={REGION_WEATHER_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
                 "P=128,128,0",
                 "[EOF]",
             ]
@@ -2665,6 +2741,11 @@ def main() -> int:
         help="exercise Sphere 0-prefixed hexadecimal script values",
     )
     parser.add_argument(
+        "--region-weather-probe",
+        action="store_true",
+        help="apply region weather keys and read them back from the character sector",
+    )
+    parser.add_argument(
         "--timer-lifetime-item-first-probe",
         action="store_true",
         help="exercise item-first timer removal with reentrant owner removal",
@@ -2834,6 +2915,18 @@ def main() -> int:
         or args.spawn_gem_duplicate_serial_probe
     ):
         parser.error("dword-hex probe writes its own world and cannot be combined")
+    if args.region_weather_probe and (
+        args.world_load_counts
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.book_pages_probe
+        or args.dword_hex_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+    ):
+        parser.error("region-weather probe writes its own world and cannot be combined")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -2884,6 +2977,7 @@ def main() -> int:
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
+        region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
     )
     if args.world_load_counts:
@@ -2907,6 +3001,8 @@ def main() -> int:
         write_book_pages_save(root)
     if args.dword_hex_probe:
         write_dword_hex_save(root)
+    if args.region_weather_probe:
+        write_region_weather_save(root)
     if args.spawn_gem_probe:
         write_spawn_gem_save(
             root,

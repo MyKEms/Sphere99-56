@@ -130,6 +130,11 @@ public:
 class CGRegion
 {
 public:
+	CGRegion()
+	{
+		m_rectUnion.SetRectEmpty();
+	}
+
 	CGRect m_rectUnion;	// The union rectangle.
 	CGTypedArray<CGRect, const CGRect&> m_Rects;
 
