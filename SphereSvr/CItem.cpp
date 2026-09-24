@@ -29,6 +29,34 @@ const CScriptMethod CItem::sm_Methods[CItem::M_QTY+1] =
 
 CSCRIPT_CLASS_IMP1(Item,CItem::sm_Props,CItem::sm_Methods,NULL,ObjBase);
 
+// 0.99 saves use both Attr_MoveAlways and ATTR_MOVEALWAYS spellings.  The
+// current table keeps the readable underscore form, so compare the names
+// case-insensitively while ignoring underscores between words.
+static int FindLegacyAttrName(LPCTSTR pszAttrName)
+{
+	if ( ! pszAttrName || ! pszAttrName[0] )
+		return -1;
+	for ( int i = 0; CItem::sm_szAttrNames[i]; i++ )
+	{
+		LPCTSTR pszInput = pszAttrName;
+		LPCTSTR pszTable = CItem::sm_szAttrNames[i];
+		for (;;)
+		{
+			while ( *pszInput == '_' )
+				pszInput++;
+			while ( *pszTable == '_' )
+				pszTable++;
+			if ( toupper(*pszInput) != toupper(*pszTable) )
+				break;
+			if ( *pszInput == '\0' )
+				return i;
+			pszInput++;
+			pszTable++;
+		}
+	}
+	return -1;
+}
+
 /////////////////////////////////////////////////////////////////
 // -CItem
 
@@ -2535,11 +2563,12 @@ HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item 
 		return NO_ERROR;
 	}
 
-	// Handle extended Attr_xxx format (e.g. Attr_MoveNever=1)
+	// Handle extended Attr_xxx format (e.g. Attr_MoveNever=1).  Legacy saves
+	// also use ATTR_MOVEALWAYS without the separator in the bit name.
 	if ( ! _strnicmp(pszKey, "Attr_", 5) )
 	{
 		LPCTSTR pszAttrName = pszKey + 5;
-		int j = FindTable( pszAttrName, sm_szAttrNames );
+		int j = FindLegacyAttrName( pszAttrName );
 		if ( j >= 0 )
 		{
 			if ( vVal.GetInt())

@@ -3,6 +3,10 @@
 
 #include "CAtom.h"
 
+#ifndef SCRIPT_MAX_LINE_LEN
+#define SCRIPT_MAX_LINE_LEN 4096
+#endif
+
 #ifndef VARTYPE
 typedef int VARTYPE;
 #endif
@@ -841,7 +845,9 @@ public:
 		if ( pszStr == NULL || *pszStr == '\0' )
 			return HRES_BAD_ARGUMENTS;
 		// Extract the tag key name
-		TCHAR szTemp[EXPRESSION_MAX_KEY_LEN];
+		// The value comes from the complete script line.  A 128-byte key-sized
+		// buffer silently truncated long unquoted legacy TAG values on load.
+		TCHAR szTemp[SCRIPT_MAX_LINE_LEN];
 		strncpy(szTemp, pszStr, sizeof(szTemp)-1);
 		szTemp[sizeof(szTemp)-1] = '\0';
 		// Split at first space or '='
@@ -885,7 +891,7 @@ public:
 		LPCTSTR pszStr = vArgs.GetPSTR();
 		if ( pszStr == NULL || *pszStr == '\0' )
 			return HRES_BAD_ARGUMENTS;
-		TCHAR szTemp[EXPRESSION_MAX_KEY_LEN];
+		TCHAR szTemp[SCRIPT_MAX_LINE_LEN];
 		strncpy(szTemp, pszStr, sizeof(szTemp)-1);
 		szTemp[sizeof(szTemp)-1] = '\0';
 		// Split at first separator
