@@ -265,6 +265,14 @@ EVENTS_ATTR_CHANGER = 1234
 EVENTS_ATTR_MASK = 0x001C
 EVENTS_ATTR_VALUES = ("e_AllPlayers", "t_fixture_events", "class_fixture")
 
+# Legacy object metadata fixture.  The value intentionally exceeds the old
+# 128-byte tag parser scratch buffer and the two items exercise both spellings
+# emitted by 0.99-era saves for named ATTR bits.
+LEGACY_METADATA_ITEM_SERIALS = (4, 5)
+LEGACY_METADATA_TAG_KEY = "long_roundtrip"
+LEGACY_METADATA_TAG_VALUE = "legacy-tag-" + ("0123456789abcdef" * 24)
+LEGACY_METADATA_ATTR_KEYS = ("Attr_MoveAlways", "ATTR_MOVEALWAYS")
+
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
 DOTTED_CONDITION_ROWS = (
@@ -2360,6 +2368,32 @@ def write_events_attr_save(root: Path) -> None:
     )
 
 
+def write_legacy_metadata_save(root: Path) -> None:
+    """Seed long unquoted TAG text and 0.99 named ATTR keys."""
+
+    sections = [
+        "TITLE=Sphere synthetic legacy metadata fixture",
+        'VERSION="0.99z8"',
+        "SAVECOUNT=0",
+    ]
+    for serial, attr_key in zip(LEGACY_METADATA_ITEM_SERIALS, LEGACY_METADATA_ATTR_KEYS):
+        sections.extend(
+            [
+                "[WORLDITEM DEFAULTITEM]",
+                f"SERIAL={serial}",
+                "P=128,128,0",
+                f"TAG.{LEGACY_METADATA_TAG_KEY}={LEGACY_METADATA_TAG_VALUE}",
+                f"{attr_key}=1",
+            ]
+        )
+    sections.append("[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "\n".join(sections))
+    write_text(
+        root / "save" / "spherechars.scp",
+        'TITLE="Sphere synthetic legacy metadata fixture"\nVERSION="0.99z8"\nSAVECOUNT=0\n[EOF]',
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -2559,6 +2593,11 @@ def main() -> int:
         action="store_true",
         help="exercise EVENTS, CHANGER, and ATTR across repeated save generations",
     )
+    parser.add_argument(
+        "--legacy-metadata-probe",
+        action="store_true",
+        help="exercise long unquoted TAG values and legacy named ATTR keys",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2617,6 +2656,22 @@ def main() -> int:
         or args.timer_sibling_mutation_owner_first_probe
     ):
         parser.error("events/attr probe cannot be combined with another fixture mode")
+
+    if args.legacy_metadata_probe and (
+        args.world_load_counts
+        or any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.container_shutdown_probe
+        or args.events_attr_probe
+        or args.book_pages_probe
+        or args.dword_hex_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+    ):
+        parser.error("legacy metadata probe cannot be combined with another fixture mode")
 
     if args.book_pages_probe and (
         args.world_load_counts
@@ -2735,6 +2790,15 @@ def main() -> int:
             encoding="ascii",
         )
         write_events_attr_save(root)
+    if args.legacy_metadata_probe:
+        ini_path = root / "sphere.ini"
+        ini_path.write_text(
+            ini_path.read_text(encoding="ascii").replace(
+                "SAVEPERIOD=1440", "SAVEPERIOD=0"
+            ),
+            encoding="ascii",
+        )
+        write_legacy_metadata_save(root)
     write_mul_fixture(
         root,
         extra_item_id=(0x0E8A

@@ -2,7 +2,9 @@
 #define _INC_CSCRIPT_H
 
 #define SCRIPT_MAX_SECTION_LEN 128
+#ifndef SCRIPT_MAX_LINE_LEN
 #define SCRIPT_MAX_LINE_LEN 4096
+#endif
 
 class CScriptMethod
 {
