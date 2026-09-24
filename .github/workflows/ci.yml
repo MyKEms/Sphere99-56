@@ -345,7 +345,7 @@ jobs:
           python3 tools/fixtures/test_ontick_content_mutation.py \
             "$RUNNER_TEMP/sphere-asan-ontick-content-mutation" \
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
-            --port 2798
+            --port 2799
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-world-save" \
             --world-save-probe
@@ -807,7 +807,7 @@ jobs:
           python3 tools/fixtures/test_ontick_content_mutation.py \
             "$RUNNER_TEMP/sphere-ontick-content-mutation" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
-            --port 2798
+            --port 2799
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-world-save" \
             --world-save-probe
