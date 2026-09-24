@@ -36,6 +36,20 @@ def collect_messages(data: bytes) -> list[str]:
     return messages
 
 
+def parse_uid_marker(messages: list[str], prefix: str) -> int | None:
+    marker = next((message for message in messages if message.startswith(prefix)), None)
+    if marker is None:
+        return None
+    raw_uid = marker[len(prefix):].strip()
+    try:
+        return int(raw_uid, 0)
+    except ValueError:
+        try:
+            return int(raw_uid, 16)
+        except ValueError:
+            return None
+
+
 def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) -> int:
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
@@ -91,11 +105,36 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                 if not initial or find_start_packet(decode_game_response(initial)) is None:
                     failures.append("probe character did not enter the world")
                 else:
-                    # Keep the listener alive while CWorld::Close tears down the
-                    # sectors; the event callback must be observable before EOF.
-                    time.sleep(1.0)
-                    process.send_signal(signal.SIGTERM)
+                    # First let the runtime timer complete the reparent and its
+                    # hook-insert. The final observer runs after that callback
+                    # returns, so these links are checked after the mutation has
+                    # settled rather than from inside @UnEquip.
                     sock.settimeout(0.2)
+                    deadline = time.monotonic() + 8.0
+                    while time.monotonic() < deadline:
+                        observed = collect_messages(bytes(data))
+                        if all(
+                            any(message.startswith(prefix) for message in observed)
+                            for prefix in (
+                                "SPHERE_SHUTDOWN_FINAL_PACK",
+                                "SPHERE_SHUTDOWN_FINAL_INSERT",
+                            )
+                        ):
+                            break
+                        try:
+                            chunk = sock.recv(65536)
+                        except socket.timeout:
+                            continue
+                        except OSError:
+                            break
+                        if not chunk:
+                            break
+                        data.extend(chunk)
+
+                    # Keep the listener alive while CWorld::Close tears down
+                    # the sectors; the shutdown event callback must be observable
+                    # before EOF as well.
+                    process.send_signal(signal.SIGTERM)
                     deadline = time.monotonic() + 15.0
                     while time.monotonic() < deadline:
                         try:
@@ -150,6 +189,46 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
     if moved_uid != DESTINATION_UID:
         failures.append(f"nested-container destination marker was {moved!r}")
 
+    runtime_events = [
+        message
+        for message in messages
+        if message.startswith("SPHERE_SHUTDOWN_RUNTIME_EVENT")
+    ]
+    if runtime_events.count("SPHERE_SHUTDOWN_RUNTIME_EVENT") != 1:
+        failures.append(
+            "runtime double-reparent marker count was "
+            f"{runtime_events.count('SPHERE_SHUTDOWN_RUNTIME_EVENT')}"
+        )
+    runtime_moved_uid = parse_uid_marker(
+        messages, "SPHERE_SHUTDOWN_RUNTIME_EVENT_MOVED"
+    )
+    if runtime_moved_uid != DESTINATION_UID:
+        failures.append(
+            "runtime double-reparent destination was "
+            f"{runtime_moved_uid!r}, expected {DESTINATION_UID:#x}"
+        )
+
+    final_pack_uid = parse_uid_marker(messages, "SPHERE_SHUTDOWN_FINAL_PACK")
+    if final_pack_uid != DESTINATION_UID:
+        failures.append(
+            "final nested-container ownership was "
+            f"{final_pack_uid!r}, expected {DESTINATION_UID:#x}"
+        )
+    final_insert_uid = parse_uid_marker(messages, "SPHERE_SHUTDOWN_FINAL_INSERT")
+    if final_insert_uid != DESTINATION_UID:
+        failures.append(
+            "final hook-insert ownership was "
+            f"{final_insert_uid!r}, expected {DESTINATION_UID:#x}"
+        )
+
+    for prefix in (
+        "SPHERE_SHUTDOWN_FINAL_PACK",
+        "SPHERE_SHUTDOWN_FINAL_INSERT",
+    ):
+        count = sum(message.startswith(prefix) for message in messages)
+        if count != 1:
+            failures.append(f"{prefix} marker occurred {count} times")
+
     log_contents = log_path.read_text(encoding="utf-8", errors="replace")
     diagnostics = [
         line for line in log_contents.splitlines() if SANITIZER_OUTPUT_RE.search(line)
@@ -161,13 +240,19 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
         failures.append(f"server exited with status {returncode} after fixture shutdown")
 
     if failures:
+        failures.append(f"observed synthetic messages: {messages!r}")
+
+    if failures:
         print("container-shutdown probe failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
     print(
         "container-shutdown probe passed: "
-        f"event_markers={event_markers!r} returncode={returncode}"
+        f"event_markers={event_markers!r} "
+        f"runtime_events={runtime_events!r} "
+        f"final_pack={final_pack_uid:#x} final_insert={final_insert_uid:#x} "
+        f"returncode={returncode}"
     )
     return 0
 

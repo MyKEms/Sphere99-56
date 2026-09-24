@@ -247,6 +247,8 @@ MUTATION_KEEP_TIMER_SECONDS = 19
 MUTATION_OBSERVER_DELAY_SECONDS = 22
 SHUTDOWN_PACK_SERIAL = 232
 SHUTDOWN_CHILD_SERIAL = 233
+SHUTDOWN_INSERT_SERIAL = 234
+SHUTDOWN_RUNTIME_PACK_SERIAL = 236
 SHUTDOWN_DEST_SERIAL = 210
 SHUTDOWN_DEST_OWNER_SERIAL = 300
 SHUTDOWN_EVENT_NAME = "t_shutdown_nested"
@@ -1071,6 +1073,8 @@ def container_shutdown_definitions() -> str:
     """Return an event-backed nested-container teardown reproducer."""
 
     destination_uid = UID_F_ITEM | SHUTDOWN_DEST_SERIAL
+    insert_uid = UID_F_ITEM | SHUTDOWN_INSERT_SERIAL
+    pack_uid = UID_F_ITEM | SHUTDOWN_RUNTIME_PACK_SERIAL
     return (
         "\n[ITEMDEF 0x0E7B]\n"
         "DEFNAME=SYNTHETIC_SHUTDOWN_TRIGGER\n"
@@ -1079,6 +1083,9 @@ def container_shutdown_definitions() -> str:
         "LAYER=30\n"
         "ON=@Timer\n"
         "SERV.B SPHERE_SHUTDOWN_TIMER\n"
+        f"FINDUID({UID_F_ITEM | SHUTDOWN_RUNTIME_PACK_SERIAL}).CONT={destination_uid}\n"
+        f"SERV.B SPHERE_SHUTDOWN_FINAL_PACK <FINDUID({pack_uid}).CONT.SERIAL>\n"
+        f"SERV.B SPHERE_SHUTDOWN_FINAL_INSERT <FINDUID({insert_uid}).CONT.SERIAL>\n"
         "CONT.REMOVE\n"
         "RETURN 1\n"
         "\n[ITEMDEF 0x0E7D]\n"
@@ -1086,9 +1093,23 @@ def container_shutdown_definitions() -> str:
         "NAME=synthetic shutdown pack\n"
         "TYPE=T_CONTAINER\n"
         "TDATA2=1\n"
+        "\n[ITEMDEF 0x0E8F]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_RUNTIME_PACK\n"
+        "NAME=synthetic shutdown runtime pack\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_SHUTDOWN_RUNTIME_EVENT\n"
+        f"FINDUID({insert_uid}).CONT={destination_uid}\n"
+        f"CONT={destination_uid}\n"
+        "SERV.B SPHERE_SHUTDOWN_RUNTIME_EVENT_MOVED <CONT.SERIAL>\n"
+        "RETURN 1\n"
         "\n[ITEMDEF 0x0E7E]\n"
         "DEFNAME=SYNTHETIC_SHUTDOWN_CHILD\n"
         "NAME=synthetic shutdown child\n"
+        "TYPE=T_NORMAL\n"
+        "\n[ITEMDEF 0x0E90]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_INSERT\n"
+        "NAME=synthetic shutdown hook insert\n"
         "TYPE=T_NORMAL\n"
         "\n[ITEMDEF 0x0E88]\n"
         "DEFNAME=SYNTHETIC_SHUTDOWN_DEST\n"
@@ -1098,6 +1119,7 @@ def container_shutdown_definitions() -> str:
         f"\n[TYPEDEF {SHUTDOWN_EVENT_NAME}]\n"
         "ON=@UnEquip\n"
         "SERV.B SPHERE_SHUTDOWN_EVENT\n"
+        f"FINDUID({insert_uid}).CONT={destination_uid}\n"
         f"CONT={destination_uid}\n"
         "SERV.B SPHERE_SHUTDOWN_EVENT_MOVED <CONT.SERIAL>\n"
         "RETURN 1\n"
@@ -2208,7 +2230,7 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
 
 
 def write_container_shutdown_save(root: Path) -> None:
-    """Seed one equipped nested container and a live destination container."""
+    """Seed nested reparent, hook-insert, and final-ownership cases."""
 
     chars = [
         "TITLE=Sphere synthetic container shutdown fixture",
@@ -2231,13 +2253,22 @@ def write_container_shutdown_save(root: Path) -> None:
         "CONT=200",
         f"EVENTS={SHUTDOWN_EVENT_NAME}",
         "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_INSERT]",
+        f"SERIAL={SHUTDOWN_INSERT_SERIAL}",
+        f"CONT={UID_F_ITEM | SHUTDOWN_PACK_SERIAL}",
+        "TIMERD=-1",
         "[WORLDITEM SYNTHETIC_SHUTDOWN_CHILD]",
         f"SERIAL={SHUTDOWN_CHILD_SERIAL}",
         f"CONT={UID_F_ITEM | SHUTDOWN_PACK_SERIAL}",
         "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_RUNTIME_PACK]",
+        f"SERIAL={SHUTDOWN_RUNTIME_PACK_SERIAL}",
+        "LAYER=30",
+        "CONT=200",
+        "TIMERD=-1",
         "[WORLDITEM SYNTHETIC_SHUTDOWN_TRIGGER]",
         "SERIAL=230",
-        "LAYER=30",
+        "LAYER=32",
         "CONT=200",
         "TIMER=1",
         "[WORLDCHAR c_MAN]",

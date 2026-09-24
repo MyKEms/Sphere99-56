@@ -145,9 +145,10 @@ public:
 		return pRec;
 	}
 	// pPrev = NULL = first
-	virtual void InsertAfter(CGObListRec* pNewRec, CGObListRec* pPrev = NULL)
+	// Return false when a removal hook retains the record or the insertion is invalid.
+	virtual bool InsertAfter(CGObListRec* pNewRec, CGObListRec* pPrev = NULL)
 	{
-		if (pNewRec == NULL) return;
+		if (pNewRec == NULL) return false;
 		pNewRec->RemoveSelf();
 		// A removal hook can reparent the record while RemoveSelf() is
 		// unwinding.  Detach that transient owner before writing this list's
@@ -157,9 +158,9 @@ public:
 		{
 			pNewRec->RemoveSelf();
 			if (pNewRec->GetParent() != NULL)
-				return;
+				return false;
 		}
-		if (pPrev == pNewRec) return;
+		if (pPrev == pNewRec) return false;
 
 		pNewRec->m_pParent = this;
 
@@ -188,19 +189,20 @@ public:
 
 		pNewRec->m_pNext = pNext;
 		m_iCount++;
+		return true;
 	}
-	void InsertBefore(CGObListRec* pNewRec, CGObListRec* pNext)
+	bool InsertBefore(CGObListRec* pNewRec, CGObListRec* pNext)
 	{
 		// pPrev = NULL = last
-		InsertAfter(pNewRec, (pNext) ? (pNext->GetPrev()) : GetTail());
+		return InsertAfter(pNewRec, (pNext) ? (pNext->GetPrev()) : GetTail());
 	}
-	void InsertHead(CGObListRec* pNewRec)
+	bool InsertHead(CGObListRec* pNewRec)
 	{
-		InsertAfter(pNewRec, NULL);
+		return InsertAfter(pNewRec, NULL);
 	}
-	void InsertTail(CGObListRec* pNewRec)
+	bool InsertTail(CGObListRec* pNewRec)
 	{
-		InsertAfter(pNewRec, GetTail());
+		return InsertAfter(pNewRec, GetTail());
 	}
 	void DeleteAll();
 	void Empty() { DeleteAll(); }
@@ -495,19 +497,11 @@ private:
 
 inline void CGObList::DeleteAll()
 {
-	// Removal hooks can move the record being removed to another list.  Keep a
-	// stable snapshot and only destroy records that still belong to this list
-	// after their hook returns; otherwise the destination list retains a freed
-	// record and will dereference it during its own teardown.
-	CGRefArray<CGObListRec> aRecords;
-	for (CGObListRec* pRec = GetHead(); pRec != NULL; pRec = pRec->GetNext())
-		aRecords.Add(pRec);
-
-	for (size_t i = 0; i < aRecords.GetCount(); ++i)
+	for (;;)
 	{
-		CGObListRec* pRec = aRecords[i];
-		if (pRec == NULL || pRec->GetParent() != this)
-			continue;
+		CGObListRec* pRec = GetHead();
+		if (pRec == NULL)
+			break;
 
 		// Run the typed removal hook while the record's derived type is still
 		// alive. Letting its base destructor detach it can make OnRemoveOb
