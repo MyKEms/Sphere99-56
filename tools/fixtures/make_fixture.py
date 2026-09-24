@@ -111,6 +111,19 @@ DIALOG_FLOW_GUMPS = (
     (30, 60, DIALOG_FLOW_CONTROLS),
 )
 
+# Sphere accepts 0-prefixed hexadecimal values for DWORD resource properties.
+# The probe reads these values back through a CHARDEF reference so it covers
+# both property loading and the script-facing property getter.
+DWORD_HEX_ACCOUNT = "DwordHexProbe"
+DWORD_HEX_MARKER = "SPHERE_DWORD_HEX"
+DWORD_HEX_HIGH_NAME = "SYNTHETIC_DWORD_HEX_HIGH"
+DWORD_HEX_LOW_NAME = "SYNTHETIC_DWORD_HEX_LOW"
+DWORD_HEX_AGE = 0xFABC
+# Resource UID of [SKILL 25]: resource flag | (RES_Skill << 25) | index.
+# RES_Skill follows the resource tag table order (SphereCommon/cresourcetag.tbl).
+RES_SKILL_TYPE = 41
+DWORD_HEX_MAGERY_UID = 0x80000000 | (RES_SKILL_TYPE << 25) | 25
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -430,7 +443,7 @@ def write_book_pages_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(header + ["[EOF]"]))
 
 
-def skill_sections() -> str:
+def skill_sections(*, dword_hex_probe: bool = False) -> str:
     sections = []
     for skill_id in range(50):
         skill_key = {
@@ -450,7 +463,11 @@ def skill_sections() -> str:
             "BONUS_DEX=0\n"
             "DELAY=1\n"
             "EFFECT=0\n"
-            "ADV_RATE=0,0,0\n"
+            + (
+                "ADVRATE=0fffffff,0,0\n"
+                if dword_hex_probe and skill_id == 25
+                else "ADVRATE=0,0,0\n"
+            )
         )
     return "\n".join(sections)
 
@@ -636,6 +653,43 @@ SYSMESSAGE {marker} flow|<ARGN>
         )
         return login, sections
     return f"DIALOG {argo_name if argo_layout else name}\n", sections
+
+
+def dword_hex_scripts() -> tuple[str, str]:
+    """Return login lines and definitions for Sphere DWORD hex parsing."""
+
+    marker = DWORD_HEX_MARKER
+    login = [
+        f"SYSMESSAGE {marker} C|high|[<FINDUID(<{DWORD_HEX_HIGH_NAME}>).ANIM>]",
+        f"SYSMESSAGE {marker} C|low|[<FINDUID(<{DWORD_HEX_LOW_NAME}>).ANIM>]",
+        "SRC.SPEECHCOLOR=0fabc",
+        f"SYSMESSAGE {marker} C|speechcolor|[<SRC.SPEECHCOLOR>]",
+        f"SYSMESSAGE {marker} C|advrate|[<FINDUID({DWORD_HEX_MAGERY_UID}).ADVRATE>]",
+        f"SYSMESSAGE {marker} C|age|[<SRC.AGE>]",
+        "NEWITEM SYNTHETIC_DWORD_HEX_ITEM",
+        "LASTNEW.ATTR(0fabc)",
+        f"SYSMESSAGE {marker} C|attr_set|[done]",
+        f"SYSMESSAGE {marker} C|attr|[<LASTNEW.ATTR>]",
+        f"SYSMESSAGE {marker} C_END",
+    ]
+    sections = "\n" + f"""[CHARDEF 0x0193]
+DEFNAME={DWORD_HEX_HIGH_NAME}
+NAME=synthetic DWORD hex high
+ID=0x0193
+ANIM=0FFC78C7F
+
+[CHARDEF 0x0194]
+DEFNAME={DWORD_HEX_LOW_NAME}
+NAME=synthetic DWORD hex low
+ID=0x0194
+ANIM=03fbc7f
+
+[ITEMDEF 0x0E7D]
+DEFNAME=SYNTHETIC_DWORD_HEX_ITEM
+NAME=synthetic DWORD hex item
+TYPE=T_NORMAL
+"""
+    return "\n".join(login) + "\n", sections
 
 
 def dotted_expression_scripts() -> tuple[str, str, str]:
@@ -1042,6 +1096,7 @@ def write_scripts(
     dialog_button_probe: bool = False,
     dialog_argo_layout_probe: bool = False,
     dialog_flow_layout_probe: bool = False,
+    dword_hex_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
 ) -> None:
@@ -1064,6 +1119,9 @@ def write_scripts(
         )
         if dialog_button_probe or dialog_argo_layout_probe or dialog_flow_layout_probe
         else ("", "")
+    )
+    dword_hex_login, dword_hex_sections = (
+        dword_hex_scripts() if dword_hex_probe else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1474,7 +1532,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -1514,14 +1572,14 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dialog_button_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
 P=128,128,0
 RECT=1,1,6143,4096
 
-""" + skill_sections() + timer_sibling_mutation_sections + """
+""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -1865,6 +1923,58 @@ def write_spawn_gem_save(root: Path, *, duplicate_serials: bool) -> None:
     )
 
 
+def write_dword_hex_save(root: Path) -> None:
+    """Seed an existing account/character whose AGE uses Sphere hexadecimal."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic DWORD hex fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {DWORD_HEX_ACCOUNT}]",
+                "PASSWORD=dword-hex-pw",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic DWORD hex fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={DWORD_HEX_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                f"AGE=0{DWORD_HEX_AGE:x}",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_timer_lifetime_save(root: Path) -> None:
     """Seed a saved NPC with an active timer item and a nested sibling tree."""
 
@@ -2191,6 +2301,11 @@ def main() -> int:
         help="exercise named ARG locals, positional object roots, and LASTNEW",
     )
     parser.add_argument(
+        "--dword-hex-probe",
+        action="store_true",
+        help="exercise Sphere 0-prefixed hexadecimal script values",
+    )
+    parser.add_argument(
         "--timer-lifetime-item-first-probe",
         action="store_true",
         help="exercise item-first timer removal with reentrant owner removal",
@@ -2292,6 +2407,17 @@ def main() -> int:
         or args.spawn_gem_duplicate_serial_probe
     ):
         parser.error("book-pages probe writes its own world and cannot be combined")
+    if args.dword_hex_probe and (
+        args.world_load_counts
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.book_pages_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+    ):
+        parser.error("dword-hex probe writes its own world and cannot be combined")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -2329,6 +2455,7 @@ def main() -> int:
         dotted_expression_probe=args.dotted_expression_probe,
         format_compat_probe=args.format_compat_probe,
         arg_locals_probe=args.arg_locals_probe,
+        dword_hex_probe=args.dword_hex_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -2358,6 +2485,8 @@ def main() -> int:
         write_timer_lifetime_save(root)
     if args.book_pages_probe:
         write_book_pages_save(root)
+    if args.dword_hex_probe:
+        write_dword_hex_save(root)
     if args.spawn_gem_probe:
         write_spawn_gem_save(
             root,

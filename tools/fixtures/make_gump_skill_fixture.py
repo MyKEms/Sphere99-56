@@ -37,10 +37,10 @@ TAG.gump_skill_clicked=1
 SYSMESSAGE {MARKER}|{BUTTON_ID}|<TAG.gump_skill_clicked>
 """
 
-# RES_Dialog is the tenth resource type (RES_UNKNOWN is zero), and the first
+# RES_Dialog is the eleventh resource type (RES_UNKNOWN is zero), and the first
 # numbered dialog occupies index zero.  Use the complete RID so this fixture
 # remains usable before named-dialog lookup is available.
-DIALOG_RID = 0x94000000
+DIALOG_RID = 0x96000000
 
 
 def main() -> int:
