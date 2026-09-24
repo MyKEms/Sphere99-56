@@ -252,6 +252,13 @@ MUTATION_TIMER_SECONDS = 5
 MUTATION_RELATION_TIMER_SECONDS = 18
 MUTATION_KEEP_TIMER_SECONDS = 19
 MUTATION_OBSERVER_DELAY_SECONDS = 22
+SHUTDOWN_PACK_SERIAL = 232
+SHUTDOWN_CHILD_SERIAL = 233
+SHUTDOWN_INSERT_SERIAL = 234
+SHUTDOWN_RUNTIME_PACK_SERIAL = 236
+SHUTDOWN_DEST_SERIAL = 210
+SHUTDOWN_DEST_OWNER_SERIAL = 300
+SHUTDOWN_EVENT_NAME = "t_shutdown_nested"
 
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
@@ -950,6 +957,7 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
         "SPHERE_MUT_CASE1_B_REMOVE_RETURNED",
         "SPHERE_MUT_CASE1_OWNER_REMOVE_RETURNED",
     )
+
     case2 = action_item(
         0x0E7F,
         "SYNTHETIC_MUTATION_A_REPARENT",
@@ -1068,6 +1076,63 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
     )
 
 
+def container_shutdown_definitions() -> str:
+    """Return an event-backed nested-container teardown reproducer."""
+
+    destination_uid = UID_F_ITEM | SHUTDOWN_DEST_SERIAL
+    insert_uid = UID_F_ITEM | SHUTDOWN_INSERT_SERIAL
+    pack_uid = UID_F_ITEM | SHUTDOWN_RUNTIME_PACK_SERIAL
+    return (
+        "\n[ITEMDEF 0x0E7B]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_TRIGGER\n"
+        "NAME=synthetic shutdown trigger\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Timer\n"
+        "SERV.B SPHERE_SHUTDOWN_TIMER\n"
+        f"FINDUID({UID_F_ITEM | SHUTDOWN_RUNTIME_PACK_SERIAL}).CONT={destination_uid}\n"
+        f"SERV.B SPHERE_SHUTDOWN_FINAL_PACK <FINDUID({pack_uid}).CONT.SERIAL>\n"
+        f"SERV.B SPHERE_SHUTDOWN_FINAL_INSERT <FINDUID({insert_uid}).CONT.SERIAL>\n"
+        "CONT.REMOVE\n"
+        "RETURN 1\n"
+        "\n[ITEMDEF 0x0E7D]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_PACK\n"
+        "NAME=synthetic shutdown pack\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        "\n[ITEMDEF 0x0E8F]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_RUNTIME_PACK\n"
+        "NAME=synthetic shutdown runtime pack\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_SHUTDOWN_RUNTIME_EVENT\n"
+        f"FINDUID({insert_uid}).CONT={destination_uid}\n"
+        f"CONT={destination_uid}\n"
+        "SERV.B SPHERE_SHUTDOWN_RUNTIME_EVENT_MOVED <CONT.SERIAL>\n"
+        "RETURN 1\n"
+        "\n[ITEMDEF 0x0E7E]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_CHILD\n"
+        "NAME=synthetic shutdown child\n"
+        "TYPE=T_NORMAL\n"
+        "\n[ITEMDEF 0x0E90]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_INSERT\n"
+        "NAME=synthetic shutdown hook insert\n"
+        "TYPE=T_NORMAL\n"
+        "\n[ITEMDEF 0x0E88]\n"
+        "DEFNAME=SYNTHETIC_SHUTDOWN_DEST\n"
+        "NAME=synthetic shutdown destination\n"
+        "TYPE=T_CONTAINER\n"
+        "TDATA2=1\n"
+        f"\n[TYPEDEF {SHUTDOWN_EVENT_NAME}]\n"
+        "ON=@UnEquip\n"
+        "SERV.B SPHERE_SHUTDOWN_EVENT\n"
+        f"FINDUID({insert_uid}).CONT={destination_uid}\n"
+        f"CONT={destination_uid}\n"
+        "SERV.B SPHERE_SHUTDOWN_EVENT_MOVED <CONT.SERIAL>\n"
+        "RETURN 1\n"
+    )
+
+
 def write_scripts(
     root: Path,
     *,
@@ -1092,6 +1157,7 @@ def write_scripts(
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
     timer_sibling_mutation_owner_first_probe: bool = False,
+    container_shutdown_probe: bool = False,
     book_pages_probe: bool = False,
     dialog_button_probe: bool = False,
     dialog_argo_layout_probe: bool = False,
@@ -1265,6 +1331,14 @@ def write_scripts(
         if timer_sibling_mutation_probe or timer_sibling_mutation_owner_first_probe
         else ""
     )
+    container_shutdown_sections = (
+        container_shutdown_definitions() if container_shutdown_probe else ""
+    )
+    container_shutdown_login = (
+        f"FINDUID({UID_F_ITEM | SHUTDOWN_PACK_SERIAL}).EVENTS={SHUTDOWN_EVENT_NAME}\n"
+        if container_shutdown_probe
+        else ""
+    )
     timer_lifetime_owner_create = (
         "ON=@Create\nITEM=SYNTHETIC_TIMER_LIFETIME\nLAYER=30\nTIMER=5\n"
         if not timer_lifetime_probe
@@ -1293,6 +1367,7 @@ def write_scripts(
             or timer_lifetime_probe
             or timer_sibling_mutation_probe
             or timer_sibling_mutation_owner_first_probe
+            or container_shutdown_probe
             or format_compat_probe
             or spawn_gem_probe
         )
@@ -1505,7 +1580,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + world_save_login_probe_script + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_login_probe_script + container_shutdown_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
@@ -1579,7 +1654,7 @@ RETURN <SRC.SERIAL>
 P=128,128,0
 RECT=1,1,6143,4096
 
-""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + """
+""" + skill_sections(dword_hex_probe=dword_hex_probe) + timer_sibling_mutation_sections + container_shutdown_sections + """
 
 [NEWBIE MAGERY]
 ITEMNEWBIE=0x0E72
@@ -2161,6 +2236,70 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
     write_text(root / "save" / "spherechars.scp", "\n".join(chars))
 
 
+def write_container_shutdown_save(root: Path) -> None:
+    """Seed nested reparent, hook-insert, and final-ownership cases."""
+
+    chars = [
+        "TITLE=Sphere synthetic container shutdown fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+        "[WORLDCHAR c_MAN]",
+        "SERIAL=200",
+        "NPC=2",
+        "STR=100",
+        "INT=100",
+        "DEX=100",
+        "HITS=100",
+        "MAXHITS=100",
+        "MANA=100",
+        "STAM=100",
+        "P=120,140,0",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_PACK]",
+        f"SERIAL={SHUTDOWN_PACK_SERIAL}",
+        "LAYER=21",
+        "CONT=200",
+        f"EVENTS={SHUTDOWN_EVENT_NAME}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_INSERT]",
+        f"SERIAL={SHUTDOWN_INSERT_SERIAL}",
+        f"CONT={UID_F_ITEM | SHUTDOWN_PACK_SERIAL}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_CHILD]",
+        f"SERIAL={SHUTDOWN_CHILD_SERIAL}",
+        f"CONT={UID_F_ITEM | SHUTDOWN_PACK_SERIAL}",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_RUNTIME_PACK]",
+        f"SERIAL={SHUTDOWN_RUNTIME_PACK_SERIAL}",
+        "LAYER=30",
+        "CONT=200",
+        "TIMERD=-1",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_TRIGGER]",
+        "SERIAL=230",
+        "LAYER=32",
+        "CONT=200",
+        "TIMER=1",
+        "[WORLDCHAR c_MAN]",
+        f"SERIAL={SHUTDOWN_DEST_OWNER_SERIAL}",
+        "NPC=2",
+        "STR=100",
+        "INT=100",
+        "DEX=100",
+        "HITS=100",
+        "MAXHITS=100",
+        "MANA=100",
+        "STAM=100",
+        "P=180,140,0",
+        "[WORLDITEM SYNTHETIC_SHUTDOWN_DEST]",
+        f"SERIAL={SHUTDOWN_DEST_SERIAL}",
+        "LAYER=21",
+        f"CONT={SHUTDOWN_DEST_OWNER_SERIAL}",
+        "TIMERD=-1",
+        "[EOF]",
+    ]
+    write_text(root / "save" / "sphereworld.scp", "TITLE=Sphere synthetic container shutdown fixture\nVERSION=0.99\nSAVECOUNT=0\n[EOF]")
+    write_text(root / "save" / "spherechars.scp", "\n".join(chars))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
@@ -2321,6 +2460,11 @@ def main() -> int:
         help="exercise owner-first delete/reparent callbacks across three sibling lists",
     )
     parser.add_argument(
+        "--container-shutdown-probe",
+        action="store_true",
+        help="exercise an event-backed nested container reparent during shutdown",
+    )
+    parser.add_argument(
         "--book-pages-probe",
         action="store_true",
         help="load a BOOK with more than 127 pages and a full resource-ID ITEMDEF",
@@ -2377,6 +2521,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.container_shutdown_probe
     ):
         parser.error("spawn-gem probe cannot be combined with another world fixture mode")
     if (
@@ -2384,6 +2529,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.container_shutdown_probe
     ) and any(world_load_modes):
         parser.error("timer-lifetime probe cannot be combined with a world-load mode")
     if sum(
@@ -2392,6 +2538,7 @@ def main() -> int:
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
+            args.container_shutdown_probe,
         )
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
@@ -2402,6 +2549,7 @@ def main() -> int:
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
+        or args.container_shutdown_probe
         or args.format_compat_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
@@ -2433,6 +2581,7 @@ def main() -> int:
             or args.timer_lifetime_item_first_probe
             or args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
+            or args.container_shutdown_probe
         ),
     )
     write_scripts(
@@ -2459,6 +2608,7 @@ def main() -> int:
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
+        container_shutdown_probe=args.container_shutdown_probe,
         book_pages_probe=args.book_pages_probe,
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
@@ -2494,15 +2644,21 @@ def main() -> int:
         )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
+    if args.container_shutdown_probe:
+        write_container_shutdown_save(root)
     write_mul_fixture(
         root,
         extra_item_id=(0x0E8A
                        if args.timer_sibling_mutation_probe
                        or args.timer_sibling_mutation_owner_first_probe
+                       or args.container_shutdown_probe
                        else 0),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         for item_id in (0x0E7D, 0x0E81, 0x0E86, 0x0E88, 0x0E89, 0x0E8A):
+            write_container_tile(root / "muls" / "tiledata.mul", item_id)
+    if args.container_shutdown_probe:
+        for item_id in (0x0E7D, 0x0E88):
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
