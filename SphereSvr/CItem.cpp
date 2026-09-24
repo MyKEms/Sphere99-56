@@ -2646,8 +2646,42 @@ HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item 
 
 	case P_MORE:
 	case P_MORE1:
-		m_itNormal.m_more1 = vVal.GetInt();
-		break;
+		{
+			LPCTSTR pszTarget = vVal.GetPSTR();
+			CGString sUnquotedTarget;
+			if ( pszTarget && pszTarget[0] == '"' )
+			{
+				int iLength = strlen(pszTarget);
+				if ( iLength >= 2 && pszTarget[iLength - 1] == '"' )
+				{
+					sUnquotedTarget = pszTarget + 1;
+					sUnquotedTarget.SetLength(iLength - 2);
+					pszTarget = sUnquotedTarget;
+				}
+			}
+			if ( IsType(IT_SPAWN_ITEM))
+			{
+				// Spawn targets are written as resource names.  Resolve the name
+				// before falling back to the legacy numeric MORE1 representation.
+				CSphereUID rid = g_Cfg.ResourceGetIDByName( RES_ItemDef, pszTarget);
+				if ( rid.IsValidRID())
+				{
+					m_itSpawnItem.m_ItemID = rid;
+					break;
+				}
+			}
+			else if ( IsType(IT_SPAWN_CHAR))
+			{
+				CSphereUID rid = g_Cfg.ResourceGetIDByName( RES_CharDef, pszTarget);
+				if ( rid.IsValidRID())
+				{
+					m_itSpawnChar.m_CharID = rid;
+					break;
+				}
+			}
+			m_itNormal.m_more1 = vVal.GetInt();
+			break;
+		}
 	case P_MORE1H:
 		m_itNormal.m_more1 = MAKEDWORD( LOWORD(m_itNormal.m_more1), vVal.GetInt());
 		break;

@@ -32,6 +32,11 @@ NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
 NAMED_MULTI_NAME = "synthetic named multi"
 SPAWN_GEM_SERIALS = tuple(range(100, 110))
 SPAWN_GEM_ITEM_ID = 0x1EA7
+SPAWN_POINT_SERIAL = UID_F_ITEM | 120
+SPAWN_POINT_ITEM_ID = 0x0E9C
+SPAWN_POINT_PRODUCT_ID = 0x0E9D
+SPAWN_POINT_PRODUCT_NAME = "SYNTHETIC_SPAWN_PRODUCT"
+SPAWN_POINT_MARKER = "SPHERE_SPAWN_POINT_CREATED"
 
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
@@ -1236,6 +1241,7 @@ def write_scripts(
     dword_hex_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
+    spawn_point_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1433,11 +1439,36 @@ def write_scripts(
         if spawn_gem_probe
         else ""
     )
+    spawn_point_itemdef = (
+        f"\n[ITEMDEF 0x{SPAWN_POINT_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_SPAWN_POINT\n"
+        "NAME=synthetic spawn point\n"
+        "TYPE=T_SPAWN_ITEM\n"
+        if spawn_point_probe
+        else ""
+    )
+    spawn_point_product_itemdef = (
+        f"\n[ITEMDEF 0x{SPAWN_POINT_PRODUCT_ID:04X}]\n"
+        f"DEFNAME={SPAWN_POINT_PRODUCT_NAME}\n"
+        "NAME=synthetic spawn product\n"
+        "TYPE=T_NORMAL\n"
+        "ON=@Create\n"
+        f"SERV.B {SPAWN_POINT_MARKER}\n"
+        if spawn_point_probe
+        else ""
+    )
+    spawn_point_login_event = (
+        f"\n[EVENTS SYNTHETIC_SPAWN_LOGIN]\n"
+        "ON=@LogIn\n"
+        f"FINDUID({SPAWN_POINT_SERIAL}).TIMER=1\n"
+        if spawn_point_probe
+        else ""
+    )
     timer_remove = "REMOVE" if timer_lifetime_item_first_probe else "CONT.REMOVE"
     unequip_remove = "CONT.REMOVE" if timer_lifetime_item_first_probe else "REMOVE"
     typedef_container_table = (
         "\n[TYPEDEFS]\nT_NORMAL 0\nT_CONTAINER 1\n"
-        + ("T_SPAWN_ITEM 69\n" if spawn_gem_probe else "")
+        + ("T_SPAWN_ITEM 69\n" if spawn_gem_probe or spawn_point_probe else "")
         if (
             typedef_container_probe
             or timer_lifetime_probe
@@ -1446,6 +1477,7 @@ def write_scripts(
             or container_shutdown_probe
             or format_compat_probe
             or spawn_gem_probe
+            or spawn_point_probe
         )
         else ""
     )
@@ -1744,7 +1776,10 @@ ITEMNEWBIE=0x0E72
 [NEWBIE resist]
 ITEMNEWBIE=0x0E73
 """ + unknown_newbie_section + named_resource_id_probe_sections + named_item_name_sections
+        + spawn_point_login_event
         + spawn_gem_itemdef
+        + spawn_point_itemdef
+        + spawn_point_product_itemdef
         + book_pages_probe_sections,
     )
 
@@ -2074,6 +2109,64 @@ def write_spawn_gem_save(root: Path, *, duplicate_serials: bool) -> None:
                 "TITLE=Sphere synthetic spawn-gem serialization fixture",
                 "VERSION=0.99",
                 "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
+def write_spawn_point_save(root: Path) -> None:
+    """Seed one timed spawn point whose target is a quoted resource name."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic spawn-point fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDITEM SYNTHETIC_SPAWN_POINT]",
+                f"SERIAL={SPAWN_POINT_SERIAL}",
+                "TIMER=60",
+                f'MORE1="{SPAWN_POINT_PRODUCT_NAME}"',
+                "MORE2=1",
+                "MOREP=1,1,0",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic spawn-point fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                "ACCOUNT=FixturePlayer",
+                "EVENTS=SYNTHETIC_SPAWN_LOGIN",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                "[ACCOUNT FixturePlayer]",
+                "PASSWORD=fixture-pw",
+                "LASTCHARUID=3",
+                "CHARUID=3",
                 "[EOF]",
             ]
         ),
@@ -2729,6 +2822,11 @@ def main() -> int:
         action="store_true",
         help="exercise long unquoted TAG values and legacy named ATTR keys",
     )
+    parser.add_argument(
+        "--spawn-point-probe",
+        action="store_true",
+        help="seed a timed spawn point whose target is a quoted resource name",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -2750,7 +2848,11 @@ def main() -> int:
         parser.error("choose only one world-load fixture mode")
     if args.spawn_gem_duplicate_serial_probe:
         args.spawn_gem_probe = True
-    if (args.spawn_gem_probe or args.spawn_gem_duplicate_serial_probe) and (
+    if (
+        args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+        or args.spawn_point_probe
+    ) and (
         any(world_load_modes)
         or args.timer_lifetime_probe
         or args.timer_lifetime_item_first_probe
@@ -2759,7 +2861,7 @@ def main() -> int:
         or args.ontick_content_mutation_probe
         or args.container_shutdown_probe
     ):
-        parser.error("spawn-gem probe cannot be combined with another world fixture mode")
+        parser.error("spawn probe cannot be combined with another world fixture mode")
     if (
         args.timer_lifetime_probe
         or args.timer_lifetime_item_first_probe
@@ -2819,6 +2921,7 @@ def main() -> int:
         or args.format_compat_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
+        or args.spawn_point_probe
     ):
         parser.error("book-pages probe writes its own world and cannot be combined")
     if args.dword_hex_probe and (
@@ -2832,6 +2935,7 @@ def main() -> int:
         or args.book_pages_probe
         or args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
+        or args.spawn_point_probe
     ):
         parser.error("dword-hex probe writes its own world and cannot be combined")
 
@@ -2885,6 +2989,7 @@ def main() -> int:
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
         suppress_login_item=args.roundtrip_integrity_probe,
         spawn_gem_probe=args.spawn_gem_probe,
+        spawn_point_probe=args.spawn_point_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -2912,6 +3017,8 @@ def main() -> int:
             root,
             duplicate_serials=args.spawn_gem_duplicate_serial_probe,
         )
+    if args.spawn_point_probe:
+        write_spawn_point_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:
