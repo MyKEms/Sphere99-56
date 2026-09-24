@@ -80,10 +80,19 @@ DIALOG_ARGO_CONTROLS = (
 # A third dialog gates its layout with control flow on TAGs of the source
 # character: IF/ELSE picks one of two buttons, a nested IF(...) with ELSEIF
 # picks one text, a WHILE over an ARG local emits one text per row and a
-# DOSWITCH picks one picture.  Another dialog opened before it declines to
-# open with RETURN 1, so the flow dialog must be the first one sent.
+# DOSWITCH picks one picture.  Dialogs opened before it: three that decline
+# to open (RETURN 1, and a bare RETURN or RETURN 0 before any control), one
+# whose layout starts with IF instead of its position, and one that starts
+# with an argo.<gump>(...) call and moves itself with argo.setlocation(x,y).
+# Only the last three are sent, in DIALOG_FLOW_GUMPS order.
 DIALOG_FLOW_LAYOUT_NAME = "d_synthetic_flow_layout"
-DIALOG_FLOW_DECLINED_NAME = "d_synthetic_flow_declined"
+DIALOG_FLOW_DECLINED_NAMES = (
+    "d_synthetic_flow_declined",
+    "d_synthetic_flow_guard_bare",
+    "d_synthetic_flow_guard_zero",
+)
+DIALOG_FLOW_IF_FIRST_NAME = "d_synthetic_flow_if_first"
+DIALOG_FLOW_ARGO_FIRST_NAME = "d_synthetic_flow_argo_first"
 DIALOG_FLOW_RANK = 1
 DIALOG_FLOW_ROWS = 3
 DIALOG_FLOW_BUTTON = 22
@@ -94,6 +103,12 @@ DIALOG_FLOW_CONTROLS = (
     "text 20 40 0 1",
     *(f"text 20 {60 + row * 20} 0 {4 + row}" for row in range(DIALOG_FLOW_ROWS)),
     f"gumppic 200 20 {100 + DIALOG_FLOW_RANK}",
+)
+# (x, y, controls) of each dialog sent, in order.
+DIALOG_FLOW_GUMPS = (
+    (0, 0, ("resizepic 0 0 5054 200 100", "button 10 10 2151 2152 1 0 31")),
+    (40, 50, ("resizepic 0 0 5054 220 120", "button 10 10 2151 2152 1 0 32")),
+    (30, 60, DIALOG_FLOW_CONTROLS),
 )
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
@@ -539,12 +554,38 @@ argo layout text
 ON={DIALOG_ARGO_BUTTON}
 SYSMESSAGE {marker} argo|<ARGN>|<ARGO.NAME>
 
-[DIALOG {DIALOG_FLOW_DECLINED_NAME}]
+[DIALOG {DIALOG_FLOW_DECLINED_NAMES[0]}]
 0 0
 IF (<SRC.TAG.flow_rank> == {DIALOG_FLOW_RANK})
 RETURN 1
 ENDIF
 {DIALOG_FLOW_DECLINED_CONTROLS[0]}
+
+[DIALOG {DIALOG_FLOW_DECLINED_NAMES[1]}]
+0 0
+IF (<SRC.TAG.flow_rank> == {DIALOG_FLOW_RANK})
+RETURN
+ENDIF
+{DIALOG_FLOW_DECLINED_CONTROLS[0]}
+
+[DIALOG {DIALOG_FLOW_DECLINED_NAMES[2]}]
+IF (<SRC.TAG.flow_rank> == {DIALOG_FLOW_RANK})
+RETURN 0
+ENDIF
+{DIALOG_FLOW_DECLINED_CONTROLS[0]}
+
+[DIALOG {DIALOG_FLOW_IF_FIRST_NAME}]
+IF (<SRC.TAG.flow_rank> == {DIALOG_FLOW_RANK})
+resizepic 0 0 5054 200 100
+ELSE
+resizepic 0 0 5054 300 100
+ENDIF
+button 10 10 2151 2152 1 0 31
+
+[DIALOG {DIALOG_FLOW_ARGO_FIRST_NAME}]
+argo.resizepic(0,0,5054,220,120)
+argo.setlocation(40,50)
+button 10 10 2151 2152 1 0 32
 
 [DIALOG {DIALOG_FLOW_LAYOUT_NAME}]
 0 0
@@ -571,6 +612,7 @@ gumppic 200 20 100
 gumppic 200 20 101
 gumppic 200 20 102
 ENDDO
+setlocation=30,60
 
 [DIALOG {DIALOG_FLOW_LAYOUT_NAME} TEXT]
 flow layout text
@@ -583,8 +625,10 @@ SYSMESSAGE {marker} flow|<ARGN>
         login = (
             f"TAG.flow_rank={DIALOG_FLOW_RANK}\n"
             "TAG.flow_level=5\n"
-            f"DIALOG {DIALOG_FLOW_DECLINED_NAME}\n"
-            f"DIALOG {DIALOG_FLOW_LAYOUT_NAME}\n"
+            + "".join(f"DIALOG {name}\n" for name in DIALOG_FLOW_DECLINED_NAMES)
+            + f"DIALOG {DIALOG_FLOW_IF_FIRST_NAME}\n"
+            + f"DIALOG {DIALOG_FLOW_ARGO_FIRST_NAME}\n"
+            + f"DIALOG {DIALOG_FLOW_LAYOUT_NAME}\n"
         )
         return login, sections
     return f"DIALOG {argo_name if argo_layout else name}\n", sections
