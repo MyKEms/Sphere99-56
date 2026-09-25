@@ -1349,12 +1349,14 @@ int CChar::ItemPickup( CItem* pItem, int amount )
 	}
 	else
 	{
-		iItemWeight = ( pItem->Item_GetDef()->GetWeight()* amount );
+		iItemWeight = SphereWeightClamp(
+			static_cast<int64_t>(pItem->Item_GetDef()->GetWeight()) * amount);
 	}
 
 	// Is it too heavy to even drag ?
 	bool fDrop = false;
-	if ( GetWeightLoadPercent( GetTotalWeight() + iItemWeight ) > 300 )
+	if ( GetWeightLoadPercent( SphereWeightClamp(
+		static_cast<int64_t>(GetTotalWeight()) + iItemWeight )) > 300 )
 	{
 		WriteString("That is too heavy. You can't move that.");
 		if ( pCharTop != this )

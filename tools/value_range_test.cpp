@@ -149,10 +149,38 @@ static bool TestPropertyAndLookupDispatch()
 		g_World.s_FindMyPropKey("NoSuchProperty") == -1, "world property table lookup");
 }
 
+static bool TestBoundaryArithmetic()
+{
+	CRectMap rect;
+	rect.m_left = 0;
+	rect.m_top = 0;
+	rect.m_right = 1;
+	rect.m_bottom = 1;
+	rect.m_map = 255;
+	rect.NormalizeRect();
+	if ( !Expect(rect.m_map == 0, "map rectangle rejects the first out-of-range map index"))
+		return false;
+
+	CItemDef itemDef(ITEMID_MULTI_MAX);
+	CGVariant weight;
+	// USHRT_MAX is the non-movable sentinel, so use the largest movable
+	// definition weight and exercise the overflowing stack product.
+	weight.SetStr("65534.0");
+	if ( !Expect(itemDef.s_PropSet("WEIGHT", weight) == NO_ERROR,
+		"synthetic maximum item weight is accepted"))
+		return false;
+	CSpawnedWeaponProbe item(ITEMID_MULTI_MAX, &itemDef);
+	item.SetAmount(USHRT_MAX);
+	const bool fClamped = item.GetWeight() == INT_MAX;
+	item.RemoveSelf();
+	return Expect(fClamped, "large stack weight saturates instead of overflowing");
+}
+
 int main()
 {
-	if ( !TestIntegerRanges() || !TestByteRanges() || !TestPropertyAndLookupDispatch() )
+	if ( !TestIntegerRanges() || !TestByteRanges() ||
+		!TestPropertyAndLookupDispatch() || !TestBoundaryArithmetic() )
 		return 1;
-	std::printf("value ranges and property lookups: all checks passed\n");
+	std::printf("value ranges, property lookups, and boundary arithmetic: all checks passed\n");
 	return 0;
 }

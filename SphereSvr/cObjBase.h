@@ -13,6 +13,15 @@
 #include "cobjbasedef.h"
 #include "spheresvr.h"
 
+inline int SphereWeightClamp( int64_t iWeight )
+{
+	if ( iWeight > INT_MAX )
+		return INT_MAX;
+	if ( iWeight < INT_MIN )
+		return INT_MIN;
+	return static_cast<int>( iWeight );
+}
+
 enum MEMORY_TYPE
 {
 	// IT_EQ_MEMORY_OBJ
@@ -880,9 +889,9 @@ public:
 	{
 		CItemDefPtr pItemDef = Item_GetDef();
 		ASSERT(pItemDef);
-		int iWeight = pItemDef->GetWeight() * GetAmount();
+		const int64_t iWeight = static_cast<int64_t>(pItemDef->GetWeight()) * GetAmount();
 		DEBUG_CHECK( iWeight >= 0 );
-		return( iWeight );
+		return( SphereWeightClamp(iWeight) );
 	}
 
 	void SetTimeout( int iDelay );
@@ -1313,7 +1322,7 @@ public:
 	{	// true weight == container item + contents.
 		if ( ! IsWeighed())
 			return 0;
-		return( CItem::GetWeight() + CContainer::GetTotalWeight());
+		return( SphereWeightClamp(static_cast<int64_t>(CItem::GetWeight()) + CContainer::GetTotalWeight()));
 	}
 	void OnWeightChange( int iChange );
 
@@ -1408,7 +1417,7 @@ public:
 	{
 		// GetAmount is used abnormally here.
 		// true weight == container item + contents.
-		return( 1 + CContainer::GetTotalWeight());
+		return( SphereWeightClamp(1LL + CContainer::GetTotalWeight()));
 	}
 	CItemCorpse( ITEMID_TYPE id, CItemDef* pItemDef ) : CItemContainer( id, pItemDef )
 	{

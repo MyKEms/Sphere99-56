@@ -11,6 +11,8 @@ public:
 	int m_map;
 
 public:
+	CGRect() : m_left(0), m_top(0), m_right(0), m_bottom(0), m_map(0) {}
+
 	int Width() const { return(m_right - m_left); }
 	int Height() const { return(m_bottom - m_top); }
 	bool IsRectEmpty() const { return( m_left >= m_right || m_top >= m_bottom ); }
@@ -61,7 +63,8 @@ public:
 			m_right = m_left;
 			m_left = wtmp;
 		}
-		if ((m_map < 0) || (m_map >= 256)) m_map = 0;
+		const int iMapCount = static_cast<int>(sizeof(g_MapList.m_maps) / sizeof(g_MapList.m_maps[0]));
+		if ((m_map < 0) || (m_map >= iMapCount)) m_map = 0;
 		if (!g_MapList.m_maps[m_map]) m_map = 0;
 	}
 

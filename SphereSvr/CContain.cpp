@@ -26,7 +26,7 @@ CSCRIPT_CLASS_IMP0(Container,NULL,CContainer::sm_Methods);
 void CContainer::OnWeightChange( int iChange )
 {
 	// Propagate the weight change up the stack if there is one.
-	m_totalweight += iChange;
+	m_totalweight = SphereWeightClamp(static_cast<int64_t>(m_totalweight) + iChange);
 
 #ifdef _DEBUG
 	if ( m_totalweight < 0 )
@@ -42,7 +42,7 @@ int CContainer::FixWeight()
 {
 	// If there is some sort of ASSERT during item add then this is used to fix it.
 	// NOTE: Often the bankbox is added to your weight !
-	m_totalweight = 0;
+	int64_t iTotalWeight = 0;
 
 	CItemPtr pItem=GetHead();
 	for ( ; pItem!=NULL; pItem=pItem->GetNext())
@@ -54,8 +54,9 @@ int CContainer::FixWeight()
 			if ( ! pCont->IsWeighed())
 				continue;	// Bank box doesn't count for wieght.
 		}
-		m_totalweight += pItem->GetWeight();
+		iTotalWeight += pItem->GetWeight();
 	}
+	m_totalweight = SphereWeightClamp(iTotalWeight);
 
 	return( m_totalweight );
 }

@@ -149,7 +149,11 @@ int CChar::GetWeightLoadPercent( int iWeight ) const
 	// Get a percent of load.
 	if ( IsGM())
 		return( 1 );
-	return( IMULDIV( iWeight, 100, g_Cfg.Calc_MaxCarryWeight(this)));
+	const int64_t iMaxCarryWeight = g_Cfg.Calc_MaxCarryWeight(this);
+	if ( iMaxCarryWeight <= 0 )
+		return( 0 );
+	const int64_t iLoadPercent = (static_cast<int64_t>(iWeight) * 100) / iMaxCarryWeight;
+	return( SphereWeightClamp(iLoadPercent) );
 }
 
 bool CChar::CanCarry( const CItem* pItem ) const
@@ -1453,4 +1457,3 @@ CRegionPtr CChar::CheckValidMove( CPointMapBase& ptDest, CMulMapBlockState& bloc
 	ptDest.m_z = z;
 	return( pArea );
 }
-
