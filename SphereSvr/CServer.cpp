@@ -494,7 +494,7 @@ void CServer::ListGMPages( CStreamText* pSrc ) const
 			(LPCTSTR) pPage->GetName(),
 			(LPCTSTR) pPage->GetAccountStatus(),
 			(LPCTSTR) pPage->GetReason(),
-			pPage->m_timePage );
+			pPage->m_timePage.GetTimeRaw() );
 	}
 }
 
