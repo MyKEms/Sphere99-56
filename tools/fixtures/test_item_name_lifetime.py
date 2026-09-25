@@ -4,8 +4,9 @@
 The fixture (make_fixture.py --world-load-counts --named-item-names) saves a
 named IT_MULTI item, whose region name is built from the item name while the
 save loads, and a named item whose saved timer expires on the first sector
-tick and logs the item name.  Run it under ASan to catch a name pointer that
-outlives its storage; the logged timer name is also checked byte for byte.
+tick and logs the item name from an explicit handler.  Run it under ASan to
+catch a name pointer that outlives its storage; the logged timer name is also
+checked byte for byte.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ EXPECTED_COUNT_LINE = (
     "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
     "allocated_items=2 allocated_chars=1"
 )
-TIMER_LINE_RE = re.compile(r"Timer expired without DECAY flag '(.*)'\?")
+TIMER_LINE_RE = re.compile(r"SPHERE_NAMED_TIMER_TICK (.*)$")
 
 
 def read_log(path: Path) -> str:
@@ -108,14 +109,13 @@ def main() -> int:
                         "server did not listen after loading the named items "
                         f"(exit status {process.poll()})"
                     )
-                elif not wait_until(
-                    process,
-                    args.timer_timeout,
-                    lambda: TIMER_LINE_RE.search(read_log(log_path)) is not None,
-                ):
-                    failures.append(
-                        "saved item timer did not reach the default timer log line "
-                        f"(exit status {process.poll()})"
+                else:
+                    # The server console is buffered while it is running, so
+                    # inspect the marker after the bounded wait and shutdown.
+                    wait_until(
+                        process,
+                        args.timer_timeout,
+                        lambda: TIMER_LINE_RE.search(read_log(log_path)) is not None,
                     )
             finally:
                 try:
@@ -132,7 +132,8 @@ def main() -> int:
     timer_names = TIMER_LINE_RE.findall(log_contents)
     if timer_names != [NAMED_TIMER_ITEM_NAME]:
         failures.append(
-            f"timer log names were {timer_names!r}; expected {[NAMED_TIMER_ITEM_NAME]!r}"
+            f"timer handler names were {timer_names!r}; "
+            f"expected {[NAMED_TIMER_ITEM_NAME]!r}"
         )
 
     unexpected_errors = [
@@ -154,7 +155,7 @@ def main() -> int:
 
     print(
         "item name lifetime probe passed: named multi loaded, "
-        f"timer logged {NAMED_TIMER_ITEM_NAME!r}"
+        f"timer handler logged {NAMED_TIMER_ITEM_NAME!r}"
     )
     return 0
 

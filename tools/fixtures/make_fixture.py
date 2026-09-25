@@ -1650,15 +1650,16 @@ def write_scripts(
         if metadata_roundtrip_probe
         else ""
     )
-    # An @Timer handler that falls through lets the default timer path log the
-    # item's name instead of silently deleting the item.
+    # Keep an explicit return here so this name-lifetime probe remains separate
+    # from the fall-through timer case exercised by the script-timers mode.
     named_item_name_sections = (
         f"\n[ITEMDEF 0x{NAMED_TIMER_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_NAMED_TIMER\n"
         "NAME=synthetic timer item\n"
         "TYPE=T_NORMAL\n"
         "ON=@Timer\n"
-        "SERV.B SPHERE_NAMED_TIMER_TICK\n"
+        "SERV.SYSMESSAGE SPHERE_NAMED_TIMER_TICK <NAME>\n"
+        "RETURN 0\n"
         if named_item_name_probe
         else ""
     )
