@@ -1056,11 +1056,17 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 			int iArgQty = vArgs.MakeArraySize();
 			if ( iArgQty < 1 )
 				return HRES_BAD_ARG_QTY;
+			// Method arguments are initially kept as text. Resolve symbolic
+			// spell names here so stock 0.99 calls use the same namespace as
+			// FINDRES and numeric calls.
+			int iSpell = g_Cfg.ResourceGetIndexType( RES_Spell, vArgs.GetArrayPSTR(0) );
+			if ( iSpell < 0 )
+				iSpell = vArgs.GetArrayInt(0);
 			if ( vArgs.GetArrayInt(2) == 1 )
 			{
 				pCharSrc = PTR_CAST(CChar,this);
 			}
-			OnSpellEffect( (SPELL_TYPE) RES_GET_INDEX( vArgs.GetArrayInt(0) ), pCharSrc, vArgs.GetArrayInt(1), NULL );
+			OnSpellEffect( (SPELL_TYPE) RES_GET_INDEX( iSpell ), pCharSrc, vArgs.GetArrayInt(1), NULL );
 		}
 		break;
 

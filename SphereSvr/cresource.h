@@ -221,6 +221,47 @@ private:
 
 typedef CRefPtr<CWebPageDef> CWebPagePtr;
 
+// Public 0.99z8 compatibility data for a built-in spell definition.  The
+// resource manager creates the definitions before scripts are read so named
+// references work in every resource file, then fills the fields that were not
+// explicitly supplied by a [SPELL] section after all item and skill resources
+// are available.
+struct CSpellDefaultResource
+{
+	RES_TYPE m_type;
+	UID_INDEX m_index;
+	int m_quantity;
+};
+
+struct CSpellDefault
+{
+	SPELL_TYPE m_id;
+	LPCTSTR m_key;
+	LPCTSTR m_alias;
+	LPCTSTR m_name;
+	LPCTSTR m_runes;
+	LPCTSTR m_prompt;
+	WORD m_flags;
+	WORD m_mana;
+	int m_castTime;
+	SOUND_TYPE m_sound;
+	ITEMID_TYPE m_spellItem;
+	ITEMID_TYPE m_scrollItem;
+	ITEMID_TYPE m_effectItem;
+	const CSpellDefaultResource* m_resources;
+	int m_resourceCount;
+	const CSpellDefaultResource* m_skillReq;
+	int m_skillReqCount;
+	const int* m_effect;
+	int m_effectCount;
+	const int* m_duration;
+	int m_durationCount;
+	const int* m_value;
+	int m_valueCount;
+};
+
+const CSpellDefault* GetSpellDefaultTable(int& iCount);
+
 class CSpellDef : public CResourceDef	// 1 based spells. See SPELL_*
 {
 	// RES_Spell
@@ -237,6 +278,7 @@ public:
 	virtual CGString GetName() const { return( m_sName ); }
 	virtual HRESULT s_PropSet( LPCTSTR pszKey, CGVariant& vVal );
 	virtual HRESULT s_PropGet( LPCTSTR pszKey, CGVariant& vVal, CScriptConsole* pSrc );
+	void ApplyDefault(const CSpellDefault& def);
 
 public:
 	CSCRIPT_CLASS_DEF1();
@@ -268,6 +310,7 @@ public:
 protected:
 	DECLARE_MEM_DYNAMIC;
 private:
+	DWORD m_dwExplicitProps;
 	WORD m_wFlags;
 #define SPELLFLAG_DIR_ANIM  0x0001	// Evoke type cast or directed. (animation)
 #define SPELLFLAG_TARG_OBJ  0x0002	// Need to target an object or char ?
@@ -476,6 +519,8 @@ public:
 	bool Load( bool fResync );
 	void Unload( bool fResync );
 	void OnTick( bool fNow );
+	void InitDefaultSpellDefs();
+	void ApplyDefaultSpellDefs();
 
 #if 1
 	// Search for a type of resource item.

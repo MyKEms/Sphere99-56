@@ -162,6 +162,40 @@ CSphereResourceMgr::CSphereResourceMgr()
 	m_fCharTitles = true;
 }
 
+void CSphereResourceMgr::InitDefaultSpellDefs()
+{
+	int iCount = 0;
+	const CSpellDefault* pDefaults = GetSpellDefaultTable( iCount );
+	for ( int i = 0; i < iCount; ++i )
+	{
+		const CSpellDefault& def = pDefaults[i];
+		CSpellDefWPtr pSpellDef = m_SpellDefs.IsValidIndex( def.m_id ) ? m_SpellDefs[def.m_id] : NULL;
+		if ( !pSpellDef )
+		{
+			pSpellDef = new CSpellDef( def.m_id );
+			m_SpellDefs.SetAtGrow( def.m_id, pSpellDef );
+		}
+
+		CSphereUID rid( RES_Spell, def.m_id );
+		if ( def.m_key && def.m_key[0] )
+			m_Const.SetKeyVar( def.m_key, CGVariant( VARTYPE_UID, &rid ));
+		if ( def.m_alias && def.m_alias[0] )
+			m_Const.SetKeyVar( def.m_alias, CGVariant( VARTYPE_UID, &rid ));
+	}
+}
+
+void CSphereResourceMgr::ApplyDefaultSpellDefs()
+{
+	int iCount = 0;
+	const CSpellDefault* pDefaults = GetSpellDefaultTable( iCount );
+	for ( int i = 0; i < iCount; ++i )
+	{
+		const CSpellDefault& def = pDefaults[i];
+		if ( m_SpellDefs.IsValidIndex( def.m_id ) && m_SpellDefs[def.m_id] )
+			m_SpellDefs[def.m_id]->ApplyDefault( def );
+	}
+}
+
 CSphereResourceMgr::~CSphereResourceMgr()
 {
 	Unload(false);
@@ -2870,6 +2904,8 @@ bool CSphereResourceMgr::Load( bool fResync )
 	if ( ! fResync )
 	{
 		LoadIni(true);
+		// Create built-in identities before parsing any [SPELL] override.
+		InitDefaultSpellDefs();
 
 		for ( int i=0; i<STAT_QTY; i++ )
 		{
@@ -2993,6 +3029,9 @@ bool CSphereResourceMgr::Load( bool fResync )
 			g_Serv.Event_PrintPercent( SERVTRIG_TestStatus, j+1, m_ResourceFiles.GetSize());
 		}
 	}
+	// All item and skill names are available now, so fill only the fields that
+	// were not explicitly supplied by a script [SPELL] section.
+	ApplyDefaultSpellDefs();
 	// Make sure we have the basics.
 
 	Debug_CheckPoint();

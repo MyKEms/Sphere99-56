@@ -66,6 +66,14 @@ DOTTED_PROBE_CAPPED_WHILE = "WHILE (2>1)"
 DOTTED_PROBE_CAPPED_FOR = "FOR 20000"
 DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 
+# Built-in 0.99z8 spell table probe.  The fixture deliberately starts with no
+# [SPELL] sections; test_spell_defaults.py appends one partial override for a
+# second load to prove the data layer is field-wise and reload-safe.
+SPELL_DEFAULT_ACCOUNT = "SpellProbe"
+SPELL_DEFAULT_PASSWORD = "spell-pw"
+SPELL_DEFAULT_MARKER = "SPHERE_SPELL_DEFAULTS"
+SPELL_DEFAULT_CHAR_SERIAL = 1
+
 # Named ARG locals and positional-object probe.  The generated login trigger
 # creates one synthetic item through a script-level NEWITEMSAFE wrapper, then
 # passes its UID into nested functions so ARG/ARGV resolution is exercised in
@@ -613,6 +621,24 @@ ON=@LogIn
 RETURN 0
 """
     return "\n".join(login) + "\n", sections
+
+
+def spell_defaults_scripts() -> tuple[str, str]:
+    """Return login assertions for built-in spell lookup and dispatch."""
+
+    marker = SPELL_DEFAULT_MARKER
+    login = [
+        f"SYSMESSAGE {marker} C|heal|[<FINDRES(SPELL,s_heal).NAME>|<FINDRES(SPELL,s_heal).MANAUSE>|<FINDRES(SPELL,s_heal).RUNES>|<FINDRES(SPELL,s_heal).SKILLREQ>]",
+        f"SYSMESSAGE {marker} C|numeric|[<FINDRES(SPELL,4).NAME>|<FINDRES(SPELL,4).MANAUSE>]",
+        f"SYSMESSAGE {marker} C|night_sight|[<FINDRES(SPELL,s_night_sight).MANAUSE>|<FINDRES(SPELL,s_night_sight).NAME>]",
+        f"SYSMESSAGE {marker} C|alias|[<FINDRES(SPELL,s_frost_bolt).NAME>|<FINDRES(SPELL,s_fire_bolt).NAME>]",
+        "SRC.HITS=40",
+        "SRC.MANA=100",
+        "SRC.SPELLEFFECT(s_heal,1000)",
+        f"SYSMESSAGE {marker} C|cast|[<SRC.HITS>|<SRC.MANA>]",
+        f"SYSMESSAGE {marker}_END",
+    ]
+    return "\n".join(login) + "\n", ""
 
 
 def dialog_button_scripts(argo_layout: bool = False, flow_layout: bool = False) -> tuple[str, str]:
@@ -1296,6 +1322,7 @@ def write_scripts(
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
+    spell_defaults_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1329,6 +1356,9 @@ def write_scripts(
         f"SYSMESSAGE {REGION_WEATHER_MARKER}_END\n"
         if region_weather_probe
         else ""
+    )
+    spell_defaults_login, spell_defaults_sections = (
+        spell_defaults_scripts() if spell_defaults_probe else ("", "")
     )
     unknown_keyword_probe_lines = []
     if (
@@ -1824,7 +1854,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + spell_defaults_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -1864,7 +1894,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + spell_defaults_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -1988,6 +2018,48 @@ def write_escape_overflow_save(root: Path) -> None:
     )
 
 
+def write_spell_defaults_save(root: Path) -> None:
+    """Write one existing character for the built-in spell cast probe."""
+
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            (
+                f"[{SPELL_DEFAULT_ACCOUNT}]",
+                f"PASSWORD={SPELL_DEFAULT_PASSWORD}",
+                f"CHARUID={SPELL_DEFAULT_CHAR_SERIAL}",
+                f"LASTCHARUID={SPELL_DEFAULT_CHAR_SERIAL}",
+                "[EOF]",
+            )
+        ),
+    )
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "[EOF]")
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            (
+                "TITLE=Sphere synthetic spell defaults fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                f"SERIAL={SPELL_DEFAULT_CHAR_SERIAL}",
+                f"ACCOUNT={SPELL_DEFAULT_ACCOUNT}",
+                "NAME=SpellDefaultsProbe",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "DEX=100",
+                "INT=100",
+                "HITS=40",
+                "MAXHITS=100",
+                "MANA=100",
+                "MAXMANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            )
+        ),
+    )
 def write_world_load_counts_save(
     root: Path,
     *,
@@ -3089,6 +3161,11 @@ def main() -> int:
         action="store_true",
         help="log in an existing character through a near-limit escape expansion",
     )
+    parser.add_argument(
+        "--spell-defaults-probe",
+        action="store_true",
+        help="exercise built-in 0.99z8 spell lookup and effect dispatch",
+    )
     args = parser.parse_args()
 
     # A mode is a complete recipe.  Reparse its declarative argument list
@@ -3133,6 +3210,7 @@ def main() -> int:
         or args.spawn_point_probe
         or args.events_attr_probe
         or args.legacy_metadata_probe
+        or args.spell_defaults_probe
     ):
         parser.error("escape-overflow probe cannot be combined with another world fixture mode")
     if (
@@ -3237,6 +3315,26 @@ def main() -> int:
         or args.spawn_gem_duplicate_serial_probe
     ):
         parser.error("region-weather probe writes its own world and cannot be combined")
+    if args.spell_defaults_probe and (
+        args.world_load_counts
+        or any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
+        or args.container_shutdown_probe
+        or args.book_pages_probe
+        or args.dword_hex_probe
+        or args.region_weather_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+        or args.spawn_point_probe
+        or args.events_attr_probe
+        or args.legacy_metadata_probe
+        or args.escape_overflow_probe
+    ):
+        parser.error("spell-defaults probe writes its own world and cannot be combined")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -3293,6 +3391,7 @@ def main() -> int:
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
+        spell_defaults_probe=args.spell_defaults_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -3327,6 +3426,8 @@ def main() -> int:
         write_spawn_point_save(root)
     if args.escape_overflow_probe:
         write_escape_overflow_save(root)
+    if args.spell_defaults_probe:
+        write_spell_defaults_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:
