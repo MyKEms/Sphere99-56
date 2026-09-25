@@ -164,7 +164,7 @@ def main() -> int:
     elif args.noncontainer_reference:
         expected_line = (
             "world load: created_items=3 created_chars=1 read_items=3 read_chars=1 "
-            "allocated_items=2 allocated_chars=1"
+            "allocated_items=3 allocated_chars=1"
         )
     elif args.unresolved_worldchar_type:
         expected_line = (
@@ -219,7 +219,7 @@ def main() -> int:
         )
     elif args.noncontainer_reference:
         expected_diagnostics = (
-            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=1 "
+            "world load diagnostics: accepted=4 tolerated_legacy=0 rejected=0 "
             "defaulted=0 deleted=0"
         )
     else:
@@ -285,10 +285,7 @@ def main() -> int:
                         "WORLDCHAR load fallback",
                     )
                 elif args.noncontainer_reference:
-                    allowed_startup_error_fragments = (
-                        "Non container uid=",
-                        "WORLDITEM property rejected",
-                    )
+                    allowed_startup_error_fragments = ()
                 elif args.rejected_property:
                     allowed_startup_error_fragments = (
                         "Item:Hitpoints assigned for non-weapon DEFAULTITEM",
@@ -412,56 +409,14 @@ def main() -> int:
                             "DEFAULTCHAR fallback was incorrectly counted as a skipped section"
                         )
                 elif args.noncontainer_reference:
-                    diagnostics = [
-                        line
+                    if any(
+                        "Non container" in line
+                        or "WORLDITEM property rejected" in line
                         for line in startup_errors
-                        if "Non container uid=" in line
-                    ]
-                    if len(diagnostics) != 1:
+                    ):
                         raise RuntimeError(
-                            "nested non-container reference did not produce exactly one diagnostic"
-                    )
-                    expected_fragments = (
-                        "id=0x0e76",
-                        "name=synthetic object",
-                        "type=0",
-                        "is_container=0",
-                        "parent_container_uid=0x00000000",
-                        "child_id=0x0e75",
-                        "child_name=synthetic container",
-                        "child_type=1",
-                        "child_is_container=1",
-                        "child_container_uid=0x00000000",
-                    )
-                    missing = [
-                        fragment
-                        for fragment in expected_fragments
-                        if fragment not in diagnostics[0]
-                    ]
-                    if missing:
-                        raise RuntimeError(
-                            "nested non-container diagnostic is missing fields: "
-                            + ", ".join(missing)
-                        )
-                    rejected_properties = [
-                        line
-                        for line in startup_errors
-                        if "WORLDITEM property rejected" in line
-                    ]
-                    if len(rejected_properties) != 1:
-                        raise RuntimeError(
-                            "nested non-container fixture did not reject the invalid CONT property"
-                        )
-                    unexpected_errors = [
-                        line
-                        for line in startup_errors
-                        if line not in diagnostics
-                        and line not in rejected_properties
-                    ]
-                    if unexpected_errors:
-                        raise RuntimeError(
-                            "nested non-container fixture logged unexpected errors: "
-                            f"{unexpected_errors!r}"
+                            "nested non-container reference was rejected instead of being "
+                            "placed at its target's top-level point"
                         )
                 elif args.named_container_reference and any(
                     "Non container uid=" in line for line in startup_errors

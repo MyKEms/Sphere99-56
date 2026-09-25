@@ -2019,6 +2019,7 @@ void CItem::SetAmount( int amount )
 	int oldamount = GetAmount();
 	if ( oldamount == amount )
 		return;
+	const int iWeightOld = GetWeight();
 
 	DEBUG_CHECK( amount >= 0 && amount <= USHRT_MAX );
 	m_amount = amount;
@@ -2084,9 +2085,7 @@ void CItem::SetAmount( int amount )
 	if (pParentCont)
 	{
 		ASSERT( IsItemEquipped() || IsItemInContainer());
-		CItemDefPtr pItemDef = Item_GetDef();
-		ASSERT(pItemDef);
-		pParentCont->OnWeightChange(( amount - oldamount ) * pItemDef->GetWeight());
+		pParentCont->OnWeightChange( GetWeight() - iWeightOld );
 	}
 }
 
@@ -2343,6 +2342,22 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	}
 
 	CItemPtr pParentItem = REF_CAST(CItem,pObjCont);
+	if ( pParentItem != NULL && pParentItem != this )
+	{
+		// A live script can leave CONT pointing at an ordinary item. Preserve
+		// the item at the target's top-level location instead of rejecting it
+		// and leaving the object detached.
+		CObjBasePtr pTopObj = pParentItem->GetTopLevelObj();
+		if ( pTopObj != NULL && MoveTo( pTopObj->GetTopPoint()))
+		{
+			// A deferred CONT may reach this path after the target is loaded.
+			// The relocation has resolved that link even though the item is now
+			// top-level rather than contained.
+			m_uidLoadContainer.InitUID();
+			m_layerLoadContainer = LAYER_NONE;
+			return( NO_ERROR );
+		}
+	}
 	CItemDefPtr pParentDef;
 	if ( pParentItem != NULL )
 		pParentDef = pParentItem->Item_GetDef();
@@ -2384,7 +2399,7 @@ bool CItem::ResolveLoadContainer()
 	CSphereUID uid = m_uidLoadContainer;
 	LAYER_TYPE layer = m_layerLoadContainer;
 	HRESULT hRes = LoadSetContainer( uid, layer );
-	if ( SUCCEEDED(hRes) && GetContainer() != NULL )
+	if ( SUCCEEDED(hRes) && ( GetContainer() != NULL || ! HasPendingLoadContainer()))
 	{
 		m_uidLoadContainer.InitUID();
 		m_layerLoadContainer = LAYER_NONE;
