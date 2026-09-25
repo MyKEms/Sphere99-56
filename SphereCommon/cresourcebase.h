@@ -436,6 +436,8 @@ public:
 	void s_WriteProps( CScript& s, LPCTSTR pszKey ) const;
 
 private:
+	int FindArg( const CResourceLink* pResourceLink ) const;
+
 	CString GetResourceName( int iIndex ) const
 	{
 		// look up the name of the fragment given it's index.

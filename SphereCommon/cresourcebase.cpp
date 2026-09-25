@@ -6,9 +6,6 @@
 #include "stdafx.h"
 #include "spherecommon.h"
 
-// Stub for missing function
-static int FindArg(void* p) { return -1; }
-
 void CResourceLink::SetLinkSection(
 	CResourceScript* pScript,
 	CScriptLineContext context,
@@ -121,6 +118,25 @@ const CScriptMethod CResourceRefArray::sm_Methods[CResourceRefArray::M_QTY+1] =
 };
 
 CSCRIPT_CLASS_IMP0(ResourceRefArray,NULL,CResourceRefArray::sm_Methods);
+
+int CResourceRefArray::FindArg( const CResourceLink* pResourceLink ) const
+{
+	if ( pResourceLink == NULL )
+		return( -1 );
+
+	// Resource links are normally shared by the resource manager, but compare
+	// their IDs as well so an equivalent link is not attached twice.
+	for ( int i = 0; i < (int)GetSize(); ++i )
+	{
+		CResourceLink* pExisting = ConstElementAt(i);
+		if ( pExisting == pResourceLink )
+			return( i );
+		if ( pExisting != NULL &&
+			pExisting->GetUIDIndex() == pResourceLink->GetUIDIndex())
+			return( i );
+	}
+	return( -1 );
+}
 
 bool CResourceRefArray::v_Set( CGVariant& vVal, RES_TYPE restype )
 {
