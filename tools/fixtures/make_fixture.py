@@ -786,6 +786,18 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
     login = [
         "TAG.probe_text=chartext",
         "TAG.probe_num=7",
+        # 0.99 current-value TAG assignments must evaluate against the
+        # existing numeric value while ordinary and string writes stay intact.
+        "TAG.current_num=10",
+        "SYSMESSAGE " + marker + " C|tag_current_initial|[<tag(current_num)>]",
+        "TAG(current_num,#+3)",
+        "SYSMESSAGE " + marker + " C|tag_current_add|[<tag(current_num)>]",
+        "TAG(current_num,#-2)",
+        "SYSMESSAGE " + marker + " C|tag_current_sub|[<tag(current_num)>]",
+        "TAG.current_num=42",
+        "SYSMESSAGE " + marker + " C|tag_current_absolute|[<tag(current_num)>]",
+        "TAG(current_text,seed)",
+        "SYSMESSAGE " + marker + " C|tag_current_string|[<tag(current_text)>]",
         "VAR dotted_probe_var,globalvalue",
         "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
         "EQUIPLAST",

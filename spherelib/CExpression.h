@@ -737,6 +737,9 @@ public:
 
 class CScript;
 class CScriptConsole;
+class CExpression;
+CExpression* Exp_GetContext();
+int CVarDefEvaluateExpression(LPCTSTR pszExpression);
 
 struct CVarDefArray : public CGSortedArray<CVarDef*, CVarDef*, LPCTSTR>
 {
@@ -876,6 +879,17 @@ public:
 			// Delete the tag
 			RemoveKey(szTemp);
 		}
+		else if ( pszVal[0] == '#' )
+		{
+			// 0.99 current-value assignments such as TAG(level,#+1)
+			// evaluate the suffix against the existing numeric tag.
+			CGVariant vCurrent;
+			FindKeyVar( szTemp, vCurrent );
+			TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+			snprintf( szExpression, sizeof(szExpression), "%d%s",
+				vCurrent.GetInt(), pszVal + 1 );
+			SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( szExpression ));
+		}
 		else if ( pszVal[0] == '"' )
 		{
 			bool fQuoted = true;
@@ -914,8 +928,19 @@ public:
 		}
 		if ( *pszVal )
 		{
-			// Set mode
-			SetKeyStr(szTemp, pszVal);
+			// Set mode.  A leading # evaluates the suffix from the current
+			// numeric value, matching the 0.99 TAG(name,#+N) convention.
+			if ( pszVal[0] == '#' )
+			{
+				CGVariant vCurrent;
+				FindKeyVar( szTemp, vCurrent );
+				TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+				snprintf( szExpression, sizeof(szExpression), "%d%s",
+					vCurrent.GetInt(), pszVal + 1 );
+				SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( szExpression ));
+			}
+			else
+				SetKeyStr(szTemp, pszVal);
 		}
 		else
 		{
@@ -1248,6 +1273,11 @@ public:
 		return i;
 	}
 };
+
+inline int CVarDefEvaluateExpression(LPCTSTR pszExpression)
+{
+	return Exp_GetContext()->GetComplex(pszExpression);
+}
 
 inline int Calc_GetRandVal(int iqty) { if (iqty <= 0) return 0; return rand() % iqty; }
 inline int Calc_GetLog2(int iNum) { int i = 0; while (iNum > 1) { iNum >>= 1; i++; } return i; }
