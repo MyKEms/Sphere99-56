@@ -1294,7 +1294,7 @@ HRESULT CItemMulti::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValR
 		strcpy( szText, pszSpeak );
 
 		CSphereExpContext exec( pCharSrc, &g_Serv );
-		exec.s_ParseEscapes( szText, 0 );
+		exec.s_ParseEscapes( szText, 0, COUNTOF(szText) );
 
 		pTiller->Speak( szText, 0, TALKMODE_SAY, FONT_NORMAL );
 	}

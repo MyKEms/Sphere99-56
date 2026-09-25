@@ -641,14 +641,14 @@ public:
 		return HRES_UNKNOWN_PROPERTY;
 	}
 
-	int GetScriptExpression(TCHAR* pszArg)
+	int GetScriptExpression(TCHAR* pszArg, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		if ( !pszArg || !*pszArg )
 			return 0;
 
 		// Control-flow expressions and RETURN values need the same macro
 		// expansion as ordinary command arguments.
-		s_ParseEscapes(pszArg, 0);
+		s_ParseEscapes(pszArg, 0, iBufCapacity);
 
 		TCHAR* pszExpr = pszArg;
 		while ( ISWHITESPACE(*pszExpr) ) pszExpr++;
@@ -689,6 +689,23 @@ public:
 		return GetComplex(pszExpr);
 	}
 
+	// GetKeywordArg normally returns a pointer into CScript::m_szLine.  Its
+	// remaining capacity is smaller when the argument starts after the key;
+	// preserve that bound while expanding control-flow expressions.
+	int GetScriptExpression(CScript& script, TCHAR* pszArg)
+	{
+		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN;
+		TCHAR* pszLineArg = script.GetArgMod();
+		if ( pszArg && pszArg == pszLineArg )
+		{
+			TCHAR* pszLine = script.GetLineBuffer();
+			ptrdiff_t iOffset = pszLineArg - pszLine;
+			if ( iOffset >= 0 && iOffset < SCRIPT_MAX_LINE_LEN )
+				iBufCapacity = SCRIPT_MAX_LINE_LEN - static_cast<size_t>(iOffset);
+		}
+		return GetScriptExpression(pszArg, iBufCapacity);
+	}
+
 	void SetBaseObject(CScriptObj* pObj)
 	{
 		m_pBaseObj = pObj;
@@ -704,7 +721,24 @@ public:
 		return m_pSrc;
 	}
 
-	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags)
+	// Check the complete replacement size before shifting the suffix.  The
+	// expression itself is temporarily NUL-terminated while it is evaluated,
+	// so strlen(pszBuf) cannot be used for this check; iBegin and iTrailLen
+	// describe the prefix and suffix explicitly.
+	static bool IsEscapeExpansionWithinCapacity(size_t iBegin, size_t iResultLen,
+		size_t iTrailLen, size_t iBufCapacity)
+	{
+		size_t iNewLen = iBegin + iResultLen + iTrailLen;
+		if ( iNewLen < iBufCapacity )
+			return true;
+
+		DEBUG_ERR(( "Script escape expansion exceeds line buffer (required=%lu capacity=%lu)" LOG_CR,
+			(unsigned long) (iNewLen + 1), (unsigned long) iBufCapacity ));
+		return false;
+	}
+
+	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags,
+		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		// Resolve <...> expression tags in a text buffer, in-place.
 		// <eval 1+2>  → "3"
@@ -825,6 +859,13 @@ public:
 				int iExprLen = iEnd - iBegin + 1;
 				int iResultLen = sResult.GetLength();
 				int iTrailLen = strlen(pszBuf + iEnd + 1);
+				if ( !IsEscapeExpansionWithinCapacity(
+					(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity) )
+				{
+					pszBuf[iEnd - 1] = '?';
+					i = iEnd;
+					continue;
+				}
 				// pszBuf[iEnd-1] is '\0', pszBuf[iEnd] is '>', trailing starts at iEnd+1
 				memmove(pszBuf + iBegin + iResultLen, pszBuf + iEnd + 1, iTrailLen + 1);
 				memcpy(pszBuf + iBegin, (LPCTSTR)sResult, iResultLen);
@@ -923,6 +964,16 @@ public:
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
 			int iResultLen = sResult.GetLength();
 			int iTrailLen = strlen(pszBuf + iEnd + 1); // chars after '>'
+			if ( !IsEscapeExpansionWithinCapacity(
+				(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity) )
+			{
+				// Restore the '>' and leave the original escape visible to the
+				// command handler.  It is safer than silently truncating a valid
+				// script line after an expansion does not fit.
+				pszBuf[iEnd] = chEnd;
+				i = iEnd;
+				continue;
+			}
 
 			// Restore the null we placed at iEnd for the trailing copy.
 			// pszBuf[iEnd] is already '\0', the trailing starts at iEnd+1.
@@ -1501,7 +1552,7 @@ public:
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					if ( *pszArg )
 					{
-						int iVal = GetScriptExpression(pszArg);
+						int iVal = GetScriptExpression(script, pszArg);
 						m_vValRet.SetInt(iVal);
 						return (TRIGRET_TYPE) iVal;
 					}
@@ -1514,7 +1565,7 @@ public:
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					int fCondition = 0;
 					if ( *pszArg )
-						fCondition = GetScriptExpression(pszArg);
+						fCondition = GetScriptExpression(script, pszArg);
 					bool fBeenTrue = false;
 
 					for (;;)
@@ -1534,7 +1585,7 @@ public:
 							size_t iElseLen;
 							FindScriptKeyword(script.GetKey(), iElseLen);
 							pszArg = GetKeywordArg(script, iElseLen, szArg, sizeof(szArg));
-							fCondition = *pszArg ? GetScriptExpression(pszArg) : 0;
+							fCondition = *pszArg ? GetScriptExpression(script, pszArg) : 0;
 						}
 					}
 				}
@@ -1596,7 +1647,7 @@ public:
 					int iMin = 1, iMax = 0;
 					if ( *pszArg )
 					{
-						iMax = GetScriptExpression(pszArg);
+						iMax = GetScriptExpression(script, pszArg);
 					}
 					int iLoops = 0;
 					for ( int i = iMin; i <= iMax; i++ )
@@ -1629,7 +1680,7 @@ public:
 				{
 					// DORAND <count> / DOSWITCH <index>
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
-					int iVal = *pszArg ? GetScriptExpression(pszArg) : 0;
+					int iVal = *pszArg ? GetScriptExpression(script, pszArg) : 0;
 					if ( index == SK_DORAND && iVal > 0 )
 						iVal = Calc_GetRandVal(iVal);
 					for (;;)
@@ -1679,7 +1730,8 @@ public:
 					if ( strchr(szKey, '<') )
 						s_ParseEscapes( szKey, 0 );
 					if ( script.GetArgMod() && *script.GetArgMod() )
-						s_ParseEscapes( script.GetArgMod(), 0 );
+						s_ParseEscapes( script.GetArgMod(), 0,
+							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
 
 					// Rebuild the statement: "KEY VALUE", or "KEY=VALUE" for an
 					// assignment.  The line reader splits at the first space or '=',

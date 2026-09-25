@@ -40,6 +40,15 @@ SPAWN_POINT_PRODUCT_ID = 0x0E9D
 SPAWN_POINT_PRODUCT_NAME = "SYNTHETIC_SPAWN_PRODUCT"
 SPAWN_POINT_MARKER = "SPHERE_SPAWN_POINT_CREATED"
 
+# Login escape-buffer probe.  The saved character name is deliberately just
+# below the engine's item/name limit; expanding it in a near-limit command
+# line must be rejected before the in-place suffix shift can overrun the
+# CScript line buffer.
+ESCAPE_OVERFLOW_ACCOUNT = "EscapeProbe"
+ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
+ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
+ESCAPE_OVERFLOW_NAME = "N" * 256
+
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
 # character), "I" in the @Equip trigger of an equipped item (default object is
@@ -1284,6 +1293,7 @@ def write_scripts(
     spawn_gem_probe: bool = False,
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
+    escape_overflow_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1391,6 +1401,22 @@ def write_scripts(
         if world_save_probe and suppress_login_item
         else ""
     )
+    escape_overflow_login = ""
+    if escape_overflow_probe:
+        # Keep the source line within SCRIPT_MAX_LINE_LEN while making the
+        # resolved name materially longer than its <NAME> escape tag.
+        escape_line = (
+            "VAR overflow_sink,"
+            + ("P" * 3000)
+            + "<NAME>"
+            + ("S" * 1050)
+        )
+        assert len(escape_line) < 4096
+        escape_overflow_login = (
+            escape_line
+            + "\n"
+            + f"SYSMESSAGE {ESCAPE_OVERFLOW_MARKER}\n"
+        )
     timer_lifetime_before_markers = (
         "SERV.B SPHERE_TIMER_COUNTS_BEFORE <SERV.ITEMS>|<SERV.CHARS>\n"
         "SERV.B SPHERE_TIMER_UIDS_BEFORE "
@@ -1769,7 +1795,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + world_save_logout_event_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_logout_event_login + escape_overflow_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
@@ -1915,6 +1941,49 @@ Synthetic starting point
     write_text(root / "save" / "spherechars.scp", "[EOF]")
     write_text(root / "accounts" / "sphereaccu.scp", "[EOF]")
     (root / "logs").mkdir(parents=True, exist_ok=True)
+
+
+def write_escape_overflow_save(root: Path) -> None:
+    """Write one existing account/character for the login escape probe."""
+
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            (
+                f"[{ESCAPE_OVERFLOW_ACCOUNT}]",
+                f"PASSWORD={ESCAPE_OVERFLOW_PASSWORD}",
+                "CHARUID=1",
+                "LASTCHARUID=1",
+                "[EOF]",
+            )
+        ),
+    )
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "[EOF]")
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            (
+                "TITLE=Sphere synthetic login escape fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=1",
+                f"ACCOUNT={ESCAPE_OVERFLOW_ACCOUNT}",
+                f"NAME={ESCAPE_OVERFLOW_NAME}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "DEX=100",
+                "INT=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            )
+        ),
+    )
 
 
 def write_world_load_counts_save(
@@ -3008,6 +3077,11 @@ def main() -> int:
         action="store_true",
         help="seed a timed spawn point whose target is a quoted resource name",
     )
+    parser.add_argument(
+        "--escape-overflow-probe",
+        action="store_true",
+        help="log in an existing character through a near-limit escape expansion",
+    )
     args = parser.parse_args()
 
     world_load_modes = (
@@ -3030,6 +3104,24 @@ def main() -> int:
         parser.error("choose only one world-load fixture mode")
     if args.spawn_gem_duplicate_serial_probe:
         args.spawn_gem_probe = True
+    if args.escape_overflow_probe and (
+        any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
+        or args.container_shutdown_probe
+        or args.book_pages_probe
+        or args.dword_hex_probe
+        or args.region_weather_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+        or args.spawn_point_probe
+        or args.events_attr_probe
+        or args.legacy_metadata_probe
+    ):
+        parser.error("escape-overflow probe cannot be combined with another world fixture mode")
     if (
         args.spawn_gem_probe
         or args.spawn_gem_duplicate_serial_probe
@@ -3187,6 +3279,7 @@ def main() -> int:
         region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
+        escape_overflow_probe=args.escape_overflow_probe,
     )
     if args.world_load_counts:
         write_world_load_counts_save(
@@ -3219,6 +3312,8 @@ def main() -> int:
         )
     if args.spawn_point_probe:
         write_spawn_point_save(root)
+    if args.escape_overflow_probe:
+        write_escape_overflow_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:
