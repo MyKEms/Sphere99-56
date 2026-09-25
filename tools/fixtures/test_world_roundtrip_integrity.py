@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import difflib
 import re
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from run_suite import shutdown_failures
@@ -66,6 +68,26 @@ def normalized_metadata_char_save(text: str) -> str:
             continue
         normalized.append(line)
     return "\n".join(normalized)
+
+
+def bounded_unified_diff(before: str, after: str, *, label: str) -> str:
+    """Return a bounded diagnostic for an unexpected normalized save change."""
+
+    diff = list(
+        difflib.unified_diff(
+            before.splitlines(),
+            after.splitlines(),
+            fromfile=f"{label}-second",
+            tofile=f"{label}-third",
+            lineterm="",
+            n=2,
+        )
+    )
+    if not diff:
+        return f"{label} changed despite an empty normalized diff"
+    if len(diff) > 80:
+        diff = diff[:80] + [f"... ({len(diff) - 80} more diff lines omitted)"]
+    return "\n".join(diff)
 
 
 def main() -> int:
@@ -141,14 +163,32 @@ def main() -> int:
         finally:
             sock.close()
 
-    def wait_for_new_save(save_fixture: Path, previous_world: str) -> None:
-        import time
+    def wait_for_new_save(
+        save_fixture: Path,
+        previous_world: str,
+        previous_chars: str,
+    ) -> None:
+        """Wait for both files to settle after the logout-triggered save.
+
+        SERV.SAVE writes the world and character files separately.  Returning
+        as soon as the world reaches EOF can race the character write (or a
+        second save from the logout hook), leaving the next generation with a
+        partially settled pair.  Require a changed world and an unchanged
+        world/character pair for a bounded quiet interval before stopping the
+        server.  This preserves all value comparisons while making the
+        generation boundary deterministic.
+        """
 
         world_path = save_fixture / "save" / "sphereworld.scp"
+        chars_path = save_fixture / "save" / "spherechars.scp"
         deadline = time.monotonic() + 30.0
+        quiet_since = None
+        last_pair = None
+        quiet_interval = 0.75
         while time.monotonic() < deadline:
             try:
-                current = world_path.read_text(encoding="ascii", errors="replace")
+                current_world = world_path.read_text(encoding="ascii", errors="replace")
+                current_chars = chars_path.read_text(encoding="ascii", errors="replace")
             except OSError:
                 time.sleep(0.1)
                 continue
@@ -171,10 +211,23 @@ def main() -> int:
                     "REGION.FLAGS=0d2",
                     "[WORLDITEM SYNTHETIC_OBJECT]",
                 )
-            if current != previous_world and "[EOF]" in current and all(
-                marker in current for marker in required_markers
-            ):
-                return
+            pair = (current_world, current_chars)
+            ready = (
+                (current_world != previous_world or current_chars != previous_chars)
+                and "[EOF]" in current_world
+                and "[EOF]" in current_chars
+                and all(marker in current_world for marker in required_markers)
+            )
+            if ready:
+                now = time.monotonic()
+                if pair != last_pair:
+                    last_pair = pair
+                    quiet_since = now
+                elif quiet_since is not None and now - quiet_since >= quiet_interval:
+                    return
+            else:
+                last_pair = None
+                quiet_since = None
             time.sleep(0.1)
         raise RuntimeError("logout-triggered save did not produce a new world file")
 
@@ -199,8 +252,12 @@ def main() -> int:
         world_path = current_fixture / "save" / "sphereworld.scp"
         try:
             previous_world = world_path.read_text(encoding="ascii", errors="replace")
+            previous_chars = (current_fixture / "save" / "spherechars.scp").read_text(
+                encoding="ascii", errors="replace"
+            )
         except OSError:
             previous_world = ""
+            previous_chars = ""
         returncode, error, log_contents = run_server(
             fixture=current_fixture,
             binary=binary,
@@ -210,9 +267,9 @@ def main() -> int:
             log_path=current_fixture / log_name,
             action=(
                 lambda port=args.port + generation, run_fixture=current_fixture,
-                saved_world=previous_world: (
+                saved_world=previous_world, saved_chars=previous_chars: (
                     login_existing_character(run_fixture, port),
-                    wait_for_new_save(run_fixture, saved_world),
+                    wait_for_new_save(run_fixture, saved_world, saved_chars),
                 )
             ),
         )
@@ -319,12 +376,26 @@ def main() -> int:
     if len(saved_worlds) == 3:
         normalize = normalized_format_save if args.format_compat else normalized_save
         if normalize(saved_worlds[1]) != normalize(saved_worlds[2]):
-            failures.append("normalized second and third saves differ")
+            failures.append(
+                "normalized second and third saves differ\n"
+                + bounded_unified_diff(
+                    normalize(saved_worlds[1]),
+                    normalize(saved_worlds[2]),
+                    label="world",
+                )
+            )
         if args.metadata_roundtrip and len(saved_chars) == 3:
-            if normalized_metadata_char_save(saved_chars[1]) != normalized_metadata_char_save(
-                saved_chars[2]
-            ):
-                failures.append("normalized second and third character saves differ")
+            normalized_second_chars = normalized_metadata_char_save(saved_chars[1])
+            normalized_third_chars = normalized_metadata_char_save(saved_chars[2])
+            if normalized_second_chars != normalized_third_chars:
+                failures.append(
+                    "normalized second and third character saves differ\n"
+                    + bounded_unified_diff(
+                        normalized_second_chars,
+                        normalized_third_chars,
+                        label="characters",
+                    )
+                )
 
     cleanup_temp_copies()
     atexit.unregister(cleanup_temp_copies)
