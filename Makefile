@@ -188,10 +188,23 @@ save-io-test:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_SAVE_IO_TEST" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
+container-list-test:
+	@mkdir -p build/container-list
+	$(CXX) $(DEFAULT_CXXFLAGS) -I$(BASEDIR)/spherelib \
+		tools/container_list_test.cpp -o build/container-list/container_list_test
+
+container-list-asan-test:
+	@mkdir -p build/asan-container-list
+	$(CXX) $(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		-I$(BASEDIR)/spherelib tools/container_list_test.cpp \
+		-o build/asan-container-list/container_list_test \
+		-fsanitize=address,undefined
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test value-range-test save-io-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test container-list-test container-list-asan-test clean

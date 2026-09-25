@@ -26,6 +26,11 @@ jobs:
       - name: Build
         run: make -j"$(nproc)" 2>&1 | tee build.log
 
+      - name: Run container-list regression
+        run: |
+          make container-list-test
+          build/container-list/container_list_test
+
       - name: Check binary
         run: file sphere99svr | grep -q 'ELF 32-bit'
 
@@ -59,6 +64,14 @@ jobs:
 
       - name: Check binary
         run: file build/asan/sphere99svr | grep -q 'ELF 64-bit'
+
+      - name: Run container-list regression under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make container-list-asan-test
+          build/asan-container-list/container_list_test
 
       - name: Verify crash recovery is opt-in
         run: |

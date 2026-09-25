@@ -1206,7 +1206,7 @@ public:
 
 protected:
 	virtual void OnRemoveOb( CGObListRec* pObRec );	// Override this = called when removed from list.
-	void ContentAddPrivate( CItemPtr pItem );
+	bool ContentAddPrivate( CItemPtr pItem );
 
 	void s_WriteContent( CScript& s ) const;
 	void s_SerializeContent( CGFile& a ) const;	// binary
@@ -1365,6 +1365,7 @@ public:
 			// still belong to this container, while allowing a pending in-flight
 			// child to remain linked until its callback unwinds.
 			CGRefArray<CItem> aItems;
+			aItems.Reserve( GetCount());
 			for ( CItemPtr pItem = GetHead(); pItem != NULL; pItem = pItem->GetNext() )
 				aItems.Add( pItem );
 			for ( size_t i = 0; i < aItems.GetCount(); ++i )

@@ -304,7 +304,8 @@ void CItemContainer::ContentAdd( CItemPtr pItem, POINT pt )
 	}
 
 insertit:
-	CContainer::ContentAddPrivate( pItem );
+	if ( ! CContainer::ContentAddPrivate( pItem ))
+		return;
 	pItem->SetContainedPoint( pt );
 
 #ifdef _DEBUG
@@ -835,4 +836,3 @@ bool CItemContainer::OnTick()
 	}
 	return CItemVendable::OnTick();
 }
-
