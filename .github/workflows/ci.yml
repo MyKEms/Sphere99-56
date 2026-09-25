@@ -400,6 +400,15 @@ jobs:
             --port 2741 \
             --duplicate-load
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-spawn-point" \
+            --spawn-point-probe
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+          python3 tools/fixtures/test_spawn_point.py \
+            "$RUNNER_TEMP/sphere-asan-spawn-point" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2744
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-dotted-expressions" \
             --dotted-expression-probe \
             --unknown-keyword-report
@@ -490,6 +499,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-spawn-gem/server.log
             ${{ runner.temp }}/sphere-asan-spawn-gem/server-reload.log
             ${{ runner.temp }}/sphere-asan-spawn-gem-duplicate/server.log
+            ${{ runner.temp }}/sphere-asan-spawn-point/server.log
             ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-asan-arg-locals/server.log
             ${{ runner.temp }}/sphere-asan-dword-hex/server.log
@@ -888,6 +898,13 @@ jobs:
             --port 2743 \
             --duplicate-load
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-spawn-point" \
+            --spawn-point-probe
+          python3 tools/fixtures/test_spawn_point.py \
+            "$RUNNER_TEMP/sphere-spawn-point" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2745
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-dotted-expressions" \
             --dotted-expression-probe \
             --unknown-keyword-report
@@ -971,6 +988,7 @@ jobs:
             ${{ runner.temp }}/sphere-spawn-gem/server.log
             ${{ runner.temp }}/sphere-spawn-gem/server-reload.log
             ${{ runner.temp }}/sphere-spawn-gem-duplicate/server.log
+            ${{ runner.temp }}/sphere-spawn-point/server.log
             ${{ runner.temp }}/sphere-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-arg-locals/server.log
             ${{ runner.temp }}/sphere-dword-hex/server.log
