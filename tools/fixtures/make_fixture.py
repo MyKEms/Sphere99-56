@@ -950,7 +950,6 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "NAME=synthetic fixture heal\n"
         "RUNES=IM\n"
         "MANAUSE=8\n"
-        "SKILLREQ=MAGERY 10.0\n"
         f"\n[ITEMDEF 0x{DOTTED_PROBE_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_DOTTED_PROBE\n"
         "NAME=synthetic dotted probe\n"

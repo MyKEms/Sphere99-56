@@ -45,6 +45,7 @@ CSkillDef::CSkillDef( SKILL_TYPE skill ) :
 	m_StatPercent = 0;
 }
 
+
 HRESULT CSkillDef::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc )
 {
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
@@ -308,6 +309,20 @@ CSpellDef::CSpellDef( SPELL_TYPE id ) : CResourceDef( CSphereUID( RES_Spell, id 
 HRESULT CSpellDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
 	// RES_Spell
+	// Spell definitions are stored directly in the spell table rather than as
+	// CResourceLink objects, so register their DEFNAME here for symbolic
+	// ResourceGetIDByName lookups such as FINDRES(SPELL,S_HEAL).
+	if ( !_stricmp(pszKey, "DEFNAME") )
+	{
+		LPCTSTR pszDefName = vVal.GetPSTR();
+		if ( pszDefName && pszDefName[0] )
+		{
+			SetResourceName( pszDefName );
+			CSphereUID rid = GetUIDIndex();
+			g_Cfg.m_Const.SetKeyVar( pszDefName, CGVariant( VARTYPE_UID, &rid ));
+		}
+		return NO_ERROR;
+	}
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp<0)
 	{
@@ -382,6 +397,12 @@ HRESULT CSpellDef::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole
 	{
 	case P_CastTime:
 		vValRet = m_iCastTime;	// In tenths.
+		break;
+	case P_ManaUse:
+		vValRet = m_wManaUse;
+		break;
+	case P_Runes:
+		vValRet = m_sRunes;
 		break;
 	case P_Flags:
 		vValRet = m_wFlags;

@@ -912,6 +912,21 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		// lookup a specific account by name.
 		vValRet.SetRef( g_Accounts.Account_FindNameCheck(vArgs));
 		break;
+	case F_FindRes:
+		// Resolve a resource by type and name without creating a definition.
+		// The resource reference is retained so callers can continue through
+		// its properties, as in FINDRES(SPELL,S_HEAL).MANAUSE.
+		if ( vArgs.MakeArraySize() < 2 )
+			return HRES_BAD_ARG_QTY;
+		{
+			RES_TYPE restype = (RES_TYPE) s_FindKeyInTable(
+				vArgs.GetArrayPSTR(0), CSphereResourceMgr::sm_szResourceBlocks );
+			if ( restype <= RES_UNKNOWN || restype >= RES_QTY )
+				return HRES_BAD_ARGUMENTS;
+			CSphereUID rid = g_Cfg.ResourceGetIDByName( restype, vArgs.GetArrayPSTR(1) );
+			vValRet.SetRef( g_Cfg.ResourceGetDef( rid ));
+		}
+		break;
 	case F_Srv:
 	case F_Serv:
 		// "LASTNEWITEM" etc
