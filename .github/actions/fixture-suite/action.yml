@@ -1,0 +1,16 @@
+name: Synthetic fixture suite
+description: Run every registered synthetic fixture case from the fixture manifest
+inputs:
+  variant:
+    description: native or asan
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Run registered fixture cases
+      shell: bash
+      run: |
+        python3 tools/fixtures/run_fixture_suite.py \
+          --variant "${{ inputs.variant }}" \
+          --binary "$SPHERE_FIXTURE_BINARY" \
+          --root "$RUNNER_TEMP"
