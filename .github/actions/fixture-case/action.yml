@@ -1,0 +1,20 @@
+name: Synthetic fixture case
+description: Generate and run one isolated synthetic fixture case
+inputs:
+  case:
+    description: Name from the fixture mode manifest
+    required: true
+  variant:
+    description: native or asan
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Run ${{ inputs.case }}
+      shell: bash
+      run: |
+        python3 tools/fixtures/run_fixture_case.py \
+          "${{ inputs.case }}" \
+          --variant "${{ inputs.variant }}" \
+          --binary "$SPHERE_FIXTURE_BINARY" \
+          --root "$RUNNER_TEMP"

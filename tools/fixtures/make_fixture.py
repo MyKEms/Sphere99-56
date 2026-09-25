@@ -12,6 +12,8 @@ import argparse
 import struct
 from pathlib import Path
 
+from fixture_cases import FIXTURE_MODES
+
 
 MAP_BLOCK_BYTES = 196
 MAP_BLOCKS_X = 0x1800 // 8
@@ -2852,6 +2854,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="directory to populate")
     parser.add_argument(
+        "--mode",
+        choices=tuple(sorted(FIXTURE_MODES)),
+        help="select a complete named fixture recipe (legacy flags remain supported)",
+    )
+    parser.add_argument(
         "--unknown-newbie",
         action="store_true",
         help="include a section keyed by a nonexistent skill",
@@ -3083,6 +3090,12 @@ def main() -> int:
         help="log in an existing character through a near-limit escape expansion",
     )
     args = parser.parse_args()
+
+    # A mode is a complete recipe.  Reparse its declarative argument list
+    # through this parser so all existing validation and defaults stay in one
+    # place while each CI test can name an isolated fixture.
+    if args.mode:
+        args = parser.parse_args([str(args.output), *FIXTURE_MODES[args.mode]])
 
     world_load_modes = (
         args.truncate_world_item,
