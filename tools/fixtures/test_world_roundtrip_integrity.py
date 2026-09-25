@@ -213,7 +213,7 @@ def main() -> int:
                 )
             pair = (current_world, current_chars)
             ready = (
-                current_world != previous_world
+                (current_world != previous_world or current_chars != previous_chars)
                 and "[EOF]" in current_world
                 and "[EOF]" in current_chars
                 and all(marker in current_world for marker in required_markers)
