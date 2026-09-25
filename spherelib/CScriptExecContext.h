@@ -641,14 +641,14 @@ public:
 		return HRES_UNKNOWN_PROPERTY;
 	}
 
-	int GetScriptExpression(TCHAR* pszArg)
+	int GetScriptExpression(TCHAR* pszArg, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		if ( !pszArg || !*pszArg )
 			return 0;
 
 		// Control-flow expressions and RETURN values need the same macro
 		// expansion as ordinary command arguments.
-		s_ParseEscapes(pszArg, 0);
+		s_ParseEscapes(pszArg, 0, iBufCapacity);
 
 		TCHAR* pszExpr = pszArg;
 		while ( ISWHITESPACE(*pszExpr) ) pszExpr++;
@@ -687,6 +687,23 @@ public:
 			}
 		}
 		return GetComplex(pszExpr);
+	}
+
+	// GetKeywordArg normally returns a pointer into CScript::m_szLine.  Its
+	// remaining capacity is smaller when the argument starts after the key;
+	// preserve that bound while expanding control-flow expressions.
+	int GetScriptExpression(CScript& script, TCHAR* pszArg)
+	{
+		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN;
+		TCHAR* pszLineArg = script.GetArgMod();
+		if ( pszArg && pszArg == pszLineArg )
+		{
+			TCHAR* pszLine = script.GetLineBuffer();
+			ptrdiff_t iOffset = pszLineArg - pszLine;
+			if ( iOffset >= 0 && iOffset < SCRIPT_MAX_LINE_LEN )
+				iBufCapacity = SCRIPT_MAX_LINE_LEN - static_cast<size_t>(iOffset);
+		}
+		return GetScriptExpression(pszArg, iBufCapacity);
 	}
 
 	void SetBaseObject(CScriptObj* pObj)
@@ -1535,7 +1552,7 @@ public:
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					if ( *pszArg )
 					{
-						int iVal = GetScriptExpression(pszArg);
+						int iVal = GetScriptExpression(script, pszArg);
 						m_vValRet.SetInt(iVal);
 						return (TRIGRET_TYPE) iVal;
 					}
@@ -1548,7 +1565,7 @@ public:
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
 					int fCondition = 0;
 					if ( *pszArg )
-						fCondition = GetScriptExpression(pszArg);
+						fCondition = GetScriptExpression(script, pszArg);
 					bool fBeenTrue = false;
 
 					for (;;)
@@ -1568,7 +1585,7 @@ public:
 							size_t iElseLen;
 							FindScriptKeyword(script.GetKey(), iElseLen);
 							pszArg = GetKeywordArg(script, iElseLen, szArg, sizeof(szArg));
-							fCondition = *pszArg ? GetScriptExpression(pszArg) : 0;
+							fCondition = *pszArg ? GetScriptExpression(script, pszArg) : 0;
 						}
 					}
 				}
@@ -1630,7 +1647,7 @@ public:
 					int iMin = 1, iMax = 0;
 					if ( *pszArg )
 					{
-						iMax = GetScriptExpression(pszArg);
+						iMax = GetScriptExpression(script, pszArg);
 					}
 					int iLoops = 0;
 					for ( int i = iMin; i <= iMax; i++ )
@@ -1663,7 +1680,7 @@ public:
 				{
 					// DORAND <count> / DOSWITCH <index>
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
-					int iVal = *pszArg ? GetScriptExpression(pszArg) : 0;
+					int iVal = *pszArg ? GetScriptExpression(script, pszArg) : 0;
 					if ( index == SK_DORAND && iVal > 0 )
 						iVal = Calc_GetRandVal(iVal);
 					for (;;)
@@ -1713,7 +1730,8 @@ public:
 					if ( strchr(szKey, '<') )
 						s_ParseEscapes( szKey, 0 );
 					if ( script.GetArgMod() && *script.GetArgMod() )
-						s_ParseEscapes( script.GetArgMod(), 0 );
+						s_ParseEscapes( script.GetArgMod(), 0,
+							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
 
 					// Rebuild the statement: "KEY VALUE", or "KEY=VALUE" for an
 					// assignment.  The line reader splits at the first space or '=',

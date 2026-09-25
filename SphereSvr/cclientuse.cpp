@@ -678,7 +678,10 @@ HRESULT CClient::Cmd_Skill_Menu( CSphereUID rid, int iSelect )
 		}
 		if ( s.IsKey("TESTIF"))
 		{
-			exec.s_ParseEscapes( s.GetArgMod(), 0 );
+			TCHAR* pszArg = s.GetArgMod();
+			if ( pszArg && *pszArg )
+				exec.s_ParseEscapes( pszArg, 0,
+					SCRIPT_MAX_LINE_LEN - (pszArg - s.GetLineBuffer()) );
 			if ( ! s.GetArgInt())
 			{
 				iShowCount--;
