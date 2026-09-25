@@ -2987,7 +2987,7 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 		}
 
 		iRet = pResLink->OnTriggerScript( exec, iAction, pszTrigName );
-		if ( fReportUnknown )
+		if ( fReportUnknown || iAction == CItemDef::T_Timer )
 			fHasTriggerHandler = pResLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet == TRIGRET_RET_VAL )
 		{
@@ -3005,7 +3005,7 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 			RES_GET_TYPE(pLink->GetUIDIndex()) != RES_ItemDef )
 			continue;
 		iRet = pLink->OnTriggerScript( exec, iAction, pszTrigName );
-		if ( fReportUnknown )
+		if ( fReportUnknown || iAction == CItemDef::T_Timer )
 			fHasTriggerHandler = pLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet != TRIGRET_RET_FALSE && iRet != TRIGRET_RET_DEFAULT )
 			return iRet;
@@ -3013,10 +3013,17 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 
 	// Look up the trigger in the RES_ItemDef. (default)
 	iRet = Base_GetDef()->OnTriggerScript( exec, iAction, pszTrigName );
-	if ( fReportUnknown )
+	if ( fReportUnknown || iAction == CItemDef::T_Timer )
 		fHasTriggerHandler = Base_GetDef()->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 	if ( fReportUnknown && !fHasTriggerHandler )
 		ScriptUnknownRecord(SCRIPT_UNKNOWN_TRIGGER, pszTrigName, this);
+	// A script timer with a handler that reaches the end without RETURN is
+	// still handled.  Timer processing has no engine default to continue to;
+	// treating the default return as unhandled only emits a misleading DECAY
+	// diagnostic after the script has already performed its work.
+	if ( iAction == CItemDef::T_Timer &&
+		iRet == TRIGRET_RET_DEFAULT && fHasTriggerHandler )
+		return TRIGRET_RET_VAL; // handled timer sentinel; no script value is required
 	return( iRet ); // TRIGRET_RET_DEFAULT ?
 }
 

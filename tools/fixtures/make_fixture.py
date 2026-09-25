@@ -29,6 +29,13 @@ TIMER_LIFETIME_ITEM_SERIALS = (101, 102, 103, 104, 105)
 UID_F_ITEM = 0x40000000
 TIMER_LIFETIME_DELAY_SECONDS = 15
 TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
+SCRIPT_TIMER_OWNER_SERIAL = 210
+SCRIPT_TIMER_ITEM_SERIAL = 211
+SCRIPT_TIMER_DELAY_SECONDS = 15
+SCRIPT_TIMER_ITEM_UID = UID_F_ITEM | SCRIPT_TIMER_ITEM_SERIAL
+SCRIPT_TIMER_ITEM_ID = 0x0E7A
+SCRIPT_TIMER_MARKER = "SPHERE_SCRIPT_TIMER_TRIGGERED"
+SCRIPT_TIMER_REMOVED_MARKER = "SPHERE_SCRIPT_TIMER_REMOVED"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
 NAMED_MULTI_NAME = "synthetic named multi"
@@ -1073,7 +1080,7 @@ def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
         )
 
     return (
-        "\n[ITEMDEF 0x0E7A]\n"
+        f"\n[ITEMDEF 0x{SCRIPT_TIMER_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_MUTATION_OBSERVER\n"
         "NAME=synthetic mutation observer\n"
         "TYPE=T_EQ_SCRIPT\n"
@@ -1276,6 +1283,7 @@ def write_scripts(
     named_item_name_probe: bool = False,
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
+    script_timer_probe: bool = False,
     dotted_expression_probe: bool = False,
     format_compat_probe: bool = False,
     arg_locals_probe: bool = False,
@@ -1454,6 +1462,25 @@ def write_scripts(
         "SERV.B SPHERE_TIMER_SIBLING_TRIGGERED\n"
         "RETURN 1\n"
         if timer_lifetime_probe
+        else ""
+    )
+    script_timer_probe_itemdef = (
+        "\n[TYPEDEF 74]\n"
+        "DEFNAME=T_EQ_MEMORY_OBJ\n"
+        "\n[ITEMDEF 0x2007]\n"
+        "DEFNAME=i_memory\n"
+        "TYPE=T_EQ_MEMORY_OBJ\n"
+        "LAYER=30\n"
+        "\n[ITEMDEF 0x0E7A]\n"
+        "DEFNAME=SYNTHETIC_SCRIPT_TIMER\n"
+        "NAME=synthetic script timer\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Timer\n"
+        f"SERV.B {SCRIPT_TIMER_MARKER} <ISUIDVALID {SCRIPT_TIMER_ITEM_UID}>\n"
+        "REMOVE\n"
+        f"SERV.B {SCRIPT_TIMER_REMOVED_MARKER} <ISUIDVALID {SCRIPT_TIMER_ITEM_UID}>\n"
+        if script_timer_probe
         else ""
     )
     timer_lifetime_observer_login = (
@@ -1757,7 +1784,7 @@ SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
 """ + unequip_remove + """
 SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
 
-""" + timer_lifetime_probe_itemdefs + """
+""" + timer_lifetime_probe_itemdefs + script_timer_probe_itemdef + """
 [ITEMDEF 0x09B2]
 DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
@@ -1823,7 +1850,7 @@ SYSMESSAGE SPHERE_TRIGGER_RETURN <TRIGGER(@FixtureReturn)>
 HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
-""" + ("" if timer_lifetime_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
+""" + ("" if timer_lifetime_probe or script_timer_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
@@ -2468,6 +2495,7 @@ def write_timer_lifetime_save(root: Path) -> None:
     timer_item_serial, container_serial, child_a_serial, child_b_serial, sibling_serial = (
         TIMER_LIFETIME_ITEM_SERIALS
     )
+
     write_text(
         root / "save" / "sphereworld.scp",
         "\n".join(
@@ -2516,6 +2544,49 @@ def write_timer_lifetime_save(root: Path) -> None:
                 "[WORLDITEM SYNTHETIC_OBJECT]",
                 f"SERIAL={child_b_serial}",
                 f"CONT={UID_F_ITEM | container_serial}",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
+def write_script_timer_save(root: Path) -> None:
+    """Seed a script timer whose handler intentionally omits RETURN 1."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic script timer fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic script timer fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                f"SERIAL={SCRIPT_TIMER_OWNER_SERIAL}",
+                "NPC=2",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[WORLDITEM SYNTHETIC_SCRIPT_TIMER]",
+                f"SERIAL={SCRIPT_TIMER_ITEM_SERIAL}",
+                f"CONT={SCRIPT_TIMER_OWNER_SERIAL}",
+                "LAYER=30",
+                f"TIMER={SCRIPT_TIMER_DELAY_SECONDS}",
                 "[EOF]",
             ]
         ),
@@ -2990,6 +3061,11 @@ def main() -> int:
         help="seed a timer-owner, nested-item, sibling, and UID-cleanup probe",
     )
     parser.add_argument(
+        "--script-timer-probe",
+        action="store_true",
+        help="seed a script timer whose handler omits RETURN 1",
+    )
+    parser.add_argument(
         "--dotted-expression-probe",
         action="store_true",
         help="evaluate dotted reference expressions and commands at login",
@@ -3120,6 +3196,7 @@ def main() -> int:
     if args.escape_overflow_probe and (
         any(world_load_modes)
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3142,6 +3219,7 @@ def main() -> int:
     ) and (
         any(world_load_modes)
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3151,6 +3229,7 @@ def main() -> int:
         parser.error("spawn probe cannot be combined with another world fixture mode")
     if (
         args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3161,6 +3240,7 @@ def main() -> int:
     if sum(
         (
             args.timer_lifetime_probe,
+            args.script_timer_probe,
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
@@ -3174,6 +3254,7 @@ def main() -> int:
         args.world_load_counts
         or any(world_load_modes)
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3184,6 +3265,7 @@ def main() -> int:
         args.world_load_counts
         or any(world_load_modes)
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3199,6 +3281,7 @@ def main() -> int:
     if args.book_pages_probe and (
         args.world_load_counts
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3214,6 +3297,7 @@ def main() -> int:
     if args.dword_hex_probe and (
         args.world_load_counts
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3228,6 +3312,7 @@ def main() -> int:
     if args.region_weather_probe and (
         args.world_load_counts
         or args.timer_lifetime_probe
+        or args.script_timer_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3249,6 +3334,7 @@ def main() -> int:
         unknown_keyword_report_format=args.unknown_keyword_report_format,
         force_garbage_collect=(
             args.timer_lifetime_probe
+            or args.script_timer_probe
             or args.timer_lifetime_item_first_probe
             or args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
@@ -3274,6 +3360,7 @@ def main() -> int:
         named_resource_id_probe=args.named_resource_ids,
         metadata_roundtrip_probe=args.metadata_roundtrip_probe,
         timer_lifetime_probe=args.timer_lifetime_probe,
+        script_timer_probe=args.script_timer_probe,
         dotted_expression_probe=args.dotted_expression_probe,
         format_compat_probe=args.format_compat_probe,
         arg_locals_probe=args.arg_locals_probe,
@@ -3312,6 +3399,8 @@ def main() -> int:
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
+    if args.script_timer_probe:
+        write_script_timer_save(root)
     if args.book_pages_probe:
         write_book_pages_save(root)
     if args.dword_hex_probe:
