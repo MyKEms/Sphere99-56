@@ -790,14 +790,20 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         # existing numeric value while ordinary and string writes stay intact.
         "TAG.current_num=10",
         "SYSMESSAGE " + marker + " C|tag_current_initial|[<tag(current_num)>]",
+        "TAG.current_num=#+1",
+        "SYSMESSAGE " + marker + " C|tag_current_property_add|[<tag(current_num)>]",
         "TAG(current_num,#+3)",
         "SYSMESSAGE " + marker + " C|tag_current_add|[<tag(current_num)>]",
         "TAG(current_num,#-2)",
         "SYSMESSAGE " + marker + " C|tag_current_sub|[<tag(current_num)>]",
+        "TAG.current_num=#+<EVAL 2>",
+        "SYSMESSAGE " + marker + " C|tag_current_expression_add|[<tag(current_num)>]",
         "TAG.current_num=42",
         "SYSMESSAGE " + marker + " C|tag_current_absolute|[<tag(current_num)>]",
         "TAG(current_text,seed)",
         "SYSMESSAGE " + marker + " C|tag_current_string|[<tag(current_text)>]",
+        "TAG.script_hash=#0DE97",
+        "SYSMESSAGE " + marker + " C|tag_script_hash_literal|[<tag(script_hash)>]",
         "VAR dotted_probe_var,globalvalue",
         "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
         "EQUIPLAST",
@@ -2033,6 +2039,8 @@ def write_world_load_counts_save(
                 'Tag.roundtrip="value with trailing space "',
                 'Tag.empty=""',
                 "Tag.numeric=42",
+                "Tag.hash_literal=#0DE97",
+                "Tag.hash_expression=#<EVAL 2>",
             ]
         )
     elif format_compat_probe:

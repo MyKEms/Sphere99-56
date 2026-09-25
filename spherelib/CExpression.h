@@ -827,6 +827,23 @@ public:
 		CVarDef* pVar = FindKeyPtr(pszKey);
 		return pVar ? (DWORD)pVar->GetValNum() : 0;
 	}
+	bool SetKeyCurrentValue(LPCTSTR pszKey, LPCTSTR pszVal)
+	{
+		// Sphere 0.99 uses a leading '#' for current-value arithmetic only
+		// when it is immediately followed by an operator.  Other forms such
+		// as #0DE97 and #<expression> are literal string values.
+		if ( pszVal == NULL || pszVal[0] != '#' ||
+			strchr("+-*/%|&^", pszVal[1]) == NULL )
+			return false;
+
+		CGVariant vCurrent;
+		FindKeyVar( pszKey, vCurrent );
+		TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+		snprintf( szExpression, sizeof(szExpression), "%d%s",
+			vCurrent.GetInt(), pszVal + 1 );
+		SetKeyInt( pszKey, (DWORD)CVarDefEvaluateExpression( szExpression ));
+		return true;
+	}
 	void RemoveKey(LPCTSTR pszKey)
 	{
 		for (int i = 0; i < (int)this->GetSize(); i++)
@@ -879,30 +896,20 @@ public:
 			// Delete the tag
 			RemoveKey(szTemp);
 		}
-		else if ( pszVal[0] == '#' )
+		else if ( ! SetKeyCurrentValue( szTemp, pszVal ) )
 		{
-			// 0.99 current-value assignments such as TAG(level,#+1)
-			// evaluate the suffix against the existing numeric tag.
-			CGVariant vCurrent;
-			FindKeyVar( szTemp, vCurrent );
-			TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
-			snprintf( szExpression, sizeof(szExpression), "%d%s",
-				vCurrent.GetInt(), pszVal + 1 );
-			SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( szExpression ));
-		}
-		else if ( pszVal[0] == '"' )
-		{
-			bool fQuoted = true;
-			// String value - strip quotes
-			pszVal++;
-			int iLen = strlen(pszVal);
-			if ( iLen > 0 && pszVal[iLen-1] == '"' )
-				pszVal[iLen-1] = '\0';
-			SetKeyStr(szTemp, pszVal, fQuoted);
-		}
-		else
-		{
-			SetKeyStr(szTemp, pszVal);
+			if ( pszVal[0] == '"' )
+			{
+				bool fQuoted = true;
+				// String value - strip quotes
+				pszVal++;
+				int iLen = strlen(pszVal);
+				if ( iLen > 0 && pszVal[iLen-1] == '"' )
+					pszVal[iLen-1] = '\0';
+				SetKeyStr(szTemp, pszVal, fQuoted);
+			}
+			else
+				SetKeyStr(szTemp, pszVal);
 		}
 		return NO_ERROR;
 	}
@@ -928,18 +935,7 @@ public:
 		}
 		if ( *pszVal )
 		{
-			// Set mode.  A leading # evaluates the suffix from the current
-			// numeric value, matching the 0.99 TAG(name,#+N) convention.
-			if ( pszVal[0] == '#' )
-			{
-				CGVariant vCurrent;
-				FindKeyVar( szTemp, vCurrent );
-				TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
-				snprintf( szExpression, sizeof(szExpression), "%d%s",
-					vCurrent.GetInt(), pszVal + 1 );
-				SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( szExpression ));
-			}
-			else
+			if ( ! SetKeyCurrentValue( szTemp, pszVal ))
 				SetKeyStr(szTemp, pszVal);
 		}
 		else

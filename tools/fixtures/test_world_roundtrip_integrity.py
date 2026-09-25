@@ -335,6 +335,8 @@ def main() -> int:
                 'Tag.empty=""',
                 "Tag.numeric=42",
                 "Tag.numeric=7",
+                "Tag.hash_literal=#0DE97",
+                "Tag.hash_expression=#<EVAL 2>",
                 "DISPID=0e9b",
             ):
                 if combined.count(marker) != 1:
