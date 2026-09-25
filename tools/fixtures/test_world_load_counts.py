@@ -219,8 +219,8 @@ def main() -> int:
         )
     elif args.noncontainer_reference:
         expected_diagnostics = (
-            "world load diagnostics: accepted=4 tolerated_legacy=0 rejected=0 "
-            "defaulted=0 deleted=0"
+            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=0 "
+            "defaulted=1 deleted=0"
         )
     else:
         expected_diagnostics = (
@@ -285,7 +285,7 @@ def main() -> int:
                         "WORLDCHAR load fallback",
                     )
                 elif args.noncontainer_reference:
-                    allowed_startup_error_fragments = ()
+                    allowed_startup_error_fragments = ("WORLDITEM CONT defaulted:",)
                 elif args.rejected_property:
                     allowed_startup_error_fragments = (
                         "Item:Hitpoints assigned for non-weapon DEFAULTITEM",
@@ -409,14 +409,26 @@ def main() -> int:
                             "DEFAULTCHAR fallback was incorrectly counted as a skipped section"
                         )
                 elif args.noncontainer_reference:
-                    if any(
-                        "Non container" in line
-                        or "WORLDITEM property rejected" in line
+                    defaulted_relocations = [
+                        line
                         for line in startup_errors
+                        if "WORLDITEM CONT defaulted:" in line
+                    ]
+                    expected_relocations = ((
+                        "cont=0x4",
+                        "uid=0x40000005",
+                        "id=0x0e75",
+                    ),)
+                    if len(defaulted_relocations) != len(expected_relocations) or any(
+                        not any(
+                            all(fragment in line for fragment in fragments)
+                            for line in defaulted_relocations
+                        )
+                        for fragments in expected_relocations
                     ):
                         raise RuntimeError(
-                            "nested non-container reference was rejected instead of being "
-                            "placed at its target's top-level point"
+                            "nested non-container reference did not log the bounded "
+                            "CONT default with its original UIDs"
                         )
                 elif args.named_container_reference and any(
                     "Non container uid=" in line for line in startup_errors

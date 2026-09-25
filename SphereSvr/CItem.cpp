@@ -2350,6 +2350,17 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 		CObjBasePtr pTopObj = pParentItem->GetTopLevelObj();
 		if ( pTopObj != NULL && MoveTo( pTopObj->GetTopPoint()))
 		{
+			// Keep this recoverable legacy relation visible and bounded during
+			// world load. The original CONT value identifies the relation that
+			// was substituted; the item remains live at the target's top level.
+			if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
+			{
+				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
+					"WORLDITEM CONT defaulted: cont=0x%x uid=0x%x id=0x%04x "
+					"reason=target is not a container; relocated to top-level" LOG_CR,
+					(DWORD)uid, (DWORD)GetUID(), (unsigned)GetDispID());
+			}
+			SetLoadDefaulted( true );
 			// A deferred CONT may reach this path after the target is loaded.
 			// The relocation has resolved that link even though the item is now
 			// top-level rather than contained.
