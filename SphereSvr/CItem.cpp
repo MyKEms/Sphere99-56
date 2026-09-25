@@ -4658,7 +4658,10 @@ bool CItem::OnTick()
 	{
 	CSphereExpContext exec(this, &g_Serv);
 	iRet = OnTrigger( CItemDef::T_Timer, exec );
-	if ( iRet == TRIGRET_RET_VAL )
+	// A timer trigger that returns 1 has handled the timer even when it does
+	// not provide a value.  Script timers use RETURN 1 for this path; treating
+	// it as unhandled falls through to the misleading DECAY diagnostic.
+	if ( iRet == TRIGRET_RET_TRUE || iRet == TRIGRET_RET_VAL )
 		return true;
 	}
 
