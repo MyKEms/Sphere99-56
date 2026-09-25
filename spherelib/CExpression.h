@@ -702,8 +702,9 @@ public:
 class CVarDefStr : public CVarDef
 {
 	CGString m_sVal;
+	bool m_fQuoted;
 public:
-	CVarDefStr(LPCTSTR pszKey, LPCTSTR pszVal) : CVarDef(pszKey), m_sVal(pszVal) {}
+	CVarDefStr(LPCTSTR pszKey, LPCTSTR pszVal, bool fQuoted = false) : CVarDef(pszKey), m_sVal(pszVal), m_fQuoted(fQuoted) {}
 	LPCTSTR GetValStr() const { return m_sVal; }
 	int GetValNum() const {
 		LPCTSTR psz = (LPCTSTR)m_sVal;
@@ -716,7 +717,9 @@ public:
 		return atoi(psz);
 	}
 	void SetValStr(LPCTSTR pszVal) { m_sVal = pszVal; }
-	CVarDef* CopySelf() const { return new CVarDefStr(GetKey(), m_sVal); }
+	bool IsQuoted() const { return m_fQuoted; }
+	void SetQuoted(bool fQuoted) { m_fQuoted = fQuoted; }
+	CVarDef* CopySelf() const { return new CVarDefStr(GetKey(), m_sVal, m_fQuoted); }
 };
 
 // Numeric variable
@@ -760,15 +763,19 @@ public:
 	}
 	int SetKeyStr(LPCTSTR pszKey, LPCTSTR pszVal)
 	{
+		return SetKeyStr(pszKey, pszVal, false);
+	}
+	int SetKeyStr(LPCTSTR pszKey, LPCTSTR pszVal, bool fQuoted)
+	{
 		CVarDef* pVar = FindKeyPtr(pszKey);
 		if (pVar)
 		{
 			CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
-			if (pStr) { pStr->SetValStr(pszVal); return 0; }
+			if (pStr) { pStr->SetValStr(pszVal); pStr->SetQuoted(fQuoted); return 0; }
 			// Type mismatch — remove old, add new
 			RemoveKey(pszKey);
 		}
-		return Add(new CVarDefStr(pszKey, pszVal));
+		return Add(new CVarDefStr(pszKey, pszVal, fQuoted));
 	}
 	void SetKeyInt(LPCTSTR pszKey, DWORD dwVal)
 	{
@@ -871,12 +878,13 @@ public:
 		}
 		else if ( pszVal[0] == '"' )
 		{
+			bool fQuoted = true;
 			// String value - strip quotes
 			pszVal++;
 			int iLen = strlen(pszVal);
 			if ( iLen > 0 && pszVal[iLen-1] == '"' )
 				pszVal[iLen-1] = '\0';
-			SetKeyStr(szTemp, pszVal);
+			SetKeyStr(szTemp, pszVal, fQuoted);
 		}
 		else
 		{

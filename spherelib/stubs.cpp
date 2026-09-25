@@ -221,8 +221,16 @@ void CVarDefArray::s_WriteTags(CScript& script, LPCTSTR pszName)
 		{
 			snprintf(szKeyFull, sizeof(szKeyFull), "Tag.%s", pszKey);
 		}
-		// Write key=value pair.
-		if ( pszVal && pszVal[0] )
+		// Preserve the quote form captured by the loader.  Quotes protect
+		// leading/trailing whitespace, which must survive the next parse.
+		CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
+		if ( pStr && pStr->IsQuoted())
+		{
+			CGString sQuoted;
+			sQuoted.Format("\"%s\"", pszVal ? pszVal : "");
+			script.WriteKey(szKeyFull, sQuoted);
+		}
+		else if ( pszVal && pszVal[0] )
 		{
 			script.WriteKey(szKeyFull, pszVal);
 		}

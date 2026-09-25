@@ -286,6 +286,17 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2743
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-metadata-roundtrip" \
+            --world-load-counts \
+            --metadata-roundtrip-probe \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_roundtrip_integrity.py \
+            "$RUNNER_TEMP/sphere-asan-metadata-roundtrip" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2744 \
+            --metadata-roundtrip
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -514,6 +525,9 @@ jobs:
             ${{ runner.temp }}/sphere-asan-arg-locals/server.log
             ${{ runner.temp }}/sphere-asan-dword-hex/server.log
             ${{ runner.temp }}/sphere-asan-region-weather/server.log
+            ${{ runner.temp }}/sphere-asan-metadata-roundtrip/server.log
+            ${{ runner.temp }}/sphere-asan-metadata-roundtrip/server-round-1.log
+            ${{ runner.temp }}/sphere-asan-metadata-roundtrip/server-round-2.log
             ${{ runner.temp }}/sphere-asan-dialog-buttons/server.log
             ${{ runner.temp }}/sphere-asan-dialog-argo-layout/server.log
             ${{ runner.temp }}/sphere-asan-dialog-flow-layout/server.log
@@ -809,6 +823,17 @@ jobs:
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2742
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-metadata-roundtrip" \
+            --world-load-counts \
+            --metadata-roundtrip-probe \
+            --world-save-probe \
+            --roundtrip-integrity-probe
+          python3 tools/fixtures/test_world_roundtrip_integrity.py \
+            "$RUNNER_TEMP/sphere-metadata-roundtrip" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2745 \
+            --metadata-roundtrip
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-csv" \
             --unknown-keyword-report \
             --unknown-keyword-report-format csv \
@@ -1011,6 +1036,9 @@ jobs:
             ${{ runner.temp }}/sphere-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-arg-locals/server.log
             ${{ runner.temp }}/sphere-dword-hex/server.log
+            ${{ runner.temp }}/sphere-metadata-roundtrip/server.log
+            ${{ runner.temp }}/sphere-metadata-roundtrip/server-round-1.log
+            ${{ runner.temp }}/sphere-metadata-roundtrip/server-round-2.log
             ${{ runner.temp }}/sphere-book-pages/server.log
             ${{ runner.temp }}/sphere-dialog-buttons/server.log
             ${{ runner.temp }}/sphere-dialog-argo-layout/server.log
