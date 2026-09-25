@@ -131,6 +131,7 @@ public:
 	}
 
 private:
+	void ApplyWeatherChance();
 	void SendSectorsCommand( LPCTSTR pszCommand, CScriptConsole* pSrc ); // distribute to the CSectors
 
 public:
@@ -168,6 +169,11 @@ protected:
 private:
 	CGString m_sName;	// Name of the region.
 	DWORD m_dwFlags;
+	bool m_fRegionRealized;
+	bool m_fColdChanceSet;
+	bool m_fRainChanceSet;
+	int m_iColdChance;
+	int m_iRainChance;
 };
 
 // See CRegionPtr;

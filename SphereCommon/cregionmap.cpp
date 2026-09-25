@@ -9,9 +9,9 @@
 #include "spheremul.h"
 #include "cregionmap.h"
 
-// Stub for missing function
+// Build a sector property assignment from a region property and its value.
 static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
-	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
+	sprintf(pszOut, "%s=%s", pszKey, pszArg ? pszArg : "");
 }
 static bool HasSymbolicResourceName() { return false; }
 #include "cpointmap.h"
@@ -44,7 +44,12 @@ const CScriptMethod CRegionBasic::sm_Methods[CRegionBasic::M_QTY+1] =
 CSCRIPT_CLASS_IMP1(RegionBasic,CRegionBasic::sm_Props,CRegionBasic::sm_Methods,NULL,ResourceDef);
 
 CRegionBasic::CRegionBasic( CSphereUID rid, LPCTSTR pszName ) :
-	CResourceDef( rid )
+	CResourceDef( rid ),
+	m_fRegionRealized( false ),
+	m_fColdChanceSet( false ),
+	m_fRainChanceSet( false ),
+	m_iColdChance( -1 ),
+	m_iRainChance( -1 )
 {
 	m_dwFlags = 0;
 	m_RegionClass = RegionClass_Unspecified;
@@ -59,6 +64,7 @@ CRegionBasic::~CRegionBasic()
 
 void CRegionBasic::UnRealizeRegion( bool fRetestChars )
 {
+	m_fRegionRealized = false;
 	// remove myself from the world. UnLink()
 	// used in the case of a ship where the region will move.
 
@@ -104,6 +110,8 @@ bool CRegionBasic::RealizeRegion()
 		if ( ! pSector->LinkRegion( this ))
 			return( false );
 	}
+	m_fRegionRealized = true;
+	ApplyWeatherChance();
 
 	ASSERT(GetRefCount());
 
@@ -298,12 +306,14 @@ HRESULT CRegionBasic::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 #ifdef SPHERE_SVR
 	case P_ColdChance:
+		m_iColdChance = vVal.IsEmpty() ? -1 : vVal.GetInt();
+		m_fColdChanceSet = true;
+		ApplyWeatherChance();
+		break;
 	case P_RainChance:
-		{
-			TCHAR szCmd[128];
-			s_CombineKeys(szCmd,pszKey,vVal.GetPSTR());
-			SendSectorsCommand( szCmd, &g_Serv );
-		}
+		m_iRainChance = vVal.IsEmpty() ? -1 : vVal.GetInt();
+		m_fRainChanceSet = true;
+		ApplyWeatherChance();
 		break;
 #endif
 	case P_Flags:
@@ -513,6 +523,30 @@ HRESULT CRegionBasic::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vVa
 #endif
 
 	return NO_ERROR;
+}
+
+void CRegionBasic::ApplyWeatherChance()
+{
+#ifdef SPHERE_SVR
+	if ( ! m_fRegionRealized )
+		return;
+
+	TCHAR szCmd[128];
+	if ( m_fColdChanceSet )
+	{
+		CGString sValue;
+		sValue.Format( "%d", m_iColdChance );
+		s_CombineKeys( szCmd, "COLDCHANCE", sValue );
+		SendSectorsCommand( szCmd, &g_Serv );
+	}
+	if ( m_fRainChanceSet )
+	{
+		CGString sValue;
+		sValue.Format( "%d", m_iRainChance );
+		s_CombineKeys( szCmd, "RAINCHANCE", sValue );
+		SendSectorsCommand( szCmd, &g_Serv );
+	}
+#endif
 }
 
 void CRegionBasic::SendSectorsCommand( LPCTSTR pszCommand, CScriptConsole* pSrc )

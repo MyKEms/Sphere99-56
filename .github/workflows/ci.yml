@@ -433,6 +433,16 @@ jobs:
             --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
             --port 2738
           python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-asan-region-weather" \
+            --region-weather-probe \
+            --unknown-keyword-report
+          ASAN_OPTIONS=quarantine_size_mb=64:malloc_context_size=8:detect_leaks=0:abort_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+          python3 tools/fixtures/test_region_weather.py \
+            "$RUNNER_TEMP/sphere-asan-region-weather" \
+            --binary "$GITHUB_WORKSPACE/build/asan/sphere99svr" \
+            --port 2750
+          python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-asan-book-pages" \
             --book-pages-probe
           # The client session runs in the i386 job: this build does not
@@ -503,6 +513,7 @@ jobs:
             ${{ runner.temp }}/sphere-asan-dotted-expressions/server.log
             ${{ runner.temp }}/sphere-asan-arg-locals/server.log
             ${{ runner.temp }}/sphere-asan-dword-hex/server.log
+            ${{ runner.temp }}/sphere-asan-region-weather/server.log
             ${{ runner.temp }}/sphere-asan-dialog-buttons/server.log
             ${{ runner.temp }}/sphere-asan-dialog-argo-layout/server.log
             ${{ runner.temp }}/sphere-asan-dialog-flow-layout/server.log
@@ -926,6 +937,14 @@ jobs:
             "$RUNNER_TEMP/sphere-dword-hex" \
             --binary "$GITHUB_WORKSPACE/sphere99svr" \
             --port 2739
+          python3 tools/fixtures/make_fixture.py \
+            "$RUNNER_TEMP/sphere-region-weather" \
+            --region-weather-probe \
+            --unknown-keyword-report
+          python3 tools/fixtures/test_region_weather.py \
+            "$RUNNER_TEMP/sphere-region-weather" \
+            --binary "$GITHUB_WORKSPACE/sphere99svr" \
+            --port 2751
           python3 tools/fixtures/make_fixture.py \
             "$RUNNER_TEMP/sphere-book-pages" \
             --book-pages-probe
