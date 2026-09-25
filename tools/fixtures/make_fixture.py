@@ -197,6 +197,10 @@ DOTTED_EXPRESSION_ROWS = (
     # in both space-separated and parenthesized function forms.
     ("hval_space", "<hval 0xBEEF>", "CI"),
     ("hval_paren", "<hval(-1)>", "C"),
+    # FINDRES returns a typed resource reference so its properties can be
+    # read through the same dotted-expression path as world objects.
+    ("findres_spell_mana", "<findres(spell,s_fixture_heal).manause>", "C"),
+    ("findres_spell_runes", "<findres(spell,s_fixture_heal).runes>", "C"),
     # Nested results are deliberately longer than their source tags.  The
     # trailing text must survive the outer replacement in both trigger
     # contexts.
@@ -948,6 +952,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
     ]
 
     sections = (
+        "\n[SPELL 4]\n"
+        "DEFNAME=s_fixture_heal\n"
+        "NAME=synthetic fixture heal\n"
+        "RUNES=IM\n"
+        "MANAUSE=8\n"
         f"\n[ITEMDEF 0x{DOTTED_PROBE_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_DOTTED_PROBE\n"
         "NAME=synthetic dotted probe\n"
