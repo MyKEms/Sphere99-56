@@ -231,7 +231,7 @@ bool CItemVendable::IsValidSaleItem( bool fBuyFromVendor ) const
 	// Can this individual item be sold or bought ?
 	if ( ! IsMovableType())
 	{
-		DEBUG_ERR(( "Vendor uid=0%lx selling unmovable item %s='%s'" LOG_CR, GetTopLevelObj()->GetUID(), GetResourceName(), (LPCTSTR) GetName()));
+		DEBUG_ERR(( "Vendor uid=0%lx selling unmovable item %s='%s'" LOG_CR, GetTopLevelObj()->GetUID(), (LPCTSTR) GetResourceName(), (LPCTSTR) GetName()));
 		return( false );
 	}
 	if ( ! fBuyFromVendor )
@@ -255,13 +255,13 @@ bool CItemVendable::IsValidNPCSaleItem() const
 
 	if ( m_lPrice <= 0 && pItemDef->GetMakeValue(0) <= 0 )
 	{
-		DEBUG_ERR(( "Vendor uid=0%lx selling unpriced item %s='%s'" LOG_CR, GetTopLevelObj()->GetUID(), GetResourceName(), (LPCTSTR) GetName()));
+		DEBUG_ERR(( "Vendor uid=0%lx selling unpriced item %s='%s'" LOG_CR, GetTopLevelObj()->GetUID(), (LPCTSTR) GetResourceName(), (LPCTSTR) GetName()));
 		return( false );
 	}
 
 	if ( ! IsValidSaleItem( true ))
 	{
-		DEBUG_ERR(( "Vendor uid=0%lx selling bad item %s='%s'" LOG_CR, GetTopLevelObj()->GetUID(), GetResourceName(), (LPCTSTR) GetName()));
+		DEBUG_ERR(( "Vendor uid=0%lx selling bad item %s='%s'" LOG_CR, GetTopLevelObj()->GetUID(), (LPCTSTR) GetResourceName(), (LPCTSTR) GetName()));
 		return( false );
 	}
 

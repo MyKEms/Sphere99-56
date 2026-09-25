@@ -6,7 +6,7 @@ class CScriptObj;
 class CStreamText
 {
 public:
-	void Printf(LPCTSTR lpszFormat, ...) { /* no-op for now */ }
+	void Printf(LPCTSTR lpszFormat, ...) __printfargs(2, 3) { /* no-op for now */ }
 };
 
 // aka CTextConsole

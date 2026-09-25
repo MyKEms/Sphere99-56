@@ -31,6 +31,13 @@ jobs:
           make container-list-test
           build/container-list/container_list_test
 
+      - name: Reject non-trivial objects through C varargs
+        run: |
+          if grep -Eq 'passing objects of non-trivially-copyable type .* through' build.log; then
+            echo 'non-trivially-copyable object passed through a C varargs boundary'
+            exit 1
+          fi
+
       - name: Check binary
         run: file sphere99svr | grep -q 'ELF 32-bit'
 
@@ -61,6 +68,13 @@ jobs:
 
       - name: Build sanitizer target
         run: make asan 2>&1 | tee asan-build.log
+
+      - name: Reject non-trivial objects through C varargs
+        run: |
+          if grep -Eq 'passing objects of non-trivially-copyable type .* through' asan-build.log; then
+            echo 'non-trivially-copyable object passed through a C varargs boundary'
+            exit 1
+          fi
 
       - name: Check binary
         run: file build/asan/sphere99svr | grep -q 'ELF 64-bit'

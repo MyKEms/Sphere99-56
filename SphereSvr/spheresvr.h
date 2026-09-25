@@ -172,7 +172,7 @@ public:
 	void Dump( const BYTE* pData, int len );
 
 	virtual int EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg );
-	void _cdecl CatchEvent( CGException* pErr, const char* pszCatchContext, ...  );
+	void _cdecl CatchEvent( CGException* pErr, const char* pszCatchContext, ...  ) __printfargs(3, 4);
 
 	bool IsLogged(LOGL_TYPE level) const { return level <= m_logLevel; }
 	bool IsLogged(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level) const { return IsLoggedGroupMask(dwGroupMask) && level <= m_logLevel; }

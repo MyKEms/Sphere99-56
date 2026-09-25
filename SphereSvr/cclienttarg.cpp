@@ -69,7 +69,7 @@ bool CClient::OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand )
 	{
 		CGString sErr;
 		sErr.FormatErrorMessage( hRes );
-		Printf( "command '%s' error '%s'" LOG_CR, (LPCSTR) pszCommand, sErr );
+		Printf( "command '%s' error '%s'" LOG_CR, (LPCSTR) pszCommand, (LPCTSTR) sErr );
 	}
 
 	else if ( ! fDelete ) // bother to update this?
@@ -99,7 +99,7 @@ bool CClient::OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand )
 	{
 		CGString sErr;
 		sErr.FormatErrorMessage(hRes);
-		g_Log.Event( LOG_GROUP_GM_CMDS, LOGL_TRACE, "%s ERR '%s'" LOG_CR, (LPCTSTR) sLogMsg, sErr );
+		g_Log.Event( LOG_GROUP_GM_CMDS, LOGL_TRACE, "%s ERR '%s'" LOG_CR, (LPCTSTR) sLogMsg, (LPCTSTR) sErr );
 		return false;
 	}
 	else
@@ -1217,7 +1217,7 @@ int CClient::OnSkill_Forensics( CSphereUID uid, int iSkillLevel, bool fTest )
 	if ( pCorpse->IsCorpseSleeping())
 	{
 		// "They are not dead but mearly unconscious"
-		Printf( "%s is unconscious but alive.", (sName.IsEmpty()) ? "It" : sName );
+		Printf( "%s is unconscious but alive.", (sName.IsEmpty()) ? "It" : (LPCTSTR) sName );
 		return 1;
 	}
 

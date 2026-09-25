@@ -217,7 +217,7 @@ public:
 		m_iVal = 0;
 	}
 
-	void SetStrFormat(LPCTSTR format, ...)
+	void SetStrFormat(LPCTSTR format, ...) __printfargs(2, 3)
 	{
 		FreeArray();
 		m_type = CGVT_STR;
@@ -546,7 +546,7 @@ public:
 		RebuildStrFromArray();
 	}
 
-	void SetArrayFormat(LPCTSTR format, ...)
+	void SetArrayFormat(LPCTSTR format, ...) __printfargs(2, 3)
 	{
 		FreeArray();
 		m_type = CGVT_STR;

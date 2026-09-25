@@ -435,9 +435,9 @@ void CItemStone::War_AnnounceWar( const CItemStone* pEnemyStone, bool fWeDeclare
 
 	TCHAR szTemp[ CSTRING_MAX_LEN ];
 	int len = sprintf( szTemp, (fWar) ? "%s %s declared war on %s." : "%s %s requested peace with %s.",
-		(fWeDeclare) ? "You" : pEnemyStone->GetName(),
+		(fWeDeclare) ? "You" : (LPCTSTR) pEnemyStone->GetName(),
 		(fWeDeclare) ? "have" : "has",
-		(fWeDeclare) ? pEnemyStone->GetName() : "You" );
+		(fWeDeclare) ? (LPCTSTR) pEnemyStone->GetName() : "You" );
 
 	if ( fAtWar )
 	{
