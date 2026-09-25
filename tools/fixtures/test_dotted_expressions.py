@@ -122,6 +122,8 @@ EXPECTED: dict[str, Expectation] = {
     "C|hval_space": "0beef",
     "I|hval_space": "0beef",
     "C|hval_paren": "0ffffffff",
+    "C|findres_spell_mana": "8",
+    "C|findres_spell_runes": "IM",
     "C|nested_escape_suffix": "prefix 0 suffix",
     "I|nested_escape_suffix": "prefix 0 suffix",
     "C|nested_escape_after_nested": "left 11 right",
