@@ -4,8 +4,8 @@
     {
       "kind": "trigger",
       "keyword": "@ENVIRONCHANGE",
-      "count": 1,
-      "reason": "The spawned synthetic timer NPC has no environment-change handler."
+      "count_range": [1, 16],
+      "reason": "The spawned synthetic timer NPC has no environment-change handler; the number of sector light changes it observes depends on scheduling, and slower sanitizer builds observe more."
     },
     {
       "kind": "trigger",
