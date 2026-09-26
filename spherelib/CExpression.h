@@ -737,6 +737,9 @@ public:
 
 class CScript;
 class CScriptConsole;
+class CExpression;
+CExpression* Exp_GetContext();
+int CVarDefEvaluateExpression(LPCTSTR pszExpression);
 
 struct CVarDefArray : public CGSortedArray<CVarDef*, CVarDef*, LPCTSTR>
 {
@@ -824,6 +827,23 @@ public:
 		CVarDef* pVar = FindKeyPtr(pszKey);
 		return pVar ? (DWORD)pVar->GetValNum() : 0;
 	}
+	bool SetKeyCurrentValue(LPCTSTR pszKey, LPCTSTR pszVal)
+	{
+		// Sphere 0.99 uses a leading '#' for current-value arithmetic only
+		// when it is immediately followed by an operator.  Other forms such
+		// as #0DE97 and #<expression> are literal string values.
+		if ( pszVal == NULL || pszVal[0] != '#' ||
+			strchr("+-*/%|&^", pszVal[1]) == NULL )
+			return false;
+
+		CGVariant vCurrent;
+		FindKeyVar( pszKey, vCurrent );
+		TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+		snprintf( szExpression, sizeof(szExpression), "%d%s",
+			vCurrent.GetInt(), pszVal + 1 );
+		SetKeyInt( pszKey, (DWORD)CVarDefEvaluateExpression( szExpression ));
+		return true;
+	}
 	void RemoveKey(LPCTSTR pszKey)
 	{
 		for (int i = 0; i < (int)this->GetSize(); i++)
@@ -876,19 +896,20 @@ public:
 			// Delete the tag
 			RemoveKey(szTemp);
 		}
-		else if ( pszVal[0] == '"' )
+		else if ( ! SetKeyCurrentValue( szTemp, pszVal ) )
 		{
-			bool fQuoted = true;
-			// String value - strip quotes
-			pszVal++;
-			int iLen = strlen(pszVal);
-			if ( iLen > 0 && pszVal[iLen-1] == '"' )
-				pszVal[iLen-1] = '\0';
-			SetKeyStr(szTemp, pszVal, fQuoted);
-		}
-		else
-		{
-			SetKeyStr(szTemp, pszVal);
+			if ( pszVal[0] == '"' )
+			{
+				bool fQuoted = true;
+				// String value - strip quotes
+				pszVal++;
+				int iLen = strlen(pszVal);
+				if ( iLen > 0 && pszVal[iLen-1] == '"' )
+					pszVal[iLen-1] = '\0';
+				SetKeyStr(szTemp, pszVal, fQuoted);
+			}
+			else
+				SetKeyStr(szTemp, pszVal);
 		}
 		return NO_ERROR;
 	}
@@ -914,8 +935,8 @@ public:
 		}
 		if ( *pszVal )
 		{
-			// Set mode
-			SetKeyStr(szTemp, pszVal);
+			if ( ! SetKeyCurrentValue( szTemp, pszVal ))
+				SetKeyStr(szTemp, pszVal);
 		}
 		else
 		{
@@ -1248,6 +1269,11 @@ public:
 		return i;
 	}
 };
+
+inline int CVarDefEvaluateExpression(LPCTSTR pszExpression)
+{
+	return Exp_GetContext()->GetComplex(pszExpression);
+}
 
 inline int Calc_GetRandVal(int iqty) { if (iqty <= 0) return 0; return rand() % iqty; }
 inline int Calc_GetLog2(int iNum) { int i = 0; while (iNum > 1) { iNum >>= 1; i++; } return i; }
