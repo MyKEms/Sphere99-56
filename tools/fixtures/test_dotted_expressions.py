@@ -207,6 +207,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|cond_tag_unset": "0",
     "C|cond_tag0_unset": "1",
     "C|cond_base_tag": "1",
+    "C|cond_isplayer": "1",
     "C|cond_findlayer": "1",
     "C|cond_findlayer_empty": "0",
     "C|cond_finduid_name": "1",

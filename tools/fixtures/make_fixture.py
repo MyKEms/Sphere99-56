@@ -344,6 +344,10 @@ DOTTED_CONDITION_ROWS = (
     ("cond_tag_unset", "(src.tag.probe_missing==1)"),
     ("cond_tag0_unset", "(src.tag0.probe_missing==0)"),
     ("cond_base_tag", "(tag.probe_num==7)"),
+    # Object predicates are valid bare operands in script conditions.  Keep
+    # this form explicit so the resolver cannot regress to DEFNAME-only
+    # lookup when a predicate has no dotted suffix or call parentheses.
+    ("cond_isplayer", "(isplayer)"),
     ("cond_findlayer", "(src.findlayer(30))"),
     ("cond_findlayer_empty", "(src.findlayer(9))"),
     ("cond_finduid_name", "(finduid(<src.serial>).name==<src.name>)"),
