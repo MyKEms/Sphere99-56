@@ -339,6 +339,15 @@ LEGACY_METADATA_TAG_KEY = "long_roundtrip"
 LEGACY_METADATA_TAG_VALUE = "legacy-tag-" + ("0123456789abcdef" * 24)
 LEGACY_METADATA_ATTR_KEYS = ("Attr_MoveAlways", "ATTR_MOVEALWAYS")
 
+# Stairs movement probe.  The synthetic tile uses the same climbable/platform
+# flags as the 0.99z8 stairs records and exercises the dynamic height path.
+MOVEMENT_STAIRS_ACCOUNT = "MovementProbe"
+MOVEMENT_STAIRS_PASSWORD = "movement_pw"
+MOVEMENT_STAIRS_CHAR_SERIAL = 3
+MOVEMENT_STAIRS_SERIAL = 0x40000021
+MOVEMENT_STAIRS_ID = 0x0E94
+MOVEMENT_STAIRS_POINT = (128, 127, 0)
+
 # Numeric conditions with bare reference operands: (key, condition).  The
 # probe prints 1 when IF takes the condition as true and 0 otherwise.
 DOTTED_CONDITION_ROWS = (
@@ -352,6 +361,25 @@ DOTTED_CONDITION_ROWS = (
     ("cond_tag_unset", "(src.tag.probe_missing==1)"),
     ("cond_tag0_unset", "(src.tag0.probe_missing==0)"),
     ("cond_base_tag", "(tag.probe_num==7)"),
+    # Object predicates are valid bare operands in script conditions.  Keep
+    # this form explicit so the resolver cannot regress to DEFNAME-only
+    # lookup when a predicate has no dotted suffix or call parentheses.
+    ("cond_isplayer", "(isplayer)"),
+    # Bare literals and resource constants must retain their legacy numeric
+    # values when the object-reference resolver is considered first.
+    ("cond_literal_one", "(1)"),
+    ("cond_literal_zero", "(0)"),
+    ("cond_literal_hex", "(0a)"),
+    ("cond_defname_bare", "(dotted_probe_const)"),
+    ("cond_item_id", "(i_dotted_probe)"),
+    ("cond_type_id", "(t_eq_script)"),
+    # STR is both a real property and a fixture DEFNAME.  The historical
+    # DEFNAME lookup wins, as it did before the bare-reference change.
+    ("cond_property_defname", "(str)"),
+    # A bare declared function stays on the legacy numeric path: its body is
+    # not executed while reading a condition.  An unknown name remains zero.
+    ("cond_bare_function", "(f_dotted_bare_probe)"),
+    ("cond_unknown_bare", "(dotted_missing_name)"),
     ("cond_findlayer", "(src.findlayer(30))"),
     ("cond_findlayer_empty", "(src.findlayer(9))"),
     ("cond_finduid_name", "(finduid(<src.serial>).name==<src.name>)"),
@@ -437,6 +465,31 @@ def write_container_tile(path: Path, item_id: int) -> None:
         0,
         1,
         b"synthetic container\0".ljust(20, b"\0"),
+    )
+    with path.open("r+b") as stream:
+        stream.seek(record_offset)
+        stream.write(record)
+
+
+def write_movement_tile(path: Path, item_id: int, flags: int, height: int) -> None:
+    """Write one synthetic movement tile record into tiledata.mul."""
+
+    record_offset = (
+        terrain_size()
+        + ((item_id // TILE_BLOCK_QTY) * 4)
+        + 4
+        + (item_id * ITEM_RECORD_BYTES)
+    )
+    record = struct.pack(
+        "<IBBIIHB20s",
+        flags,
+        1,
+        0,
+        0,
+        0,
+        0,
+        height,
+        b"synthetic movement tile\0".ljust(20, b"\0"),
     )
     with path.open("r+b") as stream:
         stream.seek(record_offset)
@@ -894,6 +947,7 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SYSMESSAGE " + marker + " C|dupe_value_valid_count|[<VAR(dotted_getter_calls)>]",
         "SYSMESSAGE " + marker + " C|dupe_chars_after|[<SERV.CHARS>]",
     ]
+    login += ["VAR dotted_bare_calls,0"]
     for key, condition in DOTTED_CONDITION_ROWS:
         login += [
             f"IF {condition}",
@@ -903,6 +957,7 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
             "ENDIF",
         ]
     login += [
+        "SYSMESSAGE " + marker + " C|cond_bare_function_count|[<VAR(dotted_bare_calls)>]",
         # A bare reference operand runs a script-function root once per
         # evaluation, and a WHILE condition re-reads the reference each time.
         "VAR dotted_getter_calls,0",
@@ -998,8 +1053,13 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "VAR dotted_disposable,<SERIAL>\n"
         "\n[DEFNAMES dotted_probe]\n"
         "dotted_probe_const 1234\n"
+        "i_dotted_probe 0x0E7B\n"
+        "str 0\n"
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
+        "\n[FUNCTION f_dotted_bare_probe]\n"
+        "VAR dotted_bare_calls,<EVAL <VAR(dotted_bare_calls)>+1>\n"
+        "RETURN 1\n"
         "\n[FUNCTION f_dotted_arg]\n"
         "RETURN <ARGS>\n"
         "\n[FUNCTION f_dotted_disposable]\n"
@@ -1339,6 +1399,7 @@ def write_scripts(
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
+    movement_stairs_probe: bool = False,
     character_content_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
@@ -1622,6 +1683,21 @@ def write_scripts(
         "ON=@Create\n"
         f"SERV.B {SPAWN_POINT_MARKER}\n"
         if spawn_point_probe
+        else ""
+    )
+    movement_stairs_itemdefs = (
+        f"\n[ITEMDEF 0x{MOVEMENT_STAIRS_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_MOVEMENT_STAIRS\n"
+        "NAME=synthetic movement stairs\n"
+        "TYPE=T_NORMAL\n"
+        "\n[CHARDEF SYNTHETIC_MOVEMENT_CHAR]\n"
+        "DEFNAME=SYNTHETIC_MOVEMENT_CHAR\n"
+        "NAME=synthetic movement human\n"
+        "ID=0x0190\n"
+        "CAN=0x14\n"
+        "STR=100\n"
+        "DEX=100\n"
+        if movement_stairs_probe
         else ""
     )
     spawn_point_login_event = (
@@ -1983,6 +2059,7 @@ ITEMNEWBIE=0x0E73
         + spawn_gem_itemdef
         + spawn_point_itemdef
         + spawn_point_product_itemdef
+        + movement_stairs_itemdefs
         + book_pages_probe_sections,
     )
 
@@ -2485,6 +2562,58 @@ def write_spawn_point_save(root: Path) -> None:
                 "PASSWORD=fixture-pw",
                 "LASTCHARUID=3",
                 "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
+def write_movement_stairs_save(root: Path) -> None:
+    """Seed a climbable stair and an Admin probe player."""
+
+    world_sections = [
+        "TITLE=Sphere synthetic movement fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+        "[WORLDITEM SYNTHETIC_MOVEMENT_STAIRS]",
+        f"SERIAL={MOVEMENT_STAIRS_SERIAL}",
+        f"P={MOVEMENT_STAIRS_POINT[0]},{MOVEMENT_STAIRS_POINT[1]},{MOVEMENT_STAIRS_POINT[2]}",
+        "[EOF]",
+    ]
+    write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {MOVEMENT_STAIRS_ACCOUNT}]",
+                f"PASSWORD={MOVEMENT_STAIRS_PASSWORD}",
+                "PLEVEL=Admin",
+                f"CHARUID={MOVEMENT_STAIRS_CHAR_SERIAL}",
+                f"LASTCHARUID={MOVEMENT_STAIRS_CHAR_SERIAL}",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic movement fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR SYNTHETIC_MOVEMENT_CHAR]",
+                f"SERIAL={MOVEMENT_STAIRS_CHAR_SERIAL}",
+                f"ACCOUNT={MOVEMENT_STAIRS_ACCOUNT}",
+                "NAME=MovementProbeCharacter",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
                 "[EOF]",
             ]
         ),
@@ -3274,6 +3403,11 @@ def main() -> int:
         action="store_true",
         help="log in an existing character through a near-limit escape expansion",
     )
+    parser.add_argument(
+        "--movement-stairs-probe",
+        action="store_true",
+        help="exercise dynamic stair height resolution",
+    )
     args = parser.parse_args()
 
     # A mode is a complete recipe.  Reparse its declarative argument list
@@ -3303,6 +3437,27 @@ def main() -> int:
         parser.error("choose only one world-load fixture mode")
     if args.spawn_gem_duplicate_serial_probe:
         args.spawn_gem_probe = True
+    if args.movement_stairs_probe and any(
+        (
+            args.world_load_counts,
+            args.timer_lifetime_probe,
+            args.memory_timer_probe,
+            args.timer_lifetime_item_first_probe,
+            args.timer_sibling_mutation_probe,
+            args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
+            args.container_shutdown_probe,
+            args.events_attr_probe,
+            args.legacy_metadata_probe,
+            args.book_pages_probe,
+            args.dword_hex_probe,
+            args.region_weather_probe,
+            args.spawn_gem_probe,
+            args.spawn_point_probe,
+            args.escape_overflow_probe,
+        )
+    ):
+        parser.error("movement-stairs probe cannot be combined with another fixture mode")
     if args.escape_overflow_probe and (
         any(world_load_modes)
         or args.timer_lifetime_probe
@@ -3489,6 +3644,7 @@ def main() -> int:
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
+        movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
     )
     if args.world_load_counts:
@@ -3527,6 +3683,8 @@ def main() -> int:
         write_spawn_point_save(root)
     if args.escape_overflow_probe:
         write_escape_overflow_save(root)
+    if args.movement_stairs_probe:
+        write_movement_stairs_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:
@@ -3556,11 +3714,13 @@ def main() -> int:
         write_legacy_metadata_save(root)
     write_mul_fixture(
         root,
-        extra_item_id=(0x0E8A
-                       if args.timer_sibling_mutation_probe
-                       or args.timer_sibling_mutation_owner_first_probe
-                       or args.container_shutdown_probe
-                       else 0),
+        extra_item_id=(
+            0x0E8A
+            if args.timer_sibling_mutation_probe
+            or args.timer_sibling_mutation_owner_first_probe
+            or args.container_shutdown_probe
+            else 0
+        ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         for item_id in (0x0E7D, 0x0E81, 0x0E86, 0x0E88, 0x0E89, 0x0E8A):
@@ -3568,6 +3728,14 @@ def main() -> int:
     if args.container_shutdown_probe:
         for item_id in (0x0E7D, 0x0E88):
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
+    if args.movement_stairs_probe:
+        tiledata = root / "muls" / "tiledata.mul"
+        write_movement_tile(
+            tiledata,
+            MOVEMENT_STAIRS_ID,
+            0x00000200 | 0x00000400 | 0x40000000,
+            10,
+        )
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
 
