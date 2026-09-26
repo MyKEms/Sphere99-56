@@ -373,7 +373,7 @@ void CWorld::GetHeightPoint( const CPointMap& pt, CMulMapBlockState& block, cons
 			CItemDefPtr pItemDef = pItem->Item_GetDef();
 			ASSERT(pItemDef);
 			block.CheckTile(
-				pItemDef->Can( CAN_I_DOOR | CAN_I_WATER | CAN_I_CLIMB | CAN_I_BLOCK | CAN_I_PLATFORM ),
+				pItemDef->GetCanFlags() & ( CAN_I_DOOR | CAN_I_WATER | CAN_I_CLIMB | CAN_I_BLOCK | CAN_I_PLATFORM ),
 				zitem, pItemDef->GetHeight(), pItemDef->GetDispID() + TERRAIN_QTY );
 		}
 	}
