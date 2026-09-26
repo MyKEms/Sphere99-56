@@ -2339,12 +2339,12 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 			const bool fNoExplicitLayer = ( layer == LAYER_NONE );
 			if ( ! layer ) 
 				layer = pItemDef->GetEquipLayer();
-			if ( g_Serv.IsLoading() && fNoExplicitLayer )
+			const bool fNoEquipLayer = ( layer == LAYER_NONE || layer >= LAYER_QTY );
+			if ( g_Serv.IsLoading() && fNoExplicitLayer && fNoEquipLayer )
 			{
-				// 0.99 saves use CONT=<character> without LAYER for direct
-				// character-owned content.  The missing key is authoritative even
-				// when the item definition has a default equip layer; stock keeps
-				// this relation as ordinary character content.
+				// 0.99 omits LAYER when it matches the ITEMDEF default.  Keep
+				// genuine no-layer content directly under the character, but let a
+				// valid ITEMDEF default continue through the normal equip path.
 				RemoveSelf();
 				if ( ! pChar->ContentAddNoLayer( this ))
 					return HRES_INVALID_HANDLE;

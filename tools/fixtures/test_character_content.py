@@ -14,6 +14,8 @@ from make_fixture import (
     CHARACTER_CONTENT_ACCOUNT,
     CHARACTER_CONTENT_CHAR_SERIAL,
     CHARACTER_CONTENT_ITEM_SERIAL,
+    CHARACTER_CONTENT_LAYERED_ITEM_ID,
+    CHARACTER_CONTENT_LAYERED_ITEM_LAYER,
     CHARACTER_CONTENT_LAYERED_ITEM_SERIAL,
     CHARACTER_CONTENT_MARKER,
     CHARACTER_CONTENT_PASSWORD,
@@ -23,7 +25,9 @@ from run_suite import shutdown_failures
 
 END_MARKER = f"{CHARACTER_CONTENT_MARKER}_END"
 MARKER_RE = re.compile(
-    r"^" + re.escape(CHARACTER_CONTENT_MARKER) + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT) (.*)$"
+    r"^"
+    + re.escape(CHARACTER_CONTENT_MARKER)
+    + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT|LAYERED_LAYER) (.*)$"
 )
 
 
@@ -58,7 +62,7 @@ def run_probe(
     port: int,
     timeout: float,
     log_name: str = "server.log",
-) -> tuple[int | None, str | None, str, list[str]]:
+) -> tuple[int | None, str | None, str, list[str], list[tuple[int, int, int, int]]]:
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
     from test_world_save_roundtrip import run_server
@@ -71,6 +75,7 @@ def run_probe(
     )
 
     messages: list[str] = []
+    equipment_packets: list[tuple[int, int, int, int]] = []
 
     def exercise() -> None:
         wait_for_world_load(fixture / "server.log", timeout)
@@ -93,6 +98,24 @@ def run_probe(
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(data))
+                from uo_packets import split_packet_stream
+
+                equipment_packets[:] = []
+                for packet in split_packet_stream(
+                    decode_game_response(bytes(data)), allow_truncated=True
+                ):
+                    # 0x2e is the protocol's single equipped-item packet;
+                    # 0x78 is the container-item packet.
+                    if packet.command != 0x2E or len(packet.data) < 13:
+                        continue
+                    equipment_packets.append(
+                        (
+                            int.from_bytes(packet.data[1:5], "big"),
+                            int.from_bytes(packet.data[5:7], "big"),
+                            packet.data[8],
+                            int.from_bytes(packet.data[9:13], "big"),
+                        )
+                    )
                 if END_MARKER in messages:
                     return
                 try:
@@ -114,7 +137,7 @@ def run_probe(
         log_path=fixture / log_name,
         action=exercise,
     )
-    return returncode, runner_error, log_contents, messages
+    return returncode, runner_error, log_contents, messages, equipment_packets
 
 
 def main() -> int:
@@ -127,7 +150,7 @@ def main() -> int:
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
-    returncode, runner_error, log_contents, messages = run_probe(
+    returncode, runner_error, log_contents, messages, equipment_packets = run_probe(
         fixture, args.binary.resolve(), args.host, args.port, args.startup_timeout
     )
     failures: list[str] = []
@@ -167,9 +190,35 @@ def main() -> int:
                     f"{label}: {description} was not preserved: "
                     f"got {rows[key]!r}; expected 0x{expected_value:x}"
                 )
+        if "LAYERED_LAYER" not in rows:
+            failures.append(f"{label}: default-layer equipment marker was not reported")
+        else:
+            try:
+                actual_layer = int(rows["LAYERED_LAYER"], 0)
+            except ValueError:
+                try:
+                    actual_layer = int(rows["LAYERED_LAYER"], 16)
+                except ValueError:
+                    actual_layer = -1
+            if actual_layer != CHARACTER_CONTENT_LAYERED_ITEM_LAYER:
+                failures.append(
+                    f"{label}: default-layer item used layer {rows['LAYERED_LAYER']!r}; "
+                    f"expected {CHARACTER_CONTENT_LAYERED_ITEM_LAYER}"
+                )
         return rows
 
     rows = check_markers("initial load", messages)
+    expected_equipment = (
+        0x40000000 | CHARACTER_CONTENT_LAYERED_ITEM_SERIAL,
+        CHARACTER_CONTENT_LAYERED_ITEM_ID,
+        CHARACTER_CONTENT_LAYERED_ITEM_LAYER,
+        CHARACTER_CONTENT_CHAR_SERIAL,
+    )
+    if expected_equipment not in equipment_packets:
+        failures.append(
+            "initial load: default-layer item was not sent in an equipment packet: "
+            f"got {equipment_packets!r}, expected {expected_equipment!r}"
+        )
     saved_chars = fixture / "save" / "spherechars.scp"
     try:
         saved_text = saved_chars.read_text(encoding="ascii", errors="replace")
@@ -195,7 +244,7 @@ def main() -> int:
 
     reload_rows: dict[str, str] = {}
     if not failures:
-        reload_returncode, reload_error, reload_log, reload_messages = run_probe(
+        reload_returncode, reload_error, reload_log, reload_messages, reload_equipment = run_probe(
             fixture,
             args.binary.resolve(),
             args.host,
@@ -207,14 +256,20 @@ def main() -> int:
             failures.append(f"reload probe failed: {reload_error}")
         failures.extend(shutdown_failures(reload_returncode, reload_log))
         reload_rows = check_markers("reload", reload_messages)
+        if expected_equipment not in reload_equipment:
+            failures.append(
+                "reload: default-layer item was not sent in an equipment packet: "
+                f"got {reload_equipment!r}, expected {expected_equipment!r}"
+            )
     if failures:
         print("character-content probe failed: " + "; ".join(failures), file=sys.stderr)
         print(log_contents[-4000:], file=sys.stderr)
         return 1
     print(
         "character-content probe passed: no-LAYER item "
-        f"{rows['UID']} and default-layer {rows['LAYERED_UID']} retained character parent "
-        f"{rows['PARENT']} through save/reload"
+        f"{rows['UID']} retained direct character content and default-layer "
+        f"{rows['LAYERED_UID']} was equipped at layer {rows['LAYERED_LAYER']} "
+        "through save/reload"
     )
     return 0
 

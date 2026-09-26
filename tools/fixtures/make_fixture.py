@@ -43,6 +43,7 @@ CHARACTER_CONTENT_ITEM_SERIAL = 4
 CHARACTER_CONTENT_ITEM_ID = 0x0E9E
 CHARACTER_CONTENT_LAYERED_ITEM_SERIAL = 5
 CHARACTER_CONTENT_LAYERED_ITEM_ID = 0x0E9F
+CHARACTER_CONTENT_LAYERED_ITEM_LAYER = 8
 CHARACTER_CONTENT_MARKER = "SPHERE_CHARACTER_CONTENT"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
@@ -465,6 +466,32 @@ def write_container_tile(path: Path, item_id: int) -> None:
         0,
         1,
         b"synthetic container\0".ljust(20, b"\0"),
+    )
+    with path.open("r+b") as stream:
+        stream.seek(record_offset)
+        stream.write(record)
+
+
+def write_equipment_tile(path: Path, item_id: int, layer: int) -> None:
+    """Mark one synthetic item as a valid visible equipment tile."""
+
+    record_offset = (
+        terrain_size()
+        + ((item_id // TILE_BLOCK_QTY) * 4)
+        + 4
+        + (item_id * ITEM_RECORD_BYTES)
+    )
+    # UFLAG1_EQUIP, movable weight, and the default paperdoll layer.
+    record = struct.pack(
+        "<IBBIIHB20s",
+        0x00000002,
+        1,
+        layer,
+        0,
+        0,
+        0,
+        1,
+        b"synthetic equipment\0".ljust(20, b"\0"),
     )
     with path.open("r+b") as stream:
         stream.seek(record_offset)
@@ -1444,6 +1471,10 @@ def write_scripts(
         "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).SERIAL>\n"
         f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_LAYERED_PARENT "
         "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).CONT.SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_LAYERED_LAYER "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).LAYER>\n"
+        "SYSMESSAGE SPHERE_CHARACTER_CONTENT_UPDATE "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).UPDATE>\n"
         f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_END\n"
         if character_content_probe
         else ""
@@ -1838,19 +1869,21 @@ def write_scripts(
         named_resource_id_probe_sections = "\n" + "\n".join(sections)
     default_char_definition = ""
     default_char_defname2 = "DEFNAME2=DEFAULTCHAR\n"
+    character_content_char_can = "CAN=0x114\n" if character_content_probe else ""
     if unresolved_worldchar_type:
         default_char_definition = "[DEFNAMES HARDCODED]\nDEFAULTCHAR c_MAN\n\n"
         default_char_defname2 = ""
     character_content_itemdef = (
+        "\n[TYPEDEF 181]\nDEFNAME=T_JEWELRY\n"
         f"\n[ITEMDEF 0x{CHARACTER_CONTENT_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_CHARACTER_CONTENT\n"
         "NAME=synthetic character content\n"
         "TYPE=T_NORMAL\n"
         f"\n[ITEMDEF 0x{CHARACTER_CONTENT_LAYERED_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_CHARACTER_CONTENT_LAYERED\n"
-        "NAME=synthetic character content with default layer\n"
-        "LAYER=29\n"
-        "TYPE=T_NORMAL\n"
+        "NAME=synthetic character content with default equip layer\n"
+        f"LAYER={CHARACTER_CONTENT_LAYERED_ITEM_LAYER}\n"
+        "TYPE=T_JEWELRY\n"
         if character_content_probe
         else ""
     )
@@ -1936,6 +1969,7 @@ DEFNAME=c_MAN
 ID=0x0190
 STR=100
 DEX=100
+""" + character_content_char_can + """
 ARMOR=5,5
 ON=@FixtureTypeCustom
 SYSMESSAGE SPHERE_CHARDEF_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
@@ -3719,7 +3753,7 @@ def main() -> int:
             if args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
             or args.container_shutdown_probe
-            else 0
+            else CHARACTER_CONTENT_LAYERED_ITEM_ID if args.character_content_probe else 0
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
@@ -3728,6 +3762,12 @@ def main() -> int:
     if args.container_shutdown_probe:
         for item_id in (0x0E7D, 0x0E88):
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
+    if args.character_content_probe:
+        write_equipment_tile(
+            root / "muls" / "tiledata.mul",
+            CHARACTER_CONTENT_LAYERED_ITEM_ID,
+            CHARACTER_CONTENT_LAYERED_ITEM_LAYER,
+        )
     if args.movement_stairs_probe:
         tiledata = root / "muls" / "tiledata.mul"
         write_movement_tile(
