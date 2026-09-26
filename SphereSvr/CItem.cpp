@@ -2320,6 +2320,7 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	if ( pObjCont->IsItem())
 	{
 		// layer is not used here of course.
+		SetNoLayerCharContent( false );
 
 		CItemContainerPtr pCont = REF_CAST(CItemContainer,pObjCont);
 		if (pCont)
@@ -2350,6 +2351,7 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 				SetNoLayerCharContent( true );
 				return NO_ERROR;
 			}
+			SetNoLayerCharContent( false );
 			// equip the item
 			pChar->LayerAdd( this, layer );
 			return( NO_ERROR );

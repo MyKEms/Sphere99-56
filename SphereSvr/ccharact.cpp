@@ -419,6 +419,10 @@ void CChar::OnRemoveOb( CGObListRec* pObRec )	// Override this = called when rem
 	CItemPtr pItem = STATIC_CAST(CItem,pObRec);
 	ASSERT(pItem);
 	DEBUG_CHECK( pItem->IsItemEquipped());
+	// The no-layer marker describes one specific load-time relation.  Once an
+	// item leaves this character it must no longer exempt later placement or
+	// weirdness checks.
+	pItem->SetNoLayerCharContent( false );
 
 	LAYER_TYPE layer = pItem->GetEquipLayer();
 	if ( layer != LAYER_DRAGGING && ! g_Serv.IsLoading() &&
