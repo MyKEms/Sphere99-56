@@ -170,6 +170,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|finduid_serial": Same("C|src_serial"),
     "C|finduid_tag": "chartext",
     "C|finduid_function": Same("C|function_plain"),
+    "C|findid_bare_item": nonempty,
     "C|lastnewitem_name": PROBE_ITEM_NAME,
     "C|function_args_root": DOTTED_PROBE_ACCOUNT,
     "C|function_args_chain": Same("I|serial"),
