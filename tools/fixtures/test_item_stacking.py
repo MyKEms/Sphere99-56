@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that an explicit same-point container drop merges equal item types."""
+"""Verify explicit and no-point equal-item merges retain their pile locations."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ ACCOUNT = "StackingProbe"
 PASSWORD = "stacking_pw"
 STACK_ITEM_ID = 0x0E96
 STACKING_UIDS = {0x40000064, 0x40000065}
+NO_POINT_STACK_ITEM_ID = 0x0E97
 
 
 def packets(data: bytes):
@@ -90,6 +91,8 @@ def container_adds(data: bytes) -> list[dict[str, int]]:
                 "uid": struct.unpack_from(">I", raw, 1)[0],
                 "id": struct.unpack_from(">H", raw, 5)[0],
                 "amount": struct.unpack_from(">H", raw, 8)[0],
+                "x": struct.unpack_from(">H", raw, 10)[0],
+                "y": struct.unpack_from(">H", raw, 12)[0],
                 "container": struct.unpack_from(">I", raw, 14)[0],
             }
         )
@@ -122,10 +125,17 @@ def backpack_uid(data: bytes) -> int | None:
     return None
 
 
-def move_to_pack(sock: socket.socket, uid: int, pack_uid: int) -> bytes:
+def move_to_pack(
+    sock: socket.socket,
+    uid: int,
+    pack_uid: int,
+    *,
+    x: int = 50,
+    y: int = 50,
+) -> bytes:
     sock.sendall(struct.pack(">BIH", 0x07, uid, 0))
     response = drain(sock, 0.25)
-    sock.sendall(struct.pack(">BIHHBI", 0x08, uid, 50, 50, 0, pack_uid))
+    sock.sendall(struct.pack(">BIHHBI", 0x08, uid, x, y, 0, pack_uid))
     return response + drain(sock, 0.9)
 
 
@@ -185,6 +195,11 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                         by_uid = {item["uid"] for item in ground}
                         for uid in sorted(by_uid):
                             data.extend(move_to_pack(sock, uid, pack_uid))
+                        # Re-open the pack so the assertion observes the
+                        # retained scripted no-point pile even when the stack
+                        # operation itself does not emit a second packet.
+                        sock.sendall(struct.pack(">BI", 0x06, pack_uid))
+                        data.extend(drain(sock, 0.9))
                         observed = [
                             item
                             for item in container_adds(bytes(data))
@@ -194,6 +209,22 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                             failures.append(
                                 "same-definition piles did not merge at explicit point: "
                                 f"container_adds={observed!r}, item_packets={item_packets(bytes(data))!r}"
+                            )
+                        no_point_observed = [
+                            item
+                            for item in container_adds(bytes(data))
+                            if item["id"] == NO_POINT_STACK_ITEM_ID
+                        ]
+                        if not any(
+                            item["amount"] >= 2
+                            and item["x"] == 70
+                            and item["y"] == 70
+                            for item in no_point_observed
+                        ):
+                            failures.append(
+                                "no-point same-definition pile did not retain the "
+                                "existing contained point: "
+                                f"container_adds={no_point_observed!r}"
                             )
         except (OSError, RuntimeError, struct.error, ValueError) as error:
             failures.append(f"protocol probe raised {type(error).__name__}: {error}")
@@ -208,7 +239,10 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
         print("item-stacking probe failed: " + "; ".join(failures), file=sys.stderr)
         print(log_contents[-4000:], file=sys.stderr)
         return 1
-    print("item-stacking probe passed: equal definitions merged at the explicit container point")
+    print(
+        "item-stacking probe passed: explicit and no-point equal-definition "
+        "merges retained their contained points"
+    )
     return 0
 
 

@@ -1,4 +1,4 @@
-"""Registered synthetic fixture mode: same-definition item stacking."""
+"""Registered synthetic fixture mode: explicit and no-point item stacking."""
 
 from .registry import FixtureCase, FixtureMode, TestCase, register_mode
 

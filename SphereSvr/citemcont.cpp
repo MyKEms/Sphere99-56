@@ -301,7 +301,12 @@ void CItemContainer::ContentAdd( CItemPtr pItem, POINT pt )
 				( tryPoint.x != pt.x || tryPoint.y != pt.y ))
 				continue;
 			if ( pItem->Stack( pTry ))
+			{
+				// Stack() keeps pItem and deletes pTry.  Preserve the existing
+				// pile's location when the caller supplied no point.
+				pt = tryPoint;
 				goto insertit;
+			}
 		}
 	}
 	if ( ! fValidPoint )

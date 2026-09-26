@@ -59,12 +59,15 @@ ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
 # Same-definition stacking probe.  Two movable, stackable ground items are
-# dragged into the character's pack at the same explicit point.  The client
-# path must merge them just as the legacy container path does.
+# dragged into the character's pack at the same explicit point.  A second
+# equal-definition item is added by script without a point, exercising the
+# existing pile's contained location.
 STACKING_ACCOUNT = "StackingProbe"
 STACKING_PASSWORD = "stacking_pw"
 STACKING_ITEM_ID = 0x0E96
+STACKING_NO_POINT_ITEM_ID = 0x0E97
 STACKING_ITEM_SERIALS = (100, 101)
+STACKING_NO_POINT_ITEM_SERIAL = 102
 
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
@@ -555,7 +558,7 @@ def write_book_pages_save(root: Path) -> None:
 
 
 def write_stacking_save(root: Path) -> None:
-    """Seed an existing account with two same-definition ground piles."""
+    """Seed explicit-point and no-point same-definition ground piles."""
 
     first_serial, second_serial = STACKING_ITEM_SERIALS
     header = [
@@ -605,6 +608,12 @@ def write_stacking_save(root: Path) -> None:
                 "[WORLDITEM SYNTHETIC_STACK_ITEM]",
                 f"SERIAL={second_serial}",
                 "P=130,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_NO_POINT_STACK_ITEM]",
+                f"SERIAL={STACKING_NO_POINT_ITEM_SERIAL}",
+                "CONT=4",
+                "P=70,70,0",
                 "AMOUNT=1",
                 "TIMERD=-1",
                 "[EOF]",
@@ -1789,6 +1798,11 @@ def write_scripts(
         "NAME=synthetic stack item\n"
         "TYPE=T_NORMAL\n"
         "CAN=0x100\n"
+        f"\n[ITEMDEF 0x{STACKING_NO_POINT_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_NO_POINT_STACK_ITEM\n"
+        "NAME=synthetic no-point stack item\n"
+        "TYPE=T_NORMAL\n"
+        "CAN=0x100\n"
         if stacking_probe
         else ""
     )
@@ -1980,6 +1994,7 @@ SYSMESSAGE SPHERE_TRIGGER_RETURN <TRIGGER(@FixtureReturn)>
 HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
+""" + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
@@ -3300,7 +3315,7 @@ def main() -> int:
     parser.add_argument(
         "--movement-stacking-probe",
         action="store_true",
-        help="exercise same-definition stacking at an explicit container point",
+        help="exercise same-definition stacking at explicit and no-point locations",
     )
     args = parser.parse_args()
 
@@ -3598,6 +3613,7 @@ def main() -> int:
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
     if args.movement_stacking_probe:
         write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_ITEM_ID)
+        write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_NO_POINT_ITEM_ID)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
 
