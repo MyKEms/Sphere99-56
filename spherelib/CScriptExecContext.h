@@ -475,13 +475,35 @@ protected:
 		return false;
 	}
 
-	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult, CScriptUnknownRejectTracker& rejected)
+	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult,
+		CScriptUnknownRejectTracker& rejected, DWORD dwFlags = 0)
 	{
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
+		if ( dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL )
+		{
+			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
+			{
+				CGVariant vSerial;
+				if ( pObj->s_PropGet("SERIAL", vSerial, m_pSrc) == NO_ERROR )
+				{
+					sResult = vSerial.GetPSTR();
+					return true;
+				}
+			}
+		}
 		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
 		return true;
+	}
+
+	static bool IsContainerAssignmentKey(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL || *pszKey == '\0' )
+			return false;
+		LPCTSTR pszProp = strrchr(pszKey, '.');
+		pszProp = pszProp ? pszProp + 1 : pszKey;
+		return !_stricmp(pszProp, "CONT");
 	}
 
 public:
@@ -749,7 +771,9 @@ public:
 		// <safe ...>  → returns "" on error
 		// <?...?>     → deferred macro, pass through for now
 		//
-		// dwFlags: CSCRIPT_PARSE_HTML = use %% delimiters instead of <>
+		// dwFlags: CSCRIPT_PARSE_HTML = use %% delimiters instead of <>;
+		// CSCRIPT_PARSE_OBJECT_SERIAL = serialize reference-valued escapes
+		// for an object-valued assignment.
 
 		if ( pszBuf == NULL || *pszBuf == '\0' )
 			return;
@@ -833,7 +857,7 @@ public:
 				CScriptUnknownRejectTracker rejected;
 				try
 				{
-					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected);
+					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags);
 				}
 				catch (...)
 				{
@@ -938,7 +962,7 @@ public:
 
 			try
 			{
-				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected);
+				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags);
 			}
 			catch (...)
 			{
@@ -1727,20 +1751,24 @@ public:
 					// table-backed expressions (EVAL, STRLEN, etc.) observable from
 					// a fixture without a graphical client.
 					TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+					bool fKeyEquals = script.WasKeyValueAssignment();
 					strncpy(szKey, pszKey, sizeof(szKey) - 1);
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
 						s_ParseEscapes( szKey, 0 );
 					if ( script.GetArgMod() && *script.GetArgMod() )
-						s_ParseEscapes( script.GetArgMod(), 0,
+					{
+						DWORD dwArgFlags = (fKeyEquals && IsContainerAssignmentKey(szKey))
+							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
+						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
+					}
 
 					// Rebuild the statement: "KEY VALUE", or "KEY=VALUE" for an
 					// assignment.  The line reader splits at the first space or '=',
 					// which can fall inside the parentheses of KEY(a, b); then
 					// ExecuteCommand() splits the rebuilt text again outside the
 					// parentheses.
-					bool fKeyEquals = script.WasKeyValueAssignment();
 					int iKeyDepth = 0;
 					for ( LPCTSTR q = szKey; *q; q++ )
 					{

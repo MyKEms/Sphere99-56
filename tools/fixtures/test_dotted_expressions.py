@@ -287,6 +287,12 @@ EXPECTED: dict[str, Expectation] = {
     "C|builtin_call": "reached",
     "C|call_readback": "9|8|7|12",
     "C|capped_loops_returned": "yes",
+    "C|object_escape_hits": "1",
+    "C|object_escape_source": nonempty,
+    "C|object_escape_handler": "hit",
+    "C|object_escape_arg": "",
+    "C|cont_target_serial": nonempty,
+    "C|cont_object_serial": Same("C|cont_target_serial"),
     # Exactly-once evaluation of a reference-returning function root.
     "C|getter_unknown_count": "1",
     "C|getter_malformed_count": "1",
