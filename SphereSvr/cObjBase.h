@@ -346,6 +346,7 @@ private:
 	IT_TYPE m_type;		// What does this item do when dclicked ? 
 	WORD m_AttrMask;		// ATTR_TYPE Attribute flags.
 	bool m_fUnEquipTriggerActive;	// Prevent recursive T_UnEquip on this item.
+	bool m_fNoLayerCharContent;	// Loaded directly under a character without an equip layer.
 	CSphereUID m_uidLoadContainer;	// deferred CONT target while loading sections out of order.
 	LAYER_TYPE m_layerLoadContainer;
 
@@ -967,6 +968,8 @@ public:
 	}
 	bool IsUnEquipTriggerActive() const { return m_fUnEquipTriggerActive; }
 	void SetUnEquipTriggerActive( bool fActive ) { m_fUnEquipTriggerActive = fActive; }
+	bool IsNoLayerCharContent() const { return m_fNoLayerCharContent; }
+	void SetNoLayerCharContent( bool fValue ) { m_fNoLayerCharContent = fValue; }
 	CItemPtr SetType( IT_TYPE type );
 	bool IsTypeLit() const
 	{
@@ -2684,6 +2687,7 @@ public:
 	LAYER_TYPE CanEquipLayer( CItem* pItem, LAYER_TYPE layer, CChar* pCharMsg, bool fTest );
 	CItemPtr LayerFind( LAYER_TYPE layer ) const;
 	bool LayerAdd( CItem* pItem, LAYER_TYPE layer );
+	bool ContentAddNoLayer( CItem* pItem );
 
 	virtual void OnWeightChange( int iChange );
 

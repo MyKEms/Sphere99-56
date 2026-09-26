@@ -67,6 +67,7 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	g_Serv.StatInc(SERV_STAT_ITEMS);
 	m_AttrMask = 0;
 	m_fUnEquipTriggerActive = false;
+	m_fNoLayerCharContent = false;
 	m_uidLoadContainer.InitUID();
 	m_layerLoadContainer = LAYER_NONE;
 	m_amount = 1;
@@ -1059,7 +1060,8 @@ int CItem::FixWeirdness()
 		else
 		{
 			SetAttr( ATTR_MOVE_NEVER );
-			if ( GetEquipLayer() != LAYER_HAIR && GetEquipLayer() != LAYER_BEARD )
+			if ( GetEquipLayer() != LAYER_HAIR && GetEquipLayer() != LAYER_BEARD &&
+				! IsNoLayerCharContent())
 			{
 				iResultCode = 0x2228;
 				goto bailout;	// get rid of it.
@@ -1141,7 +1143,7 @@ int CItem::FixWeirdness()
 		{
 		case LAYER_NONE:
 			// Only Trade windows should be equipped this way..
-			if ( ! IsType( IT_EQ_TRADE_WINDOW ))
+			if ( ! IsType( IT_EQ_TRADE_WINDOW ) && ! IsNoLayerCharContent())
 			{
 				iResultCode = 0x2230;
 				goto bailout;	// get rid of it.
@@ -2331,11 +2333,23 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 		CCharPtr pChar = REF_CAST(CChar,pObjCont);
 		if ( pChar != NULL )
 		{
-			// equip the item
 			CItemDefPtr pItemDef = Item_GetDef();
 			ASSERT(pItemDef);
 			if ( ! layer ) 
 				layer = pItemDef->GetEquipLayer();
+			if ( g_Serv.IsLoading() && layer == LAYER_NONE &&
+				pItemDef->GetEquipLayer() == LAYER_NONE )
+			{
+				// 0.99 saves use CONT=<character> without LAYER for ordinary
+				// character-owned items.  They are direct character content, not
+				// failed equipment; keep that relation intact during load.
+				RemoveSelf();
+				if ( ! pChar->ContentAddNoLayer( this ))
+					return HRES_INVALID_HANDLE;
+				SetNoLayerCharContent( true );
+				return NO_ERROR;
+			}
+			// equip the item
 			pChar->LayerAdd( this, layer );
 			return( NO_ERROR );
 		}

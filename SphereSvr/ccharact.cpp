@@ -349,6 +349,16 @@ bool CChar::LayerAdd( CItem* pItem, LAYER_TYPE layer )
 	return true;
 }
 
+bool CChar::ContentAddNoLayer( CItem* pItem )
+{
+	if ( pItem == NULL || pItem->IsDeletePending())
+		return false;
+	if ( ! CContainer::ContentAddPrivate( pItem ))
+		return false;
+	pItem->SetEquipLayer( LAYER_NONE );
+	return true;
+}
+
 void CChar::UnEquipItem( CItem* pItem )
 {
 	// The item has already been unequipped !
