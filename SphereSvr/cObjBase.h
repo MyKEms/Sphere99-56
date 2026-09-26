@@ -347,6 +347,7 @@ private:
 	WORD m_AttrMask;		// ATTR_TYPE Attribute flags.
 	bool m_fUnEquipTriggerActive;	// Prevent recursive T_UnEquip on this item.
 	bool m_fNoLayerCharContent;	// Loaded directly under a character without an equip layer.
+	bool m_fNoExplicitLayer;	// Loaded from a character relation without a saved LAYER.
 	CSphereUID m_uidLoadContainer;	// deferred CONT target while loading sections out of order.
 	LAYER_TYPE m_layerLoadContainer;
 
@@ -970,6 +971,8 @@ public:
 	void SetUnEquipTriggerActive( bool fActive ) { m_fUnEquipTriggerActive = fActive; }
 	bool IsNoLayerCharContent() const { return m_fNoLayerCharContent; }
 	void SetNoLayerCharContent( bool fValue ) { m_fNoLayerCharContent = fValue; }
+	bool IsNoExplicitLayer() const { return m_fNoExplicitLayer; }
+	void SetNoExplicitLayer( bool fValue ) { m_fNoExplicitLayer = fValue; }
 	CItemPtr SetType( IT_TYPE type );
 	bool IsTypeLit() const
 	{

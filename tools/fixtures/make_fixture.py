@@ -46,6 +46,7 @@ CHARACTER_CONTENT_LAYERED_ITEM_ID = 0x0E9F
 CHARACTER_CONTENT_LAYERED_ITEM_LAYER = 8
 CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL = 6
 CHARACTER_CONTENT_SPECIAL_ITEM_ID = 0x204E
+CHARACTER_CONTENT_SPECIAL_ITEM_LAYER = 22
 CHARACTER_CONTENT_MARKER = "SPHERE_CHARACTER_CONTENT"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
@@ -1479,6 +1480,8 @@ def write_scripts(
         "<SRC.FINDID(i_deathshroud).SERIAL>\n"
         f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_PARENT "
         "<SRC.FINDID(i_deathshroud).CONT.SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_LAYER "
+        "<SRC.FINDID(i_deathshroud).LAYER>\n"
         "SYSMESSAGE SPHERE_CHARACTER_CONTENT_UPDATE "
         "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).UPDATE>\n"
         "SERV.SAVE 1\n"
@@ -3768,7 +3771,11 @@ def main() -> int:
             if args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
             or args.container_shutdown_probe
-            else CHARACTER_CONTENT_LAYERED_ITEM_ID if args.character_content_probe else 0
+            else (
+                max(CHARACTER_CONTENT_LAYERED_ITEM_ID, CHARACTER_CONTENT_SPECIAL_ITEM_ID)
+                if args.character_content_probe
+                else 0
+            )
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
@@ -3782,6 +3789,11 @@ def main() -> int:
             root / "muls" / "tiledata.mul",
             CHARACTER_CONTENT_LAYERED_ITEM_ID,
             CHARACTER_CONTENT_LAYERED_ITEM_LAYER,
+        )
+        write_equipment_tile(
+            root / "muls" / "tiledata.mul",
+            CHARACTER_CONTENT_SPECIAL_ITEM_ID,
+            CHARACTER_CONTENT_SPECIAL_ITEM_LAYER,
         )
     if args.movement_stairs_probe:
         tiledata = root / "muls" / "tiledata.mul"

@@ -19,6 +19,7 @@ from make_fixture import (
     CHARACTER_CONTENT_LAYERED_ITEM_SERIAL,
     CHARACTER_CONTENT_MARKER,
     CHARACTER_CONTENT_PASSWORD,
+    CHARACTER_CONTENT_SPECIAL_ITEM_LAYER,
     CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL,
 )
 from run_suite import shutdown_failures
@@ -28,7 +29,7 @@ END_MARKER = f"{CHARACTER_CONTENT_MARKER}_END"
 MARKER_RE = re.compile(
     r"^"
     + re.escape(CHARACTER_CONTENT_MARKER)
-    + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT|LAYERED_LAYER|SPECIAL_UID|SPECIAL_PARENT) (.*)$"
+    + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT|LAYERED_LAYER|SPECIAL_UID|SPECIAL_PARENT|SPECIAL_LAYER) (.*)$"
 )
 
 
@@ -198,6 +199,21 @@ def main() -> int:
                 failures.append(
                     f"{label}: {description} was not preserved: "
                     f"got {rows[key]!r}; expected 0x{expected_value:x}"
+                )
+        if "SPECIAL_LAYER" not in rows:
+            failures.append(f"{label}: special no-LAYER item layer was not reported")
+        else:
+            try:
+                actual_layer = int(rows["SPECIAL_LAYER"], 0)
+            except ValueError:
+                try:
+                    actual_layer = int(rows["SPECIAL_LAYER"], 16)
+                except ValueError:
+                    actual_layer = -1
+            if actual_layer != CHARACTER_CONTENT_SPECIAL_ITEM_LAYER:
+                failures.append(
+                    f"{label}: special no-LAYER item used layer {rows['SPECIAL_LAYER']!r}; "
+                    f"expected {CHARACTER_CONTENT_SPECIAL_ITEM_LAYER}"
                 )
         if "LAYERED_LAYER" not in rows:
             failures.append(f"{label}: default-layer equipment marker was not reported")

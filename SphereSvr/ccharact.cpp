@@ -423,6 +423,7 @@ void CChar::OnRemoveOb( CGObListRec* pObRec )	// Override this = called when rem
 	// item leaves this character it must no longer exempt later placement or
 	// weirdness checks.
 	pItem->SetNoLayerCharContent( false );
+	pItem->SetNoExplicitLayer( false );
 
 	LAYER_TYPE layer = pItem->GetEquipLayer();
 	if ( layer != LAYER_DRAGGING && ! g_Serv.IsLoading() &&

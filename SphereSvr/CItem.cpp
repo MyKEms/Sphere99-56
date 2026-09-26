@@ -68,6 +68,7 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	m_AttrMask = 0;
 	m_fUnEquipTriggerActive = false;
 	m_fNoLayerCharContent = false;
+	m_fNoExplicitLayer = false;
 	m_uidLoadContainer.InitUID();
 	m_layerLoadContainer = LAYER_NONE;
 	m_amount = 1;
@@ -927,11 +928,10 @@ int CItem::FixWeirdness()
 			{
 				if ( IsAttr( ATTR_MAGIC ) && IsAttr( ATTR_NEWBIE ))
 					break;	// special
-				// Stock keeps a no-layer character-content shroud even when the
-				// live character is not dead; valid equipped shrouds still require
-				// a dead owner.
+				// Stock keeps a shroud whose saved character relation omitted
+				// LAYER even when the live character is not dead.
 				if ( ! pChar->IsStatFlag( STATF_DEAD ) &&
-					! IsNoLayerCharContent())
+					! IsNoExplicitLayer())
 				{
 					iResultCode = 0x2207;
 					goto bailout;	// get rid of it.
@@ -2325,6 +2325,7 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	{
 		// layer is not used here of course.
 		SetNoLayerCharContent( false );
+		SetNoExplicitLayer( false );
 
 		CItemContainerPtr pCont = REF_CAST(CItemContainer,pObjCont);
 		if (pCont)
@@ -2341,6 +2342,7 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 			CItemDefPtr pItemDef = Item_GetDef();
 			ASSERT(pItemDef);
 			const bool fNoExplicitLayer = ( layer == LAYER_NONE );
+			SetNoExplicitLayer( fNoExplicitLayer );
 			if ( ! layer ) 
 				layer = pItemDef->GetEquipLayer();
 			const bool fNoEquipLayer = ( layer == LAYER_NONE || layer >= LAYER_QTY );
