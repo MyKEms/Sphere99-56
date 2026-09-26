@@ -349,6 +349,16 @@ bool CChar::LayerAdd( CItem* pItem, LAYER_TYPE layer )
 	return true;
 }
 
+bool CChar::ContentAddNoLayer( CItem* pItem )
+{
+	if ( pItem == NULL || pItem->IsDeletePending())
+		return false;
+	if ( ! CContainer::ContentAddPrivate( pItem ))
+		return false;
+	pItem->SetEquipLayer( LAYER_NONE );
+	return true;
+}
+
 void CChar::UnEquipItem( CItem* pItem )
 {
 	// The item has already been unequipped !
@@ -409,6 +419,11 @@ void CChar::OnRemoveOb( CGObListRec* pObRec )	// Override this = called when rem
 	CItemPtr pItem = STATIC_CAST(CItem,pObRec);
 	ASSERT(pItem);
 	DEBUG_CHECK( pItem->IsItemEquipped());
+	// The no-layer marker describes one specific load-time relation.  Once an
+	// item leaves this character it must no longer exempt later placement or
+	// weirdness checks.
+	pItem->SetNoLayerCharContent( false );
+	pItem->SetNoExplicitLayer( false );
 
 	LAYER_TYPE layer = pItem->GetEquipLayer();
 	if ( layer != LAYER_DRAGGING && ! g_Serv.IsLoading() &&

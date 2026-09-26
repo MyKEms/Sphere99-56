@@ -67,6 +67,8 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	g_Serv.StatInc(SERV_STAT_ITEMS);
 	m_AttrMask = 0;
 	m_fUnEquipTriggerActive = false;
+	m_fNoLayerCharContent = false;
+	m_fNoExplicitLayer = false;
 	m_uidLoadContainer.InitUID();
 	m_layerLoadContainer = LAYER_NONE;
 	m_amount = 1;
@@ -926,7 +928,10 @@ int CItem::FixWeirdness()
 			{
 				if ( IsAttr( ATTR_MAGIC ) && IsAttr( ATTR_NEWBIE ))
 					break;	// special
-				if ( ! pChar->IsStatFlag( STATF_DEAD ))
+				// Stock keeps a shroud whose saved character relation omitted
+				// LAYER even when the live character is not dead.
+				if ( ! pChar->IsStatFlag( STATF_DEAD ) &&
+					! IsNoExplicitLayer())
 				{
 					iResultCode = 0x2207;
 					goto bailout;	// get rid of it.
@@ -1059,7 +1064,8 @@ int CItem::FixWeirdness()
 		else
 		{
 			SetAttr( ATTR_MOVE_NEVER );
-			if ( GetEquipLayer() != LAYER_HAIR && GetEquipLayer() != LAYER_BEARD )
+			if ( GetEquipLayer() != LAYER_HAIR && GetEquipLayer() != LAYER_BEARD &&
+				! IsNoLayerCharContent())
 			{
 				iResultCode = 0x2228;
 				goto bailout;	// get rid of it.
@@ -1141,7 +1147,7 @@ int CItem::FixWeirdness()
 		{
 		case LAYER_NONE:
 			// Only Trade windows should be equipped this way..
-			if ( ! IsType( IT_EQ_TRADE_WINDOW ))
+			if ( ! IsType( IT_EQ_TRADE_WINDOW ) && ! IsNoLayerCharContent())
 			{
 				iResultCode = 0x2230;
 				goto bailout;	// get rid of it.
@@ -2318,6 +2324,8 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 	if ( pObjCont->IsItem())
 	{
 		// layer is not used here of course.
+		SetNoLayerCharContent( false );
+		SetNoExplicitLayer( false );
 
 		CItemContainerPtr pCont = REF_CAST(CItemContainer,pObjCont);
 		if (pCont)
@@ -2331,11 +2339,26 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 		CCharPtr pChar = REF_CAST(CChar,pObjCont);
 		if ( pChar != NULL )
 		{
-			// equip the item
 			CItemDefPtr pItemDef = Item_GetDef();
 			ASSERT(pItemDef);
+			const bool fNoExplicitLayer = ( layer == LAYER_NONE );
+			SetNoExplicitLayer( fNoExplicitLayer );
 			if ( ! layer ) 
 				layer = pItemDef->GetEquipLayer();
+			const bool fNoEquipLayer = ( layer == LAYER_NONE || layer >= LAYER_QTY );
+			if ( g_Serv.IsLoading() && fNoExplicitLayer && fNoEquipLayer )
+			{
+				// 0.99 omits LAYER when it matches the ITEMDEF default.  Keep
+				// genuine no-layer content directly under the character, but let a
+				// valid ITEMDEF default continue through the normal equip path.
+				RemoveSelf();
+				if ( ! pChar->ContentAddNoLayer( this ))
+					return HRES_INVALID_HANDLE;
+				SetNoLayerCharContent( true );
+				return NO_ERROR;
+			}
+			SetNoLayerCharContent( false );
+			// equip the item
 			pChar->LayerAdd( this, layer );
 			return( NO_ERROR );
 		}
