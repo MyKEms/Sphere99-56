@@ -58,6 +58,17 @@ ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
+# Same-definition stacking probe.  Two movable, stackable ground items are
+# dragged into the character's pack at the same explicit point.  A second
+# equal-definition item is added by script without a point, exercising the
+# existing pile's contained location.
+STACKING_ACCOUNT = "StackingProbe"
+STACKING_PASSWORD = "stacking_pw"
+STACKING_ITEM_ID = 0x0E96
+STACKING_NO_POINT_ITEM_ID = 0x0E97
+STACKING_ITEM_SERIALS = (100, 101)
+STACKING_NO_POINT_ITEM_SERIAL = 102
+
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
 # character), "I" in the @Equip trigger of an equipped item (default object is
@@ -488,6 +499,31 @@ def write_movement_tile(path: Path, item_id: int, flags: int, height: int) -> No
         stream.write(record)
 
 
+def write_stackable_tile(path: Path, item_id: int) -> None:
+    """Mark a synthetic ground item as movable, nonblocking and pileable."""
+
+    record_offset = (
+        terrain_size()
+        + ((item_id // TILE_BLOCK_QTY) * 4)
+        + 4
+        + (item_id * ITEM_RECORD_BYTES)
+    )
+    record = struct.pack(
+        "<IBBIIHB20s",
+        0x00000804,  # UFLAG1_NONBLOCKING | UFLAG2_STACKABLE
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        b"synthetic stack item\0".ljust(20, b"\0"),
+    )
+    with path.open("r+b") as stream:
+        stream.seek(record_offset)
+        stream.write(record)
+
+
 def write_mul_fixture(root: Path, *, extra_item_id: int = 0) -> None:
     muls = root / "muls"
     map_blocks = MAP_BLOCKS_X * MAP_BLOCKS_Y
@@ -572,6 +608,71 @@ def write_book_pages_save(root: Path) -> None:
         ),
     )
     write_text(root / "save" / "spherechars.scp", "\n".join(header + ["[EOF]"]))
+
+
+def write_stacking_save(root: Path) -> None:
+    """Seed explicit-point and no-point same-definition ground piles."""
+
+    first_serial, second_serial = STACKING_ITEM_SERIALS
+    header = [
+        "TITLE=Sphere synthetic item-stacking fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+    ]
+    write_text(root / "accounts" / "sphereaccu.scp", "\n".join(
+        [
+            f"[ACCOUNT {STACKING_ACCOUNT}]",
+            f"PASSWORD={STACKING_PASSWORD}",
+            "PLEVEL=Admin",
+            "CHARUID=3",
+            "LASTCHARUID=3",
+            "[EOF]",
+        ]
+    ))
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "\n".join(header + ["[EOF]"]))
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            header
+            + [
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={STACKING_ACCOUNT}",
+                "NAME=StackingProbeCharacter",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[WORLDITEM DEFAULTITEM]",
+                "SERIAL=4",
+                "LAYER=21",
+                "CONT=3",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_STACK_ITEM]",
+                f"SERIAL={first_serial}",
+                "P=129,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_STACK_ITEM]",
+                f"SERIAL={second_serial}",
+                "P=130,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_NO_POINT_STACK_ITEM]",
+                f"SERIAL={STACKING_NO_POINT_ITEM_SERIAL}",
+                "CONT=4",
+                "P=70,70,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[EOF]",
+            ]
+        ),
+    )
 
 
 def skill_sections(*, dword_hex_probe: bool = False) -> str:
@@ -1392,6 +1493,7 @@ def write_scripts(
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
     movement_stairs_probe: bool = False,
+    stacking_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1766,6 +1868,20 @@ def write_scripts(
         if named_item_name_probe
         else ""
     )
+    stacking_itemdef = (
+        f"\n[ITEMDEF 0x{STACKING_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_STACK_ITEM\n"
+        "NAME=synthetic stack item\n"
+        "TYPE=T_NORMAL\n"
+        "CAN=0x100\n"
+        f"\n[ITEMDEF 0x{STACKING_NO_POINT_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_NO_POINT_STACK_ITEM\n"
+        "NAME=synthetic no-point stack item\n"
+        "TYPE=T_NORMAL\n"
+        "CAN=0x100\n"
+        if stacking_probe
+        else ""
+    )
     named_resource_id_probe_sections = ""
     if named_resource_id_probe:
         sections = [
@@ -1954,6 +2070,7 @@ SYSMESSAGE SPHERE_TRIGGER_RETURN <TRIGGER(@FixtureReturn)>
 HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
+""" + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
@@ -2025,7 +2142,8 @@ ITEMNEWBIE=0x0E73
         + spawn_point_itemdef
         + spawn_point_product_itemdef
         + movement_stairs_itemdefs
-        + book_pages_probe_sections,
+        + book_pages_probe_sections
+        + stacking_itemdef,
     )
 
 
@@ -3328,6 +3446,11 @@ def main() -> int:
         action="store_true",
         help="exercise dynamic stair height resolution",
     )
+    parser.add_argument(
+        "--movement-stacking-probe",
+        action="store_true",
+        help="exercise same-definition stacking at explicit and no-point locations",
+    )
     args = parser.parse_args()
 
     # A mode is a complete recipe.  Reparse its declarative argument list
@@ -3564,7 +3687,10 @@ def main() -> int:
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
         movement_stairs_probe=args.movement_stairs_probe,
+        stacking_probe=args.movement_stacking_probe,
     )
+    if args.movement_stacking_probe:
+        write_stacking_save(root)
     if args.world_load_counts:
         write_world_load_counts_save(
             root,
@@ -3636,7 +3762,7 @@ def main() -> int:
             if args.timer_sibling_mutation_probe
             or args.timer_sibling_mutation_owner_first_probe
             or args.container_shutdown_probe
-            else 0
+            else (STACKING_ITEM_ID if args.movement_stacking_probe else 0)
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
@@ -3653,6 +3779,9 @@ def main() -> int:
             0x00000200 | 0x00000400 | 0x40000000,
             10,
         )
+    if args.movement_stacking_probe:
+        write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_ITEM_ID)
+        write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_NO_POINT_ITEM_ID)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
 
