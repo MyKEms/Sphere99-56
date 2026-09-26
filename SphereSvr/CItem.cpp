@@ -927,7 +927,11 @@ int CItem::FixWeirdness()
 			{
 				if ( IsAttr( ATTR_MAGIC ) && IsAttr( ATTR_NEWBIE ))
 					break;	// special
-				if ( ! pChar->IsStatFlag( STATF_DEAD ))
+				// Stock keeps a no-layer character-content shroud even when the
+				// live character is not dead; valid equipped shrouds still require
+				// a dead owner.
+				if ( ! pChar->IsStatFlag( STATF_DEAD ) &&
+					! IsNoLayerCharContent())
 				{
 					iResultCode = 0x2207;
 					goto bailout;	// get rid of it.

@@ -19,6 +19,7 @@ from make_fixture import (
     CHARACTER_CONTENT_LAYERED_ITEM_SERIAL,
     CHARACTER_CONTENT_MARKER,
     CHARACTER_CONTENT_PASSWORD,
+    CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL,
 )
 from run_suite import shutdown_failures
 
@@ -27,7 +28,7 @@ END_MARKER = f"{CHARACTER_CONTENT_MARKER}_END"
 MARKER_RE = re.compile(
     r"^"
     + re.escape(CHARACTER_CONTENT_MARKER)
-    + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT|LAYERED_LAYER) (.*)$"
+    + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT|LAYERED_LAYER|SPECIAL_UID|SPECIAL_PARENT) (.*)$"
 )
 
 
@@ -176,6 +177,14 @@ def main() -> int:
                 CHARACTER_CONTENT_CHAR_SERIAL,
                 "default-layer no-LAYER item parent",
             ),
+            "SPECIAL_UID": (
+                0x40000000 | CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL,
+                "special no-LAYER item UID",
+            ),
+            "SPECIAL_PARENT": (
+                CHARACTER_CONTENT_CHAR_SERIAL,
+                "special no-LAYER item parent",
+            ),
         }
         for key, (expected_value, description) in expected.items():
             if key not in rows:
@@ -228,6 +237,7 @@ def main() -> int:
     for item_name in (
         "SYNTHETIC_CHARACTER_CONTENT",
         "SYNTHETIC_CHARACTER_CONTENT_LAYERED",
+        "i_deathshroud",
     ):
         item_match = re.search(
             rf"(?ms)^\[WORLDITEM {item_name}\]\n(.*?)(?=^\[|\Z)",
@@ -237,7 +247,7 @@ def main() -> int:
             failures.append(f"saved character did not retain {item_name} section")
             continue
         item_section = item_match.group(1)
-        if not re.search(r"(?m)^CONT=3$", item_section):
+        if not re.search(r"(?m)^CONT=0*3$", item_section):
             failures.append(f"saved {item_name} did not retain CONT=3")
         if re.search(r"(?m)^LAYER=", item_section):
             failures.append(f"saved {item_name} unexpectedly gained a LAYER")

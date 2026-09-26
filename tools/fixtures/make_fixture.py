@@ -44,6 +44,8 @@ CHARACTER_CONTENT_ITEM_ID = 0x0E9E
 CHARACTER_CONTENT_LAYERED_ITEM_SERIAL = 5
 CHARACTER_CONTENT_LAYERED_ITEM_ID = 0x0E9F
 CHARACTER_CONTENT_LAYERED_ITEM_LAYER = 8
+CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL = 6
+CHARACTER_CONTENT_SPECIAL_ITEM_ID = 0x204E
 CHARACTER_CONTENT_MARKER = "SPHERE_CHARACTER_CONTENT"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
@@ -1473,8 +1475,13 @@ def write_scripts(
         "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).CONT.SERIAL>\n"
         f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_LAYERED_LAYER "
         "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).LAYER>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_UID "
+        "<SRC.FINDID(i_deathshroud).SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_PARENT "
+        "<SRC.FINDID(i_deathshroud).CONT.SERIAL>\n"
         "SYSMESSAGE SPHERE_CHARACTER_CONTENT_UPDATE "
         "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).UPDATE>\n"
+        "SERV.SAVE 1\n"
         f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_END\n"
         if character_content_probe
         else ""
@@ -1884,6 +1891,10 @@ def write_scripts(
         "NAME=synthetic character content with default equip layer\n"
         f"LAYER={CHARACTER_CONTENT_LAYERED_ITEM_LAYER}\n"
         "TYPE=T_JEWELRY\n"
+        f"\n[ITEMDEF 0x{CHARACTER_CONTENT_SPECIAL_ITEM_ID:04X}]\n"
+        "DEFNAME=i_deathshroud\n"
+        "NAME=synthetic character content deathshroud\n"
+        "TYPE=T_NORMAL\n"
         if character_content_probe
         else ""
     )
@@ -2396,6 +2407,9 @@ def write_world_load_counts_save(
             f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
             "[WORLDITEM SYNTHETIC_CHARACTER_CONTENT_LAYERED]",
             f"SERIAL={CHARACTER_CONTENT_LAYERED_ITEM_SERIAL}",
+            f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
+            "[WORLDITEM i_deathshroud]",
+            f"SERIAL={CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL}",
             f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
             "[EOF]",
         ]
@@ -3638,6 +3652,7 @@ def main() -> int:
             or args.timer_sibling_mutation_owner_first_probe
             or args.ontick_content_mutation_probe
             or args.container_shutdown_probe
+            or args.character_content_probe
         ),
     )
     write_scripts(
