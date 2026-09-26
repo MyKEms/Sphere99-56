@@ -353,6 +353,25 @@ DOTTED_CONDITION_ROWS = (
     ("cond_tag_unset", "(src.tag.probe_missing==1)"),
     ("cond_tag0_unset", "(src.tag0.probe_missing==0)"),
     ("cond_base_tag", "(tag.probe_num==7)"),
+    # Object predicates are valid bare operands in script conditions.  Keep
+    # this form explicit so the resolver cannot regress to DEFNAME-only
+    # lookup when a predicate has no dotted suffix or call parentheses.
+    ("cond_isplayer", "(isplayer)"),
+    # Bare literals and resource constants must retain their legacy numeric
+    # values when the object-reference resolver is considered first.
+    ("cond_literal_one", "(1)"),
+    ("cond_literal_zero", "(0)"),
+    ("cond_literal_hex", "(0a)"),
+    ("cond_defname_bare", "(dotted_probe_const)"),
+    ("cond_item_id", "(i_dotted_probe)"),
+    ("cond_type_id", "(t_eq_script)"),
+    # STR is both a real property and a fixture DEFNAME.  The historical
+    # DEFNAME lookup wins, as it did before the bare-reference change.
+    ("cond_property_defname", "(str)"),
+    # A bare declared function stays on the legacy numeric path: its body is
+    # not executed while reading a condition.  An unknown name remains zero.
+    ("cond_bare_function", "(f_dotted_bare_probe)"),
+    ("cond_unknown_bare", "(dotted_missing_name)"),
     ("cond_findlayer", "(src.findlayer(30))"),
     ("cond_findlayer_empty", "(src.findlayer(9))"),
     ("cond_finduid_name", "(finduid(<src.serial>).name==<src.name>)"),
@@ -920,6 +939,7 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SYSMESSAGE " + marker + " C|dupe_value_valid_count|[<VAR(dotted_getter_calls)>]",
         "SYSMESSAGE " + marker + " C|dupe_chars_after|[<SERV.CHARS>]",
     ]
+    login += ["VAR dotted_bare_calls,0"]
     for key, condition in DOTTED_CONDITION_ROWS:
         login += [
             f"IF {condition}",
@@ -929,6 +949,7 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
             "ENDIF",
         ]
     login += [
+        "SYSMESSAGE " + marker + " C|cond_bare_function_count|[<VAR(dotted_bare_calls)>]",
         # A bare reference operand runs a script-function root once per
         # evaluation, and a WHILE condition re-reads the reference each time.
         "VAR dotted_getter_calls,0",
@@ -1024,8 +1045,13 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "VAR dotted_disposable,<SERIAL>\n"
         "\n[DEFNAMES dotted_probe]\n"
         "dotted_probe_const 1234\n"
+        "i_dotted_probe 0x0E7B\n"
+        "str 0\n"
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
+        "\n[FUNCTION f_dotted_bare_probe]\n"
+        "VAR dotted_bare_calls,<EVAL <VAR(dotted_bare_calls)>+1>\n"
+        "RETURN 1\n"
         "\n[FUNCTION f_dotted_arg]\n"
         "RETURN <ARGS>\n"
         "\n[FUNCTION f_dotted_disposable]\n"
