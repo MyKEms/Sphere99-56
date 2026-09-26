@@ -48,7 +48,14 @@ def wait_for_world_load(log_path: Path, timeout: float) -> None:
     raise RuntimeError("server did not finish world load before the bounded timeout")
 
 
-def run_probe(fixture: Path, binary: Path, host: str, port: int, timeout: float) -> tuple[int | None, str | None, str, list[str]]:
+def run_probe(
+    fixture: Path,
+    binary: Path,
+    host: str,
+    port: int,
+    timeout: float,
+    log_name: str = "server.log",
+) -> tuple[int | None, str | None, str, list[str]]:
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
     from test_world_save_roundtrip import run_server
@@ -101,7 +108,7 @@ def run_probe(fixture: Path, binary: Path, host: str, port: int, timeout: float)
         host=host,
         port=port,
         startup_timeout=timeout,
-        log_path=fixture / "server.log",
+        log_path=fixture / log_name,
         action=exercise,
     )
     return returncode, runner_error, log_contents, messages
@@ -116,54 +123,91 @@ def main() -> int:
     parser.add_argument("--startup-timeout", type=float, default=120.0)
     args = parser.parse_args()
 
+    fixture = args.fixture.resolve()
     returncode, runner_error, log_contents, messages = run_probe(
-        args.fixture.resolve(), args.binary.resolve(), args.host, args.port, args.startup_timeout
+        fixture, args.binary.resolve(), args.host, args.port, args.startup_timeout
     )
     failures: list[str] = []
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
-    rows = {}
-    for message in messages:
-        match = MARKER_RE.fullmatch(message)
-        if match:
-            rows[match.group(1)] = match.group(2).strip()
-    if END_MARKER not in messages:
-        failures.append("character-content probe did not reach its end marker")
-    if "UID" not in rows:
-        failures.append("no-LAYER item was not discoverable from the character")
+    def check_markers(label: str, marker_messages: list[str]) -> dict[str, str]:
+        rows = {}
+        for message in marker_messages:
+            match = MARKER_RE.fullmatch(message)
+            if match:
+                rows[match.group(1)] = match.group(2).strip()
+        if END_MARKER not in marker_messages:
+            failures.append(f"{label}: character-content probe did not reach its end marker")
+        if "UID" not in rows:
+            failures.append(f"{label}: no-LAYER item was not discoverable from the character")
+        else:
+            try:
+                item_uid = int(rows["UID"], 16)
+            except ValueError:
+                item_uid = -1
+            expected_uid = 0x40000000 | CHARACTER_CONTENT_ITEM_SERIAL
+            if item_uid != expected_uid:
+                failures.append(
+                    f"{label}: no-LAYER item UID was not preserved: "
+                    f"got {rows['UID']!r}; expected 0x{expected_uid:x}"
+                )
+        if "PARENT" not in rows:
+            failures.append(f"{label}: no-LAYER item did not report a character parent")
+        else:
+            try:
+                parent_uid = int(rows["PARENT"], 16)
+            except ValueError:
+                parent_uid = -1
+            if parent_uid != CHARACTER_CONTENT_CHAR_SERIAL:
+                failures.append(
+                    f"{label}: no-LAYER item parent was not preserved: "
+                    f"got {rows['PARENT']!r}; expected character serial "
+                    f"{CHARACTER_CONTENT_CHAR_SERIAL}"
+                )
+        return rows
+
+    rows = check_markers("initial load", messages)
+    saved_chars = fixture / "save" / "spherechars.scp"
+    try:
+        saved_text = saved_chars.read_text(encoding="ascii", errors="replace")
+    except OSError as error:
+        saved_text = ""
+        failures.append(f"saved character file was not readable: {error}")
+    item_match = re.search(
+        r"(?ms)^\[WORLDITEM SYNTHETIC_CHARACTER_CONTENT\]\n(.*?)(?=^\[|\Z)",
+        saved_text,
+    )
+    if item_match is None:
+        failures.append("saved character did not retain the no-LAYER item section")
     else:
-        try:
-            item_uid = int(rows["UID"], 16)
-        except ValueError:
-            item_uid = -1
-        expected_uid = 0x40000000 | CHARACTER_CONTENT_ITEM_SERIAL
-        if item_uid != expected_uid:
-            failures.append(
-                "no-LAYER item UID was not preserved: "
-                f"got {rows['UID']!r}; expected 0x{expected_uid:x}"
-            )
-    if "PARENT" not in rows:
-        failures.append("no-LAYER item did not report a character parent")
-    else:
-        try:
-            parent_uid = int(rows["PARENT"], 16)
-        except ValueError:
-            parent_uid = -1
-        if parent_uid != CHARACTER_CONTENT_CHAR_SERIAL:
-            failures.append(
-                "no-LAYER item parent was not preserved: "
-                f"got {rows['PARENT']!r}; expected character serial "
-                f"{CHARACTER_CONTENT_CHAR_SERIAL}"
-            )
+        item_section = item_match.group(1)
+        if not re.search(r"(?m)^CONT=3$", item_section):
+            failures.append("saved no-LAYER item did not retain CONT=3")
+        if re.search(r"(?m)^LAYER=", item_section):
+            failures.append("saved no-LAYER item unexpectedly gained a LAYER")
+
+    reload_rows: dict[str, str] = {}
+    if not failures:
+        reload_returncode, reload_error, reload_log, reload_messages = run_probe(
+            fixture,
+            args.binary.resolve(),
+            args.host,
+            args.port,
+            args.startup_timeout,
+            log_name="server-reload.log",
+        )
+        if reload_error:
+            failures.append(f"reload probe failed: {reload_error}")
+        failures.extend(shutdown_failures(reload_returncode, reload_log))
+        reload_rows = check_markers("reload", reload_messages)
     if failures:
         print("character-content probe failed: " + "; ".join(failures), file=sys.stderr)
         print(log_contents[-4000:], file=sys.stderr)
         return 1
     print(
         "character-content probe passed: no-LAYER item "
-        f"{rows['UID']} retained character parent {rows['PARENT']} "
-        f"(serial {CHARACTER_CONTENT_ITEM_SERIAL})"
+        f"{rows['UID']} retained character parent {rows['PARENT']} through save/reload"
     )
     return 0
 
