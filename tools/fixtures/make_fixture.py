@@ -58,6 +58,12 @@ ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
+# Dedicated runaway-loop fixture.  The normal engine default remains
+# generous; this mode sets a small value so the bounded return and the
+# second-client check complete quickly.
+RUNAWAY_LOOP_LIMIT = 32
+RUNAWAY_LOOP_MARKER = "SPHERE_RUNAWAY_LOOP"
+
 # Same-definition stacking probe.  Two movable, stackable ground items are
 # dragged into the character's pack at the same explicit point.  A second
 # equal-definition item is added by script without a point, exercising the
@@ -1492,6 +1498,7 @@ def write_scripts(
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
+    runaway_loop_probe: bool = False,
     movement_stairs_probe: bool = False,
     stacking_probe: bool = False,
 ) -> None:
@@ -1617,6 +1624,21 @@ def write_scripts(
             + "\n"
             + f"SYSMESSAGE {ESCAPE_OVERFLOW_MARKER}\n"
         )
+    runaway_loop_login = (
+        f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_CONFIG <SERV.SCRIPTLOOPLIMIT>\n"
+        "F_RUNAWAY_LOOP\n"
+        if runaway_loop_probe
+        else ""
+    )
+    runaway_loop_sections = (
+        "\n[FUNCTION f_runaway_loop]\n"
+        "WHILE (1)\n"
+        "ENDWHILE\n"
+        f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_RETURNED\n"
+        "RETURN 1\n"
+        if runaway_loop_probe
+        else ""
+    )
     timer_lifetime_before_markers = (
         "SERV.B SPHERE_TIMER_COUNTS_BEFORE <SERV.ITEMS>|<SERV.CHARS>\n"
         "SERV.B SPHERE_TIMER_UIDS_BEFORE "
@@ -2046,6 +2068,7 @@ DEX=100
 ON=@LogIn
 """ + world_save_logout_event_login + escape_overflow_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
+""" + runaway_loop_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
 NEWNPC SYNTHETIC_TIMER_OWNER
@@ -2112,7 +2135,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -2153,6 +2176,7 @@ def write_runtime_files(
     unknown_keyword_report: bool = False,
     unknown_keyword_report_format: str = "json",
     force_garbage_collect: bool = False,
+    runaway_loop_probe: bool = False,
 ) -> None:
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
@@ -2181,7 +2205,9 @@ SAVEPERIOD=1440
 SAVEBACKGROUND=0
 CLIENTLINGER=60
 SECURE=1
-""" + ("FORCEGARBAGECOLLECT=1\n" if force_garbage_collect else "") + unknown_keyword_report_setting + """
+""" + ("FORCEGARBAGECOLLECT=1\n" if force_garbage_collect else "") + (
+        f"SCRIPTLOOPLIMIT={RUNAWAY_LOOP_LIMIT}\n" if runaway_loop_probe else ""
+    ) + unknown_keyword_report_setting + """
 
 [STARTS]
 Synthetic land
@@ -3442,6 +3468,11 @@ def main() -> int:
         help="log in an existing character through a near-limit escape expansion",
     )
     parser.add_argument(
+        "--runaway-loop-probe",
+        action="store_true",
+        help="exercise a configurable bounded WHILE loop and a second login",
+    )
+    parser.add_argument(
         "--movement-stairs-probe",
         action="store_true",
         help="exercise dynamic stair height resolution",
@@ -3647,6 +3678,7 @@ def main() -> int:
             or args.ontick_content_mutation_probe
             or args.container_shutdown_probe
         ),
+        runaway_loop_probe=args.runaway_loop_probe,
     )
     write_scripts(
         root,
@@ -3686,6 +3718,7 @@ def main() -> int:
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
+        runaway_loop_probe=args.runaway_loop_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         stacking_probe=args.movement_stacking_probe,
     )

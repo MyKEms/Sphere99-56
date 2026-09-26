@@ -818,6 +818,14 @@ CResourceObj* CSphereExpContext::ResolveUIDObject(UID_INDEX uid)
 	return dynamic_cast<CResourceObj*>((CObjBase*)pObj);
 }
 
+int CSphereExpContext::GetScriptLoopLimit() const
+{
+	// A malformed or zero-valued setting must not disable the guard.
+	return g_Cfg.m_iScriptLoopLimit > 0
+		? g_Cfg.m_iScriptLoopLimit
+		: SCRIPT_MAX_LOOP_ITERATIONS;
+}
+
 bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 {
 	CSphereUID ridFunc = g_Cfg.ResourceCheckIDType(RES_Function, pszKey);
