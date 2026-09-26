@@ -480,19 +480,6 @@ protected:
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
-		// A reference used as a standalone escape is represented by its
-		// serial, so script assignments such as LASTNEW.CONT=<FINDLAYER(...)>
-		// pass the target object through the normal UID property path instead
-		// of becoming an empty string.
-		if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
-		{
-			CGVariant vSerial;
-			if ( pObj->s_PropGet("SERIAL", vSerial, m_pSrc) == NO_ERROR )
-			{
-				sResult = vSerial.GetPSTR();
-				return true;
-			}
-		}
 		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
 		return true;
 	}

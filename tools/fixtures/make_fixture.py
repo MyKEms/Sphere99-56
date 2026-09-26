@@ -876,7 +876,7 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "NEWITEM SYNTHETIC_DOTTED_PROBE",
         "EQUIPLAST",
         "NEWITEM SYNTHETIC_DOTTED_FINDID",
-        "LASTNEW.CONT=<SRC.FINDLAYER(LAYER_PACK)>",
+        "LASTNEW.CONT=<SRC.FINDLAYER(LAYER_PACK).SERIAL>",
         "LASTNEW.NAME=synthetic dotted probe",
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
