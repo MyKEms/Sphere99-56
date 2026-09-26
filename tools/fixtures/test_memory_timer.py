@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from make_fixture import MEMORY_TIMER_ITEM_UID
+from make_fixture import MEMORY_STALE_ITEM_UID, MEMORY_TIMER_ITEM_UID
 from run_suite import shutdown_failures
 
 
@@ -19,6 +19,14 @@ LOGIN_VALUE = "memory-timer-pw"
 TRIGGER_MARKER = "SPHERE_MEMORY_TIMER_TRIGGERED"
 REMOVED_MARKER = "SPHERE_MEMORY_TIMER_REMOVED"
 TIMER_ERROR = "Timer expired without DECAY flag 'created memory'?"
+TIMER_REMOVAL_RE = re.compile(
+    rf"timer removed object uid=0x{MEMORY_TIMER_ITEM_UID:x} reason=script\b",
+    re.IGNORECASE,
+)
+STALE_MEMORY_REMOVAL_RE = re.compile(
+    rf"timer removed object uid=0x{MEMORY_STALE_ITEM_UID:x} reason=memory\b",
+    re.IGNORECASE,
+)
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -150,8 +158,20 @@ def main() -> int:
         failures.append(
             f"handled memory timer still emitted {log_contents.count(TIMER_ERROR)} generic timer error(s)"
         )
-    if "world load: created_items=1 created_chars=1" not in log_contents:
-        failures.append("saved memory timer fixture did not load its item and owner")
+    if "world load: created_items=2 created_chars=1" not in log_contents:
+        failures.append("saved memory timer fixture did not load its items and owner")
+    removal_markers = TIMER_REMOVAL_RE.findall(log_contents)
+    if len(removal_markers) != 1:
+        failures.append(
+            "handled memory timer did not emit exactly one script-removal marker "
+            f"(saw {len(removal_markers)})"
+        )
+    stale_memory_markers = STALE_MEMORY_REMOVAL_RE.findall(log_contents)
+    if len(stale_memory_markers) != 1:
+        failures.append(
+            "stale memory did not emit exactly one removal marker "
+            f"(saw {len(stale_memory_markers)})"
+        )
     if failures:
         print("memory-timer probe failed:", file=sys.stderr)
         for failure in failures:

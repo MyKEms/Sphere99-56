@@ -3133,6 +3133,7 @@ bool CChar::OnTick()
 				// always check the validity of the memory objects. (even before expired)
 				if ( g_World.ObjFind(pItem->m_uidLink) == NULL )
 				{
+					pItem->LogTimerRemoval( "memory" );
 					pItem->DeleteThis();
 					continue;
 				}
@@ -3144,6 +3145,8 @@ bool CChar::OnTick()
 				continue;
 			if ( ! OnTickEquip( pItem ))
 			{
+				if ( pItem->IsType(IT_SPELL))
+					pItem->LogTimerRemoval( "spell" );
 				pItem->DeleteThis();
 				if ( ! IsValidUID())
 					return false;	// i've been deleted.
