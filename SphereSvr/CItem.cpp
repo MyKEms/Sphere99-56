@@ -2335,14 +2335,15 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 		{
 			CItemDefPtr pItemDef = Item_GetDef();
 			ASSERT(pItemDef);
+			const bool fNoExplicitLayer = ( layer == LAYER_NONE );
 			if ( ! layer ) 
 				layer = pItemDef->GetEquipLayer();
-			if ( g_Serv.IsLoading() && layer == LAYER_NONE &&
-				pItemDef->GetEquipLayer() == LAYER_NONE )
+			if ( g_Serv.IsLoading() && fNoExplicitLayer )
 			{
-				// 0.99 saves use CONT=<character> without LAYER for ordinary
-				// character-owned items.  They are direct character content, not
-				// failed equipment; keep that relation intact during load.
+				// 0.99 saves use CONT=<character> without LAYER for direct
+				// character-owned content.  The missing key is authoritative even
+				// when the item definition has a default equip layer; stock keeps
+				// this relation as ordinary character content.
 				RemoveSelf();
 				if ( ! pChar->ContentAddNoLayer( this ))
 					return HRES_INVALID_HANDLE;

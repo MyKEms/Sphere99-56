@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify a no-LAYER item whose CONT points directly at a character."""
+"""Verify no-LAYER items whose CONT points directly at a character."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from make_fixture import (
     CHARACTER_CONTENT_ACCOUNT,
     CHARACTER_CONTENT_CHAR_SERIAL,
     CHARACTER_CONTENT_ITEM_SERIAL,
+    CHARACTER_CONTENT_LAYERED_ITEM_SERIAL,
     CHARACTER_CONTENT_MARKER,
     CHARACTER_CONTENT_PASSWORD,
 )
@@ -21,7 +22,9 @@ from run_suite import shutdown_failures
 
 
 END_MARKER = f"{CHARACTER_CONTENT_MARKER}_END"
-MARKER_RE = re.compile(r"^" + re.escape(CHARACTER_CONTENT_MARKER) + r"_(UID|PARENT) (.*)$")
+MARKER_RE = re.compile(
+    r"^" + re.escape(CHARACTER_CONTENT_MARKER) + r"_(UID|PARENT|LAYERED_UID|LAYERED_PARENT) (.*)$"
+)
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -139,31 +142,30 @@ def main() -> int:
                 rows[match.group(1)] = match.group(2).strip()
         if END_MARKER not in marker_messages:
             failures.append(f"{label}: character-content probe did not reach its end marker")
-        if "UID" not in rows:
-            failures.append(f"{label}: no-LAYER item was not discoverable from the character")
-        else:
+        expected = {
+            "UID": (0x40000000 | CHARACTER_CONTENT_ITEM_SERIAL, "no-LAYER item UID"),
+            "PARENT": (CHARACTER_CONTENT_CHAR_SERIAL, "no-LAYER item parent"),
+            "LAYERED_UID": (
+                0x40000000 | CHARACTER_CONTENT_LAYERED_ITEM_SERIAL,
+                "default-layer no-LAYER item UID",
+            ),
+            "LAYERED_PARENT": (
+                CHARACTER_CONTENT_CHAR_SERIAL,
+                "default-layer no-LAYER item parent",
+            ),
+        }
+        for key, (expected_value, description) in expected.items():
+            if key not in rows:
+                failures.append(f"{label}: {description} was not discoverable from the character")
+                continue
             try:
-                item_uid = int(rows["UID"], 16)
+                actual_value = int(rows[key], 16)
             except ValueError:
-                item_uid = -1
-            expected_uid = 0x40000000 | CHARACTER_CONTENT_ITEM_SERIAL
-            if item_uid != expected_uid:
+                actual_value = -1
+            if actual_value != expected_value:
                 failures.append(
-                    f"{label}: no-LAYER item UID was not preserved: "
-                    f"got {rows['UID']!r}; expected 0x{expected_uid:x}"
-                )
-        if "PARENT" not in rows:
-            failures.append(f"{label}: no-LAYER item did not report a character parent")
-        else:
-            try:
-                parent_uid = int(rows["PARENT"], 16)
-            except ValueError:
-                parent_uid = -1
-            if parent_uid != CHARACTER_CONTENT_CHAR_SERIAL:
-                failures.append(
-                    f"{label}: no-LAYER item parent was not preserved: "
-                    f"got {rows['PARENT']!r}; expected character serial "
-                    f"{CHARACTER_CONTENT_CHAR_SERIAL}"
+                    f"{label}: {description} was not preserved: "
+                    f"got {rows[key]!r}; expected 0x{expected_value:x}"
                 )
         return rows
 
@@ -174,18 +176,22 @@ def main() -> int:
     except OSError as error:
         saved_text = ""
         failures.append(f"saved character file was not readable: {error}")
-    item_match = re.search(
-        r"(?ms)^\[WORLDITEM SYNTHETIC_CHARACTER_CONTENT\]\n(.*?)(?=^\[|\Z)",
-        saved_text,
-    )
-    if item_match is None:
-        failures.append("saved character did not retain the no-LAYER item section")
-    else:
+    for item_name in (
+        "SYNTHETIC_CHARACTER_CONTENT",
+        "SYNTHETIC_CHARACTER_CONTENT_LAYERED",
+    ):
+        item_match = re.search(
+            rf"(?ms)^\[WORLDITEM {item_name}\]\n(.*?)(?=^\[|\Z)",
+            saved_text,
+        )
+        if item_match is None:
+            failures.append(f"saved character did not retain {item_name} section")
+            continue
         item_section = item_match.group(1)
         if not re.search(r"(?m)^CONT=3$", item_section):
-            failures.append("saved no-LAYER item did not retain CONT=3")
+            failures.append(f"saved {item_name} did not retain CONT=3")
         if re.search(r"(?m)^LAYER=", item_section):
-            failures.append("saved no-LAYER item unexpectedly gained a LAYER")
+            failures.append(f"saved {item_name} unexpectedly gained a LAYER")
 
     reload_rows: dict[str, str] = {}
     if not failures:
@@ -207,7 +213,8 @@ def main() -> int:
         return 1
     print(
         "character-content probe passed: no-LAYER item "
-        f"{rows['UID']} retained character parent {rows['PARENT']} through save/reload"
+        f"{rows['UID']} and default-layer {rows['LAYERED_UID']} retained character parent "
+        f"{rows['PARENT']} through save/reload"
     )
     return 0
 
