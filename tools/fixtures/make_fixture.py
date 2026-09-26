@@ -89,6 +89,7 @@ STACKING_NO_POINT_ITEM_SERIAL = 102
 DOTTED_PROBE_ACCOUNT = "DottedProbe"
 DOTTED_PROBE_ITEM_ID = 0x0E7B
 DOTTED_PROBE_DISPOSABLE_ID = 0x0E7C
+DOTTED_PROBE_FINDID_ID = 0x0E7D
 DOTTED_PROBE_LAYER = 30
 DOTTED_PROBE_SECTOR_LIGHT = 4
 # Loops in the probe that run into the WHILE/FOR iteration limit.
@@ -256,6 +257,7 @@ DOTTED_EXPRESSION_ROWS = (
     ("finduid_serial", "<finduid(<src.serial>).serial>", "C"),
     ("finduid_tag", "<finduid(<src.serial>).tag(probe_text)>", "C"),
     ("finduid_function", "<finduid(<src.serial>).f_dotted_serial>", "C"),
+    ("findid_bare_item", "<src.findlayer(layer_pack).findid(i_dotted_findid).serial>", "C"),
     ("lastnewitem_name", "<serv.lastnewitem.name>", "C"),
     ("function_args_root", "<f_dotted_arg(<src.serial>).name>", "C"),
     ("function_args_chain", "<f_dotted_arg(<src.serial>).findlayer(30).serial>", "C"),
@@ -1012,6 +1014,9 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "EQUIPLAST",
         "NEWITEM SYNTHETIC_DOTTED_PROBE",
         "EQUIPLAST",
+        "NEWITEM SYNTHETIC_DOTTED_FINDID",
+        "LASTNEW.CONT=<SRC.FINDLAYER(LAYER_PACK).SERIAL>",
+        "LASTNEW.NAME=synthetic dotted probe",
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
     login += [
@@ -1182,9 +1187,15 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         f"LAYER={DOTTED_PROBE_LAYER}\n"
         "ON=@Create\n"
         "VAR dotted_disposable,<SERIAL>\n"
+        f"\n[ITEMDEF 0x{DOTTED_PROBE_FINDID_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_DOTTED_FINDID\n"
+        "NAME=synthetic dotted findid item\n"
+        "TYPE=T_NORMAL\n"
         "\n[DEFNAMES dotted_probe]\n"
         "dotted_probe_const 1234\n"
         "i_dotted_probe 0x0E7B\n"
+        f"i_dotted_findid 0x{DOTTED_PROBE_FINDID_ID:04X}\n"
+        "layer_pack 21\n"
         "str 0\n"
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
