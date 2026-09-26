@@ -496,14 +496,12 @@ public:
 		iValue = 0;
 		if ( m_pBaseObj == NULL )
 			return false;
-		// Bare script functions stay on the legacy numeric path: resolving one
-		// here would execute a zero-argument function merely because it appears
-		// in a condition. Object getters and methods such as ISPLAYER still
-		// need the reference evaluator, however; level-up scripts use those
-		// bare object predicates inside their guards.
+		// Bare names are handed here only for ARG locals. Keep the legacy
+		// DEFNAME/global lookup order for every other bare identifier, so a
+		// condition cannot execute a zero-argument script function as a side
+		// effect merely because it has no dotted suffix.
 		if ( strchr(pszOperand, '.') == NULL && strchr(pszOperand, '(') == NULL &&
-			m_LocalArgs.FindKeyPtr(pszOperand) == NULL &&
-			IsScriptFunction(pszOperand) )
+			m_LocalArgs.FindKeyPtr(pszOperand) == NULL )
 			return false;
 
 		CGVariant vValue;
