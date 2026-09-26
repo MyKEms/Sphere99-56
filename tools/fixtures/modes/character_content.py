@@ -7,7 +7,9 @@ MODE = register_mode(
         name="character-content",
         fixture_args=("--world-load-counts", "--character-content-probe"),
         order=55,
-        id_block=55,
+        # 55 belongs to the stairs mode on current master; keep this mode in
+        # its own synthetic-id block after the merge.
+        id_block=57,
         case=FixtureCase(
             name="character-content",
             mode="character-content",
