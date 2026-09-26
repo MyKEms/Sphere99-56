@@ -58,6 +58,14 @@ ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
+# Same-definition stacking probe.  Two movable, stackable ground items are
+# dragged into the character's pack at the same explicit point.  The client
+# path must merge them just as the legacy container path does.
+STACKING_ACCOUNT = "StackingProbe"
+STACKING_PASSWORD = "stacking_pw"
+STACKING_ITEM_ID = 0x0E96
+STACKING_ITEM_SERIALS = (100, 101)
+
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
 # character), "I" in the @Equip trigger of an equipped item (default object is
@@ -435,6 +443,31 @@ def write_container_tile(path: Path, item_id: int) -> None:
         stream.write(record)
 
 
+def write_stackable_tile(path: Path, item_id: int) -> None:
+    """Mark a synthetic ground item as movable, nonblocking and pileable."""
+
+    record_offset = (
+        terrain_size()
+        + ((item_id // TILE_BLOCK_QTY) * 4)
+        + 4
+        + (item_id * ITEM_RECORD_BYTES)
+    )
+    record = struct.pack(
+        "<IBBIIHB20s",
+        0x00000804,  # UFLAG1_NONBLOCKING | UFLAG2_STACKABLE
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        b"synthetic stack item\0".ljust(20, b"\0"),
+    )
+    with path.open("r+b") as stream:
+        stream.seek(record_offset)
+        stream.write(record)
+
+
 def write_mul_fixture(root: Path, *, extra_item_id: int = 0) -> None:
     muls = root / "muls"
     map_blocks = MAP_BLOCKS_X * MAP_BLOCKS_Y
@@ -519,6 +552,65 @@ def write_book_pages_save(root: Path) -> None:
         ),
     )
     write_text(root / "save" / "spherechars.scp", "\n".join(header + ["[EOF]"]))
+
+
+def write_stacking_save(root: Path) -> None:
+    """Seed an existing account with two same-definition ground piles."""
+
+    first_serial, second_serial = STACKING_ITEM_SERIALS
+    header = [
+        "TITLE=Sphere synthetic item-stacking fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+    ]
+    write_text(root / "accounts" / "sphereaccu.scp", "\n".join(
+        [
+            f"[ACCOUNT {STACKING_ACCOUNT}]",
+            f"PASSWORD={STACKING_PASSWORD}",
+            "PLEVEL=Admin",
+            "CHARUID=3",
+            "LASTCHARUID=3",
+            "[EOF]",
+        ]
+    ))
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "\n".join(header + ["[EOF]"]))
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            header
+            + [
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={STACKING_ACCOUNT}",
+                "NAME=StackingProbeCharacter",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[WORLDITEM DEFAULTITEM]",
+                "SERIAL=4",
+                "LAYER=21",
+                "CONT=3",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_STACK_ITEM]",
+                f"SERIAL={first_serial}",
+                "P=129,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_STACK_ITEM]",
+                f"SERIAL={second_serial}",
+                "P=130,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[EOF]",
+            ]
+        ),
+    )
 
 
 def skill_sections(*, dword_hex_probe: bool = False) -> str:
@@ -1331,6 +1423,7 @@ def write_scripts(
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
+    stacking_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1690,6 +1783,15 @@ def write_scripts(
         if named_item_name_probe
         else ""
     )
+    stacking_itemdef = (
+        f"\n[ITEMDEF 0x{STACKING_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_STACK_ITEM\n"
+        "NAME=synthetic stack item\n"
+        "TYPE=T_NORMAL\n"
+        "CAN=0x100\n"
+        if stacking_probe
+        else ""
+    )
     named_resource_id_probe_sections = ""
     if named_resource_id_probe:
         sections = [
@@ -1948,7 +2050,8 @@ ITEMNEWBIE=0x0E73
         + spawn_gem_itemdef
         + spawn_point_itemdef
         + spawn_point_product_itemdef
-        + book_pages_probe_sections,
+        + book_pages_probe_sections
+        + stacking_itemdef,
     )
 
 
@@ -3194,6 +3297,11 @@ def main() -> int:
         action="store_true",
         help="log in an existing character through a near-limit escape expansion",
     )
+    parser.add_argument(
+        "--movement-stacking-probe",
+        action="store_true",
+        help="exercise same-definition stacking at an explicit container point",
+    )
     args = parser.parse_args()
 
     # A mode is a complete recipe.  Reparse its declarative argument list
@@ -3408,7 +3516,10 @@ def main() -> int:
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
+        stacking_probe=args.movement_stacking_probe,
     )
+    if args.movement_stacking_probe:
+        write_stacking_save(root)
     if args.world_load_counts:
         write_world_load_counts_save(
             root,
@@ -3477,7 +3588,7 @@ def main() -> int:
                        if args.timer_sibling_mutation_probe
                        or args.timer_sibling_mutation_owner_first_probe
                        or args.container_shutdown_probe
-                       else 0),
+                       else (STACKING_ITEM_ID if args.movement_stacking_probe else 0)),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         for item_id in (0x0E7D, 0x0E81, 0x0E86, 0x0E88, 0x0E89, 0x0E8A):
@@ -3485,6 +3596,8 @@ def main() -> int:
     if args.container_shutdown_probe:
         for item_id in (0x0E7D, 0x0E88):
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
+    if args.movement_stacking_probe:
+        write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_ITEM_ID)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
 

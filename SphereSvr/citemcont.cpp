@@ -285,23 +285,27 @@ void CItemContainer::ContentAdd( CItemPtr pItem, POINT pt )
 		}
 	}
 
-	if ( pt.x <= 0 || pt.y <= 0 ||
-		pt.x > 512 || pt.y > 512 )	// invalid container location ?
+	const bool fValidPoint =
+		pt.x > 0 && pt.y > 0 && pt.x <= 512 && pt.y <= 512;
+	// Try the same explicit point first.  The client sends a valid point when
+	// dropping onto a container; the old path only considered stacking for an
+	// invalid point and left equal definitions as separate piles.
+	if ( ! g_Serv.IsLoading() && pItem->Item_GetDef()->IsStackableType())
 	{
-		// Try to stack it.
-		if ( ! g_Serv.IsLoading() && pItem->Item_GetDef()->IsStackableType())
+		CItemPtr pItemNext;
+		for ( CItemPtr pTry=GetHead(); pTry!=NULL; pTry=pItemNext)
 		{
-			CItemPtr pItemNext;
-			for ( CItemPtr pTry=GetHead(); pTry!=NULL; pTry=pItemNext)
-			{
-				pItemNext = pTry->GetNext();
-				pt = pTry->GetContainedPoint();
-				if ( pItem->Stack( pTry ))
-					goto insertit;
-			}
+			pItemNext = pTry->GetNext();
+			POINT tryPoint = pTry->GetContainedPoint();
+			if ( fValidPoint &&
+				( tryPoint.x != pt.x || tryPoint.y != pt.y ))
+				continue;
+			if ( pItem->Stack( pTry ))
+				goto insertit;
 		}
-		pt = GetRandContainerLoc();
 	}
+	if ( ! fValidPoint )
+		pt = GetRandContainerLoc();
 
 insertit:
 	if ( ! CContainer::ContentAddPrivate( pItem ))
