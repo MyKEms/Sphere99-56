@@ -82,6 +82,13 @@ private:
 	}
 
 protected:
+	// The server supplies its configured per-invocation limit.  The generic
+	// context keeps the historical default so libraries using it remain safe.
+	virtual int GetScriptLoopLimit() const
+	{
+		return SCRIPT_MAX_LOOP_ITERATIONS;
+	}
+
 	// Numeric values returned by script functions may be UIDs. Concrete engine
 	// contexts can resolve them to world objects without coupling this shared
 	// execution context to the server's world implementation.
@@ -475,13 +482,35 @@ protected:
 		return false;
 	}
 
-	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult, CScriptUnknownRejectTracker& rejected)
+	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult,
+		CScriptUnknownRejectTracker& rejected, DWORD dwFlags = 0)
 	{
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
+		if ( dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL )
+		{
+			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
+			{
+				CGVariant vSerial;
+				if ( pObj->s_PropGet("SERIAL", vSerial, m_pSrc) == NO_ERROR )
+				{
+					sResult = vSerial.GetPSTR();
+					return true;
+				}
+			}
+		}
 		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
 		return true;
+	}
+
+	static bool IsContainerAssignmentKey(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL || *pszKey == '\0' )
+			return false;
+		LPCTSTR pszProp = strrchr(pszKey, '.');
+		pszProp = pszProp ? pszProp + 1 : pszKey;
+		return !_stricmp(pszProp, "CONT");
 	}
 
 public:
@@ -749,7 +778,9 @@ public:
 		// <safe ...>  → returns "" on error
 		// <?...?>     → deferred macro, pass through for now
 		//
-		// dwFlags: CSCRIPT_PARSE_HTML = use %% delimiters instead of <>
+		// dwFlags: CSCRIPT_PARSE_HTML = use %% delimiters instead of <>;
+		// CSCRIPT_PARSE_OBJECT_SERIAL = serialize reference-valued escapes
+		// for an object-valued assignment.
 
 		if ( pszBuf == NULL || *pszBuf == '\0' )
 			return;
@@ -833,7 +864,7 @@ public:
 				CScriptUnknownRejectTracker rejected;
 				try
 				{
-					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected);
+					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags);
 				}
 				catch (...)
 				{
@@ -938,7 +969,7 @@ public:
 
 			try
 			{
-				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected);
+				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags);
 			}
 			catch (...)
 			{
@@ -992,12 +1023,16 @@ public:
 	// The line is "KEY VALUE" or "KEY=VALUE" or just "METHOD args".
 	// Returns NO_ERROR on success, or an HRESULT error code.
 	//
-	// A WHILE or FOR loop that reaches SCRIPT_MAX_LOOP_ITERATIONS stops there.
+	// A WHILE or FOR loop that reaches the configured iteration limit stops
+	// there. The limit is per invocation, so a second client gets a fresh
+	// budget even when the first client hit the guard.
 	// Report each such loop once (file and line), and at most
 	// MAX_REPORTED_LOOPS different loops, so a loop that keeps reaching the
 	// limit cannot flood the log.
-	static void ReportLoopLimit(CScript& script, const CScriptLineContext& ctx, LPCTSTR pszLoop)
+	static void ReportLoopLimit(CScript& script, const CScriptLineContext& ctx, LPCTSTR pszLoop, int iLoopLimit)
 	{
+		if ( iLoopLimit <= 0 )
+			iLoopLimit = SCRIPT_MAX_LOOP_ITERATIONS;
 		enum { MAX_REPORTED_LOOPS = 64, MAX_SITE_FILE = 64 };
 		struct LoopSite
 		{
@@ -1023,7 +1058,7 @@ public:
 			{
 				s_fMoreNotReported = true;
 				DEBUG_ERR(( "More script loops stopped after %d iterations; they are not reported" LOG_CR,
-					SCRIPT_MAX_LOOP_ITERATIONS ));
+					iLoopLimit ));
 			}
 			return;
 		}
@@ -1032,7 +1067,7 @@ public:
 		s_Reported[s_iReported].m_iLine = ctx.m_iLineNum;
 		s_iReported++;
 		DEBUG_ERR(( "%s(%d): %s loop stopped after %d iterations" LOG_CR,
-			pszFile, ctx.m_iLineNum, pszLoop, SCRIPT_MAX_LOOP_ITERATIONS ));
+			pszFile, ctx.m_iLineNum, pszLoop, iLoopLimit ));
 	}
 
 	// Split a statement key of the form NAME(args) or REF.NAME(args) (the
@@ -1604,12 +1639,13 @@ public:
 						strncpy(szCondition, pszCondition, sizeof(szCondition)-1);
 						szCondition[sizeof(szCondition)-1] = '\0';
 					}
+					const int iLoopLimit = GetScriptLoopLimit();
 					int iLoops = 0;
 					for (;;)
 					{
-						if ( ++iLoops > SCRIPT_MAX_LOOP_ITERATIONS )
+						if ( ++iLoops > iLoopLimit )
 						{
-							ReportLoopLimit(script, ctxStart, "WHILE");
+							ReportLoopLimit(script, ctxStart, "WHILE", iLoopLimit);
 							break; // safety limit
 						}
 
@@ -1651,12 +1687,13 @@ public:
 					{
 						iMax = GetScriptExpression(script, pszArg);
 					}
+					const int iLoopLimit = GetScriptLoopLimit();
 					int iLoops = 0;
 					for ( int i = iMin; i <= iMax; i++ )
 					{
-						if ( ++iLoops > SCRIPT_MAX_LOOP_ITERATIONS )
+						if ( ++iLoops > iLoopLimit )
 						{
-							ReportLoopLimit(script, ctxStart, "FOR");
+							ReportLoopLimit(script, ctxStart, "FOR", iLoopLimit);
 							break;
 						}
 						iRet = ExecuteScript(script, TRIGRUN_SECTION_TRUE);
@@ -1727,20 +1764,24 @@ public:
 					// table-backed expressions (EVAL, STRLEN, etc.) observable from
 					// a fixture without a graphical client.
 					TCHAR szKey[SCRIPT_MAX_LINE_LEN];
+					bool fKeyEquals = script.WasKeyValueAssignment();
 					strncpy(szKey, pszKey, sizeof(szKey) - 1);
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
 						s_ParseEscapes( szKey, 0 );
 					if ( script.GetArgMod() && *script.GetArgMod() )
-						s_ParseEscapes( script.GetArgMod(), 0,
+					{
+						DWORD dwArgFlags = (fKeyEquals && IsContainerAssignmentKey(szKey))
+							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
+						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
+					}
 
 					// Rebuild the statement: "KEY VALUE", or "KEY=VALUE" for an
 					// assignment.  The line reader splits at the first space or '=',
 					// which can fall inside the parentheses of KEY(a, b); then
 					// ExecuteCommand() splits the rebuilt text again outside the
 					// parentheses.
-					bool fKeyEquals = script.WasKeyValueAssignment();
 					int iKeyDepth = 0;
 					for ( LPCTSTR q = szKey; *q; q++ )
 					{

@@ -80,6 +80,12 @@ ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
+# Dedicated runaway-loop fixture.  The normal engine default remains
+# generous; this mode sets a small value so the bounded return and the
+# second-client check complete quickly.
+RUNAWAY_LOOP_LIMIT = 32
+RUNAWAY_LOOP_MARKER = "SPHERE_RUNAWAY_LOOP"
+
 # Same-definition stacking probe.  Two movable, stackable ground items are
 # dragged into the character's pack at the same explicit point.  A second
 # equal-definition item is added by script without a point, exercising the
@@ -180,6 +186,13 @@ DWORD_HEX_AGE = 0xFABC
 # RES_Skill follows the resource tag table order (SphereCommon/cresourcetag.tbl).
 RES_SKILL_TYPE = 41
 DWORD_HEX_MAGERY_UID = 0x80000000 | (RES_SKILL_TYPE << 25) | 25
+
+# ISBIT probe.  0.99 takes a value and a zero-based bit position and returns
+# one when that bit is set.  Include both escape forms and a high DWORD bit so
+# the fixture covers the script-facing unsigned conversion.
+ISBIT_ACCOUNT = "IsBitProbe"
+ISBIT_PASSWORD = "isbit-pw"
+ISBIT_MARKER = "SPHERE_ISBIT"
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
@@ -849,11 +862,26 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "VAR dotted_probe_var,globalvalue",
         "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
         "EQUIPLAST",
+        "VAR dotted_cont_target,<SRC.FINDLAYER(21).SERIAL>",
+        "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
+        "LASTNEW.CONT=<SRC.FINDLAYER(21)>",
+        f"SYSMESSAGE {marker} C|cont_target_serial|[<VAR(dotted_cont_target)>]",
+        f"SYSMESSAGE {marker} C|cont_object_serial|[<LASTNEW.CONT.SERIAL>]",
+        "LASTNEW.REMOVE",
         "NEWITEM SYNTHETIC_DOTTED_PROBE",
         "EQUIPLAST",
         "NEWITEM SYNTHETIC_DOTTED_FINDID",
         "LASTNEW.CONT=<SRC.FINDLAYER(LAYER_PACK).SERIAL>",
         "LASTNEW.NAME=synthetic dotted probe",
+        # A standalone object escape is a legacy empty argument. Serializing
+        # <ARGO> here would feed the reference UID back into damage_final and
+        # re-enter @GetHit indefinitely.
+        "NEWNPC c_MAN",
+        "VAR dotted_object_escape_source,<LASTNEW.SERIAL>",
+        "VAR dotted_object_escape_hits,0",
+        f"SYSMESSAGE {marker} C|object_escape_source|[<VAR(dotted_object_escape_source)>|<ISUIDVALID <VAR(dotted_object_escape_source)>>]",
+        "TRIGGER @GetHit,1,dotted,<VAR(dotted_object_escape_source)>",
+        f"SYSMESSAGE {marker} C|object_escape_hits|[<VAR(dotted_object_escape_hits)>]",
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
     login += [
@@ -974,6 +1002,13 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SYSMESSAGE " + marker + " C|environ_max_depth|[<VAR(environ_max_depth)>]",
         "SYSMESSAGE " + marker + "_END",
     ]
+    login += [
+        "ON=@GetHit",
+        f"SYSMESSAGE {marker} C|object_escape_handler|[hit]",
+        "VAR dotted_object_escape_hits,<EVAL <VAR(dotted_object_escape_hits)>+1>",
+        "F_DOTTED_DAMAGE_FINAL(<ARGO>)",
+        "RETURN 1",
+    ]
 
     # An @EnvironChange handler that keeps its sector at a fixed light level
     # behind a bare SECTOR.LIGHT guard.  Setting a sector light re-runs
@@ -1053,6 +1088,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "\n[FUNCTION f_dotted_capped_for]\n"
         f"{DOTTED_PROBE_CAPPED_FOR}\n"
         "ENDFOR\n"
+        "\n[FUNCTION f_dotted_damage_final]\n"
+        f"SYSMESSAGE {marker} C|object_escape_arg|[<ARGV(0)>]\n"
+        "IF (<ARGV(0)>)\n"
+        "DAMAGE 1,2,<ARGV(0)>\n"
+        "ENDIF\n"
     )
     return "\n".join(login) + "\n", sections, environ_change
 def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:
@@ -1372,12 +1412,14 @@ def write_scripts(
     dialog_argo_layout_probe: bool = False,
     dialog_flow_layout_probe: bool = False,
     dword_hex_probe: bool = False,
+    isbit_probe: bool = False,
     region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
+    runaway_loop_probe: bool = False,
     movement_stairs_probe: bool = False,
     character_content_probe: bool = False,
     stacking_probe: bool = False,
@@ -1407,6 +1449,13 @@ def write_scripts(
     )
     dword_hex_login, dword_hex_sections = (
         dword_hex_scripts() if dword_hex_probe else ("", "")
+    )
+    isbit_login = (
+        f"SYSMESSAGE {ISBIT_MARKER} C|bits|<ISBIT 5,0>|<ISBIT 5,1>|"
+        f"<ISBIT(5,2)>|<ISBIT 080000000,31>|<ISBIT 5,32>\n"
+        f"SYSMESSAGE {ISBIT_MARKER}_END\n"
+        if isbit_probe
+        else ""
     )
     region_weather_login = (
         f"SYSMESSAGE {REGION_WEATHER_MARKER} "
@@ -1528,6 +1577,21 @@ def write_scripts(
             + "\n"
             + f"SYSMESSAGE {ESCAPE_OVERFLOW_MARKER}\n"
         )
+    runaway_loop_login = (
+        f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_CONFIG <SERV.SCRIPTLOOPLIMIT>\n"
+        "F_RUNAWAY_LOOP\n"
+        if runaway_loop_probe
+        else ""
+    )
+    runaway_loop_sections = (
+        "\n[FUNCTION f_runaway_loop]\n"
+        "WHILE (1)\n"
+        "ENDWHILE\n"
+        f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_RETURNED\n"
+        "RETURN 1\n"
+        if runaway_loop_probe
+        else ""
+    )
     timer_lifetime_before_markers = (
         "SERV.B SPHERE_TIMER_COUNTS_BEFORE <SERV.ITEMS>|<SERV.CHARS>\n"
         "SERV.B SPHERE_TIMER_UIDS_BEFORE "
@@ -1977,6 +2041,7 @@ DEX=100
 ON=@LogIn
 """ + world_save_logout_event_login + escape_overflow_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
+""" + runaway_loop_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
 IF (<ARG.timer_probe_match> == 1)
 NEWNPC SYNTHETIC_TIMER_OWNER
@@ -2002,6 +2067,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + character_content_login + """
+""" + isbit_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
@@ -2044,7 +2110,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -2085,6 +2151,7 @@ def write_runtime_files(
     unknown_keyword_report: bool = False,
     unknown_keyword_report_format: str = "json",
     force_garbage_collect: bool = False,
+    runaway_loop_probe: bool = False,
 ) -> None:
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
@@ -2113,7 +2180,9 @@ SAVEPERIOD=1440
 SAVEBACKGROUND=0
 CLIENTLINGER=60
 SECURE=1
-""" + ("FORCEGARBAGECOLLECT=1\n" if force_garbage_collect else "") + unknown_keyword_report_setting + """
+""" + ("FORCEGARBAGECOLLECT=1\n" if force_garbage_collect else "") + (
+        f"SCRIPTLOOPLIMIT={RUNAWAY_LOOP_LIMIT}\n" if runaway_loop_probe else ""
+    ) + unknown_keyword_report_setting + """
 
 [STARTS]
 Synthetic land
@@ -2683,6 +2752,57 @@ def write_dword_hex_save(root: Path) -> None:
                 "MANA=100",
                 "STAM=100",
                 f"AGE=0{DWORD_HEX_AGE:x}",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
+def write_isbit_save(root: Path) -> None:
+    """Seed an existing account/character for the ISBIT function probe."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic ISBIT fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {ISBIT_ACCOUNT}]",
+                f"PASSWORD={ISBIT_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic ISBIT fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={ISBIT_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
                 "P=128,128,0",
                 "[EOF]",
             ]
@@ -3357,6 +3477,7 @@ def generate_fixture(
         root,
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
+        runaway_loop_probe=args.runaway_loop_probe,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
@@ -3391,6 +3512,7 @@ def generate_fixture(
         arg_locals_probe=args.arg_locals_probe,
         findarg_probe=args.findarg_probe,
         dword_hex_probe=args.dword_hex_probe,
+        isbit_probe=args.isbit_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -3405,6 +3527,7 @@ def generate_fixture(
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
+        runaway_loop_probe=args.runaway_loop_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,
@@ -3436,6 +3559,8 @@ def generate_fixture(
         write_book_pages_save(root)
     if args.dword_hex_probe:
         write_dword_hex_save(root)
+    if args.isbit_probe:
+        write_isbit_save(root)
     if args.region_weather_probe:
         write_region_weather_save(root)
     if args.spawn_gem_probe:

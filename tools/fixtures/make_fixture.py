@@ -185,6 +185,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise Sphere 0-prefixed hexadecimal script values",
     )
     parser.add_argument(
+        "--isbit-probe",
+        action="store_true",
+        help="exercise the 0.99 ISBIT bit-position function",
+    )
+    parser.add_argument(
         "--region-weather-probe",
         action="store_true",
         help="apply region weather keys and read them back from the character sector",
@@ -263,6 +268,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--escape-overflow-probe",
         action="store_true",
         help="log in an existing character through a near-limit escape expansion",
+    )
+    parser.add_argument(
+        "--runaway-loop-probe",
+        action="store_true",
+        help="exercise a configurable bounded WHILE loop and a second login",
     )
     parser.add_argument(
         "--movement-stairs-probe",
