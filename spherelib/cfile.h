@@ -321,7 +321,7 @@ public:
 		TEST_FAULT_FLUSH,
 		TEST_FAULT_CLOSE,
 	};
-	static void SetTestFault( TEST_FAULT fault );
+	static void SetTestFault( TEST_FAULT fault, LPCTSTR pszTargetFile = NULL, int iSkip = 0 );
 	static void ClearTestFault();
 	static bool WasTestFaultTriggered();
 #endif
