@@ -4,6 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 
 const CScriptProp CItem::sm_Props[CItem::P_QTY+1] =
 {
@@ -126,6 +127,18 @@ void CItem::DeleteThis()
 	// m_type = IT_JUNK;
 
 	CObjBase::DeleteThis();	// Must remove early because virtuals will fail in child destructor.
+}
+
+void CItem::LogTimerRemoval( LPCTSTR pszReason ) const
+{
+	if ( pszReason == NULL || ! *pszReason )
+		return;
+	const DWORD dwUID = static_cast<DWORD>(GetUID());
+	if ( ! dwUID )
+		return;
+	// Provenance is a debug observation, not a production error.  It has its
+	// own opt-in switch so DEBUGLEVEL does not enable a marker for every timer.
+	SPHERE_LOG_TIMER_PROVENANCE( "timer removed object uid=0x%x reason=%s", dwUID, pszReason );
 }
 
 CItemPtr CItem::CreateBase( ITEMID_TYPE id )	// static
@@ -4686,6 +4699,7 @@ bool CItem::OnTick()
 	// RETURN: false = delete it.
 
 	SetTimeout(-1);
+	const DWORD dwTimerUID = static_cast<DWORD>(GetUID());
 
 	TRIGRET_TYPE iRet;
 	{
@@ -4695,7 +4709,11 @@ bool CItem::OnTick()
 	// not provide a value.  Script timers use RETURN 1 for this path; treating
 	// it as unhandled falls through to the misleading DECAY diagnostic.
 	if ( iRet == TRIGRET_RET_TRUE || iRet == TRIGRET_RET_VAL )
+	{
+		if ( IsDeletePending())
+			LogTimerRemoval( "script" );
 		return true;
+	}
 	}
 
 	switch ( GetType())
@@ -4872,6 +4890,7 @@ bool CItem::OnTick()
 
 	if ( IsAttr(ATTR_DECAY))
 	{
+		LogTimerRemoval( "decay" );
 		if ( g_Log.IsLogged( LOGL_TRACE ))
 		{
 			DEBUG_MSG(( "Time to delete item '%s'" LOG_CR, (LPCTSTR) GetName()));
@@ -4883,7 +4902,11 @@ bool CItem::OnTick()
 
 	// NOTE: scripts might come here to default delete items we no longer want ?
 	if ( iRet == TRIGRET_RET_FALSE )
+	{
+		if ( dwTimerUID )
+			LogTimerRemoval( "script" );
 		return false;
+	}
 
 	DEBUG_ERR(( "Timer expired without DECAY flag '%s'?" LOG_CR, (LPCTSTR) GetName()));
 	return( true );

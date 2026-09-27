@@ -4,6 +4,11 @@
 // A WHILE or FOR loop stops after this many iterations.
 #define SCRIPT_MAX_LOOP_ITERATIONS 10000
 
+// Stock Sphere stops trigger recursion at a depth of forty. The server
+// context uses the same bounded depth so recursive script chains cannot
+// exhaust the native stack and take down the process.
+#define SCRIPT_MAX_RECURSION_DEPTH 40
+
 // Script control-flow keywords recognized by ExecuteScript.
 enum SK_TYPE
 {
@@ -87,6 +92,13 @@ protected:
 	virtual int GetScriptLoopLimit() const
 	{
 		return SCRIPT_MAX_LOOP_ITERATIONS;
+	}
+
+	// Concrete contexts can reject execution after a recursion-depth guard has
+	// tripped. Ordinary contexts remain executable.
+	virtual bool IsExecutionBlocked() const
+	{
+		return false;
 	}
 
 	// Numeric values returned by script functions may be UIDs. Concrete engine
@@ -1147,7 +1159,12 @@ public:
 					}
 					memcpy(szArgs, pszCmd + 4, iArgsLen);
 					szArgs[iArgsLen] = '\0';
-					s_ParseEscapes(szArgs, 0);
+					// ARG(name,<object>) stores a reference-valued local.  Keep
+					// the object's serial instead of its display text so a later
+					// dotted access (for example GATA.COLOR) can resolve the
+					// local through the normal UID path.  Scalar ARG values keep
+					// their existing text representation.
+					s_ParseEscapes(szArgs, CSCRIPT_PARSE_OBJECT_SERIAL);
 					CGVariant vArgs(szArgs);
 					CGVariant vValRet;
 					HRESULT hRes = Function_Dispatch("ARG", vArgs, vValRet);
@@ -1494,6 +1511,9 @@ public:
 	//
 	TRIGRET_TYPE ExecuteScript(CScript& script, TRIGRUN_TYPE type)
 	{
+		if ( IsExecutionBlocked() )
+			return TRIGRET_RET_DEFAULT;
+
 		CScriptUnknownContextScope scriptContextScope(&script);
 		bool fSectionFalse = (type == TRIGRUN_SECTION_FALSE || type == TRIGRUN_SINGLE_FALSE);
 		TCHAR szArg[SCRIPT_MAX_LINE_LEN];	// a keyword argument rebuilt by GetKeywordArg
@@ -1778,7 +1798,16 @@ public:
 					strncpy(szKey, pszKey, sizeof(szKey) - 1);
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
-						s_ParseEscapes( szKey, 0 );
+					{
+						// A function-style ARG statement may receive a live object
+						// reference (for example ARG(gata,<LASTNEW>)).  Expand its
+						// key with the serial-preserving flag before ExecuteCommand
+						// splits the statement; the ordinary key path intentionally
+						// renders object references as display text.
+						DWORD dwKeyFlags = !_strnicmp(szKey, "ARG(", 4)
+							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
+						s_ParseEscapes( szKey, dwKeyFlags );
+					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
 						DWORD dwArgFlags = (fKeyEquals && IsContainerAssignmentKey(szKey))

@@ -195,6 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise the character FOOD property and item-event default object",
     )
     parser.add_argument(
+        "--damage-trigger-probe",
+        action="store_true",
+        help="exercise item @Damage and source-character @ItemDamage dispatch",
+    )
+    parser.add_argument(
         "--region-weather-probe",
         action="store_true",
         help="apply region weather keys and read them back from the character sector",
@@ -278,6 +283,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--runaway-loop-probe",
         action="store_true",
         help="exercise a configurable bounded WHILE loop and a second login",
+    )
+    parser.add_argument(
+        "--recursion-depth-probe",
+        action="store_true",
+        help="exercise bounded recursive function and trigger calls",
     )
     parser.add_argument(
         "--movement-stairs-probe",

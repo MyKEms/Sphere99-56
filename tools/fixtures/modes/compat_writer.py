@@ -41,8 +41,10 @@ TIMER_LIFETIME_DELAY_SECONDS = 15
 TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 MEMORY_TIMER_OWNER_SERIAL = 200
 MEMORY_TIMER_ITEM_SERIAL = 201
+MEMORY_STALE_ITEM_SERIAL = 202
 MEMORY_TIMER_DELAY_SECONDS = 15
 MEMORY_TIMER_ITEM_UID = UID_F_ITEM | MEMORY_TIMER_ITEM_SERIAL
+MEMORY_STALE_ITEM_UID = UID_F_ITEM | MEMORY_STALE_ITEM_SERIAL
 MEMORY_TIMER_ITEM_ID = 0x0EA3
 MEMORY_TIMER_MARKER = "SPHERE_MEMORY_TIMER_TRIGGERED"
 MEMORY_TIMER_REMOVED_MARKER = "SPHERE_MEMORY_TIMER_REMOVED"
@@ -85,6 +87,15 @@ ESCAPE_OVERFLOW_NAME = "N" * 256
 # second-client check complete quickly.
 RUNAWAY_LOOP_LIMIT = 32
 RUNAWAY_LOOP_MARKER = "SPHERE_RUNAWAY_LOOP"
+
+# Trigger/function recursion probe. Both paths deliberately recurse without
+# a script-level exit; the engine guard must return them safely and leave a
+# second client responsive.
+RECURSION_DEPTH_MARKER = "SPHERE_RECURSION_DEPTH"
+RECURSION_DEPTH_ACCOUNT_ONE = "RecursionDepthOne"
+RECURSION_DEPTH_ACCOUNT_TWO = "RecursionDepthTwo"
+RECURSION_DEPTH_PASSWORD = "recursion_pw"
+RECURSION_DEPTH_LIMIT = 40
 
 # Same-definition stacking probe.  Two movable, stackable ground items are
 # dragged into the character's pack at the same explicit point.  A second
@@ -202,6 +213,16 @@ FOOD_PASSWORD = "food-pw"
 FOOD_MARKER = "SPHERE_FOOD"
 FOOD_ITEM_ID = 0x0E8C
 FOOD_INITIAL = 7
+
+# Damage trigger probe.  The item callback and the source-character callback
+# use distinct markers so the fixture proves both dispatch paths for one
+# damage operation.
+DAMAGE_TRIGGER_ACCOUNT = "DamageTriggerProbe"
+DAMAGE_TRIGGER_PASSWORD = "dmgtrig-pw"
+DAMAGE_TRIGGER_MARKER = "SPHERE_DAMAGE_TRIGGER"
+DAMAGE_TRIGGER_ITEM_ID = 0x0E76
+DAMAGE_TRIGGER_ITEM_SERIAL = 4
+DAMAGE_TRIGGER_ITEM_UID = UID_F_ITEM | DAMAGE_TRIGGER_ITEM_SERIAL
 
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
@@ -630,6 +651,7 @@ RETURN <LASTNEW.SERIAL>
 [FUNCTION f_arg_locals_probe]
 ARG(i,0)
 ARG(argobj,<ARGV(0)>)
+ARG(gata,<LASTNEW>)
 SYSMESSAGE SPHERE_ARG_LOCALS C|before|[<ARG.i>|<arg(i)>|<i>]
 WHILE (<ARG.i> < 3)
 ARG(i,#+1)
@@ -640,8 +662,13 @@ ARG(i,#+1)
 ENDWHILE
 SYSMESSAGE SPHERE_ARG_LOCALS C|bare_after|[<i>]
 SYSMESSAGE SPHERE_ARG_LOCALS C|object_before|[<argobj.name>|<ARG(argobj).name>|<ARGV(0).TYPE>]
+SYSMESSAGE SPHERE_ARG_LOCALS C|gata_before|[<gata.name>|<GATA.NAME>|<GATA.SERIAL>]
 ARGV(0).TYPE=T_NORMAL
 SYSMESSAGE SPHERE_ARG_LOCALS C|object_after|[<argobj.type>|<ARGV(0).TYPE>]
+GATA.COLOR=0123
+GATA.NAME=synthetic gata
+SYSMESSAGE SPHERE_ARG_LOCALS C|gata_after|[<GATA.COLOR>|<gata.name>|<GATA.SERIAL>]
+GATA.SFX(248)
 RETURN <i>
 
 [FUNCTION f_arg_scratch_probe]
@@ -1423,6 +1450,7 @@ def write_scripts(
     dword_hex_probe: bool = False,
     isbit_probe: bool = False,
     food_probe: bool = False,
+    damage_trigger_probe: bool = False,
     region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
@@ -1430,6 +1458,7 @@ def write_scripts(
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
     runaway_loop_probe: bool = False,
+    recursion_depth_probe: bool = False,
     movement_stairs_probe: bool = False,
     character_content_probe: bool = False,
     stacking_probe: bool = False,
@@ -1474,6 +1503,26 @@ def write_scripts(
         "EQUIPLAST\n"
         f"SYSMESSAGE {FOOD_MARKER}_END\n"
         if food_probe
+        else ""
+    )
+    damage_trigger_login = (
+        f"FINDUID({DAMAGE_TRIGGER_ITEM_UID}).DAMAGE 1,2,<SRC.SERIAL>\n"
+        f"SYSMESSAGE {DAMAGE_TRIGGER_MARKER}_END\n"
+        if damage_trigger_probe
+        else ""
+    )
+    damage_trigger_itemdef = (
+        "ON=@Damage\n"
+        f"SRC.SYSMESSAGE {DAMAGE_TRIGGER_MARKER} ITEM\n"
+        "RETURN 0\n"
+        if damage_trigger_probe
+        else ""
+    )
+    damage_trigger_event = (
+        "ON=@ItemDamage\n"
+        f"SYSMESSAGE {DAMAGE_TRIGGER_MARKER} CHAR\n"
+        "RETURN 0\n"
+        if damage_trigger_probe
         else ""
     )
     region_weather_login = (
@@ -1609,6 +1658,29 @@ def write_scripts(
         f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_RETURNED\n"
         "RETURN 1\n"
         if runaway_loop_probe
+        else ""
+    )
+    recursion_depth_login = (
+        f"SYSMESSAGE {RECURSION_DEPTH_MARKER}_FUNCTION_BEGIN\n"
+        "F_RECURSION_DEPTH_PROBE\n"
+        f"SYSMESSAGE {RECURSION_DEPTH_MARKER}_FUNCTION_RETURNED\n"
+        "TRIGGER @RecursionDepthProbe\n"
+        f"SYSMESSAGE {RECURSION_DEPTH_MARKER}_TRIGGER_RETURNED\n"
+        if recursion_depth_probe
+        else ""
+    )
+    recursion_depth_trigger = (
+        "ON=@RecursionDepthProbe\n"
+        "TRIGGER @RecursionDepthProbe\n"
+        "RETURN 0\n"
+        if recursion_depth_probe
+        else ""
+    )
+    recursion_depth_sections = (
+        "\n[FUNCTION f_recursion_depth_probe]\n"
+        "F_RECURSION_DEPTH_PROBE\n"
+        "RETURN 1\n"
+        if recursion_depth_probe
         else ""
     )
     timer_lifetime_before_markers = (
@@ -1993,6 +2065,7 @@ TDATA2=1
 DEFNAME=SYNTHETIC_OBJECT
 NAME=synthetic object
 TYPE=T_NORMAL
+""" + damage_trigger_itemdef + """
 
 [ITEMDEF 0x0E72]
 DEFNAME=SYNTHETIC_MAGERY_START
@@ -2070,7 +2143,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + world_save_logout_event_login + escape_overflow_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_logout_event_login + escape_overflow_login + recursion_depth_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 """ + runaway_loop_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
@@ -2100,13 +2173,15 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + character_content_login + """
 """ + isbit_login + """
 """ + food_probe_login + """
+""" + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
 RETURN 0
+""" + recursion_depth_trigger + """
 ON=@FixtureCustom
 SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
@@ -2142,7 +2217,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + recursion_depth_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -2184,7 +2259,11 @@ def write_runtime_files(
     unknown_keyword_report_format: str = "json",
     force_garbage_collect: bool = False,
     runaway_loop_probe: bool = False,
+    timer_removal_provenance: bool = False,
 ) -> None:
+    timer_provenance_setting = (
+        "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
+    )
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
         if unknown_keyword_report
@@ -2205,6 +2284,7 @@ WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
 DEBUGLEVEL=0
+""" + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
 MAXCHARS=5
@@ -2894,6 +2974,61 @@ def write_food_save(root: Path) -> None:
     )
 
 
+def write_damage_trigger_save(root: Path) -> None:
+    """Seed an existing character for the item/character damage callbacks."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic damage trigger fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                f"SERIAL={DAMAGE_TRIGGER_ITEM_SERIAL}",
+                "P=128,128,0",
+                "TIMERD=-1",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {DAMAGE_TRIGGER_ACCOUNT}]",
+                f"PASSWORD={DAMAGE_TRIGGER_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic damage trigger fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={DAMAGE_TRIGGER_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_region_weather_save(root: Path) -> None:
     """Seed an existing character inside the synthetic weather region."""
 
@@ -3042,6 +3177,12 @@ def write_memory_timer_save(root: Path) -> None:
                 f"CONT={MEMORY_TIMER_OWNER_SERIAL}",
                 "LAYER=30",
                 f"TIMER={MEMORY_TIMER_DELAY_SECONDS}",
+                "[WORLDITEM i_memory]",
+                f"SERIAL={MEMORY_STALE_ITEM_SERIAL}",
+                f"CONT={MEMORY_TIMER_OWNER_SERIAL}",
+                "COLOR=4",
+                "LAYER=30",
+                "LINK=0x0DEAD00",
                 "[EOF]",
             ]
         ),
@@ -3479,6 +3620,35 @@ def generate_fixture(
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
 
+    if args.recursion_depth_probe and any(
+        (
+            args.world_load_counts,
+            any(world_load_modes),
+            args.timer_lifetime_probe,
+            args.memory_timer_probe,
+            args.timer_lifetime_item_first_probe,
+            args.timer_sibling_mutation_probe,
+            args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
+            args.container_shutdown_probe,
+            args.book_pages_probe,
+            args.dialog_button_probe,
+            args.dialog_argo_layout_probe,
+            args.dialog_flow_layout_probe,
+            args.dword_hex_probe,
+            args.region_weather_probe,
+            args.spawn_gem_probe,
+            args.spawn_gem_duplicate_serial_probe,
+            args.spawn_point_probe,
+            args.events_attr_probe,
+            args.legacy_metadata_probe,
+            args.escape_overflow_probe,
+            args.movement_stairs_probe,
+            args.movement_stacking_probe,
+        )
+    ):
+        parser.error("recursion-depth probe cannot be combined with another fixture mode")
+
     if args.events_attr_probe and (
         args.world_load_counts
         or any(world_load_modes)
@@ -3582,6 +3752,7 @@ def generate_fixture(
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
         runaway_loop_probe=args.runaway_loop_probe,
+        timer_removal_provenance=args.memory_timer_probe,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
@@ -3618,6 +3789,7 @@ def generate_fixture(
         dword_hex_probe=args.dword_hex_probe,
         isbit_probe=args.isbit_probe,
         food_probe=args.food_probe,
+        damage_trigger_probe=args.damage_trigger_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -3627,12 +3799,13 @@ def generate_fixture(
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
-        suppress_login_item=args.roundtrip_integrity_probe,
+        suppress_login_item=args.roundtrip_integrity_probe or args.damage_trigger_probe,
         region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
         runaway_loop_probe=args.runaway_loop_probe,
+        recursion_depth_probe=args.recursion_depth_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,
@@ -3668,6 +3841,8 @@ def generate_fixture(
         write_isbit_save(root)
     if args.food_probe:
         write_food_save(root)
+    if args.damage_trigger_probe:
+        write_damage_trigger_save(root)
     if args.region_weather_probe:
         write_region_weather_save(root)
     if args.spawn_gem_probe:
@@ -3724,6 +3899,7 @@ def generate_fixture(
             max(STACKING_ITEM_ID, STACKING_NO_POINT_ITEM_ID)
             if args.movement_stacking_probe
             else 0,
+            DAMAGE_TRIGGER_ITEM_ID if args.damage_trigger_probe else 0,
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
