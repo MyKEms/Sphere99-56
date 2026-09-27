@@ -107,6 +107,11 @@ def main() -> int:
         action="store_true",
         help="assert quoted TAG bytes and an explicit DISPID survive the first save",
     )
+    parser.add_argument(
+        "--gump-fallback",
+        action="store_true",
+        help="assert GUMP_NONE containers use reserved fallback dimensions",
+    )
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
@@ -195,6 +200,11 @@ def main() -> int:
             if args.metadata_roundtrip:
                 required_markers = (
                     "[WORLDITEM SYNTHETIC_ROUNDTRIP_ITEM]",
+                )
+            elif args.gump_fallback:
+                required_markers = (
+                    "[WORLDITEM SYNTHETIC_GUMP_NONE_CONTAINER]",
+                    "[WORLDITEM SYNTHETIC_GUMP_NONE_CONTENT]",
                 )
             elif args.format_compat:
                 required_markers = (
@@ -313,6 +323,10 @@ def main() -> int:
         for marker in ("property rejected", "Invalid container", "Non container", "orphaned objects"):
             if marker in log_contents:
                 failures.append(f"generation {generation} logged {marker!r}")
+        if args.gump_fallback and "unknown container gump id" in log_contents.lower():
+            failures.append(
+                f"generation {generation} emitted the unknown container-gump diagnostic"
+            )
 
     if load_counts and any(count != load_counts[0] for count in load_counts[1:]):
         failures.append(f"object counts changed across reloads: {load_counts!r}")
@@ -323,7 +337,11 @@ def main() -> int:
         )
 
     for generation, world in enumerate(saved_worlds, start=1):
-        if not args.metadata_roundtrip and world.count("LEGACY_UNKNOWN=preserve-me") != 1:
+        if (
+            not args.metadata_roundtrip
+            and not args.gump_fallback
+            and world.count("LEGACY_UNKNOWN=preserve-me") != 1
+        ):
             failures.append(f"generation {generation} dropped the unknown legacy property")
         if args.metadata_roundtrip:
             combined = world + (
@@ -353,6 +371,17 @@ def main() -> int:
                     f"generation {generation} did not preserve exactly one REGION.FLAGS=0d2 "
                     f"(keys={region_flags_count}, exact={exact_region_flags_count})"
                 )
+        elif args.gump_fallback:
+            if world.count("[WORLDITEM SYNTHETIC_GUMP_NONE_CONTAINER]") != 1:
+                failures.append(f"generation {generation} lost the GUMP_NONE container")
+            if world.count("[WORLDITEM SYNTHETIC_GUMP_NONE_CONTENT]") != 1:
+                failures.append(f"generation {generation} lost the GUMP_NONE child")
+            if not re.search(
+                r"\[WORLDITEM SYNTHETIC_GUMP_NONE_CONTENT\].*?\nCONT=",
+                world,
+                flags=re.DOTALL,
+            ):
+                failures.append(f"generation {generation} did not retain the child CONT relation")
         elif world.count("REGION.FLAGS=0d2") != 1:
             failures.append(f"generation {generation} dropped REGION.FLAGS")
         if args.metadata_roundtrip:
@@ -365,6 +394,17 @@ def main() -> int:
             for pin in ("PIN=100,200,5", "PIN=300,400,6"):
                 if world.count(pin) != 1:
                     failures.append(f"generation {generation} did not retain {pin}")
+        elif args.gump_fallback:
+            if world.count("[WORLDITEM SYNTHETIC_GUMP_NONE_CONTAINER]") != 1:
+                failures.append(f"generation {generation} lost the GUMP_NONE container")
+            if world.count("[WORLDITEM SYNTHETIC_GUMP_NONE_CONTENT]") != 1:
+                failures.append(f"generation {generation} lost the GUMP_NONE child")
+            if not re.search(
+                r"\[WORLDITEM SYNTHETIC_GUMP_NONE_CONTENT\].*?\nCONT=",
+                world,
+                flags=re.DOTALL,
+            ):
+                failures.append(f"generation {generation} did not retain the child CONT relation")
         else:
             if world.count("[WORLDITEM SYNTHETIC_OBJECT]") != 1:
                 failures.append(f"generation {generation} lost the contained synthetic item")
@@ -412,6 +452,8 @@ def main() -> int:
         + (
             "three bounded saves across two reloads retained TAG bytes and DISPID"
             if args.metadata_roundtrip
+            else "three bounded saves across two reloads retained GUMP_NONE container fallback"
+            if args.gump_fallback
             else "three bounded saves across two reloads retained counts, containment, and unknown properties"
         )
     )

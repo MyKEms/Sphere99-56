@@ -204,6 +204,7 @@ POINT CItemContainer::GetRandContainerLoc() const
 		WORD m_maxy;
 	} sm_ContSize[] =
 	{
+		{ GUMP_NONE, 40, 50, 100, 100 },		// no TDATA2 gump: use the default dimensions.
 		{ GUMP_RESERVED, 40, 50, 100, 100 },		// default.
 		{ GUMP_SECURE_TRADE, 1, 1, 66, 26 },
 		{ GUMP_CORPSE, 20, 85, 80, 185 },

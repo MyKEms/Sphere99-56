@@ -304,6 +304,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="exercise same-definition stacking at explicit and no-point locations",
     )
+    parser.add_argument(
+        "--gump-fallback-probe",
+        action="store_true",
+        help="load a container with no TDATA2 gump and round-trip its child",
+    )
     return parser
 
 
