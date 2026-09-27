@@ -1025,11 +1025,26 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "VAR dotted_probe_var,globalvalue",
         "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
         "EQUIPLAST",
+        "VAR dotted_cont_target,<SRC.FINDLAYER(21).SERIAL>",
+        "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
+        "LASTNEW.CONT=<SRC.FINDLAYER(21)>",
+        f"SYSMESSAGE {marker} C|cont_target_serial|[<VAR(dotted_cont_target)>]",
+        f"SYSMESSAGE {marker} C|cont_object_serial|[<LASTNEW.CONT.SERIAL>]",
+        "LASTNEW.REMOVE",
         "NEWITEM SYNTHETIC_DOTTED_PROBE",
         "EQUIPLAST",
         "NEWITEM SYNTHETIC_DOTTED_FINDID",
         "LASTNEW.CONT=<SRC.FINDLAYER(LAYER_PACK).SERIAL>",
         "LASTNEW.NAME=synthetic dotted probe",
+        # A standalone object escape is a legacy empty argument. Serializing
+        # <ARGO> here would feed the reference UID back into damage_final and
+        # re-enter @GetHit indefinitely.
+        "NEWNPC c_MAN",
+        "VAR dotted_object_escape_source,<LASTNEW.SERIAL>",
+        "VAR dotted_object_escape_hits,0",
+        f"SYSMESSAGE {marker} C|object_escape_source|[<VAR(dotted_object_escape_source)>|<ISUIDVALID <VAR(dotted_object_escape_source)>>]",
+        "TRIGGER @GetHit,1,dotted,<VAR(dotted_object_escape_source)>",
+        f"SYSMESSAGE {marker} C|object_escape_hits|[<VAR(dotted_object_escape_hits)>]",
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
     login += [
@@ -1150,6 +1165,13 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SYSMESSAGE " + marker + " C|environ_max_depth|[<VAR(environ_max_depth)>]",
         "SYSMESSAGE " + marker + "_END",
     ]
+    login += [
+        "ON=@GetHit",
+        f"SYSMESSAGE {marker} C|object_escape_handler|[hit]",
+        "VAR dotted_object_escape_hits,<EVAL <VAR(dotted_object_escape_hits)>+1>",
+        "F_DOTTED_DAMAGE_FINAL(<ARGO>)",
+        "RETURN 1",
+    ]
 
     # An @EnvironChange handler that keeps its sector at a fixed light level
     # behind a bare SECTOR.LIGHT guard.  Setting a sector light re-runs
@@ -1229,6 +1251,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "\n[FUNCTION f_dotted_capped_for]\n"
         f"{DOTTED_PROBE_CAPPED_FOR}\n"
         "ENDFOR\n"
+        "\n[FUNCTION f_dotted_damage_final]\n"
+        f"SYSMESSAGE {marker} C|object_escape_arg|[<ARGV(0)>]\n"
+        "IF (<ARGV(0)>)\n"
+        "DAMAGE 1,2,<ARGV(0)>\n"
+        "ENDIF\n"
     )
     return "\n".join(login) + "\n", sections, environ_change
 def timer_sibling_mutation_definitions(*, owner_first: bool = False) -> str:

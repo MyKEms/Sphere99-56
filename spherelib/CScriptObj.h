@@ -6,6 +6,9 @@
 #define CSCRIPT_ARGCHK_VAL 1000
 #define CSCRIPT_PARSE_HTML 1
 #define CSCRIPT_PARSE_NBSP 2
+// Serialize a reference-valued escape only when the surrounding command has
+// explicitly requested an object UID (for example, a CONT= assignment).
+#define CSCRIPT_PARSE_OBJECT_SERIAL 4
 
 class CScript;
 
