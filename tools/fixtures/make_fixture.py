@@ -195,6 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise item @Damage and source-character @ItemDamage dispatch",
     )
     parser.add_argument(
+        "--events-method-probe",
+        action="store_true",
+        help="exercise the bare EVENTS(...) add/remove method",
+    )
+    parser.add_argument(
         "--region-weather-probe",
         action="store_true",
         help="apply region weather keys and read them back from the character sector",

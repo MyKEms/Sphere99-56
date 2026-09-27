@@ -215,6 +215,14 @@ DAMAGE_TRIGGER_ITEM_ID = 0x0E76
 DAMAGE_TRIGGER_ITEM_SERIAL = 4
 DAMAGE_TRIGGER_ITEM_UID = UID_F_ITEM | DAMAGE_TRIGGER_ITEM_SERIAL
 
+# Direct EVENTS(...) method probe.  The property form (EVENTS=...) already
+# has coverage in the metadata round-trip fixture; this exercises the
+# statement dispatcher used by production scripts.
+EVENTS_METHOD_ACCOUNT = "EventsMethodProbe"
+EVENTS_METHOD_PASSWORD = "events-method-pw"
+EVENTS_METHOD_MARKER = "SPHERE_EVENTS_METHOD"
+EVENTS_METHOD_EVENT = "e_fixture_events_method"
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -1435,6 +1443,7 @@ def write_scripts(
     dword_hex_probe: bool = False,
     isbit_probe: bool = False,
     damage_trigger_probe: bool = False,
+    events_method_probe: bool = False,
     region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
@@ -1484,6 +1493,20 @@ def write_scripts(
         f"FINDUID({DAMAGE_TRIGGER_ITEM_UID}).DAMAGE 1,2,<SRC.SERIAL>\n"
         f"SYSMESSAGE {DAMAGE_TRIGGER_MARKER}_END\n"
         if damage_trigger_probe
+        else ""
+    )
+    events_method_login = (
+        f"EVENTS(+{EVENTS_METHOD_EVENT})\n"
+        f"SYSMESSAGE {EVENTS_METHOD_MARKER}_ADD <EVENTS>\n"
+        f"EVENTS(-{EVENTS_METHOD_EVENT})\n"
+        f"SYSMESSAGE {EVENTS_METHOD_MARKER}_REMOVE <EVENTS>\n"
+        f"SYSMESSAGE {EVENTS_METHOD_MARKER}_END\n"
+        if events_method_probe
+        else ""
+    )
+    events_method_sections = (
+        f"\n[EVENTS {EVENTS_METHOD_EVENT}]\nON=@LogIn\nRETURN 0\n"
+        if events_method_probe
         else ""
     )
     damage_trigger_itemdef = (
@@ -2106,6 +2129,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
+""" + events_method_login + """
 """ + world_save_logout_event_login + escape_overflow_login + recursion_depth_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 """ + runaway_loop_login + """
@@ -2179,7 +2203,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + recursion_depth_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -2833,6 +2857,57 @@ def write_dword_hex_save(root: Path) -> None:
     )
 
 
+def write_events_method_save(root: Path) -> None:
+    """Seed an existing account/character for the EVENTS method probe."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic EVENTS method fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {EVENTS_METHOD_ACCOUNT}]",
+                f"PASSWORD={EVENTS_METHOD_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic EVENTS method fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={EVENTS_METHOD_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_isbit_save(root: Path) -> None:
     """Seed an existing account/character for the ISBIT function probe."""
 
@@ -3452,6 +3527,21 @@ def generate_fixture(
         parser.error("choose only one world-load fixture mode")
     if args.spawn_gem_duplicate_serial_probe:
         args.spawn_gem_probe = True
+    if args.events_method_probe:
+        conflicts = [
+            name
+            for name, value in vars(args).items()
+            if name.endswith("_probe")
+            and name != "events_method_probe"
+            and value
+        ]
+        if args.world_load_counts:
+            conflicts.append("world_load_counts")
+        if conflicts:
+            parser.error(
+                "events-method probe cannot be combined with another fixture mode: "
+                + ", ".join(conflicts)
+            )
     if args.movement_stairs_probe and any(
         (
             args.world_load_counts,
@@ -3679,6 +3769,7 @@ def generate_fixture(
         dword_hex_probe=args.dword_hex_probe,
         isbit_probe=args.isbit_probe,
         damage_trigger_probe=args.damage_trigger_probe,
+        events_method_probe=args.events_method_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -3688,7 +3779,11 @@ def generate_fixture(
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
-        suppress_login_item=args.roundtrip_integrity_probe or args.damage_trigger_probe,
+        suppress_login_item=(
+            args.roundtrip_integrity_probe
+            or args.damage_trigger_probe
+            or args.events_method_probe
+        ),
         region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
@@ -3730,6 +3825,8 @@ def generate_fixture(
         write_isbit_save(root)
     if args.damage_trigger_probe:
         write_damage_trigger_save(root)
+    if args.events_method_probe:
+        write_events_method_save(root)
     if args.region_weather_probe:
         write_region_weather_save(root)
     if args.spawn_gem_probe:
