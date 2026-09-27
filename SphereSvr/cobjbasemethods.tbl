@@ -11,6 +11,7 @@ COBJBASEMETHOD(DistanceFrom,CSCRIPTPROP_RETVAL|CSCRIPTPROP_NARG1,	"(uid)","dista
 COBJBASEMETHOD(Edit,		0,										"[sSelectCommand]","List contents")
 COBJBASEMETHOD(Effect,		CSCRIPTPROP_RETNUL|CSCRIPTPROP_ARG2,	"(iType,iItemID [,iSpeedSec,iLoop,fExplode])","Display effect on this object")
 COBJBASEMETHOD(Emote,		CSCRIPTPROP_RETNUL|CSCRIPTPROP_ARG1S,	"","Speak emote from this object")
+COBJBASEMETHOD(Events,		CSCRIPTPROP_ARG1S,	"(sEventName)","Add or remove an event handler")
 COBJBASEMETHOD(Fix,			CSCRIPTPROP_NARGS,						"","Make sure my Z coord is ok")
 COBJBASEMETHOD(Flip,		CSCRIPTPROP_RETNUL,						"(sDir)","Flip this to an alternate view (if possible)")
 COBJBASEMETHOD(Hit,			CSCRIPTPROP_ARG3,						"(iDamage,iSourceFlags,uidSourceChar)","get hit by source")

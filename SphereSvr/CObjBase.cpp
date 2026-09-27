@@ -820,6 +820,10 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 	case M_IsEvent:
 		vValRet.SetBool( m_Events.FindResourceID( vArgs.GetUID()) >= 0 );
 		break;
+	case M_Events:
+		if ( ! m_Events.v_Set( vArgs, RES_Events ))
+			return HRES_BAD_ARGUMENTS;
+		break;
 	case M_Tag:
 		return( m_TagDefs.s_MethodTags( vArgs, vValRet, pSrc ));
 
