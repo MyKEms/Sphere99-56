@@ -84,6 +84,7 @@ CSphereResourceMgr::CSphereResourceMgr()
 	m_wDebugFlags = 0; // DEBUGF_NPC_EMOTE
 	m_fSecure = true;
 	m_iFreezeRestartTime = 10;
+	m_iScriptLoopLimit = SCRIPT_MAX_LOOP_ITERATIONS;
 
 	// Magic
 	m_iPreCastTime = 0;
@@ -388,6 +389,10 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_SavePeriod:
 		m_iSavePeriod = vVal.GetInt()*60*TICKS_PER_SEC;
 		break;
+	case P_ScriptLoopLimit:
+		// Keep the guard enabled even when a malformed/zero value is supplied.
+		m_iScriptLoopLimit = vVal.GetInt();
+		break;
 	case P_SectorSleep:
 		m_iSectorSleepMask = _1BITMASK(vVal.GetInt()) - 1;
 		break;
@@ -547,6 +552,9 @@ HRESULT CSphereResourceMgr::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScri
 		break;
 	case P_SavePeriod:
 		vValRet.SetInt( m_iSavePeriod / (60*TICKS_PER_SEC));
+		break;
+	case P_ScriptLoopLimit:
+		vValRet.SetInt( m_iScriptLoopLimit );
 		break;
 	case P_SectorSleep:
 		vValRet.SetInt( Calc_GetLog2( m_iSectorSleepMask+1 )-1 );

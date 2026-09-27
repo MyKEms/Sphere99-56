@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "kind": "trigger",
+      "keyword": "@NPCSEENEWPLAYER",
+      "count_range": [
+        1,
+        32
+      ],
+      "reason": "The synthetic timer NPC has no new-player sight handler."
+    }
+  ]
+}

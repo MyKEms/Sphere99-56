@@ -818,6 +818,14 @@ CResourceObj* CSphereExpContext::ResolveUIDObject(UID_INDEX uid)
 	return dynamic_cast<CResourceObj*>((CObjBase*)pObj);
 }
 
+int CSphereExpContext::GetScriptLoopLimit() const
+{
+	// A malformed or zero-valued setting must not disable the guard.
+	return g_Cfg.m_iScriptLoopLimit > 0
+		? g_Cfg.m_iScriptLoopLimit
+		: SCRIPT_MAX_LOOP_ITERATIONS;
+}
+
 bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 {
 	CSphereUID ridFunc = g_Cfg.ResourceCheckIDType(RES_Function, pszKey);
@@ -942,6 +950,20 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		if ( vArgs.IsEmpty())
 			return( HRES_BAD_ARG_QTY );
 		vValRet.SetBool( g_World.ObjFind( vArgs.GetUID()) != NULL );
+		break;
+	case F_IsBit:
+		if ( vArgs.MakeArraySize() < 2 )
+			return HRES_BAD_ARG_QTY;
+		{
+			const int iBit = vArgs.GetArrayInt(1);
+			if ( iBit < 0 || iBit >= 32 )
+			{
+				vValRet.SetInt(0);
+				break;
+			}
+			const DWORD dwValue = vArgs.GetArrayElement(0).GetDWORD();
+			vValRet.SetInt((dwValue & (static_cast<DWORD>(1) << iBit)) != 0);
+		}
 		break;
 	case F_Var:
 		return g_Cfg.m_Var.s_MethodTags( vArgs, vValRet, GetSrc() );

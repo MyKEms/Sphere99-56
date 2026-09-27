@@ -81,13 +81,26 @@ def reset_registry() -> None:
 
 def all_modes() -> tuple[FixtureMode, ...]:
     modes = tuple(sorted(_MODES.values(), key=lambda item: (item.order, item.name)))
-    for index, left in enumerate(modes):
-        for right in modes[index + 1 :]:
-            if left.id_block == right.id_block:
-                raise ValueError(
-                    f"fixture modes {left.name} and {right.name} share id block {left.id_block}"
-                )
+    validate_modes(modes)
     return modes
+
+
+def validate_modes(modes: Sequence[FixtureMode]) -> None:
+    """Reject any overlapping synthetic ID ranges.
+
+    The registry allocates fixed-size blocks today, but validating the actual
+    interval keeps the guard correct if a mode later requests a different
+    block size or a custom allocator.
+    """
+
+    by_range = sorted(modes, key=lambda item: (item.id_start, item.id_end, item.name))
+    for left, right in zip(by_range, by_range[1:]):
+        if left.id_end >= right.id_start:
+            raise ValueError(
+                f"fixture modes {left.name} ({left.id_start:#x}-{left.id_end:#x}) "
+                f"and {right.name} ({right.id_start:#x}-{right.id_end:#x}) "
+                "have overlapping synthetic id ranges"
+            )
 
 
 def make_case(
