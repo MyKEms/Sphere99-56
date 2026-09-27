@@ -186,6 +186,13 @@ DWORD_HEX_AGE = 0xFABC
 RES_SKILL_TYPE = 41
 DWORD_HEX_MAGERY_UID = 0x80000000 | (RES_SKILL_TYPE << 25) | 25
 
+# ISBIT probe.  0.99 takes a value and a zero-based bit position and returns
+# one when that bit is set.  Include both escape forms and a high DWORD bit so
+# the fixture covers the script-facing unsigned conversion.
+ISBIT_ACCOUNT = "IsBitProbe"
+ISBIT_PASSWORD = "isbit-pw"
+ISBIT_MARKER = "SPHERE_ISBIT"
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -1535,6 +1542,7 @@ def write_scripts(
     dialog_argo_layout_probe: bool = False,
     dialog_flow_layout_probe: bool = False,
     dword_hex_probe: bool = False,
+    isbit_probe: bool = False,
     region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
@@ -1570,6 +1578,13 @@ def write_scripts(
     )
     dword_hex_login, dword_hex_sections = (
         dword_hex_scripts() if dword_hex_probe else ("", "")
+    )
+    isbit_login = (
+        f"SYSMESSAGE {ISBIT_MARKER} C|bits|<ISBIT 5,0>|<ISBIT 5,1>|"
+        f"<ISBIT(5,2)>|<ISBIT 080000000,31>|<ISBIT 5,32>\n"
+        f"SYSMESSAGE {ISBIT_MARKER}_END\n"
+        if isbit_probe
+        else ""
     )
     region_weather_login = (
         f"SYSMESSAGE {REGION_WEATHER_MARKER} "
@@ -2165,6 +2180,7 @@ HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + character_content_login + """
+""" + isbit_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
@@ -2853,6 +2869,57 @@ def write_dword_hex_save(root: Path) -> None:
     )
 
 
+def write_isbit_save(root: Path) -> None:
+    """Seed an existing account/character for the ISBIT function probe."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic ISBIT fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {ISBIT_ACCOUNT}]",
+                f"PASSWORD={ISBIT_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic ISBIT fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={ISBIT_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_region_weather_save(root: Path) -> None:
     """Seed an existing character inside the synthetic weather region."""
 
@@ -3505,6 +3572,11 @@ def main() -> int:
         help="exercise Sphere 0-prefixed hexadecimal script values",
     )
     parser.add_argument(
+        "--isbit-probe",
+        action="store_true",
+        help="exercise the 0.99 ISBIT bit-position function",
+    )
+    parser.add_argument(
         "--region-weather-probe",
         action="store_true",
         help="apply region weather keys and read them back from the character sector",
@@ -3817,6 +3889,7 @@ def main() -> int:
         arg_locals_probe=args.arg_locals_probe,
         findarg_probe=args.findarg_probe,
         dword_hex_probe=args.dword_hex_probe,
+        isbit_probe=args.isbit_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -3862,6 +3935,8 @@ def main() -> int:
         write_book_pages_save(root)
     if args.dword_hex_probe:
         write_dword_hex_save(root)
+    if args.isbit_probe:
+        write_isbit_save(root)
     if args.region_weather_probe:
         write_region_weather_save(root)
     if args.spawn_gem_probe:
