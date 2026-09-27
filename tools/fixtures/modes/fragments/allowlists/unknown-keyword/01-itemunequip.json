@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "kind": "trigger",
+      "keyword": "@ITEMUNEQUIP",
+      "count_range": [
+        2,
+        32
+      ],
+      "reason": "Synthetic character equipment cleanup has no fixture handler."
+    }
+  ]
+}

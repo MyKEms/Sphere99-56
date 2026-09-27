@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from modes import discover_modes
+from modes import discover_modes, generators
 from modes.registry import FixtureCase, FixtureMode, TestCase
 
 MODES = discover_modes()
 MODE_REGISTRY = {mode.name: mode for mode in MODES}
+MODE_GENERATORS = generators()
 FIXTURE_MODES = {
     mode.name: mode.fixture_args
     for mode in MODES
@@ -27,6 +28,7 @@ __all__ = [
     "FixtureCase",
     "FixtureMode",
     "MODE_REGISTRY",
+    "MODE_GENERATORS",
     "MODES",
     "NATIVE_CASES",
     "TestCase",
