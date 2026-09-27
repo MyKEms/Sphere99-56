@@ -621,6 +621,7 @@ RETURN <LASTNEW.SERIAL>
 [FUNCTION f_arg_locals_probe]
 ARG(i,0)
 ARG(argobj,<ARGV(0)>)
+ARG(gata,<LASTNEW>)
 SYSMESSAGE SPHERE_ARG_LOCALS C|before|[<ARG.i>|<arg(i)>|<i>]
 WHILE (<ARG.i> < 3)
 ARG(i,#+1)
@@ -631,8 +632,13 @@ ARG(i,#+1)
 ENDWHILE
 SYSMESSAGE SPHERE_ARG_LOCALS C|bare_after|[<i>]
 SYSMESSAGE SPHERE_ARG_LOCALS C|object_before|[<argobj.name>|<ARG(argobj).name>|<ARGV(0).TYPE>]
+SYSMESSAGE SPHERE_ARG_LOCALS C|gata_before|[<gata.name>|<GATA.NAME>|<GATA.SERIAL>]
 ARGV(0).TYPE=T_NORMAL
 SYSMESSAGE SPHERE_ARG_LOCALS C|object_after|[<argobj.type>|<ARGV(0).TYPE>]
+GATA.COLOR=0123
+GATA.NAME=synthetic gata
+SYSMESSAGE SPHERE_ARG_LOCALS C|gata_after|[<GATA.COLOR>|<gata.name>|<GATA.SERIAL>]
+GATA.SFX(248)
 RETURN <i>
 
 [FUNCTION f_arg_scratch_probe]

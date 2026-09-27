@@ -1147,7 +1147,12 @@ public:
 					}
 					memcpy(szArgs, pszCmd + 4, iArgsLen);
 					szArgs[iArgsLen] = '\0';
-					s_ParseEscapes(szArgs, 0);
+					// ARG(name,<object>) stores a reference-valued local.  Keep
+					// the object's serial instead of its display text so a later
+					// dotted access (for example GATA.COLOR) can resolve the
+					// local through the normal UID path.  Scalar ARG values keep
+					// their existing text representation.
+					s_ParseEscapes(szArgs, CSCRIPT_PARSE_OBJECT_SERIAL);
 					CGVariant vArgs(szArgs);
 					CGVariant vValRet;
 					HRESULT hRes = Function_Dispatch("ARG", vArgs, vValRet);
@@ -1768,7 +1773,16 @@ public:
 					strncpy(szKey, pszKey, sizeof(szKey) - 1);
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
-						s_ParseEscapes( szKey, 0 );
+					{
+						// A function-style ARG statement may receive a live object
+						// reference (for example ARG(gata,<LASTNEW>)).  Expand its
+						// key with the serial-preserving flag before ExecuteCommand
+						// splits the statement; the ordinary key path intentionally
+						// renders object references as display text.
+						DWORD dwKeyFlags = !_strnicmp(szKey, "ARG(", 4)
+							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
+						s_ParseEscapes( szKey, dwKeyFlags );
+					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
 						DWORD dwArgFlags = (fKeyEquals && IsContainerAssignmentKey(szKey))
