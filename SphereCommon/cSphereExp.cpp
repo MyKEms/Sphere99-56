@@ -982,7 +982,7 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		vValRet.SetRef(&g_Serv);
 		break;
 	case F_FindUID:
-	// case F_UID:
+	case F_UID:
 		if ( vArgs.IsEmpty())
 			return( HRES_BAD_ARG_QTY );
 		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));

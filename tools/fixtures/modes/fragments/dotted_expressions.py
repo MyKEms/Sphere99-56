@@ -67,6 +67,7 @@ DOTTED_EXPRESSION_ROWS = (
     ("finduid_serial", "<finduid(<src.serial>).serial>", "C"),
     ("finduid_tag", "<finduid(<src.serial>).tag(probe_text)>", "C"),
     ("finduid_function", "<finduid(<src.serial>).f_dotted_serial>", "C"),
+    ("uid_alias_name", "<uid(<src.serial>).name>", "C"),
     ("findid_bare_item", "<src.findlayer(layer_pack).findid(i_dotted_findid).serial>", "C"),
     ("lastnewitem_name", "<serv.lastnewitem.name>", "C"),
     ("function_args_root", "<f_dotted_arg(<src.serial>).name>", "C"),
