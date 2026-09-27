@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "kind": "trigger",
+      "keyword": "@TIMER",
+      "count_range": [
+        1,
+        32
+      ],
+      "optional": true,
+      "reason": "Timer callbacks can run during slower sanitizer fixture runs."
+    }
+  ]
+}

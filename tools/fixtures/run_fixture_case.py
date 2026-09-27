@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from fixture_cases import FIXTURE_CASES, FixtureCase
+from modes.fragments.allowlists import write_unknown_keyword_allowlist
 
 
 ROOT = Path(__file__).resolve().parent
@@ -42,6 +43,7 @@ def _test_command(
     repo: Path,
     pass_fixture: bool,
     pass_port: bool,
+    unknown_keyword_allowlist: Path | None,
 ) -> list[str]:
     command = [sys.executable, str(ROOT / test_script)]
     if pass_fixture:
@@ -56,8 +58,10 @@ def _test_command(
     command.extend(test_args)
     if test_script == "run_suite.py":
         if "--unknown-keyword-allowlist" in test_args:
+            if unknown_keyword_allowlist is None:
+                raise RuntimeError("unknown-keyword allowlist was not generated")
             index = command.index("--unknown-keyword-allowlist")
-            command.insert(index + 1, str(repo / "tools" / "fixtures" / "unknown_keyword_allowlist.json"))
+            command.insert(index + 1, str(unknown_keyword_allowlist))
         command.extend(("--repo", str(repo)))
     return command
 
@@ -104,6 +108,14 @@ def run_case(case_name: str, variant: str, binary: Path, root: Path, repo: Path)
 
     port = case.selected_port(variant)
     test_args = case.selected_test_args(variant)
+    allowlist_path = None
+    if any(
+        "--unknown-keyword-allowlist" in test.args
+        or "--unknown-keyword-allowlist" in test_args
+        for test in case.tests
+    ):
+        allowlist_path = root / f"{case_name}-{variant}-unknown-keyword-allowlist.json"
+        write_unknown_keyword_allowlist(allowlist_path)
     for index, test in enumerate(case.tests):
         if index:
             # Two checkers may intentionally consume the same generated save;
@@ -118,6 +130,7 @@ def run_case(case_name: str, variant: str, binary: Path, root: Path, repo: Path)
             repo,
             test.pass_fixture,
             test.pass_port,
+            allowlist_path,
         )
         _run(command, env=env, cwd=repo)
 
