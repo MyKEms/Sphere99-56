@@ -6,6 +6,8 @@ The fixture deliberately uses all three local read forms (``ARG.i``,
 current-value form, and passes a UID through ``ARGV(0)``.  It also exercises
 the legacy ``LASTNEW`` root and an ``ARGV(0).TYPE`` property write.  The
 scratch row mirrors six underscore-named locals read without ``ARG`` syntax.
+The GATA rows cover a reference-valued ``ARG(gata,<LASTNEW>)`` local, including
+property reads, writes and a method call through the dotted object root.
 """
 
 from __future__ import annotations
@@ -34,8 +36,10 @@ EXPECTED = {
     "bare_after": "5",
     "object_before": "synthetic object|synthetic object|T_NORMAL",
     "object_after": "T_NORMAL|T_NORMAL",
+    "gata_before": "synthetic object|synthetic object|040000008",
+    "gata_after": "0123|synthetic gata|040000008",
     "scratch": "101|202|303|404|505|606",
-    "scratch_object": "synthetic object|T_NORMAL",
+    "scratch_object": "synthetic gata|T_NORMAL",
     # RETURN parses the hyphens as arithmetic, just as the legacy helper does.
     "scratch_return": "-1919",
 }
