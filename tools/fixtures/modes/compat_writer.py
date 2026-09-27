@@ -205,6 +205,16 @@ ISBIT_ACCOUNT = "IsBitProbe"
 ISBIT_PASSWORD = "isbit-pw"
 ISBIT_MARKER = "SPHERE_ISBIT"
 
+# Damage trigger probe.  The item callback and the source-character callback
+# use distinct markers so the fixture proves both dispatch paths for one
+# damage operation.
+DAMAGE_TRIGGER_ACCOUNT = "DamageTriggerProbe"
+DAMAGE_TRIGGER_PASSWORD = "dmgtrig-pw"
+DAMAGE_TRIGGER_MARKER = "SPHERE_DAMAGE_TRIGGER"
+DAMAGE_TRIGGER_ITEM_ID = 0x0E76
+DAMAGE_TRIGGER_ITEM_SERIAL = 4
+DAMAGE_TRIGGER_ITEM_UID = UID_F_ITEM | DAMAGE_TRIGGER_ITEM_SERIAL
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -1424,6 +1434,7 @@ def write_scripts(
     dialog_flow_layout_probe: bool = False,
     dword_hex_probe: bool = False,
     isbit_probe: bool = False,
+    damage_trigger_probe: bool = False,
     region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
@@ -1467,6 +1478,26 @@ def write_scripts(
         f"<ISBIT(5,2)>|<ISBIT 080000000,31>|<ISBIT 5,32>\n"
         f"SYSMESSAGE {ISBIT_MARKER}_END\n"
         if isbit_probe
+        else ""
+    )
+    damage_trigger_login = (
+        f"FINDUID({DAMAGE_TRIGGER_ITEM_UID}).DAMAGE 1,2,<SRC.SERIAL>\n"
+        f"SYSMESSAGE {DAMAGE_TRIGGER_MARKER}_END\n"
+        if damage_trigger_probe
+        else ""
+    )
+    damage_trigger_itemdef = (
+        "ON=@Damage\n"
+        f"SRC.SYSMESSAGE {DAMAGE_TRIGGER_MARKER} ITEM\n"
+        "RETURN 0\n"
+        if damage_trigger_probe
+        else ""
+    )
+    damage_trigger_event = (
+        "ON=@ItemDamage\n"
+        f"SYSMESSAGE {DAMAGE_TRIGGER_MARKER} CHAR\n"
+        "RETURN 0\n"
+        if damage_trigger_probe
         else ""
     )
     region_weather_login = (
@@ -1997,6 +2028,7 @@ TDATA2=1
 DEFNAME=SYNTHETIC_OBJECT
 NAME=synthetic object
 TYPE=T_NORMAL
+""" + damage_trigger_itemdef + """
 
 [ITEMDEF 0x0E72]
 DEFNAME=SYNTHETIC_MAGERY_START
@@ -2103,9 +2135,10 @@ DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + character_content_login + """
 """ + isbit_login + """
+""" + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -2836,6 +2869,61 @@ def write_isbit_save(root: Path) -> None:
                 "[WORLDCHAR c_MAN]",
                 "SERIAL=3",
                 f"ACCOUNT={ISBIT_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
+def write_damage_trigger_save(root: Path) -> None:
+    """Seed an existing character for the item/character damage callbacks."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic damage trigger fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDITEM SYNTHETIC_OBJECT]",
+                f"SERIAL={DAMAGE_TRIGGER_ITEM_SERIAL}",
+                "P=128,128,0",
+                "TIMERD=-1",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {DAMAGE_TRIGGER_ACCOUNT}]",
+                f"PASSWORD={DAMAGE_TRIGGER_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic damage trigger fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={DAMAGE_TRIGGER_ACCOUNT}",
                 "EVENTS=e_AllPlayers",
                 "STR=100",
                 "INT=100",
@@ -3590,6 +3678,7 @@ def generate_fixture(
         findarg_probe=args.findarg_probe,
         dword_hex_probe=args.dword_hex_probe,
         isbit_probe=args.isbit_probe,
+        damage_trigger_probe=args.damage_trigger_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -3599,7 +3688,7 @@ def generate_fixture(
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
-        suppress_login_item=args.roundtrip_integrity_probe,
+        suppress_login_item=args.roundtrip_integrity_probe or args.damage_trigger_probe,
         region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
@@ -3639,6 +3728,8 @@ def generate_fixture(
         write_dword_hex_save(root)
     if args.isbit_probe:
         write_isbit_save(root)
+    if args.damage_trigger_probe:
+        write_damage_trigger_save(root)
     if args.region_weather_probe:
         write_region_weather_save(root)
     if args.spawn_gem_probe:
@@ -3695,6 +3786,7 @@ def generate_fixture(
             max(STACKING_ITEM_ID, STACKING_NO_POINT_ITEM_ID)
             if args.movement_stacking_probe
             else 0,
+            DAMAGE_TRIGGER_ITEM_ID if args.damage_trigger_probe else 0,
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
