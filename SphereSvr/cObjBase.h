@@ -830,6 +830,10 @@ public:
 	void SetAnim( ITEMID_TYPE id, int iTime );
 
 	virtual void DeleteThis();
+	// Record an item timer deletion before the UID is detached.  The bounded
+	// marker lets save/reload diagnostics distinguish a script-owned expiry
+	// from a writer or placement loss.
+	void LogTimerRemoval( LPCTSTR pszReason ) const;
 	virtual int IsWeird() const;
 	void SetDisconnected();
 

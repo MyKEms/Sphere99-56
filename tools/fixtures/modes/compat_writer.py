@@ -41,8 +41,10 @@ TIMER_LIFETIME_DELAY_SECONDS = 15
 TIMER_LIFETIME_OBSERVER_DELAY_SECONDS = 22
 MEMORY_TIMER_OWNER_SERIAL = 200
 MEMORY_TIMER_ITEM_SERIAL = 201
+MEMORY_STALE_ITEM_SERIAL = 202
 MEMORY_TIMER_DELAY_SECONDS = 15
 MEMORY_TIMER_ITEM_UID = UID_F_ITEM | MEMORY_TIMER_ITEM_SERIAL
+MEMORY_STALE_ITEM_UID = UID_F_ITEM | MEMORY_STALE_ITEM_SERIAL
 MEMORY_TIMER_ITEM_ID = 0x0EA3
 MEMORY_TIMER_MARKER = "SPHERE_MEMORY_TIMER_TRIGGERED"
 MEMORY_TIMER_REMOVED_MARKER = "SPHERE_MEMORY_TIMER_REMOVED"
@@ -2186,7 +2188,11 @@ def write_runtime_files(
     unknown_keyword_report_format: str = "json",
     force_garbage_collect: bool = False,
     runaway_loop_probe: bool = False,
+    timer_removal_provenance: bool = False,
 ) -> None:
+    timer_provenance_setting = (
+        "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
+    )
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
         if unknown_keyword_report
@@ -2207,6 +2213,7 @@ WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
 DEBUGLEVEL=0
+""" + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
 MAXCHARS=5
@@ -2992,6 +2999,12 @@ def write_memory_timer_save(root: Path) -> None:
                 f"CONT={MEMORY_TIMER_OWNER_SERIAL}",
                 "LAYER=30",
                 f"TIMER={MEMORY_TIMER_DELAY_SECONDS}",
+                "[WORLDITEM i_memory]",
+                f"SERIAL={MEMORY_STALE_ITEM_SERIAL}",
+                f"CONT={MEMORY_TIMER_OWNER_SERIAL}",
+                "COLOR=4",
+                "LAYER=30",
+                "LINK=0x0DEAD00",
                 "[EOF]",
             ]
         ),
@@ -3541,6 +3554,7 @@ def generate_fixture(
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
         runaway_loop_probe=args.runaway_loop_probe,
+        timer_removal_provenance=args.memory_timer_probe,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
