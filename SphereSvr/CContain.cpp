@@ -399,8 +399,15 @@ HRESULT CContainer::s_MethodContainer( LPCTSTR pszKey, CGVariant& vArgs, CGVaria
 		DeleteAll();
 		break;
 	case M_FindId:
-		// Get item id from the container.
-		vValRet.SetRef( ContentFind( g_Cfg.ResourceGetIDByName( RES_ItemDef, vArgs.GetPSTR())));
+		{
+			// Get item id from the container. Keep numeric arguments numeric,
+			// while still resolving a textual DEFNAME through the resource
+			// expression resolver.
+			CSphereUID rid = vArgs.IsNumeric()
+				? g_Cfg.ResourceGetID( RES_ItemDef, vArgs.GetDWORD())
+				: g_Cfg.ResourceGetIDByName( RES_ItemDef, vArgs.GetPSTR());
+			vValRet.SetRef( ContentFind( rid ));
+		}
 		break;
 	case M_FindCont:
 		// Get enumerated item from the container.
