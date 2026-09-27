@@ -896,6 +896,43 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			return hRes;
 	}
 
+	// 0.99 DEFNAMES may use a numeric index whose expression is evaluated at
+	// run time (for example DEF_CLASS[ARGN] in a dialog BUTTON handler).  The
+	// definition table stores the expanded key, so resolve the index before the
+	// ordinary global lookup.  Keep this limited to a bare identifier root;
+	// dotted object properties and function calls have their own dispatch paths.
+	LPCTSTR pszOpen = strchr(pszKey, '[');
+	size_t iKeyLen = strlen(pszKey);
+	if ( pszOpen && pszOpen > pszKey && iKeyLen > 2 && pszKey[iKeyLen - 1] == ']' &&
+		strchr(pszKey, '.') == NULL && strchr(pszKey, '(') == NULL )
+	{
+		size_t iRootLen = static_cast<size_t>(pszOpen - pszKey);
+		size_t iIndexLen = iKeyLen - iRootLen - 2;
+		if ( iRootLen < SCRIPT_MAX_LINE_LEN && iIndexLen > 0 &&
+			iRootLen + iIndexLen + 3 < SCRIPT_MAX_LINE_LEN )
+		{
+			TCHAR szIndex[SCRIPT_MAX_LINE_LEN];
+			memcpy(szIndex, pszOpen + 1, iIndexLen);
+			szIndex[iIndexLen] = '\0';
+			TCHAR* pszIndex = szIndex;
+			while ( ISWHITESPACE(*pszIndex) ) pszIndex++;
+			TCHAR* pszIndexEnd = pszIndex + strlen(pszIndex);
+			while ( pszIndexEnd > pszIndex && ISWHITESPACE(pszIndexEnd[-1]) )
+				*--pszIndexEnd = '\0';
+			if ( *pszIndex )
+			{
+				int iIndex = GetComplex(pszIndex);
+				TCHAR szExpandedKey[SCRIPT_MAX_LINE_LEN];
+				snprintf(szExpandedKey, sizeof(szExpandedKey), "%.*s[%d]",
+					static_cast<int>(iRootLen), pszKey, iIndex);
+				if ( g_Cfg.m_Var.FindKeyVar(szExpandedKey, vValRet) )
+					return NO_ERROR;
+				if ( g_Cfg.m_Const.FindKeyVar(szExpandedKey, vValRet) )
+					return NO_ERROR;
+			}
+		}
+	}
+
 	// Evaluate an identifier.
 	// Find the key in the defs collection
 	// Skip to the end of the identifier name. ( + any args? )

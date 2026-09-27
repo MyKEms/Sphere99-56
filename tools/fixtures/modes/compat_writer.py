@@ -134,6 +134,7 @@ DIALOG_BUTTON_NUMBERED = 5
 DIALOG_BUTTON_FALLBACK = 7
 DIALOG_BUTTON_SWITCH = 11
 DIALOG_BUTTON_TEXT_ID = 3
+DIALOG_BUTTON_INDEXED_NAME = "dialog_button_indexed"
 # A second dialog lays out its controls with argo.<gump>(...) calls, one of
 # them written with aligned columns that make it longer than 128 bytes.
 DIALOG_ARGO_LAYOUT_NAME = "d_synthetic_argo_layout"
@@ -737,13 +738,16 @@ textentry 20 140 180 20 0 {DIALOG_BUTTON_TEXT_ID} 0
 [DIALOG {name} TEXT]
 initial text
 
+[DEFNAMES dialog_button_probe]
+{DIALOG_BUTTON_INDEXED_NAME}[5] indexed-five
+
 [DIALOG {name} BUTTON]
 ON=@anybutton
 TAG.dialog_button_seen=any/<ARGN>
 SYSMESSAGE {marker} any|<ARGN>|<ARGCHK({DIALOG_BUTTON_SWITCH})>|<ARGTXT({DIALOG_BUTTON_TEXT_ID})>|<ARGO.NAME>
 DIALOG {name}
 ON={DIALOG_BUTTON_NUMBERED}
-SYSMESSAGE {marker} numbered|<ARGN>
+SYSMESSAGE {marker} numbered|<ARGN>|<{DIALOG_BUTTON_INDEXED_NAME}[ARGN]>
 DIALOG {name}
 ON=0
 SYSMESSAGE {marker} cancel|<ARGN>|<TAG.dialog_button_seen>
