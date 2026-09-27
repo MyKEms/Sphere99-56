@@ -86,6 +86,15 @@ ESCAPE_OVERFLOW_NAME = "N" * 256
 RUNAWAY_LOOP_LIMIT = 32
 RUNAWAY_LOOP_MARKER = "SPHERE_RUNAWAY_LOOP"
 
+# Trigger/function recursion probe. Both paths deliberately recurse without
+# a script-level exit; the engine guard must return them safely and leave a
+# second client responsive.
+RECURSION_DEPTH_MARKER = "SPHERE_RECURSION_DEPTH"
+RECURSION_DEPTH_ACCOUNT_ONE = "RecursionDepthOne"
+RECURSION_DEPTH_ACCOUNT_TWO = "RecursionDepthTwo"
+RECURSION_DEPTH_PASSWORD = "recursion_pw"
+RECURSION_DEPTH_LIMIT = 40
+
 # Same-definition stacking probe.  Two movable, stackable ground items are
 # dragged into the character's pack at the same explicit point.  A second
 # equal-definition item is added by script without a point, exercising the
@@ -1420,6 +1429,7 @@ def write_scripts(
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
     runaway_loop_probe: bool = False,
+    recursion_depth_probe: bool = False,
     movement_stairs_probe: bool = False,
     character_content_probe: bool = False,
     stacking_probe: bool = False,
@@ -1590,6 +1600,29 @@ def write_scripts(
         f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_RETURNED\n"
         "RETURN 1\n"
         if runaway_loop_probe
+        else ""
+    )
+    recursion_depth_login = (
+        f"SYSMESSAGE {RECURSION_DEPTH_MARKER}_FUNCTION_BEGIN\n"
+        "F_RECURSION_DEPTH_PROBE\n"
+        f"SYSMESSAGE {RECURSION_DEPTH_MARKER}_FUNCTION_RETURNED\n"
+        "TRIGGER @RecursionDepthProbe\n"
+        f"SYSMESSAGE {RECURSION_DEPTH_MARKER}_TRIGGER_RETURNED\n"
+        if recursion_depth_probe
+        else ""
+    )
+    recursion_depth_trigger = (
+        "ON=@RecursionDepthProbe\n"
+        "TRIGGER @RecursionDepthProbe\n"
+        "RETURN 0\n"
+        if recursion_depth_probe
+        else ""
+    )
+    recursion_depth_sections = (
+        "\n[FUNCTION f_recursion_depth_probe]\n"
+        "F_RECURSION_DEPTH_PROBE\n"
+        "RETURN 1\n"
+        if recursion_depth_probe
         else ""
     )
     timer_lifetime_before_markers = (
@@ -2039,7 +2072,7 @@ DEX=100
 
 [EVENTS e_AllPlayers]
 ON=@LogIn
-""" + world_save_logout_event_login + escape_overflow_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_logout_event_login + escape_overflow_login + recursion_depth_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 """ + runaway_loop_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
@@ -2075,6 +2108,7 @@ ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
 RETURN 0
+""" + recursion_depth_trigger + """
 ON=@FixtureCustom
 SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
@@ -2110,7 +2144,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + recursion_depth_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -3395,6 +3429,35 @@ def generate_fixture(
     ) > 1:
         parser.error("choose only one timer-lifetime probe mode")
 
+    if args.recursion_depth_probe and any(
+        (
+            args.world_load_counts,
+            any(world_load_modes),
+            args.timer_lifetime_probe,
+            args.memory_timer_probe,
+            args.timer_lifetime_item_first_probe,
+            args.timer_sibling_mutation_probe,
+            args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
+            args.container_shutdown_probe,
+            args.book_pages_probe,
+            args.dialog_button_probe,
+            args.dialog_argo_layout_probe,
+            args.dialog_flow_layout_probe,
+            args.dword_hex_probe,
+            args.region_weather_probe,
+            args.spawn_gem_probe,
+            args.spawn_gem_duplicate_serial_probe,
+            args.spawn_point_probe,
+            args.events_attr_probe,
+            args.legacy_metadata_probe,
+            args.escape_overflow_probe,
+            args.movement_stairs_probe,
+            args.movement_stacking_probe,
+        )
+    ):
+        parser.error("recursion-depth probe cannot be combined with another fixture mode")
+
     if args.events_attr_probe and (
         args.world_load_counts
         or any(world_load_modes)
@@ -3528,6 +3591,7 @@ def generate_fixture(
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
         runaway_loop_probe=args.runaway_loop_probe,
+        recursion_depth_probe=args.recursion_depth_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,

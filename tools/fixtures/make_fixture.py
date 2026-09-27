@@ -275,6 +275,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise a configurable bounded WHILE loop and a second login",
     )
     parser.add_argument(
+        "--recursion-depth-probe",
+        action="store_true",
+        help="exercise bounded recursive function and trigger calls",
+    )
+    parser.add_argument(
         "--movement-stairs-probe",
         action="store_true",
         help="exercise dynamic stair height resolution",
