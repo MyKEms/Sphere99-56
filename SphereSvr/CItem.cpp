@@ -4,6 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 
 const CScriptProp CItem::sm_Props[CItem::P_QTY+1] =
 {
@@ -133,15 +134,10 @@ void CItem::LogTimerRemoval( LPCTSTR pszReason ) const
 	const DWORD dwUID = static_cast<DWORD>(GetUID());
 	if ( ! dwUID )
 		return;
-	g_Log.Event( LOG_GROUP_DEBUG, LOGL_EVENT,
-		"timer removed object uid=0x%x reason=%s" LOG_CR, dwUID, pszReason );
-#ifndef _WIN32
-	// Linux only forwards error-level CLog events to stderr.  Keep this
-	// structured provenance marker visible to the external round-trip runner
-	// without inflating its error count.
-	fprintf( stderr, "[INFO] timer removed object uid=0x%x reason=%s\n", dwUID, pszReason );
-	fflush( stderr );
-#endif
+	// Provenance is a debug observation, not a production error.  The normal
+	// debug log path is opt-in through DEBUGLEVEL=1 (or higher), so decay and
+	// timer-heavy worlds do not receive an unconditional stderr line per tick.
+	SPHERE_LOG_LOAD( "timer removed object uid=0x%x reason=%s", dwUID, pszReason );
 }
 
 CItemPtr CItem::CreateBase( ITEMID_TYPE id )	// static

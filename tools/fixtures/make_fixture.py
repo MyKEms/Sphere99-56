@@ -2155,7 +2155,9 @@ def write_runtime_files(
     unknown_keyword_report: bool = False,
     unknown_keyword_report_format: str = "json",
     force_garbage_collect: bool = False,
+    timer_removal_provenance: bool = False,
 ) -> None:
+    debug_level = 1 if timer_removal_provenance else 0
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
         if unknown_keyword_report
@@ -2175,7 +2177,7 @@ RESOURCES=spheretables.scp
 WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
-DEBUGLEVEL=0
+DEBUGLEVEL=""" + str(debug_level) + """
 CLIENTMAX=64
 CLIENTSPERIP=64
 MAXCHARS=5
@@ -3655,6 +3657,7 @@ def main() -> int:
             or args.ontick_content_mutation_probe
             or args.container_shutdown_probe
         ),
+        timer_removal_provenance=args.memory_timer_probe,
     )
     write_scripts(
         root,
