@@ -17,6 +17,26 @@
 #ifdef SPHERE_SAVE_IO_TEST
 static CFileText::TEST_FAULT g_eTestFault = CFileText::TEST_FAULT_NONE;
 static bool g_fTestFaultTriggered = false;
+static CGString g_sTestFaultTarget;
+static int g_iTestFaultSkip = 0;
+
+static bool ShouldTriggerTestFault( const CFileText& file )
+{
+	if ( g_eTestFault == CFileText::TEST_FAULT_NONE || g_fTestFaultTriggered )
+		return false;
+	if ( !g_sTestFaultTarget.IsEmpty() &&
+		g_sTestFaultTarget.CompareNoCase( file.GetFileTitle()) != 0 )
+	{
+		return false;
+	}
+	if ( g_iTestFaultSkip > 0 )
+	{
+		--g_iTestFaultSkip;
+		return false;
+	}
+	g_fTestFaultTriggered = true;
+	return true;
+}
 #endif
 
 ///////////////////////////////////////////////////////////
@@ -298,9 +318,8 @@ bool CFileText::Flush() const
 	if (!IsFileOpen())
 		return !m_fIOError;
 #ifdef SPHERE_SAVE_IO_TEST
-	if ( g_eTestFault == TEST_FAULT_FLUSH && !g_fTestFaultTriggered )
+	if ( g_eTestFault == TEST_FAULT_FLUSH && ShouldTriggerTestFault( *this ))
 	{
-		g_fTestFaultTriggered = true;
 		m_fIOError = true;
 		errno = EIO;
 		return false;
@@ -323,9 +342,8 @@ bool CFileText::CloseChecked()
 	if ( IsModeWrite() && !Flush())
 		fOK = false;
 #ifdef SPHERE_SAVE_IO_TEST
-	if ( g_eTestFault == TEST_FAULT_CLOSE && !g_fTestFaultTriggered )
+	if ( g_eTestFault == TEST_FAULT_CLOSE && ShouldTriggerTestFault( *this ))
 	{
-		g_fTestFaultTriggered = true;
 		m_fIOError = true;
 		fOK = false;
 	}
@@ -360,15 +378,21 @@ bool CFileText::Write(const void* pData, DWORD iLen) const
 bool CFileText::Write(const void* pData, DWORD iLen)
 #endif
 {
-	if (!pData || !IsFileOpen())
+	if (!IsFileOpen())
+	{
+		m_fIOError = true;
+		return false;
+	}
+	if ( iLen == 0 )
+		return !m_fIOError;
+	if (!pData)
 	{
 		m_fIOError = true;
 		return false;
 	}
 #ifdef SPHERE_SAVE_IO_TEST
-	if ( g_eTestFault == TEST_FAULT_SHORT_WRITE && !g_fTestFaultTriggered )
+	if ( g_eTestFault == TEST_FAULT_SHORT_WRITE && ShouldTriggerTestFault( *this ))
 	{
-		g_fTestFaultTriggered = true;
 		m_fIOError = true;
 		return false;
 	}
@@ -404,9 +428,8 @@ size_t CFileText::VPrintf(LPCTSTR pFormat, va_list args)
 		return 0;
 	}
 #ifdef SPHERE_SAVE_IO_TEST
-	if ( g_eTestFault == TEST_FAULT_SHORT_WRITE && !g_fTestFaultTriggered )
+	if ( g_eTestFault == TEST_FAULT_SHORT_WRITE && ShouldTriggerTestFault( *this ))
 	{
-		g_fTestFaultTriggered = true;
 		m_fIOError = true;
 		return iStatus > 0 ? (size_t)(iStatus - 1) : 0;
 	}
@@ -426,16 +449,20 @@ size_t _cdecl CFileText::Printf(LPCTSTR pFormat, ...)
 }
 
 #ifdef SPHERE_SAVE_IO_TEST
-void CFileText::SetTestFault( TEST_FAULT fault )
+void CFileText::SetTestFault( TEST_FAULT fault, LPCTSTR pszTargetFile, int iSkip )
 {
 	g_eTestFault = fault;
 	g_fTestFaultTriggered = false;
+	g_sTestFaultTarget = pszTargetFile ? pszTargetFile : "";
+	g_iTestFaultSkip = iSkip > 0 ? iSkip : 0;
 }
 
 void CFileText::ClearTestFault()
 {
 	g_eTestFault = TEST_FAULT_NONE;
 	g_fTestFaultTriggered = false;
+	g_sTestFaultTarget.Empty();
+	g_iTestFaultSkip = 0;
 }
 
 bool CFileText::WasTestFaultTriggered()

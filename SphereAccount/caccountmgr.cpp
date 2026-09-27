@@ -237,7 +237,7 @@ bool CAccountMgr::Account_SaveAll()
 	}
 
 	CScript s;
-	if ( ! CWorld::OpenScriptBackup( s, sBaseDir, "accu", g_World.m_iSaveCountID ))
+	if ( ! CWorld::OpenScriptBackup( s, sBaseDir, "accu", g_World.m_iSaveCountID, g_World.IsSaveRetry()))
 		return( false );
 
 	s.Printf( "\\\\ " SPHERE_TITLE " %s accounts file" LOG_CR

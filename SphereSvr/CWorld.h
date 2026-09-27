@@ -348,6 +348,7 @@ private:
 	int		m_iLoadLogSuppressed[LOAD_LOG_QTY];
 	bool	m_fSaveBlockedByLoad;
 	bool	m_fSaveFailed;
+	bool	m_fSaveRetry;
 	bool	m_fLoadIntegrityReported;
 	bool	m_fLoadCountsCaptured;
 
@@ -388,6 +389,9 @@ private:
 
 	bool SaveTry(bool fForceImmediate); // Save world state
 	bool FailSave( LPCTSTR pszReason );
+	static bool ReadSaveManifest( LPCTSTR pszBaseDir, int& iSaveCount, bool& fPending, unsigned& dwRotated );
+	static bool WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPending, unsigned dwRotated );
+	static void RemoveSaveManifest( LPCTSTR pszBaseDir );
 	void GarbageCollection_GMPages();
 	bool SaveStage();
 	static void GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int savecount );
@@ -452,7 +456,8 @@ public:
 	bool IsItemTypeNear( const CPointMap& pt, IT_TYPE iType, int iDistance = 0 );
 	CItemPtr CheckNaturalResource( const CPointMap& pt, IT_TYPE Type, bool fTest = true );
 
-	static bool OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int savecount );
+	static bool OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int savecount, bool fRetry = false );
+	bool IsSaveRetry() const { return m_fSaveRetry; }
 	void ReSyncLoad();
 	void ReSyncUnload();
 
