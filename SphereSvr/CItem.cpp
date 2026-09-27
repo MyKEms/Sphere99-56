@@ -2465,6 +2465,16 @@ LPCTSTR const CItem::sm_szAttrNames[] =	// static desc ATTR_TYPE bits.
 
 HRESULT CItem::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc )
 {
+	// A bare FOOD read inside an item trigger uses the source character's
+	// hunger stat in the 0.99 script language.  The item remains the default
+	// object, so resolve this compatibility alias before item properties.
+	if ( !_stricmp(pszKey, "FOOD") && pSrc )
+	{
+		CCharPtr pCharSrc = GET_ATTACHED_CCHAR(pSrc);
+		if ( pCharSrc )
+			return pCharSrc->s_PropGet( pszKey, vValRet, pSrc );
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{

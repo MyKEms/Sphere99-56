@@ -1245,6 +1245,16 @@ public:
 				// Try as a property set (KEY=VALUE).
 				CGVariant vVal(pszArg);
 				hRes = pObj->s_PropSet(pszKey, vVal);
+				// In 0.99 item callbacks, a bare FOOD assignment refers to the
+				// source character's hunger stat even though the item is the
+				// default object.  The property setter has no source parameter,
+				// so preserve that legacy shorthand at the execution boundary.
+				if ( hRes == HRES_UNKNOWN_PROPERTY && !_stricmp(pszKey, "FOOD") && m_pSrc )
+				{
+					CResourceObj* pSrcObj = dynamic_cast<CResourceObj*>(m_pSrc->GetAttachedObj());
+					if ( pSrcObj )
+						hRes = pSrcObj->s_PropSet(pszKey, vVal);
+				}
 				rejected.Observe(hRes, pszKey, m_pBaseObj);
 				if ( hRes == NO_ERROR )
 					return NO_ERROR;

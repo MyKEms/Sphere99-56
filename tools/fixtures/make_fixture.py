@@ -199,6 +199,15 @@ ISBIT_ACCOUNT = "IsBitProbe"
 ISBIT_PASSWORD = "isbit-pw"
 ISBIT_MARKER = "SPHERE_ISBIT"
 
+# FOOD property probe.  The existing character stat path and the item-event
+# default-object path are kept in one fixture so a script-facing FOOD write
+# cannot silently turn into a no-op.
+FOOD_ACCOUNT = "FoodProbe"
+FOOD_PASSWORD = "food-pw"
+FOOD_MARKER = "SPHERE_FOOD"
+FOOD_ITEM_ID = 0x0E8C
+FOOD_INITIAL = 7
+
 # Book probe.  BOOKs with more pages than the 7-bit resource page field holds
 # (0.99 reads pages up to 255), a page above that limit that must be rejected
 # cleanly, and an ITEMDEF section named by a complete 0.99 resource ID
@@ -1576,6 +1585,7 @@ def write_scripts(
     dialog_flow_layout_probe: bool = False,
     dword_hex_probe: bool = False,
     isbit_probe: bool = False,
+    food_probe: bool = False,
     region_weather_probe: bool = False,
     suppress_login_item: bool = False,
     spawn_gem_probe: bool = False,
@@ -1612,6 +1622,15 @@ def write_scripts(
     )
     dword_hex_login, dword_hex_sections = (
         dword_hex_scripts() if dword_hex_probe else ("", "")
+    )
+    food_probe_login = (
+        f"FOOD={FOOD_INITIAL}\n"
+        f"SYSMESSAGE {FOOD_MARKER} C|<FOOD>|<SRC.FOOD>\n"
+        "NEWITEM SYNTHETIC_FOOD_ITEM\n"
+        "EQUIPLAST\n"
+        f"SYSMESSAGE {FOOD_MARKER}_END\n"
+        if food_probe
+        else ""
     )
     isbit_login = (
         f"SYSMESSAGE {ISBIT_MARKER} C|bits|<ISBIT 5,0>|<ISBIT 5,1>|"
@@ -2020,6 +2039,18 @@ def write_scripts(
         if stacking_probe
         else ""
     )
+    food_itemdef = (
+        f"\n[ITEMDEF 0x{FOOD_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_FOOD_ITEM\n"
+        "NAME=synthetic food item\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Equip\n"
+        "FOOD=0\n"
+        f"SRC.SYSMESSAGE {FOOD_MARKER} ITEM|<FOOD>|<SRC.FOOD>\n"
+        if food_probe
+        else ""
+    )
     named_resource_id_probe_sections = ""
     if named_resource_id_probe:
         sections = [
@@ -2161,7 +2192,7 @@ SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
 """ + unequip_remove + """
 SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
 
-""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + character_content_itemdef + """
+""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + character_content_itemdef + food_itemdef + """
 [ITEMDEF 0x09B2]
 DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
@@ -2231,6 +2262,7 @@ DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + character_content_login + """
 """ + isbit_login + """
+""" + food_probe_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
@@ -2973,6 +3005,58 @@ def write_isbit_save(root: Path) -> None:
     )
 
 
+def write_food_save(root: Path) -> None:
+    """Seed an existing account/character for the FOOD property probe."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic FOOD fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {FOOD_ACCOUNT}]",
+                f"PASSWORD={FOOD_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic FOOD fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={FOOD_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                f"FOOD={FOOD_INITIAL}",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_region_weather_save(root: Path) -> None:
     """Seed an existing character inside the synthetic weather region."""
 
@@ -3630,6 +3714,11 @@ def main() -> int:
         help="exercise the 0.99 ISBIT bit-position function",
     )
     parser.add_argument(
+        "--food-probe",
+        action="store_true",
+        help="exercise the character FOOD property and item-event default object",
+    )
+    parser.add_argument(
         "--region-weather-probe",
         action="store_true",
         help="apply region weather keys and read them back from the character sector",
@@ -3903,6 +3992,26 @@ def main() -> int:
         or args.spawn_gem_duplicate_serial_probe
     ):
         parser.error("region-weather probe writes its own world and cannot be combined")
+    if args.food_probe and (
+        any(world_load_modes)
+        or args.timer_lifetime_probe
+        or args.memory_timer_probe
+        or args.timer_lifetime_item_first_probe
+        or args.timer_sibling_mutation_probe
+        or args.timer_sibling_mutation_owner_first_probe
+        or args.ontick_content_mutation_probe
+        or args.container_shutdown_probe
+        or args.book_pages_probe
+        or args.dword_hex_probe
+        or args.isbit_probe
+        or args.region_weather_probe
+        or args.spawn_gem_probe
+        or args.spawn_gem_duplicate_serial_probe
+        or args.spawn_point_probe
+        or args.events_attr_probe
+        or args.legacy_metadata_probe
+    ):
+        parser.error("food probe writes its own world and cannot be combined")
 
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -3949,6 +4058,7 @@ def main() -> int:
         findarg_probe=args.findarg_probe,
         dword_hex_probe=args.dword_hex_probe,
         isbit_probe=args.isbit_probe,
+        food_probe=args.food_probe,
         timer_lifetime_item_first_probe=args.timer_lifetime_item_first_probe,
         timer_sibling_mutation_probe=args.timer_sibling_mutation_probe,
         timer_sibling_mutation_owner_first_probe=args.timer_sibling_mutation_owner_first_probe,
@@ -3997,6 +4107,8 @@ def main() -> int:
         write_dword_hex_save(root)
     if args.isbit_probe:
         write_isbit_save(root)
+    if args.food_probe:
+        write_food_save(root)
     if args.region_weather_probe:
         write_region_weather_save(root)
     if args.spawn_gem_probe:
