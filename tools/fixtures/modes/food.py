@@ -15,8 +15,8 @@ MODE = register_mode(
     FixtureMode(
         name="food",
         fixture_args=("--food-probe", "--unknown-keyword-report"),
-        order=44,
-        id_block=60,
+        order=60,
+        id_block=62,
         case=FixtureCase(
             name="food",
             mode="food",
