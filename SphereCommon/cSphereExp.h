@@ -236,6 +236,7 @@ class CSphereExpContext : public CScriptExecContext
 	// The base and default context. has no local arguments.
 protected:
 	virtual int GetScriptLoopLimit() const;
+	virtual bool IsExecutionBlocked() const;
 	virtual CResourceObj* ResolveUIDObject(UID_INDEX uid);
 	virtual bool IsScriptFunction(LPCTSTR pszKey);
 
@@ -262,6 +263,8 @@ public:
 private:
 	CScriptExecContext* m_pPrvExecContext;	// previous general context before this was opened. (may be NULL)
 	int m_iPrvTask;	// task profiling.
+	bool m_fRecursionCounted;
+	bool m_fRecursionBlocked;
 };
 
 class CSphereExpArgs : public CSphereExpContext
@@ -360,6 +363,8 @@ public:
 	CSphereThread()
 	{
 		m_pScriptContext = NULL;
+		m_iScriptRecursionDepth = 0;
+		m_fScriptRecursionReported = false;
 	}
 	const CScript* SetScriptContext( const CScript* pScriptContext )
 	{
@@ -385,6 +390,9 @@ public:
 
 	CSphereUID m_uidLastNewItem;	// for script access. (put in context not thread?!)
 	CSphereUID m_uidLastNewChar;	// for script access.
+
+	int m_iScriptRecursionDepth;
+	bool m_fScriptRecursionReported;
 };
 
 #if 0

@@ -783,13 +783,39 @@ const CScriptPropX CSphereExpContext::sm_Functions[CSphereExpContext::F_QTY+1] =
 CScriptPropArray CSphereExpContext::sm_FunctionsAll;	// static
 
 CSphereExpContext::CSphereExpContext( CResourceObj* pBaseObj, CScriptConsole* pSrc )
-	: CScriptExecContext(pBaseObj,pSrc)
+	: CScriptExecContext(pBaseObj,pSrc),
+	  m_pPrvExecContext(NULL),
+	  m_iPrvTask(-1),
+	  m_fRecursionCounted(false),
+	  m_fRecursionBlocked(false)
 {
 	// NOTE: These should be called stack based and therefore on the same thread.
 	CSphereThread* pThread = CSphereThread::GetCurrentThread();
 	if ( pThread )
 	{
 		m_pPrvExecContext = pThread->SetExecContext( this );
+		if ( m_pPrvExecContext != NULL )
+		{
+			if ( pThread->m_iScriptRecursionDepth >= SCRIPT_MAX_RECURSION_DEPTH )
+			{
+				m_fRecursionBlocked = true;
+				if ( !pThread->m_fScriptRecursionReported )
+				{
+					const CScript* pScript = pThread->m_pScriptContext;
+					LPCTSTR pszFile = pScript ? pScript->GetFileTitle() : "<native>";
+					int iLine = pScript ? pScript->GetContext().m_iLineNum : 0;
+					DEBUG_ERR(( "Trigger Recursion error ! depth=%d limit=%d chain=%s(%d)" LOG_CR,
+						pThread->m_iScriptRecursionDepth, SCRIPT_MAX_RECURSION_DEPTH,
+						pszFile ? pszFile : "<native>", iLine ));
+					pThread->m_fScriptRecursionReported = true;
+				}
+			}
+			else
+			{
+				++pThread->m_iScriptRecursionDepth;
+				m_fRecursionCounted = true;
+			}
+		}
 	}
 	else
 	{
@@ -809,7 +835,22 @@ CSphereExpContext::~CSphereExpContext()
 	if ( pThread )
 	{
 		pThread->SetExecContext( m_pPrvExecContext );
+		if ( m_fRecursionCounted && pThread->m_iScriptRecursionDepth > 0 )
+		{
+			--pThread->m_iScriptRecursionDepth;
+			// A blocked context belongs to the recursive chain that reached the
+			// limit.  Once that chain unwinds below the limit, the next independent
+			// function or trigger recursion must be reported as a new chain even if
+			// the surrounding login/event context is still active.
+			if ( pThread->m_iScriptRecursionDepth < SCRIPT_MAX_RECURSION_DEPTH )
+				pThread->m_fScriptRecursionReported = false;
+		}
 	}
+}
+
+bool CSphereExpContext::IsExecutionBlocked() const
+{
+	return m_fRecursionBlocked;
 }
 
 CResourceObj* CSphereExpContext::ResolveUIDObject(UID_INDEX uid)
