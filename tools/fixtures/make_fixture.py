@@ -190,6 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise the 0.99 ISBIT bit-position function",
     )
     parser.add_argument(
+        "--food-probe",
+        action="store_true",
+        help="exercise the character FOOD property and item-event default object",
+    )
+    parser.add_argument(
         "--damage-trigger-probe",
         action="store_true",
         help="exercise item @Damage and source-character @ItemDamage dispatch",
