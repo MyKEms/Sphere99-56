@@ -190,6 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise the 0.99 ISBIT bit-position function",
     )
     parser.add_argument(
+        "--damage-trigger-probe",
+        action="store_true",
+        help="exercise item @Damage and source-character @ItemDamage dispatch",
+    )
+    parser.add_argument(
         "--region-weather-probe",
         action="store_true",
         help="apply region weather keys and read them back from the character sector",
