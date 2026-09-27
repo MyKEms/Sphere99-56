@@ -302,6 +302,12 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			SPHERE_LOG_ERR("DebugLevel set to %d", g_iDebugLevel);
 		}
 		break;
+	case P_TimerRemovalProvenance:
+		{
+			extern bool g_fTimerRemovalProvenance;
+			g_fTimerRemovalProvenance = vVal.GetBool();
+		}
+		break;
 	case P_Log:
 		g_Log.OpenLog( vVal.GetPSTR());
 		break;
@@ -479,6 +485,12 @@ HRESULT CSphereResourceMgr::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScri
 		{
 			extern int g_iDebugLevel;
 			vValRet.SetInt( g_iDebugLevel );
+		}
+		break;
+	case P_TimerRemovalProvenance:
+		{
+			extern bool g_fTimerRemovalProvenance;
+			vValRet.SetBool( g_fTimerRemovalProvenance );
 		}
 		break;
 	case P_Log:

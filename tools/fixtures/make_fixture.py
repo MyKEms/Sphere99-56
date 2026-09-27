@@ -2252,7 +2252,9 @@ def write_runtime_files(
     force_garbage_collect: bool = False,
     timer_removal_provenance: bool = False,
 ) -> None:
-    debug_level = 1 if timer_removal_provenance else 0
+    timer_provenance_setting = (
+        "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
+    )
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
         if unknown_keyword_report
@@ -2272,7 +2274,8 @@ RESOURCES=spheretables.scp
 WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
-DEBUGLEVEL=""" + str(debug_level) + """
+DEBUGLEVEL=0
+""" + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
 MAXCHARS=5

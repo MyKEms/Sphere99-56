@@ -71,6 +71,7 @@
 // Global debug verbosity — set via DEBUGLEVEL= in sphere.ini or -d<N> on command line.
 // 0=errors only, 1=info, 2=network trace, 3=full trace
 int g_iDebugLevel = 2; // default to network trace
+bool g_fTimerRemovalProvenance = false;
 #ifdef _WIN32
 #include "eh.h"
 #include <crtdbg.h>

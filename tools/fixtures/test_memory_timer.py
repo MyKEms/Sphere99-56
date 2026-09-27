@@ -104,6 +104,12 @@ def main() -> int:
     failures: list[str] = []
     observed: list[str] = []
 
+    sphere_ini = (fixture / "sphere.ini").read_text(encoding="utf-8")
+    if "DEBUGLEVEL=0\n" not in sphere_ini:
+        failures.append("memory timer fixture must keep DEBUGLEVEL disabled")
+    if "TIMERREMOVALPROVENANCE=1\n" not in sphere_ini:
+        failures.append("memory timer fixture did not enable dedicated provenance switch")
+
     def exercise() -> None:
         sock, _ = game_connect(
             args.host,

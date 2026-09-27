@@ -136,10 +136,9 @@ void CItem::LogTimerRemoval( LPCTSTR pszReason ) const
 	const DWORD dwUID = static_cast<DWORD>(GetUID());
 	if ( ! dwUID )
 		return;
-	// Provenance is a debug observation, not a production error.  The normal
-	// debug log path is opt-in through DEBUGLEVEL=1 (or higher), so decay and
-	// timer-heavy worlds do not receive an unconditional stderr line per tick.
-	SPHERE_LOG_LOAD( "timer removed object uid=0x%x reason=%s", dwUID, pszReason );
+	// Provenance is a debug observation, not a production error.  It has its
+	// own opt-in switch so DEBUGLEVEL does not enable a marker for every timer.
+	SPHERE_LOG_TIMER_PROVENANCE( "timer removed object uid=0x%x reason=%s", dwUID, pszReason );
 }
 
 CItemPtr CItem::CreateBase( ITEMID_TYPE id )	// static
