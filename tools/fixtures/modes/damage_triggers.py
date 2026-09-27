@@ -14,8 +14,8 @@ MODE = register_mode(
     FixtureMode(
         name="damage-triggers",
         fixture_args=("--damage-trigger-probe",),
-        order=58,
-        id_block=60,
+        order=59,
+        id_block=61,
         case=FixtureCase(
             name="damage-triggers",
             mode="damage-triggers",
