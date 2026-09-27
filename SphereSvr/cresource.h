@@ -654,6 +654,7 @@ public:
 
 	bool m_fSecure;				// Secure mode. (will trap exceptions)
 	int  m_iFreezeRestartTime;	// # seconds before restarting.
+	int  m_iScriptLoopLimit;	// Maximum WHILE/FOR iterations in one invocation.
 #define DEBUGF_NPC_EMOTE		0x0001
 #define DEBUGF_ADVANCE_STATS	0x0002
 #define DEBUGF_MOTIVATION		0x0004	// display motication level debug messages.

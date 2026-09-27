@@ -235,6 +235,7 @@ class CSphereExpContext : public CScriptExecContext
 {
 	// The base and default context. has no local arguments.
 protected:
+	virtual int GetScriptLoopLimit() const;
 	virtual CResourceObj* ResolveUIDObject(UID_INDEX uid);
 	virtual bool IsScriptFunction(LPCTSTR pszKey);
 
@@ -414,4 +415,3 @@ public:
 CExpression* Exp_GetContext();
 
 #endif // _INC_CSPHEREEXP_H
-

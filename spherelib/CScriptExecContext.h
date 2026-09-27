@@ -82,6 +82,13 @@ private:
 	}
 
 protected:
+	// The server supplies its configured per-invocation limit.  The generic
+	// context keeps the historical default so libraries using it remain safe.
+	virtual int GetScriptLoopLimit() const
+	{
+		return SCRIPT_MAX_LOOP_ITERATIONS;
+	}
+
 	// Numeric values returned by script functions may be UIDs. Concrete engine
 	// contexts can resolve them to world objects without coupling this shared
 	// execution context to the server's world implementation.
@@ -992,12 +999,16 @@ public:
 	// The line is "KEY VALUE" or "KEY=VALUE" or just "METHOD args".
 	// Returns NO_ERROR on success, or an HRESULT error code.
 	//
-	// A WHILE or FOR loop that reaches SCRIPT_MAX_LOOP_ITERATIONS stops there.
+	// A WHILE or FOR loop that reaches the configured iteration limit stops
+	// there. The limit is per invocation, so a second client gets a fresh
+	// budget even when the first client hit the guard.
 	// Report each such loop once (file and line), and at most
 	// MAX_REPORTED_LOOPS different loops, so a loop that keeps reaching the
 	// limit cannot flood the log.
-	static void ReportLoopLimit(CScript& script, const CScriptLineContext& ctx, LPCTSTR pszLoop)
+	static void ReportLoopLimit(CScript& script, const CScriptLineContext& ctx, LPCTSTR pszLoop, int iLoopLimit)
 	{
+		if ( iLoopLimit <= 0 )
+			iLoopLimit = SCRIPT_MAX_LOOP_ITERATIONS;
 		enum { MAX_REPORTED_LOOPS = 64, MAX_SITE_FILE = 64 };
 		struct LoopSite
 		{
@@ -1023,7 +1034,7 @@ public:
 			{
 				s_fMoreNotReported = true;
 				DEBUG_ERR(( "More script loops stopped after %d iterations; they are not reported" LOG_CR,
-					SCRIPT_MAX_LOOP_ITERATIONS ));
+					iLoopLimit ));
 			}
 			return;
 		}
@@ -1032,7 +1043,7 @@ public:
 		s_Reported[s_iReported].m_iLine = ctx.m_iLineNum;
 		s_iReported++;
 		DEBUG_ERR(( "%s(%d): %s loop stopped after %d iterations" LOG_CR,
-			pszFile, ctx.m_iLineNum, pszLoop, SCRIPT_MAX_LOOP_ITERATIONS ));
+			pszFile, ctx.m_iLineNum, pszLoop, iLoopLimit ));
 	}
 
 	// Split a statement key of the form NAME(args) or REF.NAME(args) (the
@@ -1604,12 +1615,13 @@ public:
 						strncpy(szCondition, pszCondition, sizeof(szCondition)-1);
 						szCondition[sizeof(szCondition)-1] = '\0';
 					}
+					const int iLoopLimit = GetScriptLoopLimit();
 					int iLoops = 0;
 					for (;;)
 					{
-						if ( ++iLoops > SCRIPT_MAX_LOOP_ITERATIONS )
+						if ( ++iLoops > iLoopLimit )
 						{
-							ReportLoopLimit(script, ctxStart, "WHILE");
+							ReportLoopLimit(script, ctxStart, "WHILE", iLoopLimit);
 							break; // safety limit
 						}
 
@@ -1651,12 +1663,13 @@ public:
 					{
 						iMax = GetScriptExpression(script, pszArg);
 					}
+					const int iLoopLimit = GetScriptLoopLimit();
 					int iLoops = 0;
 					for ( int i = iMin; i <= iMax; i++ )
 					{
-						if ( ++iLoops > SCRIPT_MAX_LOOP_ITERATIONS )
+						if ( ++iLoops > iLoopLimit )
 						{
-							ReportLoopLimit(script, ctxStart, "FOR");
+							ReportLoopLimit(script, ctxStart, "FOR", iLoopLimit);
 							break;
 						}
 						iRet = ExecuteScript(script, TRIGRUN_SECTION_TRUE);
