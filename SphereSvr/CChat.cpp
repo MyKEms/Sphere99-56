@@ -7,6 +7,7 @@
 
 #include "stdafx.h"	// predef header.
 #include "CChat.h"
+#include "spherelog.h"
 
 void CClient::Event_ChatButton(const NCHAR* pszName) // Client's chat button was pressed
 {
@@ -402,6 +403,7 @@ void CChatClient::Chat_Quit()
 	{
 		// Remove myself from the channels list of members
 		pCurrentChannel->Member_Remove( this );
+		SPHERE_LOG_LOAD( "CChatChannel quit callback" );
 	}
 
 	// Now tell the chat system you left
@@ -677,16 +679,24 @@ bool CChatChannel::Member_Join( CClient* pClient, const char* pszPassword )
 
 void CChatChannel::Member_Remove( CChatClient* pClient )
 {
+	if ( pClient == NULL )
+		return;
+
+	CGString sChatName = pClient->Chat_GetName();
 	for ( int i = 0; i < m_Members.GetSize(); i++)
 	{
-		// Tell the other clients in this channel (if any) you are leaving (including yourself)
-		CClientPtr pClient = m_Members[i];
-		ASSERT(pClient);
-		pClient->addChatSystemMessage(CHATMSG_RemoveMember, pClient->Chat_GetName());
+		// Tell every member (including the one leaving) who is leaving.
+		CClientPtr pMember = m_Members[i];
+		if ( pMember == NULL )
+			continue;
+		pMember->addChatSystemMessage(CHATMSG_RemoveMember, sChatName);
 
-		// Remove from channel's list of participants
-		if (m_Members[i] == pClient)
+		if ( pMember == pClient )
+		{
+			// Remove from channel's list of participants.
 			m_Members.RemoveAt(i);
+			break;
+		}
 	}
 
 	// Update our persona
@@ -761,12 +771,27 @@ void CChatChannel::Member_Kick( CClient* pSrc, CClient* pClient )
 
 void CChatChannel::Member_KickAll(CClient* pClientException)
 {
-	// We may delete ourself when done !
-	for ( int i=0; i<m_Members.GetSize(); i++)
+	// We may delete ourself when done. Remove from the front so that each
+	// member is visited even though Member_Remove compacts the array.
+	while ( m_Members.GetSize() > 0 )
 	{
-		if ( m_Members[i] == pClientException) // If it's not me, then kick them
+		int i = 0;
+		if ( m_Members[i] == pClientException )
+		{
+			if ( m_Members.GetSize() == 1 )
+				break;
+			i = 1;
+		}
+		CClientPtr pMember = m_Members[i];
+		if ( pMember == NULL )
+		{
+			m_Members.RemoveAt(i);
 			continue;
-		Member_Kick( pClientException, m_Members[i] );
+		}
+		const int iMemberCount = m_Members.GetSize();
+		Member_Kick( pClientException, pMember );
+		if ( m_Members.GetSize() >= iMemberCount )
+			break;
 	}
 }
 
@@ -1085,10 +1110,25 @@ void CChatChannel::SendDeleteChannel()	// tell everyone about it first.
 
 void CChatChannel::DeleteThis()
 {
-	DEBUG_CHECK(m_Members.GetSize()<=0);
+	if ( m_fDeleteQueued )
+		return;
+	m_fDeleteQueued = true;
 	Member_KickAll(NULL);
 	SendDeleteChannel();
-	RemoveSelf();	// just dec the ref count. (should delete automatically)
+	g_Serv.m_Chats.QueueChannelForDelete( this );
+}
+
+CChatChannel::~CChatChannel()
+{
+	// CRefPtr is non-owning on Linux. Clear any client back-pointers before the
+	// channel storage is reclaimed, including channels closed during shutdown.
+	for ( int i = 0; i < m_Members.GetSize(); i++ )
+	{
+		CClientPtr pClient = m_Members[i];
+		if ( pClient != NULL && pClient->Channel_Get().GetRefObj() == this )
+			pClient->Channel_Set(NULL);
+	}
+	SPHERE_LOG_LOAD( "CChatChannel destroyed" );
 }
 
 //****************************************************************************
@@ -1217,6 +1257,35 @@ void CChat::KillChannels()
 		pChannel->Member_KickAll();
 	m_Channels.Empty();
 };
+
+void CChat::QueueChannelForDelete( CChatChannel* pChannel )
+{
+	if ( pChannel == NULL || m_ChannelsPendingDelete.IsMyChild( pChannel ) )
+		return;
+
+	// A channel can belong to only one intrusive list. Detach it from the
+	// active registry before retaining it for end-of-tick destruction.
+	pChannel->RemoveSelf();
+	m_ChannelsPendingDelete.InsertTail( pChannel );
+}
+
+void CChat::DestroyPendingChannels()
+{
+	// DeleteAll runs the complete channel destructor after callbacks and socket
+	// flushes for the current tick have completed.
+	m_ChannelsPendingDelete.DeleteAll();
+}
+
+void CChat::Close()
+{
+	m_Channels.DeleteAll();
+	m_ChannelsPendingDelete.DeleteAll();
+}
+
+CChat::~CChat()
+{
+	Close();
+}
 
 void CChat::WhereIs(CChatClient* pSrc, LPCTSTR pszChatName ) const
 {

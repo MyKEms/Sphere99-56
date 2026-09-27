@@ -80,6 +80,7 @@ private:
 	CGString m_sName;		// Name of the channel.
 	CGString m_sPassword;
 	bool m_fVoiceDefault;	// give others voice by default.
+	bool m_fDeleteQueued;	// deferred destruction has been requested.
 public:
 	CGRefArray<CClient> m_Members;	// Current list of members in this channel
 
@@ -89,6 +90,7 @@ public:
 
 public:
 	virtual void DeleteThis();
+	~CChatChannel();
 	void SendDeleteChannel();	// tell everyone about it first.
 
 	//***********
@@ -172,6 +174,7 @@ public:
 		m_sName = pszName;
 		m_sPassword = pszPassword;
 		m_fVoiceDefault = true;
+		m_fDeleteQueued = false;
 	};
 };
 
@@ -184,6 +187,7 @@ class CChat
 private:
 	bool m_fChatsOK;	// allowed to create new chats ?
 	CGObListType<CChatChannel> m_Channels;		// CChatChannel // List of chat channels.
+	CGObListType<CChatChannel> m_ChannelsPendingDelete;	// channels detached during the current tick.
 private:
 	void DoCommand( LPCTSTR pszMsg, CClient* pSrc);
 	void DeleteChannel(CChatChannel* pChannel);
@@ -211,6 +215,10 @@ public:
 
 	void Chat_Broadcast(CClient* pFrom, LPCTSTR pszText, CLanguageID lang = 0, bool fOverride = false);
 	static CGString DecorateName( const CChatClient* pMember = NULL, bool fSystem = false );
+	void QueueChannelForDelete( CChatChannel* pChannel );
+	void DestroyPendingChannels();
+	void Close();
+	~CChat();
 
 	CChat()
 	{
