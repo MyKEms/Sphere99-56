@@ -36,6 +36,18 @@ MEMORY_TIMER_ITEM_UID = UID_F_ITEM | MEMORY_TIMER_ITEM_SERIAL
 MEMORY_TIMER_ITEM_ID = 0x0EA3
 MEMORY_TIMER_MARKER = "SPHERE_MEMORY_TIMER_TRIGGERED"
 MEMORY_TIMER_REMOVED_MARKER = "SPHERE_MEMORY_TIMER_REMOVED"
+CHARACTER_CONTENT_ACCOUNT = "CharacterContentProbe"
+CHARACTER_CONTENT_PASSWORD = "char_content_pw"
+CHARACTER_CONTENT_CHAR_SERIAL = 3
+CHARACTER_CONTENT_ITEM_SERIAL = 4
+CHARACTER_CONTENT_ITEM_ID = 0x0E9E
+CHARACTER_CONTENT_LAYERED_ITEM_SERIAL = 5
+CHARACTER_CONTENT_LAYERED_ITEM_ID = 0x0E9F
+CHARACTER_CONTENT_LAYERED_ITEM_LAYER = 8
+CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL = 6
+CHARACTER_CONTENT_SPECIAL_ITEM_ID = 0x204E
+CHARACTER_CONTENT_SPECIAL_ITEM_LAYER = 22
+CHARACTER_CONTENT_MARKER = "SPHERE_CHARACTER_CONTENT"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
 NAMED_MULTI_NAME = "synthetic named multi"
@@ -58,6 +70,17 @@ ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
+# Same-definition stacking probe.  Two movable, stackable ground items are
+# dragged into the character's pack at the same explicit point.  A second
+# equal-definition item is added by script without a point, exercising the
+# existing pile's contained location.
+STACKING_ACCOUNT = "StackingProbe"
+STACKING_PASSWORD = "stacking_pw"
+STACKING_ITEM_ID = 0x0E96
+STACKING_NO_POINT_ITEM_ID = 0x0E97
+STACKING_ITEM_SERIALS = (100, 101)
+STACKING_NO_POINT_ITEM_SERIAL = 102
+
 # Dotted-expression probe.  Each row is (key, expression, contexts): "C" runs
 # the expression in the player's login trigger (default object and SRC are the
 # character), "I" in the @Equip trigger of an equipped item (default object is
@@ -66,6 +89,7 @@ ESCAPE_OVERFLOW_NAME = "N" * 256
 DOTTED_PROBE_ACCOUNT = "DottedProbe"
 DOTTED_PROBE_ITEM_ID = 0x0E7B
 DOTTED_PROBE_DISPOSABLE_ID = 0x0E7C
+DOTTED_PROBE_FINDID_ID = 0x0E7D
 DOTTED_PROBE_LAYER = 30
 DOTTED_PROBE_SECTOR_LIGHT = 4
 # Loops in the probe that run into the WHILE/FOR iteration limit.
@@ -233,6 +257,7 @@ DOTTED_EXPRESSION_ROWS = (
     ("finduid_serial", "<finduid(<src.serial>).serial>", "C"),
     ("finduid_tag", "<finduid(<src.serial>).tag(probe_text)>", "C"),
     ("finduid_function", "<finduid(<src.serial>).f_dotted_serial>", "C"),
+    ("findid_bare_item", "<src.findlayer(layer_pack).findid(i_dotted_findid).serial>", "C"),
     ("lastnewitem_name", "<serv.lastnewitem.name>", "C"),
     ("function_args_root", "<f_dotted_arg(<src.serial>).name>", "C"),
     ("function_args_chain", "<f_dotted_arg(<src.serial>).findlayer(30).serial>", "C"),
@@ -463,6 +488,32 @@ def write_container_tile(path: Path, item_id: int) -> None:
         stream.write(record)
 
 
+def write_equipment_tile(path: Path, item_id: int, layer: int) -> None:
+    """Mark one synthetic item as a valid visible equipment tile."""
+
+    record_offset = (
+        terrain_size()
+        + ((item_id // TILE_BLOCK_QTY) * 4)
+        + 4
+        + (item_id * ITEM_RECORD_BYTES)
+    )
+    # UFLAG1_EQUIP, movable weight, and the default paperdoll layer.
+    record = struct.pack(
+        "<IBBIIHB20s",
+        0x00000002,
+        1,
+        layer,
+        0,
+        0,
+        0,
+        1,
+        b"synthetic equipment\0".ljust(20, b"\0"),
+    )
+    with path.open("r+b") as stream:
+        stream.seek(record_offset)
+        stream.write(record)
+
+
 def write_movement_tile(path: Path, item_id: int, flags: int, height: int) -> None:
     """Write one synthetic movement tile record into tiledata.mul."""
 
@@ -482,6 +533,31 @@ def write_movement_tile(path: Path, item_id: int, flags: int, height: int) -> No
         0,
         height,
         b"synthetic movement tile\0".ljust(20, b"\0"),
+    )
+    with path.open("r+b") as stream:
+        stream.seek(record_offset)
+        stream.write(record)
+
+
+def write_stackable_tile(path: Path, item_id: int) -> None:
+    """Mark a synthetic ground item as movable, nonblocking and pileable."""
+
+    record_offset = (
+        terrain_size()
+        + ((item_id // TILE_BLOCK_QTY) * 4)
+        + 4
+        + (item_id * ITEM_RECORD_BYTES)
+    )
+    record = struct.pack(
+        "<IBBIIHB20s",
+        0x00000804,  # UFLAG1_NONBLOCKING | UFLAG2_STACKABLE
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        b"synthetic stack item\0".ljust(20, b"\0"),
     )
     with path.open("r+b") as stream:
         stream.seek(record_offset)
@@ -572,6 +648,71 @@ def write_book_pages_save(root: Path) -> None:
         ),
     )
     write_text(root / "save" / "spherechars.scp", "\n".join(header + ["[EOF]"]))
+
+
+def write_stacking_save(root: Path) -> None:
+    """Seed explicit-point and no-point same-definition ground piles."""
+
+    first_serial, second_serial = STACKING_ITEM_SERIALS
+    header = [
+        "TITLE=Sphere synthetic item-stacking fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
+    ]
+    write_text(root / "accounts" / "sphereaccu.scp", "\n".join(
+        [
+            f"[ACCOUNT {STACKING_ACCOUNT}]",
+            f"PASSWORD={STACKING_PASSWORD}",
+            "PLEVEL=Admin",
+            "CHARUID=3",
+            "LASTCHARUID=3",
+            "[EOF]",
+        ]
+    ))
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(root / "save" / "sphereworld.scp", "\n".join(header + ["[EOF]"]))
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            header
+            + [
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={STACKING_ACCOUNT}",
+                "NAME=StackingProbeCharacter",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[WORLDITEM DEFAULTITEM]",
+                "SERIAL=4",
+                "LAYER=21",
+                "CONT=3",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_STACK_ITEM]",
+                f"SERIAL={first_serial}",
+                "P=129,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_STACK_ITEM]",
+                f"SERIAL={second_serial}",
+                "P=130,128,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[WORLDITEM SYNTHETIC_NO_POINT_STACK_ITEM]",
+                f"SERIAL={STACKING_NO_POINT_ITEM_SERIAL}",
+                "CONT=4",
+                "P=70,70,0",
+                "AMOUNT=1",
+                "TIMERD=-1",
+                "[EOF]",
+            ]
+        ),
+    )
 
 
 def skill_sections(*, dword_hex_probe: bool = False) -> str:
@@ -879,6 +1020,9 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "LASTNEW.REMOVE",
         "NEWITEM SYNTHETIC_DOTTED_PROBE",
         "EQUIPLAST",
+        "NEWITEM SYNTHETIC_DOTTED_FINDID",
+        "LASTNEW.CONT=<SRC.FINDLAYER(LAYER_PACK).SERIAL>",
+        "LASTNEW.NAME=synthetic dotted probe",
         # A standalone object escape is a legacy empty argument. Serializing
         # <ARGO> here would feed the reference UID back into damage_final and
         # re-enter @GetHit indefinitely.
@@ -1065,9 +1209,15 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         f"LAYER={DOTTED_PROBE_LAYER}\n"
         "ON=@Create\n"
         "VAR dotted_disposable,<SERIAL>\n"
+        f"\n[ITEMDEF 0x{DOTTED_PROBE_FINDID_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_DOTTED_FINDID\n"
+        "NAME=synthetic dotted findid item\n"
+        "TYPE=T_NORMAL\n"
         "\n[DEFNAMES dotted_probe]\n"
         "dotted_probe_const 1234\n"
         "i_dotted_probe 0x0E7B\n"
+        f"i_dotted_findid 0x{DOTTED_PROBE_FINDID_ID:04X}\n"
+        "layer_pack 21\n"
         "str 0\n"
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
@@ -1419,6 +1569,8 @@ def write_scripts(
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
     movement_stairs_probe: bool = False,
+    character_content_probe: bool = False,
+    stacking_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1451,6 +1603,30 @@ def write_scripts(
         "<SRC.SECTOR.RAINCHANCE>|<SRC.SECTOR.COLDCHANCE>\n"
         f"SYSMESSAGE {REGION_WEATHER_MARKER}_END\n"
         if region_weather_probe
+        else ""
+    )
+    character_content_login = (
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_UID "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT).SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_PARENT "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT).CONT.SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_LAYERED_UID "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_LAYERED_PARENT "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).CONT.SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_LAYERED_LAYER "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).LAYER>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_UID "
+        "<SRC.FINDID(i_deathshroud).SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_PARENT "
+        "<SRC.FINDID(i_deathshroud).CONT.SERIAL>\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_SPECIAL_LAYER "
+        "<SRC.FINDID(i_deathshroud).LAYER>\n"
+        "SYSMESSAGE SPHERE_CHARACTER_CONTENT_UPDATE "
+        "<SRC.FINDID(SYNTHETIC_CHARACTER_CONTENT_LAYERED).UPDATE>\n"
+        "SERV.SAVE 1\n"
+        f"SYSMESSAGE {CHARACTER_CONTENT_MARKER}_END\n"
+        if character_content_probe
         else ""
     )
     unknown_keyword_probe_lines = []
@@ -1793,6 +1969,20 @@ def write_scripts(
         if named_item_name_probe
         else ""
     )
+    stacking_itemdef = (
+        f"\n[ITEMDEF 0x{STACKING_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_STACK_ITEM\n"
+        "NAME=synthetic stack item\n"
+        "TYPE=T_NORMAL\n"
+        "CAN=0x100\n"
+        f"\n[ITEMDEF 0x{STACKING_NO_POINT_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_NO_POINT_STACK_ITEM\n"
+        "NAME=synthetic no-point stack item\n"
+        "TYPE=T_NORMAL\n"
+        "CAN=0x100\n"
+        if stacking_probe
+        else ""
+    )
     named_resource_id_probe_sections = ""
     if named_resource_id_probe:
         sections = [
@@ -1843,9 +2033,28 @@ def write_scripts(
         named_resource_id_probe_sections = "\n" + "\n".join(sections)
     default_char_definition = ""
     default_char_defname2 = "DEFNAME2=DEFAULTCHAR\n"
+    character_content_char_can = "CAN=0x114\n" if character_content_probe else ""
     if unresolved_worldchar_type:
         default_char_definition = "[DEFNAMES HARDCODED]\nDEFAULTCHAR c_MAN\n\n"
         default_char_defname2 = ""
+    character_content_itemdef = (
+        "\n[TYPEDEF 181]\nDEFNAME=T_JEWELRY\n"
+        f"\n[ITEMDEF 0x{CHARACTER_CONTENT_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_CHARACTER_CONTENT\n"
+        "NAME=synthetic character content\n"
+        "TYPE=T_NORMAL\n"
+        f"\n[ITEMDEF 0x{CHARACTER_CONTENT_LAYERED_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_CHARACTER_CONTENT_LAYERED\n"
+        "NAME=synthetic character content with default equip layer\n"
+        f"LAYER={CHARACTER_CONTENT_LAYERED_ITEM_LAYER}\n"
+        "TYPE=T_JEWELRY\n"
+        f"\n[ITEMDEF 0x{CHARACTER_CONTENT_SPECIAL_ITEM_ID:04X}]\n"
+        "DEFNAME=i_deathshroud\n"
+        "NAME=synthetic character content deathshroud\n"
+        "TYPE=T_NORMAL\n"
+        if character_content_probe
+        else ""
+    )
     write_text(
         root / "scripts" / "spheretables.scp",
         """; Synthetic definitions generated by tools/fixtures/make_fixture.py.
@@ -1915,7 +2124,7 @@ SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
 """ + unequip_remove + """
 SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
 
-""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + """
+""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + character_content_itemdef + """
 [ITEMDEF 0x09B2]
 DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
@@ -1928,6 +2137,7 @@ DEFNAME=c_MAN
 ID=0x0190
 STR=100
 DEX=100
+""" + character_content_char_can + """
 ARMOR=5,5
 ON=@FixtureTypeCustom
 SYSMESSAGE SPHERE_CHARDEF_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
@@ -1981,7 +2191,9 @@ SYSMESSAGE SPHERE_TRIGGER_RETURN <TRIGGER(@FixtureReturn)>
 HITS=100
 DAMAGE 10,2
 SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
-""" + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item else "NEWITEM SYNTHETIC_HAIR\n") + """
+""" + character_content_login + """
+""" + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
+""" + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
 """ + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
@@ -2052,7 +2264,8 @@ ITEMNEWBIE=0x0E73
         + spawn_point_itemdef
         + spawn_point_product_itemdef
         + movement_stairs_itemdefs
-        + book_pages_probe_sections,
+        + book_pages_probe_sections
+        + stacking_itemdef,
     )
 
 
@@ -2162,6 +2375,7 @@ def write_world_load_counts_save(
     child_before_parent: bool,
     format_compat_probe: bool,
     metadata_roundtrip_probe: bool,
+    character_content_probe: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -2170,7 +2384,12 @@ def write_world_load_counts_save(
         "VERSION=0.99",
         "SAVECOUNT=0",
     ]
-    if metadata_roundtrip_probe:
+    if character_content_probe:
+        # The item is written with CONT=<character> and no LAYER key.  Stock
+        # 0.99 preserves this direct character relation for non-equippable
+        # items.
+        world_sections.extend([])
+    elif metadata_roundtrip_probe:
         world_sections.extend(
             [
                 "[WORLDITEM SYNTHETIC_ROUNDTRIP_ITEM]",
@@ -2317,7 +2536,44 @@ def write_world_load_counts_save(
         )
     world_sections.append("[EOF]")
     write_text(root / "save" / "sphereworld.scp", "\n".join(world_sections))
-    if rejected_property or child_before_parent or format_compat_probe or metadata_roundtrip_probe:
+    if character_content_probe:
+        write_text(
+            root / "accounts" / "sphereaccu.scp",
+            "\n".join(
+                [
+                    f"[ACCOUNT {CHARACTER_CONTENT_ACCOUNT}]",
+                    f"PASSWORD={CHARACTER_CONTENT_PASSWORD}",
+                    f"LASTCHARUID={CHARACTER_CONTENT_CHAR_SERIAL}",
+                    f"CHARUID={CHARACTER_CONTENT_CHAR_SERIAL}",
+                    "[EOF]",
+                ]
+            ),
+        )
+        char_sections = [
+            "[WORLDCHAR c_MAN]",
+            f"SERIAL={CHARACTER_CONTENT_CHAR_SERIAL}",
+            f"ACCOUNT={CHARACTER_CONTENT_ACCOUNT}",
+            "EVENTS=e_AllPlayers",
+            "STR=100",
+            "INT=100",
+            "DEX=100",
+            "HITS=100",
+            "MAXHITS=100",
+            "MANA=100",
+            "STAM=100",
+            "P=130,128,0",
+            "[WORLDITEM SYNTHETIC_CHARACTER_CONTENT]",
+            f"SERIAL={CHARACTER_CONTENT_ITEM_SERIAL}",
+            f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
+            "[WORLDITEM SYNTHETIC_CHARACTER_CONTENT_LAYERED]",
+            f"SERIAL={CHARACTER_CONTENT_LAYERED_ITEM_SERIAL}",
+            f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
+            "[WORLDITEM i_deathshroud]",
+            f"SERIAL={CHARACTER_CONTENT_SPECIAL_ITEM_SERIAL}",
+            f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
+            "[EOF]",
+        ]
+    elif rejected_property or child_before_parent or format_compat_probe or metadata_roundtrip_probe:
         write_text(
             root / "accounts" / "sphereaccu.scp",
             "\n".join(
@@ -3166,6 +3422,11 @@ def main() -> int:
         help="write a synthetic save with two items and one character",
     )
     parser.add_argument(
+        "--character-content-probe",
+        action="store_true",
+        help="load a no-LAYER item whose CONT points directly at a character",
+    )
+    parser.add_argument(
         "--world-load-counts-probe",
         action="store_true",
         help="invoke SERV.WORLDCOUNTS from the admin login event",
@@ -3355,6 +3616,11 @@ def main() -> int:
         action="store_true",
         help="exercise dynamic stair height resolution",
     )
+    parser.add_argument(
+        "--movement-stacking-probe",
+        action="store_true",
+        help="exercise same-definition stacking at explicit and no-point locations",
+    )
     args = parser.parse_args()
 
     # A mode is a complete recipe.  Reparse its declarative argument list
@@ -3376,6 +3642,7 @@ def main() -> int:
         args.child_before_parent,
         args.format_compat_probe,
         args.metadata_roundtrip_probe,
+        args.character_content_probe,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -3550,6 +3817,7 @@ def main() -> int:
             or args.timer_sibling_mutation_owner_first_probe
             or args.ontick_content_mutation_probe
             or args.container_shutdown_probe
+            or args.character_content_probe
         ),
     )
     write_scripts(
@@ -3591,7 +3859,11 @@ def main() -> int:
         spawn_point_probe=args.spawn_point_probe,
         escape_overflow_probe=args.escape_overflow_probe,
         movement_stairs_probe=args.movement_stairs_probe,
+        character_content_probe=args.character_content_probe,
+        stacking_probe=args.movement_stacking_probe,
     )
+    if args.movement_stacking_probe:
+        write_stacking_save(root)
     if args.world_load_counts:
         write_world_load_counts_save(
             root,
@@ -3607,6 +3879,7 @@ def main() -> int:
             child_before_parent=args.child_before_parent,
             format_compat_probe=args.format_compat_probe,
             metadata_roundtrip_probe=args.metadata_roundtrip_probe,
+            character_content_probe=args.character_content_probe,
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
@@ -3658,12 +3931,20 @@ def main() -> int:
         write_legacy_metadata_save(root)
     write_mul_fixture(
         root,
-        extra_item_id=(
+        extra_item_id=max(
             0x0E8A
-            if args.timer_sibling_mutation_probe
-            or args.timer_sibling_mutation_owner_first_probe
-            or args.container_shutdown_probe
-            else 0
+            if (
+                args.timer_sibling_mutation_probe
+                or args.timer_sibling_mutation_owner_first_probe
+                or args.container_shutdown_probe
+            )
+            else 0,
+            max(CHARACTER_CONTENT_LAYERED_ITEM_ID, CHARACTER_CONTENT_SPECIAL_ITEM_ID)
+            if args.character_content_probe
+            else 0,
+            max(STACKING_ITEM_ID, STACKING_NO_POINT_ITEM_ID)
+            if args.movement_stacking_probe
+            else 0,
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
@@ -3672,6 +3953,17 @@ def main() -> int:
     if args.container_shutdown_probe:
         for item_id in (0x0E7D, 0x0E88):
             write_container_tile(root / "muls" / "tiledata.mul", item_id)
+    if args.character_content_probe:
+        write_equipment_tile(
+            root / "muls" / "tiledata.mul",
+            CHARACTER_CONTENT_LAYERED_ITEM_ID,
+            CHARACTER_CONTENT_LAYERED_ITEM_LAYER,
+        )
+        write_equipment_tile(
+            root / "muls" / "tiledata.mul",
+            CHARACTER_CONTENT_SPECIAL_ITEM_ID,
+            CHARACTER_CONTENT_SPECIAL_ITEM_LAYER,
+        )
     if args.movement_stairs_probe:
         tiledata = root / "muls" / "tiledata.mul"
         write_movement_tile(
@@ -3680,6 +3972,9 @@ def main() -> int:
             0x00000200 | 0x00000400 | 0x40000000,
             10,
         )
+    if args.movement_stacking_probe:
+        write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_ITEM_ID)
+        write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_NO_POINT_ITEM_ID)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
 

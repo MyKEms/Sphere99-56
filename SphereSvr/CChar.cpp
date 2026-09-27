@@ -1528,9 +1528,17 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 
 	case M_FindEquip:
 	case M_FindLayer:	// Find equipped layers.
-		if ( vArgs.IsEmpty())
-			return HRES_BAD_ARG_QTY;
-		vValRet.SetRef( LayerFind( (LAYER_TYPE) vArgs.GetInt()));
+		{
+			if ( vArgs.IsEmpty())
+				return HRES_BAD_ARG_QTY;
+			// Method arguments arrive as raw text for dotted calls.  Resolve bare
+			// layer constants (for example layer_pack) before converting them to an
+			// integer; numeric and expression arguments retain their existing path.
+			int iLayer = vArgs.IsNumeric()
+				? vArgs.GetInt()
+				: Exp_GetValue( vArgs.GetPSTR());
+			vValRet.SetRef( LayerFind( (LAYER_TYPE) iLayer));
+		}
 		break;
 
 	case M_MemoryFindType:	// Find a type of memory.
