@@ -113,6 +113,11 @@ def main() -> int:
         action="store_true",
         help="expect multi REGION.* and map PIN properties to load",
     )
+    parser.add_argument(
+        "--gump-fallback",
+        action="store_true",
+        help="expect a GUMP_NONE container to use the reserved fallback dimensions",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -127,6 +132,7 @@ def main() -> int:
             args.weird_item,
             args.child_before_parent,
             args.format_compat,
+            args.gump_fallback,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -142,6 +148,11 @@ def main() -> int:
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
     if args.format_compat:
+        expected_line = (
+            "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
+            "allocated_items=2 allocated_chars=1"
+        )
+    elif args.gump_fallback:
         expected_line = (
             "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=1"
@@ -190,6 +201,11 @@ def main() -> int:
     if args.format_compat:
         expected_diagnostics = (
             "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=0 "
+            "defaulted=0 deleted=0"
+        )
+    elif args.gump_fallback:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=0 "
             "defaulted=0 deleted=0"
         )
     elif args.child_before_parent:
@@ -286,6 +302,10 @@ def main() -> int:
                     )
                 elif args.noncontainer_reference:
                     allowed_startup_error_fragments = ("WORLDITEM CONT defaulted:",)
+                elif args.gump_fallback:
+                    # Baseline evidence intentionally permits the diagnostic so
+                    # the dedicated assertion below reports the regression.
+                    allowed_startup_error_fragments = ("unknown container gump id 0",)
                 elif args.rejected_property:
                     allowed_startup_error_fragments = (
                         "Item:Hitpoints assigned for non-weapon DEFAULTITEM",
@@ -430,6 +450,14 @@ def main() -> int:
                             "nested non-container reference did not log the bounded "
                             "CONT default with its original UIDs"
                         )
+                elif args.gump_fallback:
+                    if any(
+                        "unknown container gump id 0" in line.lower()
+                        for line in startup_errors
+                    ):
+                        raise RuntimeError(
+                            "GUMP_NONE container still emitted an unknown-gump diagnostic"
+                        )
                 elif args.named_container_reference and any(
                     "Non container uid=" in line for line in startup_errors
                 ):
@@ -442,6 +470,7 @@ def main() -> int:
                     and not args.named_container_reference
                     and not args.rejected_property
                     and not args.weird_item
+                    and not args.gump_fallback
                 ):
                     sock, _ = game_connect(
                         args.host,
@@ -515,6 +544,7 @@ def main() -> int:
             or args.weird_item
             or args.child_before_parent
             or args.format_compat
+            or args.gump_fallback
         )
         else [expected_line, expected_line]
     )
@@ -543,6 +573,7 @@ def main() -> int:
         and not args.weird_item
         and not args.child_before_parent
         and not args.format_compat
+        and not args.gump_fallback
     ):
         admin_lines = [
             message

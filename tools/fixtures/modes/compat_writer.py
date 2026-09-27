@@ -108,6 +108,14 @@ STACKING_NO_POINT_ITEM_ID = 0x0E97
 STACKING_ITEM_SERIALS = (100, 101)
 STACKING_NO_POINT_ITEM_SERIAL = 102
 
+# A tiledata-marked container with no TDATA2 gump uses GUMP_NONE.  The
+# loader must use the reserved container dimensions for a child without a
+# saved point, without reporting a spurious unknown-gump error.
+GUMP_FALLBACK_ITEM_ID = 0x0EA4
+GUMP_FALLBACK_CHILD_ITEM_ID = 0x0EA5
+GUMP_FALLBACK_CONTAINER_SERIAL = 4
+GUMP_FALLBACK_CHILD_SERIAL = 5
+
 
 # Named ARG locals and positional-object probe.  The generated login trigger
 # creates one synthetic item through a script-level NEWITEMSAFE wrapper, then
@@ -1471,6 +1479,7 @@ def write_scripts(
     movement_stairs_probe: bool = False,
     character_content_probe: bool = False,
     stacking_probe: bool = False,
+    gump_fallback_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1971,6 +1980,18 @@ def write_scripts(
         if stacking_probe
         else ""
     )
+    gump_fallback_itemdef = (
+        f"\n[ITEMDEF 0x{GUMP_FALLBACK_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_GUMP_NONE_CONTAINER\n"
+        "NAME=synthetic container without a gump\n"
+        "TYPE=CONTAINER\n"
+        f"\n[ITEMDEF 0x{GUMP_FALLBACK_CHILD_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_GUMP_NONE_CONTENT\n"
+        "NAME=synthetic child of a container without a gump\n"
+        "TYPE=T_NORMAL\n"
+        if gump_fallback_probe
+        else ""
+    )
     named_resource_id_probe_sections = ""
     if named_resource_id_probe:
         sections = [
@@ -2125,7 +2146,7 @@ SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
 """ + unequip_remove + """
 SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
 
-""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + character_content_itemdef + food_itemdef + """
+""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + character_content_itemdef + food_itemdef + gump_fallback_itemdef + """
 [ITEMDEF 0x09B2]
 DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
@@ -2391,6 +2412,7 @@ def write_world_load_counts_save(
     format_compat_probe: bool,
     metadata_roundtrip_probe: bool,
     character_content_probe: bool,
+    gump_fallback_probe: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -2404,6 +2426,20 @@ def write_world_load_counts_save(
         # 0.99 preserves this direct character relation for non-equippable
         # items.
         world_sections.extend([])
+    elif gump_fallback_probe:
+        # The child has no saved point, so loading must choose the reserved
+        # container dimensions even though this container definition has no
+        # TDATA2 gump (GUMP_NONE).
+        world_sections.extend(
+            [
+                "[WORLDITEM SYNTHETIC_GUMP_NONE_CONTAINER]",
+                f"SERIAL={GUMP_FALLBACK_CONTAINER_SERIAL}",
+                "P=128,128,0",
+                "[WORLDITEM SYNTHETIC_GUMP_NONE_CONTENT]",
+                f"SERIAL={GUMP_FALLBACK_CHILD_SERIAL}",
+                f"CONT={GUMP_FALLBACK_CONTAINER_SERIAL}",
+            ]
+        )
     elif metadata_roundtrip_probe:
         world_sections.extend(
             [
@@ -2588,7 +2624,13 @@ def write_world_load_counts_save(
             f"CONT={CHARACTER_CONTENT_CHAR_SERIAL}",
             "[EOF]",
         ]
-    elif rejected_property or child_before_parent or format_compat_probe or metadata_roundtrip_probe:
+    elif (
+        rejected_property
+        or child_before_parent
+        or format_compat_probe
+        or metadata_roundtrip_probe
+        or gump_fallback_probe
+    ):
         write_text(
             root / "accounts" / "sphereaccu.scp",
             "\n".join(
@@ -3610,6 +3652,7 @@ def generate_fixture(
         args.format_compat_probe,
         args.metadata_roundtrip_probe,
         args.character_content_probe,
+        args.gump_fallback_probe,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -3904,6 +3947,7 @@ def generate_fixture(
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,
+        gump_fallback_probe=args.gump_fallback_probe,
     )
     if args.movement_stacking_probe:
         write_stacking_save(root)
@@ -3923,6 +3967,7 @@ def generate_fixture(
             format_compat_probe=args.format_compat_probe,
             metadata_roundtrip_probe=args.metadata_roundtrip_probe,
             character_content_probe=args.character_content_probe,
+            gump_fallback_probe=args.gump_fallback_probe,
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)
@@ -3997,6 +4042,9 @@ def generate_fixture(
             if args.movement_stacking_probe
             else 0,
             DAMAGE_TRIGGER_ITEM_ID if args.damage_trigger_probe else 0,
+            max(GUMP_FALLBACK_ITEM_ID, GUMP_FALLBACK_CHILD_ITEM_ID)
+            if args.gump_fallback_probe
+            else 0,
         ),
     )
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
@@ -4027,5 +4075,7 @@ def generate_fixture(
     if args.movement_stacking_probe:
         write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_ITEM_ID)
         write_stackable_tile(root / "muls" / "tiledata.mul", STACKING_NO_POINT_ITEM_ID)
+    if args.gump_fallback_probe:
+        write_container_tile(root / "muls" / "tiledata.mul", GUMP_FALLBACK_ITEM_ID)
     print(f"wrote synthetic Sphere runtime fixture to {root}")
     return 0
