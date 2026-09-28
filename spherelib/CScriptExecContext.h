@@ -251,17 +251,25 @@ protected:
 			return false;
 
 		CGVariant vCurrent;
-		HRESULT hRes = Function_Dispatch(szRoot, vArgs, vCurrent);
-		rejected.Observe(hRes, szRoot, m_pBaseObj);
-		bool fRootFromFunction = (hRes == NO_ERROR);
+		CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
+		// 0.99 item callbacks use UID as an object-root alias.  The ordinary
+		// UID function expects an argument and the legacy property returns only
+		// the serial, so handle the bare dotted root before either scalar path.
+		bool fUIDRoot = pBase != NULL && !_stricmp(szRoot, "UID") && vArgs.IsEmpty()
+			&& strchr(pszExpr + aStart[0], '(') == NULL;
+		HRESULT hRes = fUIDRoot ? NO_ERROR : Function_Dispatch(szRoot, vArgs, vCurrent);
+		if ( fUIDRoot )
+			vCurrent.SetRef(pBase);
+		else
+			rejected.Observe(hRes, szRoot, m_pBaseObj);
+		bool fRootFromFunction = (hRes == NO_ERROR) && !fUIDRoot;
 		if ( fRootFromFunction )
 		{
 			if ( IsScriptFunction(szRoot) )
 				fEffect = true;
 		}
-		else
+		else if ( !fUIDRoot )
 		{
-			CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
 			if ( pBase == NULL )
 				return false;
 			hRes = pBase->s_PropGet(szRoot, vCurrent, m_pSrc);
@@ -1310,9 +1318,14 @@ public:
 					vRootArgs.SetVoid();
 				}
 				CGVariant vRoot;
-				HRESULT hRoot = Function_Dispatch(szRootName, vRootArgs, vRoot);
-				rejected.Observe(hRoot, szRootName, m_pBaseObj);
-				bool fRootFromFunction = (hRoot == NO_ERROR);
+				bool fUIDRoot = pObj != NULL && !_stricmp(szRootName, "UID") && vRootArgs.IsEmpty()
+					&& strchr(szRoot, '(') == NULL;
+				HRESULT hRoot = fUIDRoot ? NO_ERROR : Function_Dispatch(szRootName, vRootArgs, vRoot);
+				if ( fUIDRoot )
+					vRoot.SetRef(pObj);
+				else
+					rejected.Observe(hRoot, szRootName, m_pBaseObj);
+				bool fRootFromFunction = (hRoot == NO_ERROR) && !fUIDRoot;
 				if ( hRoot != NO_ERROR && pObj )
 				{
 					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
