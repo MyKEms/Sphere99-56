@@ -1423,18 +1423,15 @@ public:
 					if ( !fPropertySet )
 					{
 						// Only a registered script function on a reference-property
-						// root belongs on this fallback path. Script-function roots
+						// root belongs on this fallback path. Function-return roots
 						// already dispatch globally; running their suffix again can
 						// re-enter a function while its indexed table is expanding.
-						// Built-in object roots such as LASTNEW still need this path for
-						// script methods attached to the newly created object.
 						TCHAR szFunctionName[SCRIPT_MAX_LINE_LEN];
 						CGVariant vFunctionArgs;
 						const size_t iSuffixLen = strlen(pszDot + 1);
 						if ( SplitDottedSegment(pszDot + 1, iSuffixLen,
 							szFunctionName, sizeof(szFunctionName), vFunctionArgs) &&
-								IsScriptFunction(szFunctionName) &&
-									(!fRootFromFunction || !IsScriptFunction(szRootName)) )
+								IsScriptFunction(szFunctionName) && !fRootFromFunction )
 						{
 							if ( vFunctionArgs.IsVoid() )
 								vFunctionArgs = vArgs;
