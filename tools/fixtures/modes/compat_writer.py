@@ -947,8 +947,17 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "F_DOTTED_SERIAL.TAG.cmd_function_set=30",
         "FINDUID(1).TAG.cmd_finduid_set=41",
         "SRC.SYSMESSAGE " + marker + " C|cmd_src_method|[reached]",
+        # The legacy command form resolves an object method before dispatching
+        # the dotted operation.  These writes are read back below so a parser
+        # that only treats the root as a property fails first.
+        "FINDLAYER(30).TAG(bare_findlayer,11)",
+        "FINDID(i_dotted_findid).TAG(bare_findid,12)",
+        "SRC.FINDLAYER.30.TAG(bare_legacy_command,13)",
         "SYSMESSAGE " + marker + " C|cmd_readback|[<tag(cmd_base_set)>|<tag(cmd_src_set)>|"
         "<tag(cmd_function_set)>|<tag(cmd_finduid_set)>|<tag(cmd_item_src_set)>]",
+        "SYSMESSAGE " + marker + " C|bare_method_readback|[<findlayer(30).tag(bare_findlayer)>|"
+        "<findid(i_dotted_findid).tag(bare_findid)>|<findlayer(30).tag(bare_legacy_command)>]",
+        "SYSMESSAGE " + marker + " C|legacy_command|[reached]",
         "SRC.NAME=DottedRenamed",
         "SYSMESSAGE " + marker + " C|cmd_src_name_set|[<name>]",
         "NAME=" + DOTTED_PROBE_ACCOUNT,
