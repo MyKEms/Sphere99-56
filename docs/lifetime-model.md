@@ -54,3 +54,22 @@ is therefore also drained explicitly at shutdown.
 
 The soak uses only generated fixture data. It must never be pointed at a
 production `save/` or `accounts/` directory.
+
+## Resource definitions
+
+Resource definitions use a different boundary from world objects and the
+runtime owners above. `CResourceDef` and `CResourceLink` instances are borrowed
+through the resource manager's lookup arrays; those arrays do not own or delete
+the definitions during a server tick. A normal resource resync only closes the
+script files and keeps the definitions linked while the replacement scripts are
+loaded. A full shutdown closes the world first, then unlinks and clears the
+resource lookup arrays, so world objects no longer execute callbacks against a
+resource definition when that boundary is crossed. Account cleanup follows the
+resource boundary and does not retain a resource pointer after the world has
+closed.
+
+This means the current engine has no same-tick resource-definition deletion path
+that needs another deferred queue. If resource hot-unload is changed to destroy
+definitions rather than unlink them, it must become an explicit owner boundary
+with an end-of-tick queue and an ASan callback fixture before that change is
+enabled.
