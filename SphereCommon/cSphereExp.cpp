@@ -1491,7 +1491,13 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 		}
 		else
 		{
-			vValRet = m_vVal.GetArrayElement( vArgs.GetInt());
+			// ARGV accepts an expression for its index.  Production scripts use
+			// local counters (for example ARGV(i)) while walking a variable-length
+			// argument list; converting the raw text with GetInt() treats that name
+			// as zero and repeatedly returns the first argument.
+			LPCTSTR pszIndex = vArgs.GetPSTR();
+			const int iIndex = (pszIndex && *pszIndex) ? GetComplex(pszIndex) : 0;
+			vValRet = m_vVal.GetArrayElement(iIndex);
 		}
 		break;
 	case F_ArgVCount:

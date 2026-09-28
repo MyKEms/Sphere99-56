@@ -107,6 +107,7 @@ EXPECTED: dict[str, Expectation] = {
     # Forms without a function-root chain.
     "C|src_name": DOTTED_PROBE_ACCOUNT,
     "I|src_name": DOTTED_PROBE_ACCOUNT,
+    "C|argv_index": "01|01|DottedProbe|01",
     "C|src_str": number,
     # The command rows address the player as FINDUID(1): the fixture world
     # starts empty, so the probe character is the first character created.
