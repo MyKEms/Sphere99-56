@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 import struct
 import sys
@@ -112,9 +113,11 @@ def main() -> int:
     ini_path = fixture / "sphere.ini"
     ini_text = ini_path.read_text(encoding="ascii")
     ini_text = ini_text.replace("DEBUGLEVEL=0", "DEBUGLEVEL=1")
-    if ini_text.count("CLIENTLINGER=60") != 1:
-        raise RuntimeError("account lifetime fixture did not contain its client linger setting")
-    ini_path.write_text(ini_text.replace("CLIENTLINGER=60", "CLIENTLINGER=20"), encoding="ascii")
+    linger_match = re.search(r"(?im)^\s*CLIENTLINGER\s*=\s*(\d+)\s*$", ini_text)
+    if linger_match is None or int(linger_match.group(1)) <= 0:
+        raise RuntimeError("account lifetime fixture has no positive CLIENTLINGER setting")
+    linger_seconds = int(linger_match.group(1))
+    ini_path.write_text(ini_text, encoding="ascii")
     failures: list[str] = []
 
     def exercise() -> None:
@@ -178,7 +181,7 @@ def main() -> int:
                 raise RuntimeError("linger account character did not enter the world")
         finally:
             linger_client.close()
-        time.sleep(22.0)
+        time.sleep(linger_seconds + 2.0)
         _reconnect_same_character(
             args.host,
             args.port,

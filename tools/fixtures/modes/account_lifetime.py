@@ -20,6 +20,11 @@ def generate(output: Path) -> int:
     result = generate_recipe(output, MODE)
     if result:
         return result
+    ini_path = output / "sphere.ini"
+    ini = ini_path.read_text(encoding="ascii")
+    if ini.count("CLIENTLINGER=60") != 1:
+        raise RuntimeError("account lifetime fixture did not contain its linger setting")
+    ini_path.write_text(ini.replace("CLIENTLINGER=60", "CLIENTLINGER=20"), encoding="ascii")
     scripts_path = output / "scripts" / "spheretables.scp"
     scripts = scripts_path.read_text(encoding="ascii")
     logout_marker = "ON=@Logout\nRETURN 0\n\n[CHARDEF 0x0191]"
