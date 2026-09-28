@@ -97,11 +97,15 @@ public:
 	int DetachChar( CChar* pChar );
 	int AttachChar( CChar* pChar );
 	void DeleteAllChars();
+	void CancelDelete();
+	void OnClientLingerExpired();
 
 	virtual void DeleteThis();
 
 private:
 	bool SendOutgoingMail( CSphereUID uidMsg );
+	bool HasClientLingerChar() const;
+	void QueueDelete();
 
 public:
 	CLanguageID m_lang;			// UNICODE language pref. (ENU=english)
@@ -156,6 +160,7 @@ public:
 #endif
 
 private:
+	bool m_fDeleteRequested;
 	bool m_fDeleteQueued;
 	PLEVEL_TYPE m_PrivLevel;
 

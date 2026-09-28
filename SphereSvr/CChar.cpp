@@ -217,6 +217,7 @@ void CChar::ClientAttach( CClient* pClient )
 	HRESULT hRes = Player_SetAccount( pAccount );
 	if ( IS_ERROR(hRes))	// i now own this char.
 		return;
+	pAccount->CancelDelete();
 
 	ASSERT(m_pPlayer);
 	m_pPlayer->m_timeLastUsed.InitTimeCurrent();

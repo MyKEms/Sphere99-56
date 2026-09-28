@@ -112,6 +112,7 @@ CAccount::CAccount( LPCTSTR pszName, bool fGuest ) :
 	m_Total_Connect_Time = 0;
 	m_Last_Connect_Time = 0;
 	m_iEmailFailures = 0;
+	m_fDeleteRequested = false;
 	m_fDeleteQueued = false;
 
 	// Add myself to the list.
@@ -120,7 +121,7 @@ CAccount::CAccount( LPCTSTR pszName, bool fGuest ) :
 
 CAccount::~CAccount()
 {
-	SPHERE_LOG_LOAD( "CAccount destroyed" );
+	SPHERE_LOG_LOAD( "CAccount destroyed account='%s'", (LPCTSTR) m_sName );
 	// We should go track down and delete all the chars and clients that use this account !
 	// Chat channel bans.
 	// GMPAges
@@ -133,9 +134,20 @@ CAccount::~CAccount()
 
 void CAccount::DeleteThis()
 {
-	// Account pointers are non-owning on Linux. Keep the account alive until
-	// the client callback and socket flush phases have completed, and make
-	// repeated cleanup requests harmless.
+	// Keep a temporary account visible while one of its characters is in the
+	// CLIENTLINGER window. The next login must be able to find the account and
+	// reattach that character; destruction is requested again when the linger
+	// item expires. Both flags make repeated cleanup requests idempotent.
+	if ( m_fDeleteRequested || m_fDeleteQueued )
+		return;
+	m_fDeleteRequested = true;
+	if ( ! g_Serv.IsLoading() && HasClientLingerChar())
+		return;
+	QueueDelete();
+}
+
+void CAccount::QueueDelete()
+{
 	if ( m_fDeleteQueued )
 		return;
 	m_fDeleteQueued = true;
@@ -148,6 +160,30 @@ void CAccount::DeleteThis()
 
 	g_Accounts.Account_Delete(this);
 	g_Accounts.QueueAccountForDelete(this);
+}
+
+void CAccount::CancelDelete()
+{
+	if ( ! m_fDeleteQueued )
+		m_fDeleteRequested = false;
+}
+
+bool CAccount::HasClientLingerChar() const
+{
+	for ( size_t i = 0; i < m_Chars.GetSize(); ++i )
+	{
+		CCharPtr pChar = g_World.CharFind( m_Chars.GetAt(i));
+		if ( pChar != NULL && pChar->LayerFind( LAYER_FLAG_ClientLinger ) != NULL )
+			return true;
+	}
+	return false;
+}
+
+void CAccount::OnClientLingerExpired()
+{
+	if ( ! m_fDeleteRequested || m_fDeleteQueued || HasClientLingerChar())
+		return;
+	QueueDelete();
 }
 
 int CAccount::NameStrip( TCHAR* pszNameOut, LPCTSTR pszNameInp, int iNameLen ) // static
@@ -372,7 +408,7 @@ void CAccount::OnLogout( CClient* pClient )
 {
 	// CClient is disconnecting from this CAccount.
 	ASSERT(pClient);
-	SPHERE_LOG_LOAD( "CAccount logout callback" );
+	SPHERE_LOG_LOAD( "CAccount logout callback account='%s'", (LPCTSTR) m_sName );
 
 	if ( pClient->m_ConnectType == CONNECT_TELNET )
 	{
