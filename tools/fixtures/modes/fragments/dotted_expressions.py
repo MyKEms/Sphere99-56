@@ -43,6 +43,11 @@ DOTTED_EXPRESSION_ROWS = (
     ("strlen_dot", "<strlen a.b>", "CI"),
     ("strcmp_dot", "<strcmp a.b,a.b>", "C"),
     ("strindexof_dot", "<strindexof abc.def,def>", "C"),
+    # 0.99 string helpers use zero-based offsets and token indexes.
+    ("strmid_dot", "<strmid abcdef,2,3>", "CI"),
+    ("strgettok_dot", "<strgettok alpha|beta|gamma,1,|>", "C"),
+    ("strmid_quoted", '<strmid "abcdef",2,3>', "C"),
+    ("strgettok_quoted", '<strgettok "alpha,beta,gamma",1,",">', "C"),
     ("safe_src_name", "<safe src.name>", "C"),
     ("safe_missing_tag", "<safe src.tag(probe_missing)>", "C"),
     ("tag_paren", "<tag(probe_text)>", "CI"),
