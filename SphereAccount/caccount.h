@@ -16,7 +16,7 @@
 #include "cresourcebase.h"
 #include "caccountbase.h"
 
-class CAccount : public CResourceObj
+class CAccount : public CGObListRec, public CResourceObj
 {
 	// RES_Account
 
@@ -156,6 +156,7 @@ public:
 #endif
 
 private:
+	bool m_fDeleteQueued;
 	PLEVEL_TYPE m_PrivLevel;
 
 	CGString m_sName;			// Name = no spaces. case independant.
@@ -226,6 +227,8 @@ public:
 	void Account_Add( CAccount* pAccount );
 	void Account_Cleanup( CAccount* pAccount );
 	void Account_Delete( CAccount* pAccount );
+	void QueueAccountForDelete( CAccount* pAccount );
+	void DestroyPendingAccounts();
 
 	virtual HRESULT s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vRetVal, CScriptConsole* pSrc );
 
@@ -256,10 +259,10 @@ public:
 
 private:
 	CResLockNameArray<CAccount> m_Accounts;		// Name sorted list.
+	CGObListType<CAccount> m_AccountsPendingDelete;	// Accounts detached during the current tick.
 	CUIDArray m_UIDs;	// UID array pointers to the accounts.
 };
 
 extern CAccountMgr g_Accounts;	// All the player accounts. 
 
 #endif
-

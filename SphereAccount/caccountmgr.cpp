@@ -39,12 +39,14 @@ CAccountMgr::CAccountMgr() :
 
 CAccountMgr::~CAccountMgr()
 {
+	m_AccountsPendingDelete.DeleteAll();
 	StaticDestruct();	// static singleton
 	m_Accounts.StaticDestruct(); // Static item
 }
 
 void CAccountMgr::Empty()
 {
+	m_AccountsPendingDelete.DeleteAll();
 	m_Accounts.RemoveAll();
 	m_UIDs.DeleteAllUIDs();
 }
@@ -272,8 +274,39 @@ void CAccountMgr::Account_Cleanup( CAccount* pAccount )
 
 void CAccountMgr::Account_Delete( CAccount* pAccount )
 {
-	// What if we have an attached client !?!?
 	m_Accounts.RemoveArg( pAccount );
+}
+
+void CAccountMgr::QueueAccountForDelete( CAccount* pAccount )
+{
+	if ( pAccount == NULL || m_AccountsPendingDelete.IsMyChild( pAccount ))
+		return;
+
+	// An account can be retained by only one intrusive list.  It is normally
+	// already detached from the sorted name index by Account_Delete(), but
+	// remove any transient list link before queuing it for destruction.
+	if ( pAccount->GetParent() != NULL )
+		pAccount->RemoveSelf();
+	m_AccountsPendingDelete.InsertTail( pAccount );
+}
+
+void CAccountMgr::DestroyPendingAccounts()
+{
+	// Character pointers are non-owning.  A temporary account can request
+	// deletion before the world garbage collector has destructed its chars;
+	// keep that account queued until each char has detached from m_Chars.
+	CGObListRec* pRec = static_cast<CGObList&>(m_AccountsPendingDelete).GetHead();
+	while ( pRec != NULL )
+	{
+		CGObListRec* pNext = pRec->GetNext();
+		CAccount* pAccount = static_cast<CAccount*>(pRec);
+		if ( pAccount->m_Chars.GetSize() == 0 )
+		{
+			pRec->RemoveSelf();
+			delete pAccount;
+		}
+		pRec = pNext;
+	}
 }
 
 void CAccountMgr::Account_Add( CAccount* pAccount )
