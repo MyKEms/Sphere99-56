@@ -952,6 +952,10 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SRC.NAME=DottedRenamed",
         "SYSMESSAGE " + marker + " C|cmd_src_name_set|[<name>]",
         "NAME=" + DOTTED_PROBE_ACCOUNT,
+        # ARGV accepts an expression index.  The fixture passes a number and
+        # an object, then selects the second value through a local counter so
+        # both the scalar and referenced-object forms are covered together.
+        "F_DOTTED_ARGV(42,<SRC.SERIAL>)",
         "SYSMESSAGE " + marker + " C|disposable_before|[<isuidvalid <f_dotted_disposable>>]",
         "F_DOTTED_DISPOSABLE.REMOVE",
         "SYSMESSAGE " + marker + " C|disposable_after|[<isuidvalid <f_dotted_disposable>>]",
@@ -1132,6 +1136,10 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "RETURN 1\n"
         "\n[FUNCTION f_dotted_arg]\n"
         "RETURN <ARGS>\n"
+        "\n[FUNCTION f_dotted_argv]\n"
+        "ARG(i,1)\n"
+        "SRC.SYSMESSAGE SPHERE_DOTTED_EXPR C|argv_index|[<ARGV(i)>|<ARGV(i).TYPE>|<ARGV(i).NAME>|<ARGV(i).SERIAL>]\n"
+        "RETURN 1\n"
         "\n[FUNCTION f_dotted_disposable]\n"
         "RETURN <VAR(dotted_disposable)>\n"
         "\n[FUNCTION f_dotted_call]\n"
