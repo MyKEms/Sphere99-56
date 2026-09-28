@@ -6,6 +6,7 @@
 #include "stdafx.h"	// predef header.
 #include "caccountbase.h"
 #include "caccount.h"
+#include "spherelog.h"
 
 extern "C"
 {
@@ -83,6 +84,7 @@ const CScriptMethod CAccount::sm_Methods[CAccount::M_QTY+1] =
 CSCRIPT_CLASS_IMP1(Account,CAccount::sm_Props,CAccount::sm_Methods,NULL,ResourceObj);
 
 CAccount::CAccount( LPCTSTR pszName, bool fGuest ) :
+	CGObListRec(),
 	CResourceObj( UID_INDEX_CLEAR )	// not set yet.
 {
 	// Just find a free UID for me.
@@ -110,6 +112,8 @@ CAccount::CAccount( LPCTSTR pszName, bool fGuest ) :
 	m_Total_Connect_Time = 0;
 	m_Last_Connect_Time = 0;
 	m_iEmailFailures = 0;
+	m_fDeleteRequested = false;
+	m_fDeleteQueued = false;
 
 	// Add myself to the list.
 	g_Accounts.Account_Add( this );
@@ -117,6 +121,7 @@ CAccount::CAccount( LPCTSTR pszName, bool fGuest ) :
 
 CAccount::~CAccount()
 {
+	SPHERE_LOG_LOAD( "CAccount destroyed account='%s'", (LPCTSTR) m_sName );
 	// We should go track down and delete all the chars and clients that use this account !
 	// Chat channel bans.
 	// GMPAges
@@ -129,15 +134,56 @@ CAccount::~CAccount()
 
 void CAccount::DeleteThis()
 {
+	// Keep a temporary account visible while one of its characters is in the
+	// CLIENTLINGER window. The next login must be able to find the account and
+	// reattach that character; destruction is requested again when the linger
+	// item expires. Both flags make repeated cleanup requests idempotent.
+	if ( m_fDeleteRequested || m_fDeleteQueued )
+		return;
+	m_fDeleteRequested = true;
+	if ( ! g_Serv.IsLoading() && HasClientLingerChar())
+		return;
+	QueueDelete();
+}
+
+void CAccount::QueueDelete()
+{
+	if ( m_fDeleteQueued )
+		return;
+	m_fDeleteQueued = true;
+
 	// Now track down all my disconnected chars !
-	// Just un-reference myself then the CRefObjDef should delete me.
 	if ( ! g_Serv.IsLoading())
 	{
 		DeleteAllChars();
 	}
 
-	// What if we have an attached client !?!?
 	g_Accounts.Account_Delete(this);
+	g_Accounts.QueueAccountForDelete(this);
+}
+
+void CAccount::CancelDelete()
+{
+	if ( ! m_fDeleteQueued )
+		m_fDeleteRequested = false;
+}
+
+bool CAccount::HasClientLingerChar() const
+{
+	for ( size_t i = 0; i < m_Chars.GetSize(); ++i )
+	{
+		CCharPtr pChar = g_World.CharFind( m_Chars.GetAt(i));
+		if ( pChar != NULL && pChar->LayerFind( LAYER_FLAG_ClientLinger ) != NULL )
+			return true;
+	}
+	return false;
+}
+
+void CAccount::OnClientLingerExpired()
+{
+	if ( ! m_fDeleteRequested || m_fDeleteQueued || HasClientLingerChar())
+		return;
+	QueueDelete();
 }
 
 int CAccount::NameStrip( TCHAR* pszNameOut, LPCTSTR pszNameInp, int iNameLen ) // static
@@ -268,7 +314,6 @@ void CAccount::DeleteAllChars()
 			continue;
 		pChar->DeleteThis();
 	}
-	m_Chars.RemoveAll();
 }
 
 int CAccount::DetachChar( CChar* pChar )
@@ -363,6 +408,7 @@ void CAccount::OnLogout( CClient* pClient )
 {
 	// CClient is disconnecting from this CAccount.
 	ASSERT(pClient);
+	SPHERE_LOG_LOAD( "CAccount logout callback account='%s'", (LPCTSTR) m_sName );
 
 	if ( pClient->m_ConnectType == CONNECT_TELNET )
 	{

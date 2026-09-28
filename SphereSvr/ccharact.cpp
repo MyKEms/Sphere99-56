@@ -3158,11 +3158,15 @@ bool CChar::OnTick()
 				continue;
 			if ( ! pItem->IsTimerExpired())
 				continue;
+			const bool fClientLinger =
+				pItem->GetEquipLayer() == LAYER_FLAG_ClientLinger;
 			if ( ! OnTickEquip( pItem ))
 			{
 				if ( pItem->IsType(IT_SPELL))
 					pItem->LogTimerRemoval( "spell" );
 				pItem->DeleteThis();
+				if ( fClientLinger && m_pAccount )
+					m_pAccount->OnClientLingerExpired();
 				if ( ! IsValidUID())
 					return false;	// i've been deleted.
 			}
