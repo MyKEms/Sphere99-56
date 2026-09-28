@@ -217,6 +217,7 @@ EXPECTED: dict[str, Expectation] = {
     "I|eval_bare_tag": "14",
     "I|eval_bare_function": Same("C|function_plain"),
     "C|eval_defname": "1234",
+    "C|indexed_defname_while": "7",
     "C|eval_unknown_reference": "0",
     # Bare reference operands in IF conditions.
     "C|cond_src_str_eq": "1",

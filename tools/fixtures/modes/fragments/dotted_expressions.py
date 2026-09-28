@@ -110,6 +110,9 @@ DOTTED_EXPRESSION_ROWS = (
     ("eval_bare_function", "<eval src.f_dotted_serial>", "I"),
     ("eval_bracket_str_dex", "<eval <src.str>+<src.dex>>", "C"),
     ("eval_defname", "<eval dotted_probe_const>", "C"),
+    # Keep indexed DEFNAME expansion live while a script loop advances the
+    # index. Production magic-item tables use this shape repeatedly.
+    ("indexed_defname_while", "<f_dotted_indexed_while>", "C"),
     ("eval_unknown_reference", "<eval foo.bar>", "C"),
     # Expression grammar: parentheses, unary !, && and ||.  Arithmetic and
     # comparison operators still chain from left to right without
