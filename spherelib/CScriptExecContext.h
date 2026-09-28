@@ -1413,6 +1413,23 @@ public:
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					if ( hRes == NO_ERROR )
 						return NO_ERROR;
+
+					// A referenced object can also be the base of a script
+					// function (for example CONT.CREATURESTART).  Native methods
+					// take precedence, but after they reject the segment, dispatch
+					// the function with the referenced object as the active base.
+					// This is the command equivalent of the reference-chain
+					// fallback used by escape expressions.
+					if ( !fPropertySet )
+					{
+						CScriptObj* pOldBase = GetBaseObject();
+						SetBaseObject(pRootObj);
+						hRes = Function_Dispatch(pszDot + 1, vArgs, vValRet);
+						SetBaseObject(pOldBase);
+						rejected.Observe(hRes, pszDot + 1, pRootObj);
+						if ( hRes == NO_ERROR )
+							return NO_ERROR;
+					}
 				}
 			}
 		}

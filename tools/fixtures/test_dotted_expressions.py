@@ -293,6 +293,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|cmd_readback": "23|21|30|41|11",
     "I|cmd_readback": "18",
     "C|cmd_src_name_set": "DottedRenamed",
+    "I|cont_function_base": "DottedProbe|01|1",
     "C|disposable_before": "1",
     "C|disposable_after": "0",
     # Statements written as calls run once each with their arguments.
@@ -467,7 +468,17 @@ def report_failures(report_path: Path) -> list[str]:
         for entry in report.get("entries", [])
         if misparsed_report_key(entry)
     )
-    return [f"unknown-keyword report contains misparsed key {key}" for key in bogus]
+    failures = [f"unknown-keyword report contains misparsed key {key}" for key in bogus]
+    unresolved_cont = [
+        entry for entry in report.get("entries", [])
+        if entry.get("kind") == "method" and str(entry.get("keyword", "")).upper() == "CONT.*"
+    ]
+    if unresolved_cont:
+        failures.append(
+            "referenced CONT script-function command remained unresolved: "
+            + repr(unresolved_cont)
+        )
+    return failures
 
 
 def main() -> int:

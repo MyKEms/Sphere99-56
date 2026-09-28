@@ -1107,6 +1107,10 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "SRC.TAG.cmd_item_src_set=11",
         "F_DOTTED_SERIAL.TAG.cmd_item_function_set=18",
         "SRC.SYSMESSAGE " + marker + " I|cmd_readback|[<tag(cmd_item_function_set)>]",
+        # A dotted command whose root is a live object can name a script
+        # function as its final segment.  The function must run once with
+        # CONT (the equipped item's character) as its base object.
+        "CONT.F_CONT_REFERENCE_PROBE",
     ]
 
     sections = (
@@ -2283,6 +2287,11 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
+
+[FUNCTION f_cont_reference_probe]
+VAR dotted_cont_function_calls,<EVAL <VAR(dotted_cont_function_calls)>+1>
+SYSMESSAGE SPHERE_DOTTED_EXPR I|cont_function_base|[<NAME>|<SERIAL>|<VAR(dotted_cont_function_calls)>]
+RETURN 1
 """ + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
