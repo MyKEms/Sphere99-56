@@ -4,6 +4,7 @@
 //
 
 #include "stdafx.h"	// predef header.
+#include "spherelog.h"
 
 //*****************************************************************
 // -CPartyDef
@@ -13,12 +14,38 @@ CPartyDef::CPartyDef( CChar* pChar1, CChar *pChar2 )
 	// pChar1 = the master.
 	ASSERT(pChar1);
 	ASSERT(pChar2);
+	m_fDeleteQueued = false;
 	m_uidMaster = pChar1->GetUID();
 	pChar1->m_pParty.SetRefObj( this );
 	pChar2->m_pParty.SetRefObj( this );
 	AttachChar(pChar1);
 	AttachChar(pChar2);
 	SendAddList( UID_INDEX_CLEAR, NULL );	// send full list to all.
+}
+
+CPartyDef::~CPartyDef()
+{
+	for ( int i = 0; i < m_Chars.GetSize(); i++ )
+	{
+		CCharPtr pChar = g_World.CharFind( m_Chars.GetAt(i) );
+		if ( pChar != NULL && pChar->m_pParty.GetRefObj() == this )
+			pChar->m_pParty.ReleaseRefObj();
+	}
+
+	// Keep a bounded teardown diagnostic so the lifetime fixture can prove that
+	// the deferred queue destroys one party exactly once.
+	SPHERE_LOG_LOAD( "CPartyDef destroyed" );
+}
+
+void CPartyDef::DeleteThis()
+{
+	// CRefPtr is non-owning in the Linux reimplementation.  Keep this party
+	// alive until all client and sector callbacks for the current tick have
+	// completed, while making repeated teardown requests harmless.
+	if ( m_fDeleteQueued )
+		return;
+	m_fDeleteQueued = true;
+	g_World.QueuePartyForDelete( this );
 }
 
 int CPartyDef::AttachChar( CChar* pChar )
@@ -290,8 +317,7 @@ bool CPartyDef::Disband( CSphereUID uidMaster )
 		pChar->m_pParty.ReleaseRefObj();
 	}
 
-	RemoveSelf();	// should remove itself from the world list.
-	delete this;
+	DeleteThis();
 	return( true );
 }
 
@@ -320,7 +346,7 @@ bool CPartyDef::AcceptEvent( CChar* pCharAccept, CSphereUID uidInviter )	// stat
 
 	CRefPtr<CPartyDef> pParty = pCharInviter->m_pParty;
 
-	if ( ! pCharAccept->m_pParty.IsValidRefObj())	// Aready in a party !
+	if ( pCharAccept->m_pParty.IsValidRefObj())	// Already in a party.
 	{
 		if ( pParty == pCharAccept->m_pParty )	// already in this party
 			return( true );

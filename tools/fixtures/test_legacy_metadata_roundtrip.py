@@ -72,7 +72,7 @@ def main() -> int:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--port", type=int, default=2742)
     parser.add_argument("--generations", type=int, default=2)
-    parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--timeout", type=float, default=90.0)
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()

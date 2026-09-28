@@ -1500,6 +1500,7 @@ void CWorld::Close( bool fResources )
 	m_GuildStones.RemoveAll();
 	m_TownStones.RemoveAll();
 	m_Parties.DeleteAll();
+	m_PartiesPendingDelete.DeleteAll();
 	m_GMPages.DeleteAll();
 
 	for ( int i = 0; i<SECTOR_QTY; i++ )
@@ -1511,6 +1512,24 @@ void CWorld::Close( bool fResources )
 	m_fLoadCountsCaptured = false;
 
 	m_Clock.InitTime();	// no more sense of time.
+}
+
+void CWorld::QueuePartyForDelete( CPartyDef* pParty )
+{
+	if ( pParty == NULL || m_PartiesPendingDelete.IsMyChild( pParty ))
+		return;
+
+	// A party can only belong to one intrusive list.  Detach it from the
+	// active registry before retaining it for the end-of-tick deletion pass.
+	pParty->RemoveSelf();
+	m_PartiesPendingDelete.InsertTail( pParty );
+}
+
+void CWorld::DestroyPendingParties()
+{
+	// DeleteAll() runs the complete CPartyDef destructor while no client or
+	// sector callback from the current tick can still hold its raw pointer.
+	m_PartiesPendingDelete.DeleteAll();
 }
 
 void CWorld::GarbageCollection_GMPages()

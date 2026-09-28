@@ -16,6 +16,7 @@ protected:
 private:
 	CSphereUID m_uidMaster;	// Also in m_Chars (which is proabably sorted)
 	CUIDRefArray m_Chars;	// CChar
+	bool m_fDeleteQueued;	// true after disband queues this party for end-of-tick destruction
 
 private:
 	bool SendMemberMsg( CChar* pCharDest, const CUOExtData* pExtData, int iLen );
@@ -39,6 +40,7 @@ public:
 	}
 
 	bool Disband( CSphereUID uidMaster );
+	void DeleteThis();
 	int AttachChar( CChar* pChar );
 	int DetachChar( CChar* pChar );
 
@@ -55,7 +57,7 @@ public:
 	void AcceptMember( CChar* pChar );
 
 	CPartyDef( CChar* pCharInvite, CChar* pCharAccept );
-	~CPartyDef() {}
+	~CPartyDef();
 };
 
 #endif	// _INC_CCLIENT_H
