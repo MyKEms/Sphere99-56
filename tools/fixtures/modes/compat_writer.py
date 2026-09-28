@@ -1111,6 +1111,9 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         # function as its final segment.  The function must run once with
         # CONT (the equipped item's character) as its base object.
         "CONT.F_CONT_REFERENCE_PROBE",
+        # The command-root path must preserve indexed DEFNAME expansion while
+        # the referenced function walks its positional arguments.
+        "CONT.F_DOTTED_INDEXED_COMMAND(0,1,2)",
     ]
 
     sections = (
@@ -1176,6 +1179,16 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "VAR dotted_indexed_i,<EVAL <VAR(dotted_indexed_i)>+1>\n"
         "ENDWHILE\n"
         "RETURN <VAR(dotted_indexed_result)>\n"
+        "\n[FUNCTION f_dotted_indexed_command]\n"
+        "ARG(dotted_command_i,0)\n"
+        "ARG(dotted_command_result,0)\n"
+        "WHILE (<ARG(dotted_command_i)> < ARGVCOUNT)\n"
+        "VAR dotted_command_value,<dotted_probe_indexed[<ARGV(<ARG(dotted_command_i)>)>]>\n"
+        "ARG(dotted_command_result,<EVAL <ARG(dotted_command_result)>+<VAR(dotted_command_value)>>)\n"
+        "ARG(dotted_command_i,#+1)\n"
+        "ENDWHILE\n"
+        f"SYSMESSAGE {marker} I|indexed_command_root|[<ARG(dotted_command_result)>]\n"
+        "RETURN <ARG(dotted_command_result)>\n"
         "\n[FUNCTION f_dotted_damage_final]\n"
         f"SYSMESSAGE {marker} C|object_escape_arg|[<ARGV(0)>]\n"
         "IF (<ARGV(0)>)\n"

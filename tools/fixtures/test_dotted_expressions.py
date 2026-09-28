@@ -295,6 +295,7 @@ EXPECTED: dict[str, Expectation] = {
     "I|cmd_readback": "18",
     "C|cmd_src_name_set": "DottedRenamed",
     "I|cont_function_base": "DottedProbe|01|1",
+    "I|indexed_command_root": "7",
     "C|disposable_before": "1",
     "C|disposable_after": "0",
     # Statements written as calls run once each with their arguments.

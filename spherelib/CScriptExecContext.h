@@ -1422,13 +1422,30 @@ public:
 					// fallback used by escape expressions.
 					if ( !fPropertySet )
 					{
-						CScriptObj* pOldBase = GetBaseObject();
-						SetBaseObject(pRootObj);
-						hRes = Function_Dispatch(pszDot + 1, vArgs, vValRet);
-						SetBaseObject(pOldBase);
-						rejected.Observe(hRes, pszDot + 1, pRootObj);
-						if ( hRes == NO_ERROR )
-							return NO_ERROR;
+						// Only a registered script function on a reference-property
+						// root belongs on this fallback path. Script-function roots
+						// already dispatch globally; running their suffix again can
+						// re-enter a function while its indexed table is expanding.
+						// Built-in object roots such as LASTNEW still need this path for
+						// script methods attached to the newly created object.
+						TCHAR szFunctionName[SCRIPT_MAX_LINE_LEN];
+						CGVariant vFunctionArgs;
+						const size_t iSuffixLen = strlen(pszDot + 1);
+						if ( SplitDottedSegment(pszDot + 1, iSuffixLen,
+							szFunctionName, sizeof(szFunctionName), vFunctionArgs) &&
+								IsScriptFunction(szFunctionName) &&
+									(!fRootFromFunction || !IsScriptFunction(szRootName)) )
+						{
+							if ( vFunctionArgs.IsVoid() )
+								vFunctionArgs = vArgs;
+							CScriptObj* pOldBase = GetBaseObject();
+							SetBaseObject(pRootObj);
+							hRes = Function_Dispatch(szFunctionName, vFunctionArgs, vValRet);
+							SetBaseObject(pOldBase);
+							rejected.Observe(hRes, pszDot + 1, pRootObj);
+							if ( hRes == NO_ERROR )
+								return NO_ERROR;
+						}
 					}
 				}
 			}
