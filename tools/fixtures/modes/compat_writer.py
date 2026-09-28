@@ -153,6 +153,13 @@ DIALOG_ARGO_CONTROLS = (
     f"button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
     "htmlgump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
 )
+# A dialog-layout tag setter is also used by the race/class flow.  The
+# comma-form ARGO.TAG(name,value) must survive layout construction so the
+# button handler can dispatch the stored command.
+DIALOG_ARGO_TAG_ACCOUNT = "DialogArgoTagProbe"
+DIALOG_ARGO_TAG_MARKER = "SPHERE_DIALOG_ARGO_TAG"
+DIALOG_ARGO_TAG_NAME = "d_synthetic_argo_tag"
+DIALOG_ARGO_TAG_BUTTON = 13
 # A third dialog gates its layout with control flow on TAGs of the source
 # character: IF/ELSE picks one of two buttons, a nested IF(...) with ELSEIF
 # picks one text, a WHILE over an ARG local emits one text per row and a
@@ -853,6 +860,26 @@ SYSMESSAGE {marker} flow|<ARGN>
     return f"DIALOG {argo_name if argo_layout else name}\n", sections
 
 
+def dialog_argo_tag_scripts() -> tuple[str, str]:
+    """Return a dialog whose button dispatches a command stored in ARGO.TAG."""
+
+    login = f"DIALOG({DIALOG_ARGO_TAG_NAME})\n"
+    sections = f"""
+[DIALOG {DIALOG_ARGO_TAG_NAME}]
+0 0
+ARGO.TAG(forward,f_dialog_argo_tag_forward)
+button 20 20 2151 2152 1 0 {DIALOG_ARGO_TAG_BUTTON}
+
+[DIALOG {DIALOG_ARGO_TAG_NAME} BUTTON]
+ON={DIALOG_ARGO_TAG_BUTTON}
+<ARGO.TAG(forward)>
+
+[FUNCTION f_dialog_argo_tag_forward]
+SYSMESSAGE {DIALOG_ARGO_TAG_MARKER} forward
+"""
+    return login, sections
+
+
 def dword_hex_scripts() -> tuple[str, str]:
     """Return login lines and definitions for Sphere DWORD hex parsing."""
 
@@ -1490,6 +1517,7 @@ def write_scripts(
     dialog_button_probe: bool = False,
     dialog_argo_layout_probe: bool = False,
     dialog_flow_layout_probe: bool = False,
+    dialog_argo_tag_probe: bool = False,
     dword_hex_probe: bool = False,
     isbit_probe: bool = False,
     food_probe: bool = False,
@@ -1530,6 +1558,9 @@ def write_scripts(
         )
         if dialog_button_probe or dialog_argo_layout_probe or dialog_flow_layout_probe
         else ("", "")
+    )
+    dialog_argo_tag_login, dialog_argo_tag_sections = (
+        dialog_argo_tag_scripts() if dialog_argo_tag_probe else ("", "")
     )
     dword_hex_login, dword_hex_sections = (
         dword_hex_scripts() if dword_hex_probe else ("", "")
@@ -2248,7 +2279,7 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -2289,7 +2320,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -3795,6 +3826,7 @@ def generate_fixture(
             args.dialog_button_probe,
             args.dialog_argo_layout_probe,
             args.dialog_flow_layout_probe,
+            args.dialog_argo_tag_probe,
             args.dword_hex_probe,
             args.region_weather_probe,
             args.spawn_gem_probe,
@@ -3960,6 +3992,7 @@ def generate_fixture(
         dialog_button_probe=args.dialog_button_probe,
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
+        dialog_argo_tag_probe=args.dialog_argo_tag_probe,
         suppress_login_item=(
             args.roundtrip_integrity_probe
             or args.damage_trigger_probe
