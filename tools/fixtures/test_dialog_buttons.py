@@ -56,7 +56,7 @@ PRESSES = (
         DIALOG_BUTTON_NUMBERED,
         (),
         (),
-        f"numbered|{DIALOG_BUTTON_NUMBERED}",
+        f"numbered|{DIALOG_BUTTON_NUMBERED}|indexed-five",
     ),
     (
         DIALOG_BUTTON_FALLBACK,

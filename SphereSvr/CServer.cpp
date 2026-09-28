@@ -1643,6 +1643,8 @@ void CServer::OnTick()
 		catch (...) { SPHERE_LOG_ERR("OnTick: recovered flush threw"); }
 		DestroyPendingClients();
 		g_Accounts.DestroyPendingAccounts();
+		m_Chats.DestroyPendingChannels();
+		g_World.DestroyPendingParties();
 		return;
 	}
 #endif
@@ -1745,6 +1747,8 @@ void CServer::OnTick()
 	catch (...) { SPHERE_LOG_ERR("OnTick: network flush threw"); }
 	DestroyPendingClients();
 	g_Accounts.DestroyPendingAccounts();
+	m_Chats.DestroyPendingChannels();
+	g_World.DestroyPendingParties();
 	if ( s_iTickDbg <= 3 ) { SPHERE_LOG_NET("OnTick phase3 flush ok (tick=%d)", s_iTickDbg); }
 	g_Serv.m_Profile.SwitchTask( PROFILE_Overhead ); // PROFILE_Overhead
 
@@ -1893,6 +1897,7 @@ void CServer::SocketsClose()
 	m_Clients.DeleteAll();
 	DestroyPendingClients();
 	g_Accounts.DestroyPendingAccounts();
+	m_Chats.Close();
 	m_SocketMain.Close();
 	m_SocketGod.Close();
 }

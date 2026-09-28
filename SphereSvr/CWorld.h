@@ -365,6 +365,7 @@ public:
 
 	CGObListType<CGMPage> m_GMPages;		// Current outstanding GM pages. (CGMPage)
 	CGObListType<CPartyDef> m_Parties;	// links to all active parties. CPartyDef
+	CGObListType<CPartyDef> m_PartiesPendingDelete;	// parties detached during the current tick
 
 public:
 	CSCRIPT_CLASS_DEF1();
@@ -466,6 +467,8 @@ public:
 	virtual HRESULT s_PropSet( LPCTSTR pszKey, CGVariant& vVal ) ;
 
 	void OnTick();
+	void QueuePartyForDelete( CPartyDef* pParty );
+	void DestroyPendingParties();
 
 	CObjBasePtr ObjFind( CSphereUID uid ) const
 	{

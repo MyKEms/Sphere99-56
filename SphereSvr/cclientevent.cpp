@@ -1445,6 +1445,7 @@ void CClient::Event_ExtData( EXTDATA_TYPE type, const CUOExtData* pData, int len
 			{
 				// No Party !
 				// We must send a response back to the client for this or it will hang !?
+				SPHERE_LOG_LOAD( "CPartyDef no-party response" );
 				CPartyDef::MessageClient( this, m_pChar->GetUID(), (const NCHAR*)( pData->Party_Msg_Opt.m_data ), len-1 );
 			}
 			else

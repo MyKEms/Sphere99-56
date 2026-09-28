@@ -57,6 +57,62 @@ CExpression* Exp_GetContext()
 
 namespace
 {
+	// Split the comma-separated arguments used by string helpers while keeping
+	// commas inside quoted text and nested calls in the current argument.  The
+	// older Str_ParseCmds helper is intentionally simple and treats every comma
+	// as a separator, which turns e.g. strgettok("a,b", 1, ",") into four
+	// arguments.  String helpers also accept the legacy space-call form, so
+	// remove one pair of surrounding quotes after splitting.
+	static int ParseStringFunctionArgs(TCHAR* pszArgs, TCHAR** ppArgs, int iMaxArgs)
+	{
+		if ( pszArgs == NULL || ppArgs == NULL || iMaxArgs <= 0 )
+			return 0;
+
+		int iCount = 0;
+		TCHAR* p = pszArgs;
+		while ( iCount < iMaxArgs )
+		{
+			while ( *p && ISWHITESPACE(*p) )
+				p++;
+			ppArgs[iCount++] = p;
+
+			bool fQuoted = false;
+			int iDepth = 0;
+			for ( ; *p; p++ )
+			{
+				if ( *p == '"' )
+					fQuoted = !fQuoted;
+				else if ( !fQuoted && *p == '(' )
+					iDepth++;
+				else if ( !fQuoted && *p == ')' && iDepth > 0 )
+					iDepth--;
+				else if ( !fQuoted && iDepth == 0 && *p == ',' )
+				{
+					*p++ = '\0';
+					break;
+				}
+			}
+
+			// Trim whitespace before the separator/end and remove one pair of
+			// quotes without disturbing quoted commas.
+			TCHAR* pszArg = ppArgs[iCount - 1];
+			size_t iLen = strlen(pszArg);
+			while ( iLen > 0 && ISWHITESPACE(pszArg[iLen - 1]) )
+				pszArg[--iLen] = '\0';
+			if ( iLen >= 2 && pszArg[0] == '"' && pszArg[iLen - 1] == '"' )
+			{
+				pszArg[--iLen] = '\0';
+				memmove(pszArg, pszArg + 1, iLen);
+			}
+
+			if ( !*p )
+				break;
+		}
+		while ( iCount < iMaxArgs )
+			ppArgs[iCount++] = p;
+		return iCount;
+	}
+
 	const size_t UNKNOWN_KEYWORD_REPORT_LIMIT = 1024;
 	const size_t UNKNOWN_KEYWORD_MAX_NAME = 128;
 	const size_t UNKNOWN_KEYWORD_MAX_SOURCE = 256;
@@ -896,6 +952,43 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			return hRes;
 	}
 
+	// 0.99 DEFNAMES may use a numeric index whose expression is evaluated at
+	// run time (for example DEF_CLASS[ARGN] in a dialog BUTTON handler).  The
+	// definition table stores the expanded key, so resolve the index before the
+	// ordinary global lookup.  Keep this limited to a bare identifier root;
+	// dotted object properties and function calls have their own dispatch paths.
+	LPCTSTR pszOpen = strchr(pszKey, '[');
+	size_t iKeyLen = strlen(pszKey);
+	if ( pszOpen && pszOpen > pszKey && iKeyLen > 2 && pszKey[iKeyLen - 1] == ']' &&
+		strchr(pszKey, '.') == NULL && strchr(pszKey, '(') == NULL )
+	{
+		size_t iRootLen = static_cast<size_t>(pszOpen - pszKey);
+		size_t iIndexLen = iKeyLen - iRootLen - 2;
+		if ( iRootLen < SCRIPT_MAX_LINE_LEN && iIndexLen > 0 &&
+			iRootLen + iIndexLen + 3 < SCRIPT_MAX_LINE_LEN )
+		{
+			TCHAR szIndex[SCRIPT_MAX_LINE_LEN];
+			memcpy(szIndex, pszOpen + 1, iIndexLen);
+			szIndex[iIndexLen] = '\0';
+			TCHAR* pszIndex = szIndex;
+			while ( ISWHITESPACE(*pszIndex) ) pszIndex++;
+			TCHAR* pszIndexEnd = pszIndex + strlen(pszIndex);
+			while ( pszIndexEnd > pszIndex && ISWHITESPACE(pszIndexEnd[-1]) )
+				*--pszIndexEnd = '\0';
+			if ( *pszIndex )
+			{
+				int iIndex = GetComplex(pszIndex);
+				TCHAR szExpandedKey[SCRIPT_MAX_LINE_LEN];
+				snprintf(szExpandedKey, sizeof(szExpandedKey), "%.*s[%d]",
+					static_cast<int>(iRootLen), pszKey, iIndex);
+				if ( g_Cfg.m_Var.FindKeyVar(szExpandedKey, vValRet) )
+					return NO_ERROR;
+				if ( g_Cfg.m_Const.FindKeyVar(szExpandedKey, vValRet) )
+					return NO_ERROR;
+			}
+		}
+	}
+
 	// Evaluate an identifier.
 	// Find the key in the defs collection
 	// Skip to the end of the identifier name. ( + any args? )
@@ -982,7 +1075,7 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		vValRet.SetRef(&g_Serv);
 		break;
 	case F_FindUID:
-	// case F_UID:
+	case F_UID:
 		if ( vArgs.IsEmpty())
 			return( HRES_BAD_ARG_QTY );
 		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));
@@ -1159,6 +1252,81 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				break;
 			}
 			vValRet.SetInt( Str_Match(ppArgs[1], ppArgs[0]) == MATCH_VALID ? 1 : 0 );
+		}
+		break;
+
+	case F_StrMid:
+		{
+			// strmid(text,start,length) uses zero-based offsets.  The legacy
+			// scripts pass numeric expressions (including 0ff), so resolve the
+			// indexes with the normal expression parser instead of atoi().
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[3] = { NULL, NULL, NULL };
+			ParseStringFunctionArgs(szTmp, ppArgs, 3);
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL || ppArgs[2] == NULL )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			const int iStart = Exp_GetValue(ppArgs[1]);
+			const int iLength = Exp_GetValue(ppArgs[2]);
+			const int iTextLength = strlen(ppArgs[0]);
+			if ( iStart < 0 || iLength <= 0 || iStart >= iTextLength )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			CGString sResult(ppArgs[0] + iStart);
+			sResult.SetLength((iLength < iTextLength - iStart) ? iLength : iTextLength - iStart);
+			vValRet.SetStr(sResult.GetPtr());
+		}
+		break;
+
+	case F_StrGetTok:
+		{
+			// strgettok(text,index,delimiter) returns the zero-based token.
+			// Preserve empty fields and accept a multi-character delimiter, as
+			// the 0.99 scripts use both spaces and punctuation.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
+			szTmp[sizeof(szTmp)-1] = '\0';
+			TCHAR* ppArgs[3] = { NULL, NULL, NULL };
+			ParseStringFunctionArgs(szTmp, ppArgs, 3);
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL || ppArgs[2] == NULL || ppArgs[2][0] == '\0' )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			const int iToken = Exp_GetValue(ppArgs[1]);
+			if ( iToken < 0 )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			LPCTSTR pszToken = ppArgs[0];
+			const int iDelimiterLength = strlen(ppArgs[2]);
+			for ( int i = 0; i < iToken; ++i )
+			{
+				LPCTSTR pszDelimiter = strstr(pszToken, ppArgs[2]);
+				if ( pszDelimiter == NULL )
+				{
+					pszToken = NULL;
+					break;
+				}
+				pszToken = pszDelimiter + iDelimiterLength;
+			}
+			if ( pszToken == NULL )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			LPCTSTR pszEnd = strstr(pszToken, ppArgs[2]);
+			CGString sResult(pszToken);
+			if ( pszEnd != NULL )
+				sResult.SetLength(pszEnd - pszToken);
+			vValRet.SetStr(sResult.GetPtr());
 		}
 		break;
 
