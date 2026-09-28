@@ -1104,6 +1104,12 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
     equip = ["TAG.probe_text=itemtext"]
     equip += dotted_expression_lines("I", "SRC.SYSMESSAGE")
     equip += [
+        # The stock item scripts use UID.DUPE in callbacks.  Keep the count
+        # local to this callback so the regression proves that the method was
+        # dispatched on the item exactly once.
+        "VAR uid_dupe_items_before,<SERV.ITEMS>",
+        "UID.DUPE 1",
+        "SRC.SYSMESSAGE " + marker + " I|uid_dupe_item_delta|[<EVAL <SERV.ITEMS>-<VAR(uid_dupe_items_before)>>]",
         "SRC.TAG.cmd_item_src_set=11",
         "F_DOTTED_SERIAL.TAG.cmd_item_function_set=18",
         "SRC.SYSMESSAGE " + marker + " I|cmd_readback|[<tag(cmd_item_function_set)>]",

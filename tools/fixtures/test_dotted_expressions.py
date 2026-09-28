@@ -153,6 +153,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|function_plain": number,
     "I|function_plain": number,
     "I|serial": nonempty,
+    "I|uid_name": PROBE_ITEM_NAME,
     "C|deferred_src_tag": "chartext",
     "C|deferred_eval": "75",
     "C|deferred_strlen": "3",
@@ -317,6 +318,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|dupe_value_count": "1",
     "C|dupe_value_valid": "1",
     "C|dupe_value_valid_count": "1",
+    "I|uid_dupe_item_delta": "1",
     # The @EnvironChange handler sets its sector light behind a guard that
     # never matches.  Entering the world runs it once; its own write may run
     # it once more, nested, but a write of the level already in effect must

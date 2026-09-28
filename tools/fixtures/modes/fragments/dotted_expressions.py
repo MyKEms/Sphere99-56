@@ -53,6 +53,10 @@ DOTTED_EXPRESSION_ROWS = (
     ("tag_paren", "<tag(probe_text)>", "CI"),
     ("function_plain", "<f_dotted_serial>", "CI"),
     ("serial", "<serial>", "I"),
+    # In item callbacks UID is the current item object, so its dotted
+    # properties and methods must run against that object rather than the
+    # scalar serial value returned by the legacy UID property.
+    ("uid_name", "<uid.name>", "I"),
     ("deferred_src_tag", "<?src.tag(probe_text)?>", "C"),
     ("deferred_eval", "<?eval 5*1.5?>", "C"),
     ("deferred_strlen", "<?strlen a.b?>", "C"),
