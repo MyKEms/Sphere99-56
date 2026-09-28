@@ -15,8 +15,8 @@ MODE = register_mode(
     FixtureMode(
         name="dialog-argo-tag",
         fixture_args=("--dialog-argo-tag-probe",),
-        order=64,
-        id_block=65,
+        order=68,
+        id_block=68,
         case=FixtureCase(
             name="dialog-argo-tag",
             mode="dialog-argo-tag",
