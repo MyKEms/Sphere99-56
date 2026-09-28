@@ -860,7 +860,8 @@ public:
 	bool CanSee( const CObjBaseTemplate* pObj ) const;
 	bool CanHear( const CObjBaseTemplate* pSrc, TALKMODE_TYPE mode ) const;
 
-	bool Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj );
+	bool Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj,
+		const CGVariant* pDialogArgs = NULL );
 	bool Menu_Setup( CSphereUID ridMenu, CObjBase* pObj, bool fContextMenu = false );
 
 	int OnSkill_Info( SKILL_TYPE skill, CSphereUID uid, int iTestLevel, bool fTest );

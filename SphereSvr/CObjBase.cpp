@@ -1219,7 +1219,12 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 			CSphereUID ridName = g_Cfg.ResourceCheckIDType( RES_Dialog, pszName );
 			if ( ridName.IsValidRID())
 				rid = ridName;
-			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, rid, this ))
+			// The first argument names the dialog.  The remaining values are the
+			// positional ARGV values visible while its layout is evaluated.
+			CGVariant vDialogArgs( vArgs );
+			vDialogArgs.MakeArraySize();
+			vDialogArgs.RemoveArrayElement( 0 );
+			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, rid, this, &vDialogArgs ))
 				return(HRES_BAD_ARGUMENTS);
 		}
 		break;

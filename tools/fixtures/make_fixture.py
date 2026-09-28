@@ -255,6 +255,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="open, by name, dialogs whose layouts use IF/WHILE/DOSWITCH/RETURN at login",
     )
     parser.add_argument(
+        "--dialog-argv-probe",
+        action="store_true",
+        help="open a dialog with positional values consumed by its layout through ARGV",
+    )
+    parser.add_argument(
         "--spawn-gem-probe",
         action="store_true",
         help="seed top-level spawn gems with an explicit zero timer",

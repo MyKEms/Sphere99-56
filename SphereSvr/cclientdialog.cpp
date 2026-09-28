@@ -100,11 +100,14 @@ class CDialogLayoutExec : public CSphereExpArgs
 	// (resizepic, button, ...), an argo.<name>(...) call, or a command.
 public:
 	CDialogLayoutExec( CObjBase* pObj, CScriptConsole* pSrc,
-		CGStringArray& asControls, CGStringArray& asText, int& x, int& y ) :
+		CGStringArray& asControls, CGStringArray& asText, int& x, int& y,
+		const CGVariant* pDialogArgs = NULL ) :
 		CSphereExpArgs( pObj, pSrc, pObj ),
 		m_pDialogObj( pObj ), m_pLayoutSrc( pSrc ), m_asControls( asControls ), m_asText( asText ),
 		m_x( x ), m_y( y ), m_fReturned( false )
 	{
+		if ( pDialogArgs != NULL )
+			m_vVal = *pDialogArgs;
 	}
 
 	// A RETURN statement ended the layout.
@@ -295,7 +298,8 @@ private:
 	bool m_fReturned;
 };
 
-bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
+bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj,
+	const CGVariant* pDialogArgs )
 {
 	if ( pObj == NULL )
 		return( false );
@@ -335,7 +339,7 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj )
 	CGStringArray asText;
 
 	// In Sphere 0.99-style dialogs, pObj is both the base object and argo.
-	CDialogLayoutExec exec( pObj, m_pChar, asControls, asText, x, y );
+	CDialogLayoutExec exec( pObj, m_pChar, asControls, asText, x, y, pDialogArgs );
 
 	// Set up gump accumulator so nested function calls can add gump commands.
 	CGStringArray* pPrevControls = CScriptExecContext::sm_pGumpControls;
