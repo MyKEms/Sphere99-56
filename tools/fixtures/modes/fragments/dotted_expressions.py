@@ -80,6 +80,14 @@ DOTTED_EXPRESSION_ROWS = (
     ("src_findlayer_name", "<src.findlayer(30).name>", "CI"),
     ("src_findlayer_serial", "<src.findlayer(30).serial>", "CI"),
     ("src_findlayer_tag", "<src.findlayer(30).tag(probe_text)>", "C"),
+    # Stock 0.99 also accepts a dotted argument segment: FINDLAYER.21 is
+    # equivalent to FINDLAYER(21).  Keep the layer argument and the following
+    # property separate so this legacy form cannot be reported as an unknown
+    # FINDLAYER.* chain.
+    ("src_findlayer_pack_serial", "<src.findlayer(layer_pack).serial>", "C"),
+    ("src_findlayer_legacy_serial", "<src.findlayer.layer_pack.serial>", "C"),
+    ("src_findlayer_legacy_numeric_serial", "<src.findlayer.30.serial>", "C"),
+    ("findid_root_serial", "<findid(i_dotted_findid).serial>", "C"),
     ("src_sector_light", "<src.sector.light>", "C"),
     ("deferred_finduid_name", "<?finduid(<src.serial>).name?>", "C"),
     ("deferred_findlayer_serial", "<?src.findlayer(30).serial?>", "C"),

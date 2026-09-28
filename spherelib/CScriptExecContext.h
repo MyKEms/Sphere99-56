@@ -311,6 +311,32 @@ protected:
 			}
 			if ( hRes != NO_ERROR )
 			{
+				// 0.99 accepts a bare dotted argument after a method name,
+				// e.g. SRC.FINDLAYER.21.ISWEAPON and
+				// SRC.FINDLAYER.LAYER_HORSE.  The argument is a segment rather
+				// than parenthesized text, so retry the method with the next
+				// segment before treating the chain as a dotted property.
+				if ( vArgs.IsEmpty() && iSegment + 1 < iSegments )
+				{
+					TCHAR szLegacyArg[SCRIPT_MAX_LINE_LEN];
+					if ( aLen[iSegment + 1] < sizeof(szLegacyArg) &&
+						SplitDottedSegment(pszExpr + aStart[iSegment + 1],
+							aLen[iSegment + 1], szLegacyArg, sizeof(szLegacyArg), vArgs) &&
+						vArgs.IsEmpty() )
+					{
+						CGVariant vLegacyArgs(szLegacyArg);
+						hRes = pCurrent->s_Method(szName, vLegacyArgs, vNext, m_pSrc);
+						rejected.Observe(hRes, szName, pCurrent);
+						if ( hRes == NO_ERROR )
+						{
+							fEffect = true;
+							iSegment++;
+						}
+					}
+				}
+			}
+			if ( hRes != NO_ERROR )
+			{
 				CScriptObj* pOldBase = GetBaseObject();
 				SetBaseObject(pCurrent);
 				hRes = Function_Dispatch(szName, vArgs, vNext);
@@ -523,6 +549,19 @@ protected:
 		LPCTSTR pszProp = strrchr(pszKey, '.');
 		pszProp = pszProp ? pszProp + 1 : pszKey;
 		return !_stricmp(pszProp, "CONT");
+	}
+
+	static bool HasFindObjectSegment(LPCTSTR pszKey)
+	{
+		for ( LPCTSTR p = pszKey; p && *p; p++ )
+		{
+			if ( (!_strnicmp(p, "FINDID", 6) &&
+					(p[6] == '\0' || p[6] == '.' || p[6] == '(')) ||
+				(!_strnicmp(p, "FINDLAYER", 9) &&
+					(p[9] == '\0' || p[9] == '.' || p[9] == '(')) )
+				return true;
+		}
+		return false;
 	}
 
 public:
@@ -1286,6 +1325,34 @@ public:
 				return NO_ERROR;
 		}
 
+		// A dotted FINDID/FINDLAYER command such as
+		// SRC.FINDLAYER.1.BOUNCE uses the same legacy dotted-argument chain
+		// as an escape. Resolve the complete chain here so the intermediate
+		// object lookup is not mistaken for a property and dispatched a second
+		// time below. Other dotted commands retain their normal setter/method
+		// precedence (for example LASTNEW.ATTR(...)).
+		if ( pObj && !fPropertySet && strchr(pszKey, '.') && HasFindObjectSegment(pszKey) )
+		{
+			TCHAR szChainExpr[SCRIPT_MAX_LINE_LEN];
+			if ( *pszArg )
+				snprintf(szChainExpr, sizeof(szChainExpr), "%s(%s)", pszKey, pszArg);
+			else
+			{
+				strncpy(szChainExpr, pszKey, sizeof(szChainExpr) - 1);
+				szChainExpr[sizeof(szChainExpr) - 1] = '\0';
+			}
+			CGVariant vChain;
+			bool fChainEffect = false;
+			CScriptUnknownRejectTracker chainRejected;
+			if ( ResolveDottedChain(szChainExpr, vChain, chainRejected, fChainEffect) )
+				return NO_ERROR;
+			if ( fChainEffect )
+			{
+				rejected = chainRejected;
+				return HRES_UNKNOWN_PROPERTY;
+			}
+		}
+
 		// Allow commands to invoke methods on referenced objects, for example
 		// SRC.SYSMESSAGE inside an item trigger. Resolve the left side through
 		// the context's function table first, then through the base object's
@@ -1317,6 +1384,13 @@ public:
 				{
 					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
 					rejected.Observe(hRoot, szRoot, m_pBaseObj);
+					if ( hRoot != NO_ERROR )
+					{
+						// FINDID(...) and FINDLAYER(...) are object methods on
+						// the default character/container, not global functions.
+						hRoot = pObj->s_Method(szRootName, vRootArgs, vRoot, m_pSrc);
+						rejected.Observe(hRoot, szRootName, m_pBaseObj);
+					}
 				}
 
 				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
