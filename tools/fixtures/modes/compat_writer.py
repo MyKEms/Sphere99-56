@@ -2436,6 +2436,7 @@ def write_runtime_files(
     force_garbage_collect: bool = False,
     runaway_loop_probe: bool = False,
     timer_removal_provenance: bool = False,
+    debug_level: int = 0,
 ) -> None:
     timer_provenance_setting = (
         "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
@@ -2459,7 +2460,7 @@ RESOURCES=spheretables.scp
 WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
-DEBUGLEVEL=0
+DEBUGLEVEL=""" + str(debug_level) + """
 """ + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
@@ -4072,10 +4073,15 @@ def generate_fixture(
         root,
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
-        runaway_loop_probe=args.runaway_loop_probe or args.expression_chain_probe,
+        runaway_loop_probe=(
+            args.runaway_loop_probe
+            or args.expression_chain_probe
+            or args.daily_logging_probe
+        ),
         timer_removal_provenance=(
             args.memory_timer_probe or args.timer_default_remove_probe
         ),
+        debug_level=2 if args.daily_logging_probe else 0,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
@@ -4134,8 +4140,8 @@ def generate_fixture(
         region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
-        escape_overflow_probe=args.escape_overflow_probe,
-        runaway_loop_probe=args.runaway_loop_probe,
+        escape_overflow_probe=(args.escape_overflow_probe or args.daily_logging_probe),
+        runaway_loop_probe=(args.runaway_loop_probe or args.daily_logging_probe),
         recursion_depth_probe=args.recursion_depth_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
@@ -4190,7 +4196,7 @@ def generate_fixture(
         )
     if args.spawn_point_probe:
         write_spawn_point_save(root)
-    if args.escape_overflow_probe:
+    if args.escape_overflow_probe or args.daily_logging_probe:
         write_escape_overflow_save(root)
     if args.movement_stairs_probe:
         write_movement_stairs_save(root)
