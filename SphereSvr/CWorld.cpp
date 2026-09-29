@@ -5,7 +5,15 @@
 
 #include "stdafx.h"	// predef header.
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 #include <stdio.h>
+#include <set>
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 #include <signal.h>
@@ -19,6 +27,139 @@ static const SOUND_TYPE sm_Sounds_Ghost[] =
 	SOUND_GHOST_4,
 	SOUND_GHOST_5,
 };
+
+namespace
+{
+	static void IntegrityAppend( char* pszOut, size_t iOutLen, const char* pszPart )
+	{
+		if ( pszOut == NULL || pszPart == NULL || iOutLen == 0 )
+			return;
+		const size_t iUsed = strlen( pszOut );
+		if ( iUsed + 1 < iOutLen )
+			strncat( pszOut, pszPart, iOutLen - iUsed - 1 );
+	}
+
+	static int IntegrityViolation( const char* pszRule, const CObjBase* pObj,
+		const char* pszChain, int& iLogBudget )
+	{
+		if ( iLogBudget <= 0 )
+			return 1;
+		--iLogBudget;
+		const unsigned dwUID = pObj ? static_cast<unsigned>(pObj->GetUID()) : 0;
+		g_Log.Event( LOG_GROUP_INIT, LOGL_CRIT,
+			"integrity watchdog rule=%s uid=0x%x chain=%s" LOG_CR,
+			pszRule, dwUID, pszChain ? pszChain : "-" );
+		return 1;
+	}
+
+	static void IntegrityChain( const CObjBase* pObj, char* pszOut, size_t iOutLen )
+	{
+		if ( pszOut == NULL || iOutLen == 0 )
+			return;
+		pszOut[0] = '\0';
+		std::set<const CObjBase*> seen;
+		const CObjBase* pCurrent = pObj;
+		for ( int i = 0; pCurrent != NULL && i < 16; ++i )
+		{
+			if ( ! seen.insert( pCurrent ).second )
+			{
+				IntegrityAppend( pszOut, iOutLen, "->cycle" );
+				break;
+			}
+			char szUID[32];
+			snprintf( szUID, sizeof(szUID), "%s0x%x", i ? "->" : "",
+				static_cast<unsigned>(pCurrent->GetUID()) );
+			IntegrityAppend( pszOut, iOutLen, szUID );
+			pCurrent = dynamic_cast<const CObjBase*>(pCurrent->GetParent());
+		}
+		if ( pszOut[0] == '\0' )
+			strncpy( pszOut, "-", iOutLen - 1 );
+		pszOut[iOutLen - 1] = '\0';
+	}
+
+	static bool IntegrityParentAllowed( const CObjBase* pObj, const CGObList* pParent )
+	{
+		if ( pParent == NULL || pParent == &g_World.m_ObjNew ||
+			pParent == &g_World.m_ObjDelete )
+			return pParent != NULL;
+		if ( pObj->IsChar())
+			return dynamic_cast<const CCharsList*>(pParent) != NULL ||
+				dynamic_cast<const CCharsActiveList*>(pParent) != NULL;
+		if ( pObj->IsItem())
+			return dynamic_cast<const CItemsList*>(pParent) != NULL ||
+				dynamic_cast<const CChar*>(pParent) != NULL ||
+				dynamic_cast<const CItemContainer*>(pParent) != NULL;
+		return false;
+	}
+
+	static int CheckIntegrityObject( CWorld* pWorld, CObjBase* pObj,
+		DWORD dwUIDIndex, int& iWorkBudget, int& iLogBudget )
+	{
+		if ( pObj == NULL )
+			return 0;
+		int iViolations = 0;
+		char szChain[256];
+		IntegrityChain( pObj, szChain, sizeof(szChain));
+
+		CGObList* pParent = pObj->GetParent();
+		if ( ! IntegrityParentAllowed( pObj, pParent ))
+			iViolations += IntegrityViolation( pParent ? "invalid_parent" : "parent_missing",
+				pObj, szChain, iLogBudget );
+		else if ( pParent != NULL && ! pParent->IsMyChild( pObj ))
+			iViolations += IntegrityViolation( "parent_missing_link", pObj, szChain, iLogBudget );
+
+		if (( pObj->GetUIDIndex() & UID_INDEX_MASK ) != dwUIDIndex )
+			iViolations += IntegrityViolation( "uid_slot_mismatch", pObj, szChain, iLogBudget );
+
+		if ( pObj->IsItem())
+		{
+			CContainer* pParentContainer = dynamic_cast<CContainer*>(pParent);
+			if ( pParentContainer != NULL && ! pParentContainer->IsMyChild(pObj))
+				iViolations += IntegrityViolation( "container_missing_child", pObj, szChain, iLogBudget );
+
+			std::set<const CObjBase*> seen;
+			const CObjBase* pCurrent = pObj;
+			while ( pCurrent != NULL )
+			{
+				CGObList* pCurrentParent = pCurrent->GetParent();
+				CObjBase* pContainer = dynamic_cast<CObjBase*>(pCurrentParent);
+				if ( pContainer == NULL )
+					break;
+				if ( ! seen.insert( pContainer ).second )
+				{
+					iViolations += IntegrityViolation( "container_cycle", pObj, szChain, iLogBudget );
+					break;
+				}
+				pCurrent = pContainer;
+			}
+		}
+
+		// Only a top-level item or active character has world coordinates. A
+		// disconnected object may retain an uninitialised point during teardown.
+		const bool fTopItem = pObj->IsItem() && dynamic_cast<CItemsList*>(pParent) != NULL;
+		const bool fActiveChar = pObj->IsChar() && dynamic_cast<CCharsActiveList*>(pParent) != NULL;
+		if (( fTopItem || fActiveChar ) && ! pObj->GetTopPoint().IsValidPoint())
+			iViolations += IntegrityViolation( "invalid_top_point", pObj, szChain, iLogBudget );
+
+		CContainer* pContainer = dynamic_cast<CContainer*>(pObj);
+		if ( pContainer != NULL && iWorkBudget != 0 )
+		{
+			for ( CItemPtr pChild = pContainer->GetHead(); pChild != NULL; pChild = pChild->GetNext())
+			{
+				if ( iWorkBudget > 0 )
+					--iWorkBudget;
+				if ( pChild->GetParent() != pContainer )
+					iViolations += IntegrityViolation( "child_parent_backlink", pChild, szChain, iLogBudget );
+				CObjBase* pLinked = pWorld->ObjFind( pChild->GetUID());
+				if ( pLinked != pChild )
+					iViolations += IntegrityViolation( "child_uid_link", pChild, szChain, iLogBudget );
+				if ( iWorkBudget == 0 )
+					break;
+			}
+		}
+		return iViolations;
+	}
+}
 
 //////////////////////////////////////////////////////////////////
 // -CWorldThread
@@ -200,6 +341,8 @@ CWorld::CWorld()
 	m_iSaveCountID = 0;
 	m_iSaveStage = 0;
 	m_fSaveRetry = false;
+	m_iIntegrityCursor = 1;
+	m_iIntegrityCycleObjects = 0;
 	ResetLoadIntegrity();
 }
 
@@ -1921,6 +2064,81 @@ LPCTSTR CWorld::GetGameTime() const
 	return( GetTimeDescFromMinutes( GetGameWorldTime()));
 }
 
+int CWorld::CheckIntegrity( int iBudget )
+{
+	const DWORD dwUIDCount = GetUIDCount();
+	if ( dwUIDCount <= 1 )
+	{
+		m_iIntegrityCursor = 1;
+		m_iIntegrityCycleObjects = 0;
+		return 0;
+	}
+
+	const bool fComplete = iBudget <= 0;
+	const DWORD dwStart = fComplete ? 1 :
+		( m_iIntegrityCursor > 0 && static_cast<DWORD>(m_iIntegrityCursor) < dwUIDCount ?
+			static_cast<DWORD>(m_iIntegrityCursor) : 1 );
+	const DWORD dwRequestedEnd = dwStart + static_cast<DWORD>(iBudget);
+	const DWORD dwEnd = fComplete || dwRequestedEnd > dwUIDCount ? dwUIDCount : dwRequestedEnd;
+	int iWorkBudget = fComplete ? -1 : iBudget;
+	int iLogBudget = 16; // A persistent fault must not flood the daily log.
+	int iViolations = 0;
+	for ( DWORD i = dwStart; i < dwEnd; ++i )
+	{
+		CResourceObj* pRaw = FindUIDObj(i);
+		if ( pRaw != NULL )
+		{
+			CObjBase* pObj = dynamic_cast<CObjBase*>(pRaw);
+			if ( pObj == NULL )
+			{
+				char szChain[32];
+				snprintf( szChain, sizeof(szChain), "slot=0x%x", static_cast<unsigned>(i));
+				iViolations += IntegrityViolation( "uid_slot_type", NULL, szChain, iLogBudget );
+			}
+			else
+			{
+				if ( ! fComplete )
+				{
+					if ( iWorkBudget > 0 )
+						--iWorkBudget;
+				}
+				iViolations += CheckIntegrityObject( this, pObj, i, iWorkBudget, iLogBudget );
+				m_iIntegrityCycleObjects++;
+			}
+		}
+	}
+
+	if ( fComplete )
+	{
+		const int iExpectedObjects = m_iIntegrityCycleObjects + m_ObjDelete.GetCount();
+		if ( iExpectedObjects != CObjBase::sm_iCount )
+		{
+			char szCount[64];
+			snprintf( szCount, sizeof(szCount), "uid=%d objects=%d", iExpectedObjects, CObjBase::sm_iCount );
+			iViolations += IntegrityViolation( "count_drift", NULL, szCount, iLogBudget );
+		}
+		m_iIntegrityCursor = 1;
+		m_iIntegrityCycleObjects = 0;
+	}
+	else if ( dwEnd >= dwUIDCount )
+	{
+		const int iExpectedObjects = m_iIntegrityCycleObjects + m_ObjDelete.GetCount();
+		if ( iExpectedObjects != CObjBase::sm_iCount )
+		{
+			char szCount[64];
+			snprintf( szCount, sizeof(szCount), "uid=%d objects=%d", iExpectedObjects, CObjBase::sm_iCount );
+			iViolations += IntegrityViolation( "count_drift", NULL, szCount, iLogBudget );
+		}
+		m_iIntegrityCursor = 1;
+		m_iIntegrityCycleObjects = 0;
+	}
+	else
+	{
+		m_iIntegrityCursor = static_cast<int>(dwEnd);
+	}
+	return iViolations;
+}
+
 void CWorld::OnTick()
 {
 	// Do this once per tick.
@@ -1961,6 +2179,7 @@ void CWorld::OnTick()
 
 		g_Serv.m_Profile.SwitchTask( PROFILE_Debug );
 		GarbageCollection_New();	// clean up our delete list.
+		CheckIntegrity( 256 );
 		g_Serv.m_Profile.SwitchTask( PROFILE_Overhead );
 	}
 	if ( m_timeSave <= GetCurrentTime())
