@@ -260,6 +260,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="open, by name, dialogs whose layouts use IF/WHILE/DOSWITCH/RETURN at login",
     )
     parser.add_argument(
+        "--dialog-argv-probe",
+        action="store_true",
+        help="open a dialog with positional values consumed by its layout through ARGV",
+    )
+    parser.add_argument(
         "--dialog-argo-tag-probe",
         action="store_true",
         help="store a command with ARGO.TAG(name,value) and dispatch it from a button",
