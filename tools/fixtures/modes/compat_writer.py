@@ -48,6 +48,13 @@ MEMORY_STALE_ITEM_UID = UID_F_ITEM | MEMORY_STALE_ITEM_SERIAL
 MEMORY_TIMER_ITEM_ID = 0x0EA3
 MEMORY_TIMER_MARKER = "SPHERE_MEMORY_TIMER_TRIGGERED"
 MEMORY_TIMER_REMOVED_MARKER = "SPHERE_MEMORY_TIMER_REMOVED"
+TIMER_DEFAULT_REMOVE_OWNER_SERIAL = 300
+TIMER_DEFAULT_REMOVE_ITEM_SERIAL = 301
+TIMER_DEFAULT_REMOVE_DELAY_SECONDS = 15
+TIMER_DEFAULT_REMOVE_ITEM_UID = UID_F_ITEM | TIMER_DEFAULT_REMOVE_ITEM_SERIAL
+TIMER_DEFAULT_REMOVE_ITEM_ID = 0x0EA3
+TIMER_DEFAULT_REMOVE_MARKER = "SPHERE_TIMER_DEFAULT_REMOVE_TRIGGERED"
+TIMER_DEFAULT_REMOVE_AFTER_MARKER = "SPHERE_TIMER_DEFAULT_REMOVE_AFTER"
 CHARACTER_CONTENT_ACCOUNT = "CharacterContentProbe"
 CHARACTER_CONTENT_PASSWORD = "char_content_pw"
 CHARACTER_CONTENT_CHAR_SERIAL = 3
@@ -164,6 +171,13 @@ DIALOG_ARGO_CONTROLS = (
     f"button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
     "htmlgump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
 )
+# A dialog-layout tag setter is also used by the race/class flow.  The
+# comma-form ARGO.TAG(name,value) must survive layout construction so the
+# button handler can dispatch the stored command.
+DIALOG_ARGO_TAG_ACCOUNT = "DialogArgoTagProbe"
+DIALOG_ARGO_TAG_MARKER = "SPHERE_DIALOG_ARGO_TAG"
+DIALOG_ARGO_TAG_NAME = "d_synthetic_argo_tag"
+DIALOG_ARGO_TAG_BUTTON = 13
 # A third dialog gates its layout with control flow on TAGs of the source
 # character: IF/ELSE picks one of two buttons, a nested IF(...) with ELSEIF
 # picks one text, a WHILE over an ARG local emits one text per row and a
@@ -890,6 +904,26 @@ SYSMESSAGE {marker} wrong
     return login, sections
 
 
+def dialog_argo_tag_scripts() -> tuple[str, str]:
+    """Return a dialog whose button dispatches a command stored in ARGO.TAG."""
+
+    login = f"DIALOG({DIALOG_ARGO_TAG_NAME})\n"
+    sections = f"""
+[DIALOG {DIALOG_ARGO_TAG_NAME}]
+0 0
+ARGO.TAG(forward,f_dialog_argo_tag_forward)
+button 20 20 2151 2152 1 0 {DIALOG_ARGO_TAG_BUTTON}
+
+[DIALOG {DIALOG_ARGO_TAG_NAME} BUTTON]
+ON={DIALOG_ARGO_TAG_BUTTON}
+<ARGO.TAG(forward)>
+
+[FUNCTION f_dialog_argo_tag_forward]
+SYSMESSAGE {DIALOG_ARGO_TAG_MARKER} forward
+"""
+    return login, sections
+
+
 def dword_hex_scripts() -> tuple[str, str]:
     """Return login lines and definitions for Sphere DWORD hex parsing."""
 
@@ -1514,6 +1548,7 @@ def write_scripts(
     named_resource_id_probe: bool = False,
     timer_lifetime_probe: bool = False,
     memory_timer_probe: bool = False,
+    timer_default_remove_probe: bool = False,
     dotted_expression_probe: bool = False,
     format_compat_probe: bool = False,
     arg_locals_probe: bool = False,
@@ -1528,6 +1563,7 @@ def write_scripts(
     dialog_argo_layout_probe: bool = False,
     dialog_flow_layout_probe: bool = False,
     dialog_argv_probe: bool = False,
+    dialog_argo_tag_probe: bool = False,
     dword_hex_probe: bool = False,
     isbit_probe: bool = False,
     food_probe: bool = False,
@@ -1571,6 +1607,9 @@ def write_scripts(
     )
     dialog_argv_login, dialog_argv_sections = (
         dialog_argv_scripts() if dialog_argv_probe else ("", "")
+    )
+    dialog_argo_tag_login, dialog_argo_tag_sections = (
+        dialog_argo_tag_scripts() if dialog_argo_tag_probe else ("", "")
     )
     dword_hex_login, dword_hex_sections = (
         dword_hex_scripts() if dword_hex_probe else ("", "")
@@ -1838,6 +1877,25 @@ def write_scripts(
         f"SERV.B {MEMORY_TIMER_REMOVED_MARKER} <ISUIDVALID {MEMORY_TIMER_ITEM_UID}>\n"
         "RETURN 1\n"
         if memory_timer_probe
+        else ""
+    )
+    timer_default_remove_itemdef = (
+        "\n[TYPEDEF 74]\n"
+        "DEFNAME=T_EQ_MEMORY_OBJ\n"
+        "\n[ITEMDEF 0x2007]\n"
+        "DEFNAME=i_memory\n"
+        "TYPE=T_EQ_MEMORY_OBJ\n"
+        "LAYER=30\n"
+        f"\n[ITEMDEF 0x{TIMER_DEFAULT_REMOVE_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_TIMER_DEFAULT_REMOVE\n"
+        "NAME=synthetic timer default remove\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Timer\n"
+        f"SERV.B {TIMER_DEFAULT_REMOVE_MARKER} <ISUIDVALID {TIMER_DEFAULT_REMOVE_ITEM_UID}>\n"
+        "REMOVE\n"
+        f"SERV.B {TIMER_DEFAULT_REMOVE_AFTER_MARKER} <ISUIDVALID {TIMER_DEFAULT_REMOVE_ITEM_UID}>\n"
+        if timer_default_remove_probe
         else ""
     )
     timer_lifetime_observer_login = (
@@ -2214,7 +2272,7 @@ SERV.B SPHERE_TIMER_UNEQUIP_TRIGGERED
 """ + unequip_remove + """
 SERV.B SPHERE_TIMER_UNEQUIP_REMOVE_RETURNED
 
-""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + character_content_itemdef + food_itemdef + gump_fallback_itemdef + """
+""" + timer_lifetime_probe_itemdefs + memory_timer_itemdef + timer_default_remove_itemdef + character_content_itemdef + food_itemdef + gump_fallback_itemdef + """
 [ITEMDEF 0x09B2]
 DEFNAME=SYNTHETIC_SHIRT
 NAME=synthetic shirt
@@ -2288,8 +2346,8 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + food_probe_login + """
 """ + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
-""" + ("" if timer_lifetime_probe or memory_timer_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
+""" + ("" if timer_lifetime_probe or memory_timer_probe or timer_default_remove_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -2330,7 +2388,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
+""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -3374,6 +3432,49 @@ def write_memory_timer_save(root: Path) -> None:
     )
 
 
+def write_timer_default_remove_save(root: Path) -> None:
+    """Seed an item whose timer callback removes itself without RETURN."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic default timer removal fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic default timer removal fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                f"SERIAL={TIMER_DEFAULT_REMOVE_OWNER_SERIAL}",
+                "NPC=2",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=130,128,0",
+                "[WORLDITEM SYNTHETIC_TIMER_DEFAULT_REMOVE]",
+                f"SERIAL={TIMER_DEFAULT_REMOVE_ITEM_SERIAL}",
+                f"CONT={TIMER_DEFAULT_REMOVE_OWNER_SERIAL}",
+                "LAYER=30",
+                f"TIMER={TIMER_DEFAULT_REMOVE_DELAY_SECONDS}",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_timer_sibling_mutation_save(root: Path) -> None:
     """Seed three independent sibling mutation cases and live destinations."""
 
@@ -3748,6 +3849,7 @@ def generate_fixture(
             args.world_load_counts,
             args.timer_lifetime_probe,
             args.memory_timer_probe,
+            args.timer_default_remove_probe,
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
@@ -3768,6 +3870,7 @@ def generate_fixture(
         any(world_load_modes)
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3791,6 +3894,7 @@ def generate_fixture(
         any(world_load_modes)
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3801,6 +3905,7 @@ def generate_fixture(
     if (
         args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3812,6 +3917,7 @@ def generate_fixture(
         (
             args.timer_lifetime_probe,
             args.memory_timer_probe,
+            args.timer_default_remove_probe,
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
@@ -3827,6 +3933,7 @@ def generate_fixture(
             any(world_load_modes),
             args.timer_lifetime_probe,
             args.memory_timer_probe,
+            args.timer_default_remove_probe,
             args.timer_lifetime_item_first_probe,
             args.timer_sibling_mutation_probe,
             args.timer_sibling_mutation_owner_first_probe,
@@ -3837,6 +3944,7 @@ def generate_fixture(
             args.dialog_argo_layout_probe,
             args.dialog_flow_layout_probe,
             args.dialog_argv_probe,
+            args.dialog_argo_tag_probe,
             args.dword_hex_probe,
             args.region_weather_probe,
             args.spawn_gem_probe,
@@ -3856,6 +3964,7 @@ def generate_fixture(
         or any(world_load_modes)
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3867,6 +3976,7 @@ def generate_fixture(
         or any(world_load_modes)
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3883,6 +3993,7 @@ def generate_fixture(
         args.world_load_counts
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3899,6 +4010,7 @@ def generate_fixture(
         args.world_load_counts
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3914,6 +4026,7 @@ def generate_fixture(
         args.world_load_counts
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3927,6 +4040,7 @@ def generate_fixture(
         any(world_load_modes)
         or args.timer_lifetime_probe
         or args.memory_timer_probe
+        or args.timer_default_remove_probe
         or args.timer_lifetime_item_first_probe
         or args.timer_sibling_mutation_probe
         or args.timer_sibling_mutation_owner_first_probe
@@ -3954,7 +4068,9 @@ def generate_fixture(
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
         runaway_loop_probe=args.runaway_loop_probe,
-        timer_removal_provenance=args.memory_timer_probe,
+        timer_removal_provenance=(
+            args.memory_timer_probe or args.timer_default_remove_probe
+        ),
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
@@ -3984,6 +4100,7 @@ def generate_fixture(
         metadata_roundtrip_probe=args.metadata_roundtrip_probe,
         timer_lifetime_probe=args.timer_lifetime_probe,
         memory_timer_probe=args.memory_timer_probe,
+        timer_default_remove_probe=args.timer_default_remove_probe,
         dotted_expression_probe=args.dotted_expression_probe,
         format_compat_probe=args.format_compat_probe,
         arg_locals_probe=args.arg_locals_probe,
@@ -4003,6 +4120,7 @@ def generate_fixture(
         dialog_argo_layout_probe=args.dialog_argo_layout_probe,
         dialog_flow_layout_probe=args.dialog_flow_layout_probe,
         dialog_argv_probe=args.dialog_argv_probe,
+        dialog_argo_tag_probe=args.dialog_argo_tag_probe,
         suppress_login_item=(
             args.roundtrip_integrity_probe
             or args.damage_trigger_probe
@@ -4043,6 +4161,8 @@ def generate_fixture(
         write_timer_lifetime_save(root)
     if args.memory_timer_probe:
         write_memory_timer_save(root)
+    if args.timer_default_remove_probe:
+        write_timer_default_remove_save(root)
     if args.book_pages_probe:
         write_book_pages_save(root)
     if args.dword_hex_probe:

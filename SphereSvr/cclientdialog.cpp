@@ -259,7 +259,14 @@ private:
 		{
 			CGVariant vSubArgs(pGumpArgs);
 			CGVariant vSubRet;
-			HRESULT hRes = m_pDialogObj->s_PropSet(szGumpKey, vSubArgs);
+			// TAG is a method in 0.99 dialog layouts.  Its comma-separated
+			// arguments must reach s_MethodTags; treating it as a property
+			// first makes "TAG(name,value)" look like one literal tag key.
+			HRESULT hRes = HRES_UNKNOWN_PROPERTY;
+			if ( !_stricmp(szGumpKey, "TAG" ))
+				hRes = m_pDialogObj->s_Method(szGumpKey, vSubArgs, vSubRet, m_pLayoutSrc);
+			if ( hRes != NO_ERROR )
+				hRes = m_pDialogObj->s_PropSet(szGumpKey, vSubArgs);
 			if ( hRes != NO_ERROR )
 				hRes = m_pDialogObj->s_Method(szGumpKey, vSubArgs, vSubRet, m_pLayoutSrc);
 			if ( hRes == NO_ERROR )

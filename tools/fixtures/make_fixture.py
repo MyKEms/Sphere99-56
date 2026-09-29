@@ -165,6 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="seed a production-shaped created-memory script timer",
     )
     parser.add_argument(
+        "--timer-default-remove-probe",
+        action="store_true",
+        help="exercise an @Timer handler that removes its item without RETURN",
+    )
+    parser.add_argument(
         "--dotted-expression-probe",
         action="store_true",
         help="evaluate dotted reference expressions and commands at login",
@@ -258,6 +263,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dialog-argv-probe",
         action="store_true",
         help="open a dialog with positional values consumed by its layout through ARGV",
+    )
+    parser.add_argument(
+        "--dialog-argo-tag-probe",
+        action="store_true",
+        help="store a command with ARGO.TAG(name,value) and dispatch it from a button",
     )
     parser.add_argument(
         "--spawn-gem-probe",
