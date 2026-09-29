@@ -741,9 +741,9 @@ RETURN 0
 [FUNCTION f_object_root_args]
 ARG(i,0)
 ARG(last,)
-WHILE (<ARG(i)> < ARGVCOUNT-1)
-ARG(last,<ARGV(<ARG(i)>)>)
-ARG(i,#+1)
+WHILE (arg(i)<ARGVCOUNT-1)
+ARG(last,<?argv(<arg(i)>)?>)
+ARG(i,<arg(i)>+1)
 ENDWHILE
 TAG.object_root_args=<ARGVCOUNT>|<ARG(i)>|<ARG(last)>
 RETURN 0

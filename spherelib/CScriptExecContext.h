@@ -86,6 +86,35 @@ private:
 		return SCRIPT_UNKNOWN_GET;
 	}
 
+	// ARG locals retain their source text so quoted values and object serials
+	// remain usable as strings.  A numeric local can also be assigned an
+	// expanded expression (for example ARG(i,<ARG(i)>+1)); recognize that
+	// expression when the local is read by the numeric evaluator.
+	static bool IsSimpleNumericExpression(LPCTSTR pszValue)
+	{
+		if ( pszValue == NULL || *pszValue == '\0' )
+			return false;
+		bool fDigit = false;
+		bool fOperator = false;
+		for ( LPCTSTR p = pszValue; *p; ++p )
+		{
+			if ( isdigit((unsigned char)*p) )
+			{
+				fDigit = true;
+				continue;
+			}
+			if ( ISWHITESPACE(*p) )
+				continue;
+			if ( strchr("+-*/%()<>!=&|~", *p) != NULL )
+			{
+				fOperator = true;
+				continue;
+			}
+			return false;
+		}
+		return fDigit && fOperator;
+	}
+
 protected:
 	// The server supplies its configured per-invocation limit.  The generic
 	// context keeps the historical default so libraries using it remain safe.
@@ -614,7 +643,15 @@ public:
 		if ( vValue.IsEmpty() )
 			return true;
 		LPCTSTR pszValue = vValue.GetPSTR();
-		iValue = GetSingle(pszValue);
+		if ( IsSimpleNumericExpression(pszValue) )
+		{
+			TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+			strncpy(szExpression, pszValue, sizeof(szExpression) - 1);
+			szExpression[sizeof(szExpression) - 1] = '\0';
+			iValue = GetComplex(szExpression);
+		}
+		else
+			iValue = GetSingle(pszValue);
 		return true;
 	}
 
@@ -702,6 +739,13 @@ public:
 					m_LocalArgs.FindKeyVar(pszName, vCurrent);
 					TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
 					snprintf(szExpression, sizeof(szExpression), "%d%s", vCurrent.GetInt(), pszValue + 1);
+					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(szExpression));
+				}
+				else if ( IsSimpleNumericExpression(pszValue) )
+				{
+					TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
+					strncpy(szExpression, pszValue, sizeof(szExpression) - 1);
+					szExpression[sizeof(szExpression) - 1] = '\0';
 					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(szExpression));
 				}
 				else
