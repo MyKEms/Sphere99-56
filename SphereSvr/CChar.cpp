@@ -1838,6 +1838,36 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		}
 		break;
 
+	case M_NewEquip:
+		{
+			// 0.99's NEWEQUIP combines NEWITEM with EQUIPLAST.  Resolve the
+			// item definition before creating anything so an invalid name cannot
+			// silently create DEFAULTITEM through CItem::CreateBase().
+			if ( vArgs.IsEmpty())
+				return HRES_BAD_ARG_QTY;
+			LPCTSTR pszItemDef = vArgs.GetPSTR();
+			// Named item definitions must be present in the DEFNAME table.  The
+			// general expression resolver hashes an unknown word into an integer;
+			// accepting that value could accidentally create DEFAULTITEM (and emit
+			// its invalid-item diagnostic).  Numeric item IDs remain supported.
+			CSphereUID rid = g_Cfg.ResourceCheckIDType( RES_ItemDef, pszItemDef );
+			if ( !rid.IsValidRID() && pszItemDef && isdigit( (unsigned char)pszItemDef[0] ))
+				rid = g_Cfg.ResourceGetIDByName( RES_ItemDef, pszItemDef );
+			if ( !rid.IsValidRID() || rid.GetResType() != RES_ItemDef )
+				return NO_ERROR;
+			ITEMID_TYPE id = (ITEMID_TYPE) rid.GetResIndex();
+			if ( id <= ITEMID_NOTHING )
+				return NO_ERROR;
+			if ( g_Cfg.FindItemDef( id ) == NULL )
+				return NO_ERROR;
+			CItemPtr pItem = CItem::CreateScript( id, pCharSrc ? (CChar*)pCharSrc : this );
+			if ( pItem == NULL )
+				return HRES_BAD_ARGUMENTS;
+			vValRet.SetRef(pItem);
+			m_Act.m_Targ = pItem->GetUID();	// preserve LASTNEW/LASTNEWITEM and EQUIPLAST semantics.
+			return ItemEquip( pItem );
+		}
+
 	case M_Dupe:	// = dupe a creature !
 		{
 			CCharPtr pChar = CChar::CreateNPC( GetID());
