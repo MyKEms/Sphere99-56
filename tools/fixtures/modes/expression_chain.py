@@ -13,8 +13,8 @@ MODE = register_mode(
     FixtureMode(
         name="expression-chain",
         fixture_args=("--expression-chain-probe",),
-        order=71,
-        id_block=71,
+        order=72,
+        id_block=72,
         case=FixtureCase(
             name="expression-chain",
             mode="expression-chain",
