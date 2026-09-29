@@ -79,7 +79,9 @@ CClient::CClient( SOCKET client ) :
 	g_Serv.m_Clients.InsertHead( this );
 
 	CSocketAddress PeerName = m_Socket.GetPeerName();
-	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_EVENT,
+	// This compatibility record must remain visible even when an installation
+	// narrows LOGMASK for verbose client diagnostics.
+	g_Log.Event( 0, LOGL_EVENT,
 		"%x:Client connected [Total:%d] from '%s'." LOG_CR,
 		m_Socket.GetSocket(), g_Serv.StatGet( SERV_STAT_CLIENTS ),
 		(LPCTSTR) PeerName.GetAddrStr());
