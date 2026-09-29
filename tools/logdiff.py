@@ -29,6 +29,7 @@ _LEVEL_RE = re.compile(
 _TIME_RE = re.compile(r"^\d{2}:\d{2}(?::\d{2})?:")
 _BRACKET_LEVEL_RE = re.compile(r"^\[(?P<level>DEBUG|TRACE|INFO|WARN|WARNING|ERROR|CRIT|CRITICAL|FATAL)\]\s*")
 _CONTEXT_RE = re.compile(r"^\((?:[^()\r\n]+),\s*(\d+)\)")
+_CLIENT_SOCKET_RE = re.compile(r"^[0-9A-Fa-f]+:")
 _IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _HEX_RE = re.compile(r"(?<![\w])(?:0x[0-9a-fA-F]+|0[0-9a-fA-F]{3,})(?![\w])")
 _NUMBER_RE = re.compile(r"(?<![\w])[-+]?\d+(?:\.\d+)?(?![\w])")
@@ -60,6 +61,11 @@ def normalize_line(line: str) -> str:
     if context:
         prefix = f"(script,{context.group(1)})"
         body = body[context.end() :]
+
+    # Client records carry the socket handle as a hexadecimal prefix.  The
+    # handle is allocated afresh for every connection and is not part of the
+    # stock event class being compared.
+    body = _CLIENT_SOCKET_RE.sub("", body, count=1)
 
     # Replace identifying values before numbers so addresses and quoted names
     # cannot leak into a diff report.

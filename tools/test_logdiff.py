@@ -32,6 +32,16 @@ class LogDiffTests(unittest.TestCase):
             "INFO:Loading '<value>'",
         )
 
+    def test_client_socket_prefix_is_run_specific(self):
+        self.assertEqual(
+            normalize_line("15:01:FC:Login 'alice'"),
+            "INFO:Login '<value>'",
+        )
+        self.assertEqual(
+            normalize_line("15:01:0c:Login 'alice'"),
+            "INFO:Login '<value>'",
+        )
+
     def test_diff_reports_only_classes_and_count_ratios(self):
         linux = [
             "12:00:ERROR:bad item 7",
