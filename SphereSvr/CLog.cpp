@@ -73,16 +73,20 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 #endif
 #endif
 
-	// Write out to log file.
-#ifdef _WIN32
+	// Write out to the configured daily log on every platform.  The Linux
+	// stderr channel below remains available for tooling and crash triage.
 	WriteString( pszMsg );
-#endif
 
 	// print to all client consoles.
 	g_Serv.Event_PrintClient( pszMsg );	// echo out to admin telnets.
 
 	// Send event to the external monitors.
+	// Linux's legacy path did not mirror log chunks into the console.  Keep
+	// that console stream stable: the daily file above is the new sink, while
+	// stderr remains the existing tooling channel.
+#ifdef _WIN32
 	g_Serv.OnTriggerEvent( SERVTRIG_ServerMsg, reinterpret_cast<uintptr_t>(pszMsg), static_cast<uintptr_t>(iColorType) );
+#endif
 }
 
 int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
@@ -91,7 +95,8 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		return( 0 );
 
 #ifndef _WIN32
-	// Linux: skip file I/O entirely. SPHERE_LOG_* macros handle stderr output.
+	// Keep the stderr channel for tooling and crash triage.  The daily file is
+	// written below through the same formatter used by the Windows build.
 	// g_Log.Event is called thousands of times during script loading, so only
 	// problems (FATAL/CRITICAL/ERROR) go to stderr — and always, whatever
 	// LOGMASK says: EventError()/DEBUG_ERR pass group 0, which never matches
@@ -106,12 +111,7 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 			fputc( '\n', stderr );
 		fflush( stderr );
 	}
-	if ( ! IsLogged( dwGroupMask, level ))
-		return( 0 );
-	try { g_Serv.Event_PrintClient( pszMsg ); }
-	catch (...) { fprintf( stderr, "[ERROR] CLog::Event_PrintClient threw\n" ); }
-	return 1;
-#else
+#endif
 	if ( ! IsLogged( dwGroupMask, level ))
 		return( 0 );
 
@@ -173,7 +173,6 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		iRet = 0;
 	}
 	return( iRet );
-#endif
 }
 
 CGTime CLog::sm_prevCatchTick;
