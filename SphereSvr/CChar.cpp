@@ -1112,6 +1112,9 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		// Extended for STATF_Stone etc.
 		vValRet.SetDWORD( m_StatFlag );
 		break;
+	case P_Flag_Immobile:
+		vValRet.SetBool( IsStatFlag( STATF_Immobile ));
+		break;
 	case P_Font:
 		vValRet.SetInt( m_fonttype );
 		break;
@@ -1240,6 +1243,9 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_Flags:
 		// DO NOT MODIFY STATF_SaveParity, STATF_Spawned, STATF_Pet
 		m_StatFlag = ( vVal.GetInt() &~ (STATF_SaveParity|STATF_Pet|STATF_Spawned)) | ( m_StatFlag& (STATF_SaveParity|STATF_Pet|STATF_Spawned) );
+		break;
+	case P_Flag_Immobile:
+		StatFlag_Mod( STATF_Immobile, vVal.GetBool());
 		break;
 	case P_Font:
 		m_fonttype = (FONT_TYPE) vVal.GetInt();
@@ -1658,6 +1664,15 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		else
 		{
 			Noto_Criminal();
+		}
+		break;
+	case M_Flag_Immobile:
+		{
+			bool fImmobile = vArgs.IsEmpty()
+				? ! IsStatFlag( STATF_Immobile )
+				: vArgs.GetBool();
+			StatFlag_Mod( STATF_Immobile, fImmobile );
+			vValRet.SetBool( fImmobile );
 		}
 		break;
 	case M_Disconnect:
