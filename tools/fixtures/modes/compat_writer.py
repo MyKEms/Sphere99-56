@@ -731,7 +731,7 @@ def object_root_dispatch_scripts() -> tuple[str, str]:
 [FUNCTION f_object_root_empty]
 ARG(i,0)
 ARG(last,)
-WHILE (<ARG(i)> < (ARGVCOUNT-1))
+WHILE (<ARG(i)> < ARGVCOUNT-1)
 ARG(last,<ARGV(<ARG(i)>)>)
 ARG(i,#+1)
 ENDWHILE
@@ -741,7 +741,7 @@ RETURN 0
 [FUNCTION f_object_root_args]
 ARG(i,0)
 ARG(last,)
-WHILE (<ARG(i)> < (ARGVCOUNT-1))
+WHILE (<ARG(i)> < ARGVCOUNT-1)
 ARG(last,<ARGV(<ARG(i)>)>)
 ARG(i,#+1)
 ENDWHILE

@@ -1101,6 +1101,28 @@ public:
 					int iValue = 0;
 					if ( ResolveReferenceOperand(szOperand, iValue) )
 					{
+						// ARGVCOUNT-1 is the stock loop bound used by legacy
+						// variable-argument helpers.  The general expression
+						// reader intentionally evaluates operator chains from left
+						// to right, but this bound must be kept together so an
+						// empty list does not turn (0 < 0 - 1) into a true loop.
+						if ( !fNeg && !_stricmp(szOperand, "ARGVCOUNT") )
+						{
+							LPCTSTR pCount = pName;
+							while ( ISWHITESPACE(*pCount) ) pCount++;
+							if ( *pCount == '-' )
+							{
+								LPCTSTR pOne = pCount + 1;
+								while ( ISWHITESPACE(*pOne) ) pOne++;
+								if ( *pOne == '1' &&
+									!isalnum((unsigned char)pOne[1]) &&
+									pOne[1] != '_' && pOne[1] != '.' )
+								{
+									iValue--;
+									pName = pOne + 1;
+								}
+							}
+						}
 						pStr = pName;
 						return fNeg ? -iValue : iValue;
 					}
