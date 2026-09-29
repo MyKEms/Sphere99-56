@@ -26,14 +26,36 @@ extern int g_iDebugLevel;
 // mask, so enabling it does not turn on unrelated verbose logging.
 extern bool g_fTimerRemovalProvenance;
 
-// Core logging macro — writes to stderr (captured in sphere99svr.log)
+// Keep the historical stderr stream and feed compatibility events and errors
+// to the daily CLog sink. Verbose network/script traces remain stderr-only:
+// the daily file is a stock-compatible operational record, not a debug dump.
+// Formatting once avoids evaluating a logging argument twice when it has side
+// effects (for example a socket or object lookup).
+inline void SphereLogMessage(int iDebugLevel, LPCTSTR pszLabel, LOGL_TYPE level, LPCTSTR pszFormat, ...)
+{
+	if ( g_iDebugLevel < iDebugLevel )
+		return;
+
+	TCHAR szMessage[1024];
+	va_list vargs;
+	va_start(vargs, pszFormat);
+	vsnprintf(szMessage, sizeof(szMessage), pszFormat, vargs);
+	va_end(vargs);
+
+	fprintf(stderr, "[%s] %s\n", pszLabel, szMessage);
+	fflush(stderr);
+	if ( iDebugLevel <= 1 )
+	{
+		TCHAR szDailyMessage[sizeof(szMessage) + 1];
+		snprintf(szDailyMessage, sizeof(szDailyMessage), "%s" LOG_CR, szMessage);
+		g_Log.EventStrDaily(0, level, szDailyMessage);
+	}
+}
+
 #define SPHERE_LOG(level, fmt, ...) \
-	do { if (g_iDebugLevel >= (level)) { \
-		fprintf(stderr, "[%s] " fmt "\n", \
-			(level) == 0 ? "ERR" : (level) == 1 ? "INF" : (level) == 2 ? "NET" : "TRC", \
-			##__VA_ARGS__); \
-		fflush(stderr); \
-	} } while(0)
+	SphereLogMessage((level), \
+		(level) == 0 ? "ERR" : (level) == 1 ? "INF" : (level) == 2 ? "NET" : "TRC", \
+		(level) == 0 ? LOGL_ERROR : LOGL_EVENT, fmt, ##__VA_ARGS__)
 
 // Convenience macros for each subsystem
 #define SPHERE_LOG_ERR(fmt, ...)    SPHERE_LOG(0, fmt, ##__VA_ARGS__)
@@ -42,9 +64,7 @@ extern bool g_fTimerRemovalProvenance;
 #define SPHERE_LOG_CLIENT(fmt, ...) SPHERE_LOG(2, fmt, ##__VA_ARGS__)
 #define SPHERE_LOG_SCRIPT(fmt, ...) SPHERE_LOG(3, fmt, ##__VA_ARGS__)
 #define SPHERE_LOG_TIMER_PROVENANCE(fmt, ...) \
-	do { if (g_fTimerRemovalProvenance) { \
-		fprintf(stderr, "[INF] " fmt "\n", ##__VA_ARGS__); \
-		fflush(stderr); \
-	} } while(0)
+	do { if (g_fTimerRemovalProvenance) \
+		SphereLogMessage(0, "INF", LOGL_EVENT, fmt, ##__VA_ARGS__); } while(0)
 
 #endif // SPHERE_LOG_H
