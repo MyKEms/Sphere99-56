@@ -577,7 +577,85 @@ static bool SaveFileExists( LPCTSTR pszPath )
 	return true;
 }
 
-bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fRetry )
+static bool CopySaveFile( LPCTSTR pszSource, LPCTSTR pszTarget )
+{
+	FILE* pSource = fopen( pszSource, "rb" );
+	if ( !pSource )
+		return !SaveFileExists( pszSource );
+	FILE* pTarget = fopen( pszTarget, "wb" );
+	if ( !pTarget )
+	{
+		fclose( pSource );
+		return false;
+	}
+
+	char buffer[64 * 1024];
+	bool fOK = true;
+	while ( !feof( pSource ))
+	{
+		size_t iRead = fread( buffer, 1, sizeof(buffer), pSource );
+		if ( iRead && fwrite( buffer, 1, iRead, pTarget ) != iRead )
+		{
+			fOK = false;
+			break;
+		}
+		if ( ferror( pSource ))
+		{
+			fOK = false;
+			break;
+		}
+	}
+	if ( fflush( pTarget ) != 0 )
+		fOK = false;
+	if ( fclose( pTarget ) != 0 )
+		fOK = false;
+	if ( fclose( pSource ) != 0 )
+		fOK = false;
+	if ( !fOK )
+		remove( pszTarget );
+	return fOK;
+}
+
+static bool PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszTarget )
+{
+	if ( !SaveFileExists( pszSource ))
+		return true;
+
+	remove( pszTarget );
+#ifdef _WIN32
+	if ( CreateHardLink( pszTarget, pszSource, NULL ))
+		return true;
+#else
+	if ( link( pszSource, pszTarget ) == 0 )
+		return true;
+#endif
+	return CopySaveFile( pszSource, pszTarget );
+}
+
+static bool PublishSaveFile( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName )
+{
+	CGString sTarget;
+	sTarget.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir, pszBaseName );
+	const CGString sTemp = s.GetFilePath();
+	bool fPublished = false;
+#ifdef _WIN32
+	fPublished = MoveFileEx( (LPCTSTR) sTemp, (LPCTSTR) sTarget,
+		MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH ) != 0;
+#else
+	fPublished = rename( sTemp, sTarget ) == 0;
+#endif
+	if ( !fPublished )
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Publish '%s' to '%s' FAILED code %d" LOG_CR,
+			(LPCTSTR) sTemp, (LPCTSTR) sTarget, CGFile::GetLastError());
+		return false;
+	}
+	s.SetFilePath( sTarget );
+	return true;
+}
+
+bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fRetry, bool fAtomic )
 {
 	ASSERT(pszBaseName);
 
@@ -589,7 +667,8 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 	unsigned dwRotated = 0;
 	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount,
 		fManifestPending, dwRotated ) && fManifestPending && iManifestSaveCount == iSaveCount;
-	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit && (dwRotated & dwManifestBit);
+	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit &&
+		(dwRotated & dwManifestBit) && SaveFileExists( sArchive );
 
 	CGString sSaveName;
 	sSaveName.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir, pszBaseName );
@@ -599,10 +678,14 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 		// A retry keeps an archive already rotated by the failed generation. If
 		// this component was not reached before the failure, rotate it now.
 		remove( sArchive );
-		if ( rename( sSaveName, sArchive ))
+		const bool fRotated = fAtomic ? PreserveSaveFile( sSaveName, sArchive ) :
+			(rename( sSaveName, sArchive ) == 0 || !SaveFileExists( sSaveName ));
+		if ( !fRotated )
 		{
-			// May not exist if this is the first time.
-			g_Log.Event( LOG_GROUP_SAVE, LOGL_WARN, "Rename %s to '%s' FAILED code %d?" LOG_CR, (LPCTSTR) sSaveName, (const TCHAR*) sArchive, CGFile::GetLastError() );
+			g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT, "%s '%s' to '%s' FAILED code %d" LOG_CR,
+				fAtomic ? "Preserve" : "Rename", (LPCTSTR) sSaveName,
+				(const TCHAR*) sArchive, CGFile::GetLastError() );
+			return false;
 		}
 		if ( fHaveManifest && dwManifestBit )
 		{
@@ -615,9 +698,15 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 		}
 	}
 
-	if ( ! s.Open( sSaveName, OF_WRITE|OF_TEXT))
+	CGString sOpenName = sSaveName;
+	if ( fAtomic )
 	{
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT, "Save '%s' FAILED" LOG_CR, (LPCTSTR) sSaveName );
+		sOpenName.Format( "%s" SPHERE_FILE "%s.tmp", pszBaseDir, pszBaseName );
+		remove( sOpenName );
+	}
+	if ( ! s.Open( sOpenName, OF_WRITE|OF_TEXT))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT, "Save '%s' FAILED" LOG_CR, (LPCTSTR) sOpenName );
 		return( false );
 	}
 
@@ -751,6 +840,10 @@ bool CWorld::SaveStage() // Save world state in stages.
 		const bool fPlayersCloseOK = m_FilePlayers.CloseChecked();
 		if ( !fWorldCloseOK || !fPlayersCloseOK )
 			return FailSave( "closing world files" );
+		if ( !PublishSaveFile( m_FileWorld, g_Cfg.m_sWorldBaseDir, "world" ))
+			return FailSave( "publishing world save" );
+		if ( !PublishSaveFile( m_FilePlayers, g_Cfg.m_sWorldBaseDir, "chars" ))
+			return FailSave( "publishing character save" );
 
 		int iManifestSaveCount = 0;
 		bool fManifestPending = false;
@@ -847,11 +940,11 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 
 	// Determine the save name based on the time.
 	// exponentially degrade the saves over time.
-	if ( ! OpenScriptBackup( m_FileWorld, g_Cfg.m_sWorldBaseDir, "world", m_iSaveCountID, fRetry ))
+	if ( ! OpenScriptBackup( m_FileWorld, g_Cfg.m_sWorldBaseDir, "world", m_iSaveCountID, fRetry, true ))
 	{
 		return FailSave( "opening world save" );
 	}
-	if ( ! OpenScriptBackup( m_FilePlayers, g_Cfg.m_sWorldBaseDir, "chars", m_iSaveCountID, fRetry ))
+	if ( ! OpenScriptBackup( m_FilePlayers, g_Cfg.m_sWorldBaseDir, "chars", m_iSaveCountID, fRetry, true ))
 	{
 		return FailSave( "opening character save" );
 	}

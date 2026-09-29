@@ -457,7 +457,7 @@ public:
 	bool IsItemTypeNear( const CPointMap& pt, IT_TYPE iType, int iDistance = 0 );
 	CItemPtr CheckNaturalResource( const CPointMap& pt, IT_TYPE Type, bool fTest = true );
 
-	static bool OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int savecount, bool fRetry = false );
+	static bool OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int savecount, bool fRetry = false, bool fAtomic = false );
 	bool IsSaveRetry() const { return m_fSaveRetry; }
 	void ReSyncLoad();
 	void ReSyncUnload();
