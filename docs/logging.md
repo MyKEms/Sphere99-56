@@ -1,11 +1,12 @@
 # Server logging
 
 The server writes a daily text log when `LOG=logs/` (or another directory) is
-configured. Files are named `sphereYYYY-MM-DD.log`. The formatter follows the
-0.99 daily-log shape: `HH:MM:` is emitted for runtime events, level words are
-`CRITICAL:`, `ERROR:`, and `WARNING:`, and script failures include a
-`(file,line)` context before the message. Startup/load events retain the stock
-plain-line form while the server is loading.
+configured. Files are named `sphereYYYY-MM-DD.log` and begin with the server
+description and compile stamp. The formatter follows the 0.99 daily-log
+shape: `HH:MM:` is emitted for runtime events, level words are `CRITICAL:`,
+`ERROR:`, and `WARNING:`, and script failures include a `(file,line)` context
+before the message. Startup/load events retain the stock plain-line form while
+the server is loading.
 
 The engine's internal levels map to the stock vocabulary as follows:
 

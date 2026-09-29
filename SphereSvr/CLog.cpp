@@ -57,7 +57,16 @@ bool CLog::OpenLog( LPCTSTR pszBaseDirName )	// name set previously.
 	CGString sFileName = GetMergedFileName( m_sBaseDir, sName );
 
 	// Use the OF_READWRITE to append to an existing file.
-	return( CFileText::Open( sFileName, OF_SHARE_DENY_NONE|OF_READWRITE|OF_TEXT ));
+	if ( ! CFileText::Open( sFileName, OF_SHARE_DENY_NONE|OF_READWRITE|OF_TEXT ))
+		return false;
+
+	// The startup banner is emitted before the configuration's LOG= path is
+	// loaded.  Repeat the generic build stamp when the daily file is opened so
+	// every stock-format log identifies the server build that produced it.
+	WriteString( LOG_CR );
+	WriteString( g_szServerDescription );
+	WriteString( LOG_CR "Compiled on " __DATE__ " (" __TIME__ ")" LOG_CR LOG_CR );
+	return true;
 }
 
 void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
