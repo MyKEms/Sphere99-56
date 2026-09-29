@@ -295,6 +295,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="log in an existing character through a near-limit escape expansion",
     )
     parser.add_argument(
+        "--daily-logging-probe",
+        action="store_true",
+        help="exercise daily logging for script, connection, and login messages",
+    )
+    parser.add_argument(
         "--runaway-loop-probe",
         action="store_true",
         help="exercise a configurable bounded WHILE loop and a second login",

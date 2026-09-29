@@ -100,6 +100,16 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 
 int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
 {
+	return EventStrInternal( dwGroupMask, level, pszMsg, true );
+}
+
+int CLog::EventStrDaily( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
+{
+	return EventStrInternal( dwGroupMask, level, pszMsg, false );
+}
+
+int CLog::EventStrInternal( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg, bool fEmitStderr )
+{
 	if ( pszMsg == NULL || *pszMsg == '\0' )
 		return( 0 );
 
@@ -108,10 +118,9 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 	// written below through the same formatter used by the Windows build.
 	// g_Log.Event is called thousands of times during script loading, so only
 	// problems (FATAL/CRITICAL/ERROR) go to stderr — and always, whatever
-	// LOGMASK says: EventError()/DEBUG_ERR pass group 0, which never matches
-	// the mask, and dropping these hid why the server exits (e.g. "No previous
-	// backup available ?" on an empty save/).
-	if ( level <= LOGL_ERROR )
+	// LOGMASK says. Group 0 is the ungrouped compatibility path used by
+	// EventError()/DEBUG_ERR.
+	if ( fEmitStderr && level <= LOGL_ERROR )
 	{
 		LPCTSTR pszLabel = ( level == LOGL_FATAL ) ? "FATAL" : ( level == LOGL_CRIT ) ? "CRITICAL" : "ERROR";
 		fprintf( stderr, "[%s] %s", pszLabel, pszMsg );
