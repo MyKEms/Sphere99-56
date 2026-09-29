@@ -175,6 +175,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise named ARG locals, positional object roots, and LASTNEW",
     )
     parser.add_argument(
+        "--object-root-dispatch-probe",
+        action="store_true",
+        help="exercise script functions called through a referenced object root",
+    )
+    parser.add_argument(
         "--findarg-probe",
         action="store_true",
         help="exercise resource-reference event add, deduplication, and removal",
