@@ -692,6 +692,36 @@ public:
 public:
 	virtual HRESULT Function_Dispatch(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet)
 	{
+		// FINDCONT is an object method on the active container, but the
+		// reference-chain evaluator dispatches its root through this function
+		// table first.  Forward the root here so a valid method is not recorded
+		// as an unknown function before the object fallback runs.
+		if ( !_stricmp(pszKey, "FINDCONT") && m_pBaseObj )
+		{
+			CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+			if ( pObj )
+			{
+				HRESULT hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+				if ( hRes == NO_ERROR )
+					return hRes;
+			}
+		}
+		// FLAG_IMMOBILE is both a character property and a zero/one-argument
+		// method in 0.99 scripts.  Resolve the active object before the global
+		// function lookup so valid reads and calls do not create rejected-key
+		// diagnostics.
+		if ( !_stricmp(pszKey, "FLAG_IMMOBILE") && m_pBaseObj )
+		{
+			CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+			if ( pObj )
+			{
+				HRESULT hRes = vArgs.IsEmpty()
+					? pObj->s_PropGet(pszKey, vValRet, m_pSrc)
+					: pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+				if ( hRes == NO_ERROR )
+					return hRes;
+			}
+		}
 		if ( !_stricmp(pszKey, "ARG") )
 		{
 			LPCTSTR pszArgs = vArgs.GetPSTR();
