@@ -3439,7 +3439,7 @@ LOGIN_ERR_TYPE CClient::Setup_Start( CChar* pChar ) // Send character startup st
 		}
 	}
 
-	DEBUG_TRACE(( "%x:Setup_Start done" LOG_CR, m_Socket.GetSocket()));
+	SPHERE_LOG_NET("%x:Setup_Start done", m_Socket.GetSocket());
 	return LOGIN_SUCCESS;
 }
 
@@ -3512,7 +3512,7 @@ bool CClient::Setup_Play( int iSlot ) // After hitting "Play Character" button
 	SPHERE_LOG_NET("Setup_Play: slot=%d sock=%d", iSlot, m_Socket.GetSocket());
 	// Mode == CLIMODE_SETUP_CHARLIST
 
-	DEBUG_TRACE(( "%x:Setup_Play slot %d" LOG_CR, m_Socket.GetSocket(), iSlot ));
+	SPHERE_LOG_NET("%x:Setup_Play slot %d", m_Socket.GetSocket(), iSlot );
 
 	if ( ! GetAccount())
 		return( false );
