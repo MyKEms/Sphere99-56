@@ -1112,6 +1112,9 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		// Extended for STATF_Stone etc.
 		vValRet.SetDWORD( m_StatFlag );
 		break;
+	case P_Flag_Immobile:
+		vValRet.SetBool( IsStatFlag( STATF_Immobile ));
+		break;
 	case P_Font:
 		vValRet.SetInt( m_fonttype );
 		break;
@@ -1240,6 +1243,9 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_Flags:
 		// DO NOT MODIFY STATF_SaveParity, STATF_Spawned, STATF_Pet
 		m_StatFlag = ( vVal.GetInt() &~ (STATF_SaveParity|STATF_Pet|STATF_Spawned)) | ( m_StatFlag& (STATF_SaveParity|STATF_Pet|STATF_Spawned) );
+		break;
+	case P_Flag_Immobile:
+		StatFlag_Mod( STATF_Immobile, vVal.GetBool());
 		break;
 	case P_Font:
 		m_fonttype = (FONT_TYPE) vVal.GetInt();
@@ -1660,6 +1666,15 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			Noto_Criminal();
 		}
 		break;
+	case M_Flag_Immobile:
+		{
+			bool fImmobile = vArgs.IsEmpty()
+				? ! IsStatFlag( STATF_Immobile )
+				: vArgs.GetBool();
+			StatFlag_Mod( STATF_Immobile, fImmobile );
+			vValRet.SetBool( fImmobile );
+		}
+		break;
 	case M_Disconnect:
 		// Push a player char off line. CLIENTLINGER thing
 		if ( IsClient())
@@ -1837,6 +1852,36 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			m_Act.m_Targ = pItem->GetUID();	// for last target stuff. (trigger stuff)
 		}
 		break;
+
+	case M_NewEquip:
+		{
+			// 0.99's NEWEQUIP combines NEWITEM with EQUIPLAST.  Resolve the
+			// item definition before creating anything so an invalid name cannot
+			// silently create DEFAULTITEM through CItem::CreateBase().
+			if ( vArgs.IsEmpty())
+				return HRES_BAD_ARG_QTY;
+			LPCTSTR pszItemDef = vArgs.GetPSTR();
+			// Named item definitions must be present in the DEFNAME table.  The
+			// general expression resolver hashes an unknown word into an integer;
+			// accepting that value could accidentally create DEFAULTITEM (and emit
+			// its invalid-item diagnostic).  Numeric item IDs remain supported.
+			CSphereUID rid = g_Cfg.ResourceCheckIDType( RES_ItemDef, pszItemDef );
+			if ( !rid.IsValidRID() && pszItemDef && isdigit( (unsigned char)pszItemDef[0] ))
+				rid = g_Cfg.ResourceGetIDByName( RES_ItemDef, pszItemDef );
+			if ( !rid.IsValidRID() || rid.GetResType() != RES_ItemDef )
+				return NO_ERROR;
+			ITEMID_TYPE id = (ITEMID_TYPE) rid.GetResIndex();
+			if ( id <= ITEMID_NOTHING )
+				return NO_ERROR;
+			if ( g_Cfg.FindItemDef( id ) == NULL )
+				return NO_ERROR;
+			CItemPtr pItem = CItem::CreateScript( id, pCharSrc ? (CChar*)pCharSrc : this );
+			if ( pItem == NULL )
+				return HRES_BAD_ARGUMENTS;
+			vValRet.SetRef(pItem);
+			m_Act.m_Targ = pItem->GetUID();	// preserve LASTNEW/LASTNEWITEM and EQUIPLAST semantics.
+			return ItemEquip( pItem );
+		}
 
 	case M_Dupe:	// = dupe a creature !
 		{

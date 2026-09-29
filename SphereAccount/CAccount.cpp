@@ -400,7 +400,9 @@ void CAccount::OnLogin( CClient* pClient )
 		g_Serv.m_nClientsAreGuests ++;
 	}
 
-	g_pLog->Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Login '%s'" LOG_CR, pClient->m_Socket.GetSocket(), (LPCTSTR) GetName());
+	// Keep the stock login record in the daily sink independently of the
+	// optional verbose client-group mask.
+	g_pLog->Event( 0, LOGL_EVENT, "%x:Login '%s'" LOG_CR, pClient->m_Socket.GetSocket(), (LPCTSTR) GetName());
 	g_Serv.OnTriggerEvent( SERVTRIG_ClientChange, pClient->m_Socket.GetSocket());
 }
 

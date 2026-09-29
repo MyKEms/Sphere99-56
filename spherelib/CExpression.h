@@ -1137,89 +1137,108 @@ public:
 		return GetOperand(pStr);
 	}
 
-	// Evaluate a chain of arithmetic, bitwise and comparison operators from
-	// left to right without precedence, and leave pStr at the first
-	// character that is not part of it.  && and || end the chain.
+	struct OperatorToken
+	{
+		char op;
+		int length;
+		bool fCompareEqual;
+		bool fShift;
+		bool fLogical;
+	};
+
+	// Read one binary operator.  Sphere's expression grammar has no operator
+	// precedence, so the distinction between a bitwise and logical pair is
+	// needed only when applying the token, not when building the chain.
+	static bool GetOperatorToken(LPCTSTR pStr, OperatorToken& token)
+	{
+		if (!pStr || !*pStr || !strchr("+-*/%|&^<>!=", *pStr))
+			return false;
+
+		token.op = *pStr;
+		token.length = 1;
+		token.fCompareEqual = false;
+		token.fShift = false;
+		token.fLogical = false;
+		if (token.op == '!' && pStr[1] != '=')
+			return false;
+		if ((token.op == '&' || token.op == '|') && pStr[1] == token.op)
+		{
+			token.length = 2;
+			token.fLogical = true;
+		}
+		else if ((token.op == '>' || token.op == '<') && pStr[1] == token.op)
+		{
+			token.length = 2;
+			token.fShift = true;
+		}
+		else if ((token.op == '>' || token.op == '<') && pStr[1] == '=')
+		{
+			token.length = 2;
+			token.fCompareEqual = true;
+		}
+		else if ((token.op == '!' || token.op == '=') && pStr[1] == '=')
+		{
+			token.length = 2;
+		}
+		return true;
+	}
+
+	static int ApplyOperator(const OperatorToken& token, int left, int right)
+	{
+		if (token.fLogical)
+			return token.op == '&' ? ((left && right) ? 1 : 0) : ((left || right) ? 1 : 0);
+		if (token.fShift)
+			return token.op == '<' ? (left << right) : (left >> right);
+		switch (token.op)
+		{
+		case '+': return left + right;
+		case '-': return left - right;
+		case '*': return left * right;
+		case '/': return right ? (left / right) : 0;
+		case '%': return right ? (left % right) : 0;
+		case '|': return left | right;
+		case '&': return left & right;
+		case '^': return left ^ right;
+		case '>': return token.fCompareEqual ? (left >= right) : (left > right);
+		case '<': return token.fCompareEqual ? (left <= right) : (left < right);
+		case '!': return left != right;
+		case '=': return left == right;
+		default: return left;
+		}
+	}
+
+	// Evaluate one unparenthesized chain from right to left.  This is the
+	// 0.99 grammar: every binary operator has the same precedence and the
+	// right operand is itself the remainder of the chain.  Parentheses recurse
+	// through GetPrimary/GetComplexAdvance and therefore remain explicit groups.
 	int GetOperatorChain(LPCTSTR& pStr)
 	{
 		if (!pStr || !*pStr) return 0;
-		int val = GetPrimary(pStr);
-		while (*pStr)
+		int left = GetPrimary(pStr);
+		LPCTSTR pOp = pStr;
+		while (ISWHITESPACE(*pOp)) pOp++;
+
+		OperatorToken token;
+		if (!GetOperatorToken(pOp, token))
 		{
-			LPCTSTR pOp = pStr;
-			while (ISWHITESPACE(*pOp)) pOp++;
-			if (!*pOp) { pStr = pOp; break; }
-			char op = *pOp;
-			if (!strchr("+-*/%|&^<>!=", op) || (op == '!' && pOp[1] != '=') ||
-				((op == '&' || op == '|') && pOp[1] == op))
-			{
-				pStr = pOp;	// not an operator of this chain: it ends here
-				break;
-			}
-			LPCTSTR p = pOp + 1;
-			bool fOrEqual = false;
-			if ((op == '>' || op == '<') && *p == op) p++;
-			else if ((op == '>' || op == '<') && *p == '=') { p++; fOrEqual = true; }
-			else if ((op == '!' || op == '=') && *p == '=') p++;
-			int val2 = GetPrimary(p);
-			switch (op)
-			{
-			case '+': val = val + val2; break;
-			case '-': val = val - val2; break;
-			case '*': val = val * val2; break;
-			case '/': val = val2 ? (val / val2) : 0; break;
-			case '%': val = val2 ? (val % val2) : 0; break;
-			case '|': val = val | val2; break;
-			case '&': val = val & val2; break;
-			case '^': val = val ^ val2; break;
-			case '>': val = (pOp[1] == '>') ? (val >> val2) : (fOrEqual ? (val >= val2) : (val > val2)); break;
-			case '<': val = (pOp[1] == '<') ? (val << val2) : (fOrEqual ? (val <= val2) : (val < val2)); break;
-			case '!': val = (val != val2); break;
-			case '=': val = (val == val2); break;
-			}
-			pStr = p;
+			pStr = pOp;
+			return left;
 		}
-		return val;
+
+		LPCTSTR pRight = pOp + token.length;
+		int right = GetOperatorChain(pRight);
+		pStr = pRight;
+		return ApplyOperator(token, left, right);
 	}
 
-	// Combine operator chains with && and then ||.  Both operands of && and
-	// || are always evaluated, as <...> operands on the same line are all
-	// expanded before the condition is evaluated.
-	int GetLogicalAnd(LPCTSTR& pStr)
-	{
-		int val = GetOperatorChain(pStr);
-		for (;;)
-		{
-			LPCTSTR p = pStr;
-			while (ISWHITESPACE(*p)) p++;
-			if (p[0] != '&' || p[1] != '&')
-				break;
-			p += 2;
-			int val2 = GetOperatorChain(p);
-			val = (val && val2) ? 1 : 0;
-			pStr = p;
-		}
-		return val;
-	}
+	// Kept as named entry points for callers and older subclasses.  Logical
+	// operators are part of the same chain, so they no longer introduce a
+	// separate precedence level.
+	int GetLogicalAnd(LPCTSTR& pStr) { return GetOperatorChain(pStr); }
 
-	// Evaluate a numeric expression and leave pStr at the first character
-	// that is not part of it.
 	int GetComplexAdvance(LPCTSTR& pStr)
 	{
-		if (!pStr || !*pStr) return 0;
-		int val = GetLogicalAnd(pStr);
-		for (;;)
-		{
-			LPCTSTR p = pStr;
-			while (ISWHITESPACE(*p)) p++;
-			if (p[0] != '|' || p[1] != '|')
-				break;
-			p += 2;
-			int val2 = GetLogicalAnd(p);
-			val = (val || val2) ? 1 : 0;
-			pStr = p;
-		}
-		return val;
+		return GetOperatorChain(pStr);
 	}
 
 	int GetComplex(LPCTSTR pStr) { return GetComplexAdvance(pStr); }

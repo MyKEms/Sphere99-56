@@ -324,6 +324,14 @@ private:
 	CServTime	m_timeSave;		// when to auto save ?
 	CServTime	m_timeRespawn;	// when to res dead NPC's ?
 	int		m_Sector_Pulse;		// Slow some stuff down that doesn't need constant processing.
+	int		m_iIntegrityCursor;	// next UID slot for the bounded integrity pass.
+	int		m_iIntegrityCycleObjects;	// non-null UID slots seen in this cycle.
+	int		m_iIntegrityCycleSlots;	// UID slots scanned in this cycle.
+	int		m_iIntegrityCycleViolations;	// all violations, including capped logs.
+	int		m_iIntegrityLogBudget;	// remaining diagnostic lines for this cycle.
+	int		m_iIntegrityLastLogs;	// lines emitted by the last completed cycle.
+	unsigned long long m_iIntegrityCycleChanges;	// creation/destruction count at cycle start.
+	long long m_iIntegrityCycleStartMs;	// monotonic start time for observability.
 
 	int		m_iSaveStage;	// Current stage of the background save.
 
@@ -475,6 +483,11 @@ public:
 	virtual HRESULT s_PropSet( LPCTSTR pszKey, CGVariant& vVal ) ;
 
 	void OnTick();
+	// Run a bounded integrity pass over the UID table. A non-positive budget
+	// performs a complete pass and is used by the disposable fixture; runtime
+	// ticks provide a small positive budget so the check cannot stall the loop.
+	int CheckIntegrity( int iBudget = 0 );
+	int GetIntegrityLastLogCount() const { return m_iIntegrityLastLogs; }
 	void QueuePartyForDelete( CPartyDef* pParty );
 	void DestroyPendingParties();
 

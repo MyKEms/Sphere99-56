@@ -24,6 +24,7 @@ from modes.fragments.dotted_expressions import (
     DOTTED_PROBE_MARKER,
     DOTTED_PROBE_SECTOR_LIGHT,
 )
+from modes.fragments.expression_chain import expression_chain_scripts
 
 MAP_BLOCK_BYTES = 196
 MAP_BLOCKS_X = 0x1800 // 8
@@ -1581,6 +1582,7 @@ def write_scripts(
     character_content_probe: bool = False,
     stacking_probe: bool = False,
     gump_fallback_probe: bool = False,
+    expression_chain_probe: bool = False,
 ) -> None:
     timer_lifetime_probe = timer_lifetime_probe or timer_lifetime_item_first_probe
     book_pages_probe_sections = book_pages_sections() if book_pages_probe else ""
@@ -1604,6 +1606,9 @@ def write_scripts(
         )
         if dialog_button_probe or dialog_argo_layout_probe or dialog_flow_layout_probe
         else ("", "")
+    )
+    expression_chain_login, expression_chain_sections = (
+        expression_chain_scripts() if expression_chain_probe else ("", "")
     )
     dialog_argv_login, dialog_argv_sections = (
         dialog_argv_scripts() if dialog_argv_probe else ("", "")
@@ -2347,7 +2352,7 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or timer_default_remove_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + expression_chain_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -2388,7 +2393,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
+""" + dotted_expression_sections + arg_locals_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -2431,6 +2436,7 @@ def write_runtime_files(
     force_garbage_collect: bool = False,
     runaway_loop_probe: bool = False,
     timer_removal_provenance: bool = False,
+    debug_level: int = 0,
 ) -> None:
     timer_provenance_setting = (
         "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
@@ -2454,7 +2460,7 @@ RESOURCES=spheretables.scp
 WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
-DEBUGLEVEL=0
+DEBUGLEVEL=""" + str(debug_level) + """
 """ + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
@@ -4067,10 +4073,15 @@ def generate_fixture(
         root,
         unknown_keyword_report=args.unknown_keyword_report,
         unknown_keyword_report_format=args.unknown_keyword_report_format,
-        runaway_loop_probe=args.runaway_loop_probe,
+        runaway_loop_probe=(
+            args.runaway_loop_probe
+            or args.expression_chain_probe
+            or args.daily_logging_probe
+        ),
         timer_removal_provenance=(
             args.memory_timer_probe or args.timer_default_remove_probe
         ),
+        debug_level=2 if args.daily_logging_probe else 0,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
@@ -4129,13 +4140,14 @@ def generate_fixture(
         region_weather_probe=args.region_weather_probe,
         spawn_gem_probe=args.spawn_gem_probe,
         spawn_point_probe=args.spawn_point_probe,
-        escape_overflow_probe=args.escape_overflow_probe,
-        runaway_loop_probe=args.runaway_loop_probe,
+        escape_overflow_probe=(args.escape_overflow_probe or args.daily_logging_probe),
+        runaway_loop_probe=(args.runaway_loop_probe or args.daily_logging_probe),
         recursion_depth_probe=args.recursion_depth_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,
         gump_fallback_probe=args.gump_fallback_probe,
+        expression_chain_probe=args.expression_chain_probe,
     )
     if args.movement_stacking_probe:
         write_stacking_save(root)
@@ -4184,7 +4196,7 @@ def generate_fixture(
         )
     if args.spawn_point_probe:
         write_spawn_point_save(root)
-    if args.escape_overflow_probe:
+    if args.escape_overflow_probe or args.daily_logging_probe:
         write_escape_overflow_save(root)
     if args.movement_stairs_probe:
         write_movement_stairs_save(root)

@@ -300,6 +300,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="log in an existing character through a near-limit escape expansion",
     )
     parser.add_argument(
+        "--daily-logging-probe",
+        action="store_true",
+        help="exercise daily logging for script, connection, and login messages",
+    )
+    parser.add_argument(
         "--runaway-loop-probe",
         action="store_true",
         help="exercise a configurable bounded WHILE loop and a second login",
@@ -323,6 +328,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--gump-fallback-probe",
         action="store_true",
         help="load a container with no TDATA2 gump and round-trip its child",
+    )
+    parser.add_argument(
+        "--expression-chain-probe",
+        action="store_true",
+        help="exercise the 0.99 right-to-left expression grammar",
     )
     return parser
 

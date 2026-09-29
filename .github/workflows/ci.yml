@@ -103,6 +103,15 @@ jobs:
         with:
           variant: asan
 
+      - name: Run integrity watchdog fixture under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make integrity-asan-test
+          build/asan-integrity/integrity_test 2>&1 | tee integrity-asan-test.log
+          grep -q 'CRITICAL.*rule=parent_missing' integrity-asan-test.log
+
       - name: Upload ASan fixture server logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -133,6 +142,24 @@ jobs:
         run: |
           make save-io-test
           build/save-io/save_io_test
+
+  integrity:
+    name: World-integrity watchdog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++-multilib make
+
+      - name: Run injected-corruption regression
+        run: |
+          make integrity-test
+          build/integrity/integrity_test 2>&1 | tee integrity-test.log
+          grep -q 'CRITICAL.*rule=parent_missing' integrity-test.log
 
   value-ranges:
     name: Value-range properties and script lookup tables
@@ -173,6 +200,9 @@ jobs:
 
       - name: Offline protocol fixtures
         run: python3 tools/test_protocol.py
+
+      - name: Stock log format and diff regression
+        run: python3 tools/test_logdiff.py
 
       - name: External denylist unit checks
         run: python3 tools/test_secret_denylist.py
