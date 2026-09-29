@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -102,6 +103,21 @@ def wait_for_generation(path: Path, previous: str, timeout: float) -> str:
     raise RuntimeError(f"save did not advance within {timeout:.1f}s: {path}")
 
 
+def monitor_current_save_files(
+    paths: tuple[Path, ...], stop: threading.Event, missing: list[tuple[float, str]]
+) -> None:
+    """Record any current save file that disappears during a generation."""
+
+    while not stop.is_set():
+        now = time.monotonic()
+        for path in paths:
+            if not path.is_file():
+                entry = (now, path.name)
+                if not missing or missing[-1][1] != path.name:
+                    missing.append(entry)
+        time.sleep(0.0005)
+
+
 def run_generation(
     fixture: Path, binary: Path, port: int, generation: int, timeout: float
 ) -> tuple[str, str]:
@@ -117,6 +133,14 @@ def run_generation(
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )
+        monitor_stop = threading.Event()
+        missing_files: list[tuple[float, str]] = []
+        monitor = threading.Thread(
+            target=monitor_current_save_files,
+            args=((world_path, chars_path), monitor_stop, missing_files),
+            daemon=True,
+        )
+        monitor.start()
         try:
             wait_for_port("127.0.0.1", port, timeout)
             world = wait_for_generation(world_path, before_world, timeout)
@@ -127,7 +151,14 @@ def run_generation(
             time.sleep(0.05)
             chars = read_save(chars_path)
         finally:
+            monitor_stop.set()
+            monitor.join(timeout=2.0)
             returncode = stop_server(process)
+    if missing_files:
+        names = ", ".join(sorted({name for _, name in missing_files}))
+        raise RuntimeError(
+            f"generation {generation}: current save file disappeared during rotation: {names}"
+        )
     log = log_path.read_text(encoding="utf-8", errors="replace")
     failures = shutdown_failures(returncode, log)
     if failures:
