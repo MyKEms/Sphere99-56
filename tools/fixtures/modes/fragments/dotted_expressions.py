@@ -116,8 +116,7 @@ DOTTED_EXPRESSION_ROWS = (
     ("eval_defname", "<eval dotted_probe_const>", "C"),
     ("eval_unknown_reference", "<eval foo.bar>", "C"),
     # Expression grammar: parentheses, unary !, && and ||.  Arithmetic and
-    # comparison operators still chain from left to right without
-    # precedence.
+    # comparison operators chain from right to left without precedence.
     ("eval_paren_group", "<eval (1+2)*3>", "C"),
     ("eval_paren_right", "<eval 2*(3+4)>", "C"),
     ("eval_not", "<eval !0>", "C"),

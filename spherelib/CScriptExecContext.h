@@ -408,6 +408,7 @@ protected:
 
 		// Find argument separator: space or '('
 		TCHAR* pszArgs = szKey;
+		bool fSpaceCall = false;
 		while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
 			pszArgs++;
 
@@ -431,6 +432,25 @@ protected:
 			*pszArgs++ = '\0';
 			while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
 			vArgs = pszArgs;
+			fSpaceCall = true;
+		}
+
+		// The space-separated EVAL form is a one-token legacy command.  Keep
+		// its argument boundary here; parenthesized EVAL retains the complete
+		// expression and therefore can contain spaces.
+		if ( fSpaceCall && !_stricmp(szKey, "EVAL") )
+		{
+			LPCTSTR pszText = vArgs.GetPSTR();
+			TCHAR szToken[SCRIPT_MAX_LINE_LEN];
+			size_t iToken = 0;
+			while ( pszText && pszText[iToken] && !ISWHITESPACE(pszText[iToken]) &&
+				iToken + 1 < sizeof(szToken) )
+			{
+				szToken[iToken] = pszText[iToken];
+				iToken++;
+			}
+			szToken[iToken] = '\0';
+			vArgs.SetStr(szToken);
 		}
 
 		// Reference chains with function roots and per-segment arguments.
@@ -658,9 +678,14 @@ public:
 	// Named ARG variables belong to this function/trigger execution context.
 	// Nested contexts get fresh storage and discard it on return.
 	CScriptLocalArgs m_LocalArgs;
+	// A script function invoked with the legacy space-separated form ("F a,b")
+	// does not expose those tokens through ARGV/ARGVCOUNT.  Keep this syntax
+	// distinction on the dispatch context so the function evaluator can retain
+	// the raw argument text while reporting the stock count.
+	bool m_fSpaceSeparatedFunctionArgs;
 
 	CScriptExecContext(CScriptObj* pObj, CScriptConsole* pConsole)
-		: m_pBaseObj(pObj), m_pSrc(pConsole)
+		: m_pBaseObj(pObj), m_pSrc(pConsole), m_fSpaceSeparatedFunctionArgs(false)
 	{
 	}
 
@@ -704,8 +729,17 @@ public:
 					snprintf(szExpression, sizeof(szExpression), "%d%s", vCurrent.GetInt(), pszValue + 1);
 					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(szExpression));
 				}
+				else if ( IsPureArithmeticExpression(pszValue) )
+					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(pszValue));
 				else
-					m_LocalArgs.SetKeyStr(pszName, pszValue);
+				{
+					// Stock preserves a literal zero in its two-character hex form;
+					// expressions that evaluate to zero still use the normal "0".
+					if ( pszValue[0] == '0' && pszValue[1] == '\0' )
+						m_LocalArgs.SetKeyStr(pszName, "00");
+					else
+						m_LocalArgs.SetKeyStr(pszName, pszValue);
+				}
 			}
 			if ( !m_LocalArgs.FindKeyVar(pszName, vValRet) )
 				vValRet.SetStr("");
@@ -729,6 +763,36 @@ public:
 
 		// Subclasses override this for additional functions.
 		return HRES_UNKNOWN_PROPERTY;
+	}
+
+	static bool IsPureArithmeticExpression(LPCTSTR pszValue)
+	{
+		if ( pszValue == NULL || *pszValue == '\0' )
+			return false;
+		bool fDigit = false;
+		bool fOperator = false;
+		for ( const unsigned char* p = reinterpret_cast<const unsigned char*>(pszValue);
+			*p; p++ )
+		{
+			if ( isdigit(*p) )
+			{
+				fDigit = true;
+				continue;
+			}
+			if ( ISWHITESPACE(*p) )
+				continue;
+			if ( strchr("+-*/%|&^().", *p) )
+			{
+				fOperator = true;
+				continue;
+			}
+			if ( (*p == 'x' || *p == 'X') && fDigit )
+				continue;
+			if ( isxdigit(*p) && fDigit )
+				continue;
+			return false;
+		}
+		return fDigit && fOperator;
 	}
 
 	int GetScriptExpression(TCHAR* pszArg, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
@@ -1434,7 +1498,10 @@ public:
 		{
 			CGVariant vArgs(pszArg);
 			CGVariant vValRet;
+			const bool fPreviousSpaceCall = m_fSpaceSeparatedFunctionArgs;
+			m_fSpaceSeparatedFunctionArgs = !fCallForm && pszArg != NULL && *pszArg != '\0';
 			HRESULT hRes = Function_Dispatch(pszKey, vArgs, vValRet);
+			m_fSpaceSeparatedFunctionArgs = fPreviousSpaceCall;
 			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 				return NO_ERROR;
