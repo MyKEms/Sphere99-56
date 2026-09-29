@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#else
+#include <io.h>
 #endif
 
 #ifdef SPHERE_SAVE_IO_TEST
@@ -340,7 +342,9 @@ bool CFileText::Sync() const
 #ifdef _WIN32
 	if ( !m_pStream )
 		return !m_fIOError;
-	if ( !FlushFileBuffers( (HANDLE)(intptr_t)fileno( m_pStream )))
+	const int iFD = _fileno( m_pStream );
+	const intptr_t iHandle = iFD >= 0 ? _get_osfhandle( iFD ) : -1;
+	if ( iHandle == -1 || !FlushFileBuffers( (HANDLE)iHandle ))
 	{
 		m_fIOError = true;
 		return false;

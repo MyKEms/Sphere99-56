@@ -14,6 +14,7 @@
 #include <time.h>
 #else
 #include <windows.h>
+#include <io.h>
 #endif
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
@@ -23,7 +24,7 @@
 static unsigned long long SaveClockMillis()
 {
 #ifdef _WIN32
-	return (unsigned long long)GetTickCount64();
+	return (unsigned long long)GetTickCount();
 #else
 	struct timespec ts;
 	if ( clock_gettime( CLOCK_MONOTONIC, &ts ) != 0 )
@@ -41,6 +42,21 @@ static unsigned long long SaveFileSize( LPCTSTR pszPath )
 	if ( stat( pszPath, &st ) != 0 )
 		return 0;
 	return (unsigned long long)st.st_size;
+}
+
+static bool SaveSyncStream( FILE* pFile )
+{
+	if ( !pFile || fflush( pFile ) != 0 )
+		return false;
+#ifdef _WIN32
+	const int iFD = _fileno( pFile );
+	if ( iFD < 0 )
+		return false;
+	const intptr_t iHandle = _get_osfhandle( iFD );
+	return iHandle != -1 && FlushFileBuffers((HANDLE)iHandle) != 0;
+#else
+	return fsync( fileno( pFile )) == 0;
+#endif
 }
 
 static bool SaveCopyFile( LPCTSTR pszSource, LPCTSTR pszTarget )
@@ -71,12 +87,8 @@ static bool SaveCopyFile( LPCTSTR pszSource, LPCTSTR pszTarget )
 			break;
 		}
 	}
-	if ( fOK && fflush( pTarget ) != 0 )
+	if ( fOK && !SaveSyncStream( pTarget ))
 		fOK = false;
-#ifndef _WIN32
-	if ( fOK && fsync( fileno( pTarget )) != 0 )
-		fOK = false;
-#endif
 	if ( fclose( pTarget ) != 0 )
 		fOK = false;
 	if ( fclose( pSource ) != 0 )
@@ -716,8 +728,15 @@ bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
 	char szLine[512];
 	bool fHeader = false;
 	bool fEOF = false;
+	bool fAfterEOF = false;
 	while ( fgets( szLine, sizeof(szLine), pFile ) != NULL )
 	{
+		if ( fEOF )
+		{
+			if ( szLine[0] != '\n' && szLine[0] != '\r' && szLine[0] != '\0' )
+				fAfterEOF = true;
+			continue;
+		}
 		if ( !strncmp( szLine, "SAVECOUNT=", 10 ))
 		{
 			int iFound = 0;
@@ -731,7 +750,7 @@ bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
 		}
 	}
 	fclose( pFile );
-	return fHeader && fEOF;
+	return fHeader && fEOF && !fAfterEOF;
 }
 
 bool CWorld::PublishSavePair()
