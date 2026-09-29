@@ -165,6 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="seed a production-shaped created-memory script timer",
     )
     parser.add_argument(
+        "--timer-default-remove-probe",
+        action="store_true",
+        help="exercise an @Timer handler that removes its item without RETURN",
+    )
+    parser.add_argument(
         "--dotted-expression-probe",
         action="store_true",
         help="evaluate dotted reference expressions and commands at login",
