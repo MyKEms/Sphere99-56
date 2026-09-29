@@ -73,6 +73,53 @@ static bool TestLoadDetailBudgetScope()
 	return fRuntimeVisible;
 }
 
+static bool TestBackupFallbackRequiresOptIn()
+{
+	char szTempDir[] = "/tmp/sphere-save-fallback-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const std::string sWorldBackup = sBaseDir + "sphereb02w.scp";
+	const std::string sCharsBackup = sBaseDir + "sphereb02c.scp";
+	{
+		std::ofstream currentWorld( sWorld.c_str());
+		currentWorld << "TITLE=Broken current save\nVERSION=0.99\nSAVECOUNT=2\n";
+		std::ofstream currentChars( sChars.c_str());
+		currentChars << "TITLE=Current chars\nVERSION=0.99\nSAVECOUNT=2\n[EOF]\n";
+		std::ofstream backupWorld( sWorldBackup.c_str());
+		backupWorld << "TITLE=Backup world\nVERSION=0.99\nSAVECOUNT=1\n[EOF]\n";
+		std::ofstream backupChars( sCharsBackup.c_str());
+		backupChars << "TITLE=Backup chars\nVERSION=0.99\nSAVECOUNT=1\n[EOF]\n";
+		if ( !currentWorld || !currentChars || !backupWorld || !backupChars )
+			return false;
+	}
+
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	const bool fImplicitFallback = g_World.LoadWorldForTest();
+	if ( fImplicitFallback )
+	{
+		std::fprintf( stderr, "corrupt current save was silently replaced by a backup\n" );
+		return false;
+	}
+
+	g_Cfg.m_fSaveBackupFallback = true;
+	g_World.m_iSaveCountID = 0;
+	const bool fExplicitFallback = g_World.LoadWorldForTest();
+	g_World.Close( false );
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	unlink( sWorldBackup.c_str());
+	unlink( sCharsBackup.c_str());
+	rmdir( szTempDir );
+	return fExplicitFallback;
+}
+
 int main()
 {
 	if ( !TestUIDReset() )
@@ -87,6 +134,12 @@ int main()
 		return 1;
 	}
 	std::printf( "load detail budget: bounded during load and visible at runtime\n" );
+	if ( !TestBackupFallbackRequiresOptIn() )
+	{
+		std::fprintf( stderr, "backup fallback was not restricted to the explicit option\n" );
+		return 1;
+	}
+	std::printf( "backup fallback: corrupt current save is fatal unless explicitly enabled\n" );
 
 	char szTempDir[] = "/tmp/sphere-load-safety-XXXXXX";
 	if ( mkdtemp( szTempDir ) == NULL )

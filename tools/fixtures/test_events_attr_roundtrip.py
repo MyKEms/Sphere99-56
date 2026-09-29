@@ -134,6 +134,13 @@ def run_generation(
         raise RuntimeError("; ".join(failures))
     if SANITIZER_RE.search(log):
         raise RuntimeError(f"generation {generation} log contains sanitizer output")
+    if not re.search(r"World save started: SaveCount=\d+ objects=\d+/\d+", log):
+        raise RuntimeError(f"generation {generation}: save start diagnostic missing")
+    if not re.search(
+        r"World save ended: SaveCount=\d+ duration_ms=\d+ objects=\d+/\d+ files=\d+/\d+",
+        log,
+    ):
+        raise RuntimeError(f"generation {generation}: save end diagnostic missing")
     return world, chars
 
 
