@@ -200,6 +200,18 @@ save-io-test:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_SAVE_IO_TEST" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
+integrity-test:
+	$(MAKE) BUILD_DIR=build/integrity TARGET=build/integrity/integrity_test \
+		TEST_SRC=tools/integrity_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_INTEGRITY_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
+integrity-asan-test:
+	$(MAKE) BUILD_DIR=build/asan-integrity TARGET=build/asan-integrity/integrity_test \
+		TEST_SRC=tools/integrity_test.cpp \
+		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_INTEGRITY_TEST" \
+		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+
 container-list-test:
 	@mkdir -p build/container-list
 	$(CXX) $(DEFAULT_CXXFLAGS) -I$(BASEDIR)/spherelib \
@@ -219,4 +231,4 @@ clean:
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test value-range-test save-io-test container-list-test container-list-asan-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test container-list-test container-list-asan-test clean
