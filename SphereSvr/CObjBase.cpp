@@ -1227,6 +1227,24 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 			CGVariant vDialogArgs( vArgs );
 			vDialogArgs.MakeArraySize();
 			vDialogArgs.RemoveArrayElement( 0 );
+			int iDialogArgCount = vDialogArgs.MakeArraySize();
+			// Function-style calls preserve one pair of quotes in the raw argument
+			// variant.  DIALOG exposes values through ARGV, where 0.99 supplies the
+			// string contents; retaining the delimiters turns a command stored in
+			// ARGO.TAG into an invalid quoted method name.
+			for ( int i = 0; i < iDialogArgCount; i++ )
+			{
+				CGVariant& vArg = vDialogArgs.GetArrayElement( i );
+				LPCTSTR pszArg = vArg.GetPSTR();
+				if ( pszArg == NULL )
+					continue;
+				size_t iArgLen = strlen( pszArg );
+				if ( iArgLen < 2 || pszArg[0] != '"' || pszArg[iArgLen - 1] != '"' )
+					continue;
+				CGString sUnquoted( pszArg + 1 );
+				sUnquoted.SetLength( static_cast<int>( iArgLen - 2 ));
+				vArg.SetStr( sUnquoted );
+			}
 			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, rid, this, &vDialogArgs ))
 				return(HRES_BAD_ARGUMENTS);
 		}
