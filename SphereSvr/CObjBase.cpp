@@ -101,6 +101,7 @@ size_t CUIDRefArray::InsertObj(const CObjBase* pObj, size_t i)
 }
 
 int CObjBase::sm_iCount = 0;	// UID table.
+unsigned long long CObjBase::sm_iChangeCount = 0;
 bool CObjBase::sm_fDeleteReal = false;	// UID table.
 
 CObjBase::CObjBase( UID_INDEX dwUIDMask )
@@ -108,6 +109,7 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	// based on CObjBaseTemplate
 	// dwUIDMask = UID_F_ITEM;
 	sm_iCount ++;
+	sm_iChangeCount ++;
 	m_fDeletePending = false;
 	m_fLoadToleratedLegacy = false;
 	m_fLoadRejectedProperty = false;
@@ -136,6 +138,7 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 CObjBase::~CObjBase()
 {
 	sm_iCount --;
+	sm_iChangeCount ++;
 	// ASSERT(sm_fDeleteReal);
 	// ASSERT( GetParent() == NULL || GetParent() == &g_World.m_ObjDelete );
 

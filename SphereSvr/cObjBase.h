@@ -246,6 +246,7 @@ public:
 	CVarDefArray m_LoadedProps;		// saved properties unknown to this engine; retained for round-trip safety.
 
 	static int  sm_iCount;		// how many total objects in the world ?
+	static unsigned long long sm_iChangeCount;	// object creations and destructions.
 	static bool sm_fDeleteReal;	// Delete for real. not just place in "to be deleted" list
 	bool IsDeletePending() const { return m_fDeletePending; }
 	bool HasLoadToleratedLegacy() const { return m_fLoadToleratedLegacy; }

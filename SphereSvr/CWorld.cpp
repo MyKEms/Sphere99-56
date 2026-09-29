@@ -13,6 +13,7 @@
 #endif
 
 #include <stdio.h>
+#include <chrono>
 #include <set>
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
@@ -30,6 +31,14 @@ static const SOUND_TYPE sm_Sounds_Ghost[] =
 
 namespace
 {
+	static const int INTEGRITY_LOG_BUDGET = 16;
+
+	static long long IntegrityNowMs()
+	{
+		return std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
+
 	static void IntegrityAppend( char* pszOut, size_t iOutLen, const char* pszPart )
 	{
 		if ( pszOut == NULL || pszPart == NULL || iOutLen == 0 )
@@ -343,6 +352,12 @@ CWorld::CWorld()
 	m_fSaveRetry = false;
 	m_iIntegrityCursor = 1;
 	m_iIntegrityCycleObjects = 0;
+	m_iIntegrityCycleSlots = 0;
+	m_iIntegrityCycleViolations = 0;
+	m_iIntegrityLogBudget = INTEGRITY_LOG_BUDGET;
+	m_iIntegrityLastLogs = 0;
+	m_iIntegrityCycleChanges = CObjBase::sm_iChangeCount;
+	m_iIntegrityCycleStartMs = 0;
 	ResetLoadIntegrity();
 }
 
@@ -2067,22 +2082,39 @@ LPCTSTR CWorld::GetGameTime() const
 int CWorld::CheckIntegrity( int iBudget )
 {
 	const DWORD dwUIDCount = GetUIDCount();
+	const bool fComplete = iBudget <= 0;
+	const bool fNewCycle = fComplete || m_iIntegrityCycleStartMs == 0;
+	if ( fNewCycle )
+	{
+		m_iIntegrityCycleChanges = CObjBase::sm_iChangeCount;
+		m_iIntegrityCycleObjects = 0;
+		m_iIntegrityCycleSlots = 0;
+		m_iIntegrityCycleViolations = 0;
+		m_iIntegrityLogBudget = INTEGRITY_LOG_BUDGET;
+		m_iIntegrityCycleStartMs = IntegrityNowMs();
+	}
 	if ( dwUIDCount <= 1 )
 	{
+		m_iIntegrityLastLogs = INTEGRITY_LOG_BUDGET - m_iIntegrityLogBudget;
+		g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,
+			"integrity watchdog cycle slots=0 objects=0 violations=0 elapsed_ms=0 logs=%d" LOG_CR,
+			m_iIntegrityLastLogs );
 		m_iIntegrityCursor = 1;
 		m_iIntegrityCycleObjects = 0;
+		m_iIntegrityCycleSlots = 0;
+		m_iIntegrityCycleViolations = 0;
+		m_iIntegrityCycleStartMs = 0;
 		return 0;
 	}
 
-	const bool fComplete = iBudget <= 0;
 	const DWORD dwStart = fComplete ? 1 :
 		( m_iIntegrityCursor > 0 && static_cast<DWORD>(m_iIntegrityCursor) < dwUIDCount ?
 			static_cast<DWORD>(m_iIntegrityCursor) : 1 );
 	const DWORD dwRequestedEnd = dwStart + static_cast<DWORD>(iBudget);
 	const DWORD dwEnd = fComplete || dwRequestedEnd > dwUIDCount ? dwUIDCount : dwRequestedEnd;
 	int iWorkBudget = fComplete ? -1 : iBudget;
-	int iLogBudget = 16; // A persistent fault must not flood the daily log.
 	int iViolations = 0;
+	m_iIntegrityCycleSlots += static_cast<int>(dwEnd - dwStart);
 	for ( DWORD i = dwStart; i < dwEnd; ++i )
 	{
 		CResourceObj* pRaw = FindUIDObj(i);
@@ -2093,7 +2125,7 @@ int CWorld::CheckIntegrity( int iBudget )
 			{
 				char szChain[32];
 				snprintf( szChain, sizeof(szChain), "slot=0x%x", static_cast<unsigned>(i));
-				iViolations += IntegrityViolation( "uid_slot_type", NULL, szChain, iLogBudget );
+				iViolations += IntegrityViolation( "uid_slot_type", NULL, szChain, m_iIntegrityLogBudget );
 			}
 			else
 			{
@@ -2102,35 +2134,42 @@ int CWorld::CheckIntegrity( int iBudget )
 					if ( iWorkBudget > 0 )
 						--iWorkBudget;
 				}
-				iViolations += CheckIntegrityObject( this, pObj, i, iWorkBudget, iLogBudget );
+				iViolations += CheckIntegrityObject( this, pObj, i, iWorkBudget, m_iIntegrityLogBudget );
 				m_iIntegrityCycleObjects++;
 			}
 		}
 	}
 
-	if ( fComplete )
+	m_iIntegrityCycleViolations += iViolations;
+	if ( fComplete || dwEnd >= dwUIDCount )
 	{
-		const int iExpectedObjects = m_iIntegrityCycleObjects + m_ObjDelete.GetCount();
-		if ( iExpectedObjects != CObjBase::sm_iCount )
+		// A live world can create and destroy objects while the UID table is
+		// being scanned.  Only compare the accumulated slot count when the
+		// creation/destruction counter stayed unchanged for the whole cycle.
+		if ( CObjBase::sm_iChangeCount == m_iIntegrityCycleChanges )
 		{
-			char szCount[64];
-			snprintf( szCount, sizeof(szCount), "uid=%d objects=%d", iExpectedObjects, CObjBase::sm_iCount );
-			iViolations += IntegrityViolation( "count_drift", NULL, szCount, iLogBudget );
+			const int iExpectedObjects = m_iIntegrityCycleObjects + m_ObjDelete.GetCount();
+			if ( iExpectedObjects != CObjBase::sm_iCount )
+			{
+				char szCount[64];
+				snprintf( szCount, sizeof(szCount), "uid=%d objects=%d", iExpectedObjects, CObjBase::sm_iCount );
+				const int iCountViolation = IntegrityViolation( "count_drift", NULL, szCount, m_iIntegrityLogBudget );
+				iViolations += iCountViolation;
+				m_iIntegrityCycleViolations += iCountViolation;
+			}
 		}
+		const long long iElapsedMs = IntegrityNowMs() - m_iIntegrityCycleStartMs;
+		m_iIntegrityLastLogs = INTEGRITY_LOG_BUDGET - m_iIntegrityLogBudget;
+		g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,
+			"integrity watchdog cycle slots=%d objects=%d violations=%d elapsed_ms=%lld logs=%d" LOG_CR,
+			m_iIntegrityCycleSlots, m_iIntegrityCycleObjects,
+			m_iIntegrityCycleViolations, iElapsedMs >= 0 ? iElapsedMs : 0,
+			m_iIntegrityLastLogs );
 		m_iIntegrityCursor = 1;
 		m_iIntegrityCycleObjects = 0;
-	}
-	else if ( dwEnd >= dwUIDCount )
-	{
-		const int iExpectedObjects = m_iIntegrityCycleObjects + m_ObjDelete.GetCount();
-		if ( iExpectedObjects != CObjBase::sm_iCount )
-		{
-			char szCount[64];
-			snprintf( szCount, sizeof(szCount), "uid=%d objects=%d", iExpectedObjects, CObjBase::sm_iCount );
-			iViolations += IntegrityViolation( "count_drift", NULL, szCount, iLogBudget );
-		}
-		m_iIntegrityCursor = 1;
-		m_iIntegrityCycleObjects = 0;
+		m_iIntegrityCycleSlots = 0;
+		m_iIntegrityCycleViolations = 0;
+		m_iIntegrityCycleStartMs = 0;
 	}
 	else
 	{
