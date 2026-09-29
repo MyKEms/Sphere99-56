@@ -400,7 +400,7 @@ void CAccount::OnLogin( CClient* pClient )
 		g_Serv.m_nClientsAreGuests ++;
 	}
 
-	g_pLog->Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Login '%s'" LOG_CR, pClient->m_Socket.GetSocket(), (LPCTSTR) GetName());
+	g_pLog->Event( LOG_GROUP_CLIENTS, LOGL_EVENT, "%x:Login '%s'" LOG_CR, pClient->m_Socket.GetSocket(), (LPCTSTR) GetName());
 	g_Serv.OnTriggerEvent( SERVTRIG_ClientChange, pClient->m_Socket.GetSocket());
 }
 

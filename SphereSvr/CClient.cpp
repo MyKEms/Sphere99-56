@@ -79,6 +79,10 @@ CClient::CClient( SOCKET client ) :
 	g_Serv.m_Clients.InsertHead( this );
 
 	CSocketAddress PeerName = m_Socket.GetPeerName();
+	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_EVENT,
+		"%x:Client connected [Total:%d] from '%s'." LOG_CR,
+		m_Socket.GetSocket(), g_Serv.StatGet( SERV_STAT_CLIENTS ),
+		(LPCTSTR) PeerName.GetAddrStr());
 	SPHERE_LOG_NET("CClient::CClient constructed sock=%d peer=%s total=%d", m_Socket.GetSocket(), (LPCTSTR) PeerName.GetAddrStr(), g_Serv.StatGet( SERV_STAT_CLIENTS ));
 
 #ifdef _WIN32

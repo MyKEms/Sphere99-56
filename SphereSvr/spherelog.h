@@ -26,9 +26,11 @@ extern int g_iDebugLevel;
 // mask, so enabling it does not turn on unrelated verbose logging.
 extern bool g_fTimerRemovalProvenance;
 
-// Keep the historical stderr stream and feed the same formatted line to the
-// daily CLog sink. Formatting once avoids evaluating a logging argument twice
-// when it has side effects (for example a socket or object lookup).
+// Keep the historical stderr stream and feed compatibility events and errors
+// to the daily CLog sink. Verbose network/script traces remain stderr-only:
+// the daily file is a stock-compatible operational record, not a debug dump.
+// Formatting once avoids evaluating a logging argument twice when it has side
+// effects (for example a socket or object lookup).
 inline void SphereLogMessage(int iDebugLevel, LPCTSTR pszLabel, LOGL_TYPE level, LPCTSTR pszFormat, ...)
 {
 	if ( g_iDebugLevel < iDebugLevel )
@@ -42,9 +44,12 @@ inline void SphereLogMessage(int iDebugLevel, LPCTSTR pszLabel, LOGL_TYPE level,
 
 	fprintf(stderr, "[%s] %s\n", pszLabel, szMessage);
 	fflush(stderr);
-	TCHAR szDailyMessage[sizeof(szMessage) + 1];
-	snprintf(szDailyMessage, sizeof(szDailyMessage), "%s" LOG_CR, szMessage);
-	g_Log.EventStrDaily(0, level, szDailyMessage);
+	if ( iDebugLevel <= 1 )
+	{
+		TCHAR szDailyMessage[sizeof(szMessage) + 1];
+		snprintf(szDailyMessage, sizeof(szDailyMessage), "%s" LOG_CR, szMessage);
+		g_Log.EventStrDaily(0, level, szDailyMessage);
+	}
 }
 
 #define SPHERE_LOG(level, fmt, ...) \

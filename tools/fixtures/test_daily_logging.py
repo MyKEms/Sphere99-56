@@ -19,8 +19,19 @@ from modes.compat_writer import (
 SCRIPT_ERROR = re.compile(r"[^\s]+\(\d+\): WHILE loop stopped after 32 iterations")
 DAILY_MARKERS = (
     SCRIPT_ERROR,
-    "CClient::CClient constructed",
-    "Setup_CharListReq",
+    re.compile(r"Client connected \[Total:\d+\] from '[^']+'\."),
+    re.compile(r"Login '[^']+'"),
+    re.compile(r"Setup_Start acct='[^']+', char='[^']+'"),
+)
+
+# These are implementation traces used while diagnosing the Linux logging
+# path.  They are intentionally stderr-only: the daily file is a compatibility
+# surface and must contain the stock connection/login records instead.
+NON_STOCK_DAILY_MARKERS = (
+    "xFlush ",
+    "Setup_CreateDialog:",
+    "addPlayerStart:",
+    "f:Setup_Start done",
 )
 
 
@@ -101,7 +112,12 @@ def main() -> int:
 
             if not all(marker_matches(daily_contents)):
                 failures.append(
-                    "daily file did not contain script error, connection, and login markers"
+                    "daily file did not contain script error, connection, login, and setup markers"
+                )
+            leaked = [marker for marker in NON_STOCK_DAILY_MARKERS if marker in daily_contents]
+            if leaked:
+                failures.append(
+                    "daily file contained non-stock trace markers: " + ", ".join(leaked)
                 )
             if process.poll() is not None:
                 failures.append("server exited before the unclean durability check")
@@ -117,6 +133,9 @@ def main() -> int:
     daily_contents = read_daily_logs(fixture)
     if not all(marker_matches(daily_contents)):
         failures.append("daily markers were not durable after SIGKILL")
+    leaked = [marker for marker in NON_STOCK_DAILY_MARKERS if marker in daily_contents]
+    if leaked:
+        failures.append("non-stock trace markers survived SIGKILL: " + ", ".join(leaked))
     if find_start_packet(decode_game_response(response)) is None:
         failures.append("existing character did not enter the world")
 
@@ -129,7 +148,7 @@ def main() -> int:
         return 1
 
     print(
-        "daily logging probe passed: script error, connection, and login lines "
+        "daily logging probe passed: script error, connection, login, and setup lines "
         "reached the daily file before SIGKILL"
     )
     return 0

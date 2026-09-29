@@ -3279,7 +3279,7 @@ LOGIN_ERR_TYPE CClient::Setup_Start( CChar* pChar ) // Send character startup st
 
 	CharDisconnect();	// I'm already logged in as someone else ?
 
-	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Setup_Start acct='%s', char='%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) GetAccount()->GetName(), (LPCTSTR) pChar->GetName());
+	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_EVENT, "%x:Setup_Start acct='%s', char='%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) GetAccount()->GetName(), (LPCTSTR) pChar->GetName());
 
 #ifndef _DEBUG
 #ifdef _WIN32
