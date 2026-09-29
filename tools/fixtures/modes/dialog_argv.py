@@ -15,8 +15,8 @@ MODE = register_mode(
     FixtureMode(
         name="dialog-argv",
         fixture_args=("--dialog-argv-probe",),
-        order=67,
-        id_block=67,
+        order=69,
+        id_block=69,
         case=FixtureCase(
             name="dialog-argv",
             mode="dialog-argv",
