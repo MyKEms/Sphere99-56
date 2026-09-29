@@ -329,6 +329,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="load a container with no TDATA2 gump and round-trip its child",
     )
+    parser.add_argument(
+        "--expression-chain-probe",
+        action="store_true",
+        help="exercise the 0.99 right-to-left expression grammar",
+    )
     return parser
 
 

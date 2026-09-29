@@ -307,8 +307,9 @@ public:
 	}
 
 	// argv=1
-	CSphereExpArgs( CResourceObj* pBaseObj, CScriptConsole* pSrc, CGVariant& vVal ) :
-		CSphereExpContext(pBaseObj,pSrc), m_vVal(vVal)
+	CSphereExpArgs( CResourceObj* pBaseObj, CScriptConsole* pSrc, CGVariant& vVal,
+		bool fParseArgv = true ) :
+		CSphereExpContext(pBaseObj,pSrc), m_vVal(vVal), m_fParseArgv(fParseArgv)
 	{
 	}
 
@@ -349,6 +350,8 @@ public:
 
 	// "ARGV" or ARG#
 	CGVariant m_vVal;
+	// Legacy space-separated calls retain their raw text but expose no ARGV.
+	bool m_fParseArgv = true;
 };
 
 //*****************************************************************
