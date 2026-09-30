@@ -1152,11 +1152,10 @@ bool CWorld::PublishSavePair()
 		return false;
 	}
 
-	if ( !PublishSaveFile( sWorldTemp, sWorldCurrent ) ||
-		!PublishSaveFile( sCharsTemp, sCharsCurrent ))
-		return false;
-	return VerifySaveFile( sWorldCurrent, m_iSaveCountID ) &&
-		VerifySaveFile( sCharsCurrent, m_iSaveCountID );
+	// Each publication syncs the directory, so once both return the pair is
+	// the durable current generation and the caller records the commit.
+	return PublishSaveFile( sWorldTemp, sWorldCurrent ) &&
+		PublishSaveFile( sCharsTemp, sCharsCurrent );
 }
 
 bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fRetry )
@@ -1359,8 +1358,25 @@ bool CWorld::SaveStage() // Save world state in stages.
 
 		if ( !PublishSavePair())
 			return FailSave( "publishing paired world files" );
+		// Record the commit as soon as both files are published: a pending
+		// manifest would make the next start prefer the previous backups.
 		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, false, 0 ))
 			return FailSave( "committing save manifest" );
+
+		CGString sWorldCurrent;
+		CGString sCharsCurrent;
+		sWorldCurrent.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
+		sCharsCurrent.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
+		// Re-read the published pair as a diagnostic only.  The generation is
+		// already committed, so a mismatch is reported but neither discards
+		// it nor fails the save.
+		if ( !VerifySaveFile( sWorldCurrent, m_iSaveCountID ) ||
+			!VerifySaveFile( sCharsCurrent, m_iSaveCountID ))
+		{
+			g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+				"Save generation %d was committed, but re-reading '%s' and '%s' did not find matching SAVECOUNT and [EOF]" LOG_CR,
+				m_iSaveCountID, (LPCTSTR)sWorldCurrent, (LPCTSTR)sCharsCurrent );
+		}
 
 		const int iCommittedSaveCount = m_iSaveCountID;
 		m_iSaveCountID++;	// Save only counts if we get to the end without trapping.
@@ -1371,10 +1387,6 @@ bool CWorld::SaveStage() // Save world state in stages.
 		const unsigned long long iNowMillis = SaveClockMillis();
 		const unsigned long long iDuration = iNowMillis >= m_ullSaveStartMillis ?
 			iNowMillis - m_ullSaveStartMillis : 0;
-		CGString sWorldCurrent;
-		CGString sCharsCurrent;
-		sWorldCurrent.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
-		sCharsCurrent.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
 		g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT,
 			"World save ended: SaveCount=%d duration_ms=%llu objects=%d/%d files=%llu/%llu" LOG_CR,
 			iCommittedSaveCount, iDuration,
@@ -1770,9 +1782,25 @@ bool CWorld::LoadWorld() // Load world from script
 	unsigned dwRotated = 0;
 	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
 		iPendingSaveCount, fPendingManifest, dwRotated );
+	int iLiveWorldCount = INT_MIN;
+	int iLiveCharsCount = INT_MIN;
+	// Both live files carrying the pending generation's SAVECOUNT means both
+	// were published (each was validated before its rename); only the commit
+	// record is missing.  That pair is the newest complete generation.
+	const bool fPublishedPending = fHaveManifest && fPendingManifest &&
+		ReadSaveFileCount( sWorldName, iLiveWorldCount ) &&
+		ReadSaveFileCount( sCharsName, iLiveCharsCount ) &&
+		iLiveWorldCount == iPendingSaveCount && iLiveCharsCount == iPendingSaveCount;
 	if ( fHaveManifest && !fPendingManifest )
 	{
 		RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
+	}
+	else if ( fPublishedPending )
+	{
+		m_iSaveCountID = iPendingSaveCount;
+		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+			"Save generation %d was published before its commit was recorded; loading the published pair" LOG_CR,
+			iPendingSaveCount );
 	}
 	else if ( fHaveManifest && fPendingManifest )
 	{
@@ -1829,6 +1857,11 @@ bool CWorld::LoadWorld() // Load world from script
 		{
 			if ( fPendingManifest )
 				m_iSaveCountID = iPendingSaveCount;
+			// The published generation is now the loaded one: drop its stale
+			// pending record, so the next save backs this pair up as a new
+			// generation instead of retrying over it.
+			if ( fPublishedPending )
+				RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
 			return( true );
 		}
 

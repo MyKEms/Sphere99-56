@@ -11,7 +11,13 @@ directory is synchronised after each rename; the previous live files are
 preserved as the paired backup only after both temporary files pass
 validation.  A pending save manifest records which backup components are
 available, so a restart can select the last complete pair if publication was
-interrupted.
+interrupted.  The commit is recorded in the manifest as soon as the second
+rename and its directory sync have completed; re-reading the published files
+afterwards is only a diagnostic and never discards the committed generation.
+If the commit record is missing but both live files already carry the pending
+generation's `SAVECOUNT`, publication had completed: the restart loads that
+pair and drops the stale pending record, so the next save backs the pair up
+before replacing it.
 
 The account file follows the same keep-then-replace rule: the previous
 `sphereaccu.scp` remains readable while a new generation is serialized to a

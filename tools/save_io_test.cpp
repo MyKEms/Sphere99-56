@@ -228,6 +228,76 @@ static bool RunRepeatedFailureCase()
 	return fPassed;
 }
 
+// Both files of a generation are published, then the save fails before its
+// commit is recorded (here: closing the COMMITTED manifest).  The published
+// pair is complete, so a restart must load it instead of the previous
+// generation's backups, and the following save must back it up before
+// replacing it.
+static bool RunPublishedBeforeCommitCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-commit-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_World.m_iSaveCountID = 0;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	CFileText::ClearTestFault();
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	const bool fInitial = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 1;
+
+	// Mark the next generation so the test can tell which pair was loaded.
+	g_Cfg.m_Var.SetKeyStr( "PUBLISHED_MARKER", "generation-1" );
+	// Generation 1 writes the manifest when it starts and after each backup
+	// (accounts, world, characters); the fifth write records the commit.
+	CFileText::SetTestFault( CFileText::TEST_FAULT_CLOSE, "sphere.save.pending.tmp", 4 );
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fCommitFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
+		CFileText::WasTestFaultTriggered() && g_World.m_iSaveCountID == 1;
+	CFileText::ClearTestFault();
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const std::string sPublishedWorld = ReadFile( sBaseDir + "/sphereworld.scp" );
+	const std::string sPublishedChars = ReadFile( sBaseDir + "/spherechars.scp" );
+	const std::string sPending = ReadFile( sBaseDir + "/sphere.save.pending" );
+	const bool fPublished = sPublishedWorld.find( "SAVECOUNT=1\n" ) != std::string::npos &&
+		sPublishedWorld.find( "PUBLISHED_MARKER=generation-1" ) != std::string::npos &&
+		sPublishedChars.find( "SAVECOUNT=1\n" ) != std::string::npos &&
+		sPending.find( "STATE=PENDING" ) != std::string::npos;
+
+	// Restart: forget the marker, then load whatever the start-up picks.
+	g_World.Close( false );
+	g_Cfg.m_Var.RemoveKey( "PUBLISHED_MARKER" );
+	const bool fReloaded = g_World.LoadAll();
+	const bool fLoadedPublished =
+		!g_Cfg.m_Var.FindKeyStr( "PUBLISHED_MARKER" ).CompareNoCase( "generation-1" );
+
+	// The following save must back up the published pair before replacing it.
+	g_Cfg.m_Var.RemoveKey( "PUBLISHED_MARKER" );
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fFollowing = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fBackedUp = ReadFile( sBaseDir + "/sphereb01w.scp" ) == sPublishedWorld &&
+		ReadFile( sBaseDir + "/sphereb01c.scp" ) == sPublishedChars;
+	const bool fPassed = fInitial && fCommitFailed && fPublished && fReloaded &&
+		fLoadedPublished && fFollowing && fBackedUp;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"published pair discarded after a failed commit: initial=%d commit_failed=%d published=%d "
+			"reloaded=%d loaded_published=%d following=%d backed_up=%d\n",
+			fInitial ? 1 : 0, fCommitFailed ? 1 : 0, fPublished ? 1 : 0, fReloaded ? 1 : 0,
+			fLoadedPublished ? 1 : 0, fFollowing ? 1 : 0, fBackedUp ? 1 : 0 );
+	}
+	g_World.Close( false );
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fPassed;
+}
+
 static const char* const ACCOUNT_SENTINEL = "RETRY_SENTINEL=preserve-first-archive";
 
 // Save generation 0, then append a sentinel to the live account file so the
@@ -499,6 +569,8 @@ int main()
 	if ( !RunFaultCase( CFileText::TEST_FAULT_CLOSE, "close failure", "sphereworld.scp.tmp" ))
 		return 1;
 	if ( !RunRepeatedFailureCase() )
+		return 1;
+	if ( !RunPublishedBeforeCommitCase() )
 		return 1;
 	// Run every account retry case so one run reports each failing case.
 	const bool fAccountReuse = RunRetryPreservesAccountArchiveCase();
