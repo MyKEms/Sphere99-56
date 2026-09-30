@@ -142,8 +142,9 @@ ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 # Object-root function dispatch probe.  The two CONT calls deliberately use an
 # empty argument list and three positional values so ARGVCOUNT/ARGV handling
 # is exercised on the same path as legacy object-root commands.  Further rows
-# cover an SRC root, the space-separated form, roots that are not world
-# objects (the server, a definition), and function calls inside escapes.
+# cover an SRC root, an item root, the space-separated form, roots that are
+# not world objects (the server, a definition), and function calls inside
+# escapes.
 OBJECT_ROOT_DISPATCH_ACCOUNT = "ObjectRootDispatchProbe"
 OBJECT_ROOT_DISPATCH_MARKER = "SPHERE_OBJECT_ROOT"
 OBJECT_ROOT_DISPATCH_ITEM_ID = 0x0EA6
@@ -814,6 +815,9 @@ def object_root_dispatch_trigger() -> str:
             # The source character is a world object as well.
             "SRC.f_object_root_report(7,8)",
             f"SRC.SYSMESSAGE {marker} C|src_call|[<SRC.TAG.object_root_report>]",
+            # So is an item: here the equipped item itself, found by its UID.
+            "FINDUID(<SERIAL>).f_object_root_report(5,6)",
+            f"SRC.SYSMESSAGE {marker} C|item_root|[<TAG.object_root_report>]",
             # The space-separated form keeps the argument semantics it has
             # without a root: the text is in ARGS/ARGV, the count stays zero.
             "SRC.f_object_root_report 9,10",
