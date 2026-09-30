@@ -1525,6 +1525,35 @@ public:
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					if ( hRes == NO_ERROR )
 						return NO_ERROR;
+
+					// A referenced object can also be the base of a script
+					// function (for example CONT.CREATURESTART). Native methods
+					// take precedence, then dispatch the script function with the
+					// referenced object as the active base. A built-in object root
+					// such as LASTNEW is resolved through Function_Dispatch too, but
+					// it is not itself a script function and must retain this path.
+					if ( !fPropertySet )
+					{
+						TCHAR szFunctionName[SCRIPT_MAX_LINE_LEN];
+						CGVariant vFunctionArgs;
+						const size_t iSuffixLen = strlen(pszDot + 1);
+						const bool fRootFromScriptFunction =
+							fRootFromFunction && IsScriptFunction(szRootName);
+						if ( SplitDottedSegment(pszDot + 1, iSuffixLen,
+							szFunctionName, sizeof(szFunctionName), vFunctionArgs) &&
+								IsScriptFunction(szFunctionName) && !fRootFromScriptFunction )
+						{
+							if ( vFunctionArgs.IsVoid() )
+								vFunctionArgs = vArgs;
+							CScriptObj* pOldBase = GetBaseObject();
+							SetBaseObject(pRootObj);
+							hRes = Function_Dispatch(szFunctionName, vFunctionArgs, vValRet);
+							SetBaseObject(pOldBase);
+							rejected.Observe(hRes, pszDot + 1, pRootObj);
+							if ( hRes == NO_ERROR )
+								return NO_ERROR;
+						}
+					}
 				}
 			}
 		}

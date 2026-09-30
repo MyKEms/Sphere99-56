@@ -139,6 +139,13 @@ GUMP_FALLBACK_CHILD_SERIAL = 5
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
+# Object-root function dispatch probe.  The two calls deliberately use an
+# empty argument list and three positional values so ARGVCOUNT/ARGV handling
+# is exercised on the same path as legacy object-root commands.
+OBJECT_ROOT_DISPATCH_ACCOUNT = "ObjectRootDispatchProbe"
+OBJECT_ROOT_DISPATCH_MARKER = "SPHERE_OBJECT_ROOT"
+OBJECT_ROOT_DISPATCH_ITEM_ID = 0x0EA6
+
 # Resource-reference array probe.  The login script adds the same event twice,
 # reports the resulting list, removes it by name, and saves the character so
 # the test covers both in-memory membership and serialized output.
@@ -731,6 +738,40 @@ ARG(scratch_obj,<ARGV(0)>)
 SYSMESSAGE SPHERE_ARG_LOCALS C|scratch|[<SCRATCH_1>|<scratch_2>|<SCRATCH_3>|<scratch_4>|<SCRATCH_5>|<scratch_6>]
 SYSMESSAGE SPHERE_ARG_LOCALS C|scratch_object|[<SCRATCH_OBJ.NAME>|<scratch_obj.type>]
 RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
+"""
+    return "\n".join(login) + "\n", sections
+
+
+def object_root_dispatch_scripts() -> tuple[str, str]:
+    """Return empty- and positional-ARGV object-root calls."""
+
+    login = [
+        "NEWITEM SYNTHETIC_OBJECT_ROOT",
+        "EQUIPLAST",
+        f"SYSMESSAGE {OBJECT_ROOT_DISPATCH_MARKER} C|empty|[<TAG.object_root_empty>]",
+        f"SYSMESSAGE {OBJECT_ROOT_DISPATCH_MARKER} C|args|[<TAG.object_root_args>]",
+        f"SYSMESSAGE {OBJECT_ROOT_DISPATCH_MARKER} C_END",
+    ]
+    sections = f"""
+[FUNCTION f_object_root_empty]
+ARG(i,0)
+ARG(last,)
+WHILE (<ARG(i)> < ARGVCOUNT-1)
+ARG(last,<ARGV(<ARG(i)>)>)
+ARG(i,#+1)
+ENDWHILE
+TAG.object_root_empty=<ARGVCOUNT>|<ARG(i)>|<ARG(last)>
+RETURN 0
+
+[FUNCTION f_object_root_args]
+ARG(i,0)
+ARG(last,)
+WHILE (arg(i)<ARGVCOUNT-1)
+ARG(last,<?argv(<arg(i)>)?>)
+ARG(i,<arg(i)>+1)
+ENDWHILE
+TAG.object_root_args=<ARGVCOUNT>|<ARG(i)>|<ARG(last)>
+RETURN 0
 """
     return "\n".join(login) + "\n", sections
 
@@ -1571,6 +1612,7 @@ def write_scripts(
     dotted_expression_probe: bool = False,
     format_compat_probe: bool = False,
     arg_locals_probe: bool = False,
+    object_root_dispatch_probe: bool = False,
     findarg_probe: bool = False,
     timer_lifetime_item_first_probe: bool = False,
     timer_sibling_mutation_probe: bool = False,
@@ -1614,6 +1656,9 @@ def write_scripts(
     )
     arg_locals_login, arg_locals_sections = (
         arg_locals_scripts() if arg_locals_probe else ("", "")
+    )
+    object_root_dispatch_login, object_root_dispatch_sections = (
+        object_root_dispatch_scripts() if object_root_dispatch_probe else ("", "")
     )
     findarg_login, findarg_sections = (
         findarg_scripts() if findarg_probe else ("", "")
@@ -1678,6 +1723,18 @@ def write_scripts(
         f"SRC.SYSMESSAGE {DAMAGE_TRIGGER_MARKER} ITEM\n"
         "RETURN 0\n"
         if damage_trigger_probe
+        else ""
+    )
+    object_root_dispatch_itemdef = (
+        f"\n[ITEMDEF 0x{OBJECT_ROOT_DISPATCH_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_OBJECT_ROOT\n"
+        "NAME=synthetic object-root target\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=30\n"
+        "ON=@Equip\n"
+        "CONT.f_object_root_empty()\n"
+        "CONT.f_object_root_args(1,2,3)\n"
+        if object_root_dispatch_probe
         else ""
     )
     damage_trigger_event = (
@@ -2258,7 +2315,7 @@ TDATA2=1
 DEFNAME=SYNTHETIC_OBJECT
 NAME=synthetic object
 TYPE=T_NORMAL
-""" + damage_trigger_itemdef + """
+""" + object_root_dispatch_itemdef + damage_trigger_itemdef + """
 
 [ITEMDEF 0x0E72]
 DEFNAME=SYNTHETIC_MAGERY_START
@@ -2370,7 +2427,7 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or timer_default_remove_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + expression_chain_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
+""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + object_root_dispatch_login + expression_chain_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -2411,7 +2468,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
+""" + dotted_expression_sections + arg_locals_sections + object_root_dispatch_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -4135,6 +4192,7 @@ def generate_fixture(
         dotted_expression_probe=args.dotted_expression_probe,
         format_compat_probe=args.format_compat_probe,
         arg_locals_probe=args.arg_locals_probe,
+        object_root_dispatch_probe=args.object_root_dispatch_probe,
         findarg_probe=args.findarg_probe,
         dword_hex_probe=args.dword_hex_probe,
         isbit_probe=args.isbit_probe,
@@ -4264,6 +4322,7 @@ def generate_fixture(
             if args.movement_stacking_probe
             else 0,
             DAMAGE_TRIGGER_ITEM_ID if args.damage_trigger_probe else 0,
+            OBJECT_ROOT_DISPATCH_ITEM_ID if args.object_root_dispatch_probe else 0,
             max(GUMP_FALLBACK_ITEM_ID, GUMP_FALLBACK_CHILD_ITEM_ID)
             if args.gump_fallback_probe
             else 0,
