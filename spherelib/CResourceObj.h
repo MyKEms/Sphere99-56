@@ -62,9 +62,11 @@ struct CUIDArray
 	}
 	void FreeUID(CResourceObj* pObj)
 	{
-		// Can't free up the UID til after the save !
+		// Can't free up the UID til after the save !  A deferred object can
+		// share a slot with its replacement before its destructor runs; only
+		// release the slot if it still belongs to this object.
 		DWORD dwIndex = pObj->GetUIDIndex() & 0x3FFFFFFF; // strip type flags
-		if (dwIndex > 0 && dwIndex < GetUIDCount())
+		if (dwIndex > 0 && dwIndex < GetUIDCount() && m_UIDs[dwIndex] == pObj)
 			m_UIDs.SetAt(dwIndex, UID_PLACE_HOLDER);
 	}
 	DWORD AllocUID(CResourceObj* pObj, DWORD dwIndex)

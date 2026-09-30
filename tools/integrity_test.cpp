@@ -114,6 +114,61 @@ static bool TestCountDriftIsReported()
 	return fReported;
 }
 
+static bool TestDeferredUIDReuseKeepsNewOwner()
+{
+	g_Serv.SetServerMode( SERVMODE_Run );
+	CItemDef containerDef( ITEMID_MULTI_MAX );
+	CItemDef itemDef( ITEMID_MULTI_MAX );
+	CIntegrityContainer* pContainerRaw = new CIntegrityContainer( ITEMID_MULTI_MAX, &containerDef );
+	CItemPtr pContainer = pContainerRaw;
+	pContainerRaw->Detach();
+	CItem* pOld = new CIntegrityItem( ITEMID_MULTI_MAX, &itemDef );
+	const DWORD dwIndex = pOld->GetUIDIndex() & UID_INDEX_MASK;
+	pOld->DeleteThis();
+	CItemPtr pNew = new CIntegrityItem( ITEMID_MULTI_MAX, &itemDef );
+	if (( pNew->GetUIDIndex() & UID_INDEX_MASK ) != dwIndex )
+	{
+		pNew->DeleteThis();
+		pContainer->DeleteThis();
+		g_World.GarbageCollection_New();
+		return false;
+	}
+	if ( ! pContainerRaw->AttachRaw( pNew ))
+	{
+		pNew->DeleteThis();
+		pContainer->DeleteThis();
+		g_World.GarbageCollection_New();
+		return false;
+	}
+
+	// The old object is still pending while the replacement is live in the
+	// same slot.  Its final destructor must not clear the replacement's UID.
+	g_World.GarbageCollection_New();
+	const bool fPreserved = g_World.FindUIDObj( dwIndex ) == pNew &&
+		pNew->GetParent() == pContainerRaw;
+	pNew->DeleteThis();
+	pContainer->DeleteThis();
+	g_World.GarbageCollection_New();
+	return fPreserved;
+}
+
+static bool TestRepeatedViolationIsSummarized()
+{
+	// End the preceding injected cycle so its keys are no longer active.
+	g_World.CheckIntegrity( 0 );
+	CItemDef itemDef( ITEMID_MULTI_MAX );
+	CItemPtr pItem = new CIntegrityItem( ITEMID_MULTI_MAX, &itemDef );
+	pItem->Detach();
+	if ( g_World.CheckIntegrity( 0 ) <= 0 )
+		return false;
+	if ( g_World.CheckIntegrity( 0 ) <= 0 )
+		return false;
+	const bool fSummarized = g_World.GetIntegrityLastSuppressed() == 1;
+	pItem->DeleteThis();
+	g_World.GarbageCollection_New();
+	return fSummarized;
+}
+
 static bool TestLogBudgetIsPerCycle()
 {
 	CItemDef itemDef( ITEMID_MULTI_MAX );
@@ -204,6 +259,16 @@ int main()
 	if ( !TestCountDriftIsReported())
 	{
 		std::fprintf( stderr, "injected count drift was not reported\n" );
+		return 1;
+	}
+	if ( !TestDeferredUIDReuseKeepsNewOwner())
+	{
+		std::fprintf( stderr, "deferred UID reuse lost the replacement object\n" );
+		return 1;
+	}
+	if ( !TestRepeatedViolationIsSummarized())
+	{
+		std::fprintf( stderr, "repeated integrity violation was not summarized\n" );
 		return 1;
 	}
 	if ( !TestLogBudgetIsPerCycle())

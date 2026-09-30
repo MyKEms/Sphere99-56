@@ -13,6 +13,8 @@
 #include "csectortemplate.h"
 #include "common.h"
 #include "cObjBase.h"
+#include <set>
+#include <string>
 
 struct CSectorEnviron	// When these change it is an CCharDef::T_EnvironChange,
 {
@@ -356,6 +358,10 @@ private:
 	int		m_iIntegrityCycleViolations;	// all violations, including capped logs.
 	int		m_iIntegrityLogBudget;	// remaining diagnostic lines for this cycle.
 	int		m_iIntegrityLastLogs;	// lines emitted by the last completed cycle.
+	int		m_iIntegritySuppressed;	// repeated violations summarized at cycle end.
+	int		m_iIntegrityLastSuppressed;
+	std::set<std::string> m_sIntegrityActive;
+	std::set<std::string> m_sIntegritySeen;
 	unsigned long long m_iIntegrityCycleChanges;	// creation/destruction count at cycle start.
 	long long m_iIntegrityCycleStartMs;	// monotonic start time for observability.
 	bool	m_fIntegrityResourceBaseline;
@@ -447,6 +453,7 @@ private:
 	void GarbageCollection_GMPages();
 	void CaptureResourceIntegrityBaseline();
 	int CheckResourceIntegrity( int& iLogBudget );
+	void FinishIntegrityCycleViolations();
 	bool SaveStage();
 	void SaveForce(); // Save world state
 
@@ -528,6 +535,9 @@ public:
 	// ticks provide a small positive budget so the check cannot stall the loop.
 	int CheckIntegrity( int iBudget = 0 );
 	int GetIntegrityLastLogCount() const { return m_iIntegrityLastLogs; }
+	int GetIntegrityLastSuppressed() const { return m_iIntegrityLastSuppressed; }
+	int ReportIntegrityViolation( const char* pszRule, const CObjBase* pObj,
+		const char* pszChain, int& iLogBudget, DWORD dwUIDOverride = 0 );
 	void QueuePartyForDelete( CPartyDef* pParty );
 	void DestroyPendingParties();
 
