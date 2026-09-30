@@ -120,6 +120,68 @@ static bool TestBackupFallbackRequiresOptIn()
 	return fExplicitFallback;
 }
 
+static bool TestMismatchedPairRecovery()
+{
+	char szTempDir[] = "/tmp/sphere-save-pair-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const std::string sWorldBackup = sBaseDir + "sphereb02w.scp";
+	const std::string sCharsBackup = sBaseDir + "sphereb02c.scp";
+	const std::string sManifest = sBaseDir + "sphere.save.pending";
+
+	const char* pszWorldTwo = "TITLE=Current world\nVERSION=0.99\nSAVECOUNT=2\n[EOF]\n";
+	const char* pszCharsOne = "TITLE=Current chars\nVERSION=0.99\nSAVECOUNT=1\n[EOF]\n";
+	const char* pszWorldOne = "TITLE=Archived world\nVERSION=0.99\nSAVECOUNT=1\n[EOF]\n";
+	const char* pszCharsOneArchive = "TITLE=Archived chars\nVERSION=0.99\nSAVECOUNT=1\n[EOF]\n";
+	{
+		std::ofstream world( sWorld.c_str());
+		std::ofstream chars( sChars.c_str());
+		world << pszWorldTwo;
+		chars << pszCharsOne;
+		if ( !world || !chars )
+			return false;
+	}
+
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	const bool fMismatchAccepted = g_World.LoadWorldForTest();
+	g_World.Close( false );
+	if ( fMismatchAccepted )
+	{
+		std::fprintf( stderr, "mismatched current world/chars pair was accepted\n" );
+		unlink( sWorld.c_str());
+		unlink( sChars.c_str());
+		rmdir( szTempDir );
+		return false;
+	}
+
+	{
+		std::ofstream worldBackup( sWorldBackup.c_str());
+		std::ofstream charsBackup( sCharsBackup.c_str());
+		std::ofstream manifest( sManifest.c_str());
+		worldBackup << pszWorldOne;
+		charsBackup << pszCharsOneArchive;
+		manifest << "SAVECOUNT=2\nSTATE=PENDING\nROTATED=3\n[EOF]\n";
+		if ( !worldBackup || !charsBackup || !manifest )
+			return false;
+	}
+	g_World.m_iSaveCountID = 0;
+	const bool fRecovered = g_World.LoadWorldForTest() && g_World.m_iSaveCountID == 2;
+	g_World.Close( false );
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	unlink( sWorldBackup.c_str());
+	unlink( sCharsBackup.c_str());
+	unlink( sManifest.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	return fRecovered;
+}
+
 int main()
 {
 	if ( !TestUIDReset() )
@@ -140,6 +202,12 @@ int main()
 		return 1;
 	}
 	std::printf( "backup fallback: corrupt current save is fatal unless explicitly enabled\n" );
+	if ( !TestMismatchedPairRecovery() )
+	{
+		std::fprintf( stderr, "mismatched save pair was not rejected and recovered only from a pending pair\n" );
+		return 1;
+	}
+	std::printf( "paired save load: mismatched current pair rejected; pending archives recover atomically\n" );
 
 	char szTempDir[] = "/tmp/sphere-load-safety-XXXXXX";
 	if ( mkdtemp( szTempDir ) == NULL )

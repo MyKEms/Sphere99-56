@@ -878,8 +878,9 @@ bool CWorld::PublishSaveFile( LPCTSTR pszTemp, LPCTSTR pszCurrent )
 #endif
 }
 
-bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
+static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 {
+	iSaveCount = INT_MIN;
 	FILE* pFile = fopen( pszPath, "rb" );
 	if ( !pFile )
 		return false;
@@ -897,18 +898,23 @@ bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
 		}
 		if ( !strncmp( szLine, "SAVECOUNT=", 10 ))
 		{
-			int iFound = 0;
-			if ( sscanf( szLine + 10, "%d", &iFound ) == 1 )
-				fHeader = iFound == iSaveCount;
+			if ( sscanf( szLine + 10, "%d", &iSaveCount ) == 1 )
+				fHeader = true;
 		}
 		if ( !strncmp( szLine, "[EOF]", 5 ))
 		{
 			fEOF = true;
-			break;
+			continue;
 		}
 	}
 	fclose( pFile );
 	return fHeader && fEOF && !fAfterEOF;
+}
+
+bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
+{
+	int iFound = 0;
+	return ReadSaveFileCount( pszPath, iFound ) && iFound == iSaveCount;
 }
 
 bool CWorld::PublishSavePair()
@@ -935,22 +941,49 @@ bool CWorld::PublishSavePair()
 	CGString sCharsArchive;
 	GetBackupName( sWorldArchive, g_Cfg.m_sWorldBaseDir, 'w', m_iSaveCountID );
 	GetBackupName( sCharsArchive, g_Cfg.m_sWorldBaseDir, 'c', m_iSaveCountID );
+	int iManifestSaveCount = 0;
+	bool fManifestPending = false;
 	unsigned dwRotated = 0;
-	if ( !PreserveSaveFile( sWorldCurrent, sWorldArchive ))
-		return false;
-	if ( SaveFileExists( sWorldCurrent ))
+	const bool fRetryManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
+		iManifestSaveCount, fManifestPending, dwRotated ) && fManifestPending &&
+		iManifestSaveCount == m_iSaveCountID;
+	if ( !fRetryManifest )
+		dwRotated = 0;
+	if ( ! ( dwRotated & 0x01 ))
 	{
-		dwRotated |= 0x01;
-		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
+		if ( !PreserveSaveFile( sWorldCurrent, sWorldArchive ))
 			return false;
+		if ( SaveFileExists( sWorldCurrent ))
+		{
+			dwRotated |= 0x01;
+			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
+				return false;
+		}
 	}
-	if ( !PreserveSaveFile( sCharsCurrent, sCharsArchive ))
-		return false;
-	if ( SaveFileExists( sCharsCurrent ))
+	else if ( !SaveFileExists( sWorldArchive ))
 	{
-		dwRotated |= 0x02;
-		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save generation %d lost its world archive; refusing to re-rotate the live pair" LOG_CR,
+			m_iSaveCountID );
+		return false;
+	}
+	if ( ! ( dwRotated & 0x02 ))
+	{
+		if ( !PreserveSaveFile( sCharsCurrent, sCharsArchive ))
 			return false;
+		if ( SaveFileExists( sCharsCurrent ))
+		{
+			dwRotated |= 0x02;
+			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
+				return false;
+		}
+	}
+	else if ( !SaveFileExists( sCharsArchive ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save generation %d lost its character archive; refusing to re-rotate the live pair" LOG_CR,
+			m_iSaveCountID );
+		return false;
 	}
 
 	if ( !PublishSaveFile( sWorldTemp, sWorldCurrent ) ||
@@ -972,7 +1005,16 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 	unsigned dwRotated = 0;
 	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount,
 		fManifestPending, dwRotated ) && fManifestPending && iManifestSaveCount == iSaveCount;
-	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit && (dwRotated & dwManifestBit);
+	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit &&
+		( dwRotated & dwManifestBit ) && SaveFileExists( sArchive );
+	if ( fRetry && fHaveManifest && dwManifestBit && ( dwRotated & dwManifestBit ) &&
+		!SaveFileExists( sArchive ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save retry lost archive '%s'; refusing to re-rotate '%s'" LOG_CR,
+			(LPCTSTR)sArchive, (LPCTSTR)pszBaseName );
+		return false;
+	}
 
 	CGString sSaveName;
 	sSaveName.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir, pszBaseName );
@@ -1251,7 +1293,7 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 	fprintf( stderr, "[INFO] World save started: SaveCount=%d objects=%d/%d\n",
 		m_iSaveCountID, m_iSaveStartItems, m_iSaveStartChars );
 #endif
-	if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir,
+	if ( !fRetry && !WriteSaveManifest( g_Cfg.m_sWorldBaseDir,
 		m_iSaveCountID, true, 0 ))
 		return FailSave( "opening save manifest" );
 
@@ -1545,9 +1587,9 @@ bool CWorld::LoadWorld() // Load world from script
 	// operator explicitly enables SaveBackupFallback in the INI.
 
 	CGString sWorldName;
-	sWorldName.Format( "%s" SPHERE_FILE "world", (LPCTSTR) g_Cfg.m_sWorldBaseDir );
+	sWorldName.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR) g_Cfg.m_sWorldBaseDir );
 	CGString sCharsName;
-	sCharsName.Format( "%s" SPHERE_FILE "chars", (LPCTSTR) g_Cfg.m_sWorldBaseDir );
+	sCharsName.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR) g_Cfg.m_sWorldBaseDir );
 	int iPendingSaveCount = 0;
 	bool fPendingManifest = false;
 	unsigned dwRotated = 0;
@@ -1594,7 +1636,22 @@ bool CWorld::LoadWorld() // Load world from script
 		m_iLoadReadChars = 0;
 		m_iLoadItems = 0;
 		m_iLoadChars = 0;
-		const bool fWorldLoaded = LoadFile( sWorldName );
+		int iWorldSaveCount = 0;
+		int iCharsSaveCount = 0;
+		const bool fWorldHeader = ReadSaveFileCount( sWorldName, iWorldSaveCount );
+		const bool fCharsHeader = ReadSaveFileCount( sCharsName, iCharsSaveCount );
+		const bool fMatchingPair = fWorldHeader && fCharsHeader &&
+			iWorldSaveCount == iCharsSaveCount;
+		if ( !fMatchingPair )
+		{
+			g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL,
+				"World/chars save pair mismatch: world=%d%s chars=%d%s" LOG_CR,
+				iWorldSaveCount, iWorldSaveCount == INT_MIN ? "(missing)" : "",
+				iCharsSaveCount, iCharsSaveCount == INT_MIN ? "(missing)" : "" );
+			if ( !fPendingManifest && iWorldSaveCount != INT_MIN )
+				m_iSaveCountID = iWorldSaveCount;
+		}
+		const bool fWorldLoaded = fMatchingPair && LoadFile( sWorldName );
 		const bool fCharsLoaded = fWorldLoaded && LoadFile( sCharsName );
 		if ( fWorldLoaded && fCharsLoaded )
 		{
