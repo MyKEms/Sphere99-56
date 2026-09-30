@@ -25,10 +25,17 @@ temporary file, then the temporary file is renamed into place.  The directory
 is synchronized after that publication so the rename survives a sudden restart.
 
 A retry of a failed generation reuses every backup that the pending manifest
-records as already taken (world, characters, and accounts) instead of
-overwriting it with a file published by the failed attempt.  A component that
-the failed attempt did not reach is backed up by the retry.  If a recorded
-backup has disappeared, the retry stops instead of rotating again.
+records as already taken (world, characters, accounts, and the server list)
+instead of overwriting it with a file published by the failed attempt.  The
+manifest records each backup's actual path (`ARCHIVE_W`, `ARCHIVE_C`,
+`ARCHIVE_A`, `ARCHIVE_S`) once the backup's directory has been synchronised,
+and the retry and the start-up use that path.  A recomputed name could differ:
+the server list backup carries the current date, and `BACKUPLEVELS`
+selects the other names.  A manifest without recorded paths falls back to the
+computed names.  A component that the failed attempt did not reach is backed
+up by the retry.  If a recorded backup has disappeared, the retry stops
+instead of rotating again; the log names the missing file and the manifest
+(`sphere.save.pending`) to remove if that backup cannot be restored.
 
 Save backups retain Sphere's stock names and rotation rule.  For generation
 `N`, the backup level is selected by the number of trailing zero octal digits

@@ -312,6 +312,32 @@ enum LOAD_LOG_CATEGORY
 	LOAD_LOG_QTY,
 };
 
+// The pending save manifest (sphere.save.pending): the generation being saved
+// and, for each component whose backup that generation has taken, the path the
+// backup was actually written to.  A retry reuses the recorded path, because a
+// recomputed backup name can change (the server list backup carries the date,
+// and BACKUPLEVELS selects the other names).
+struct CSaveManifest
+{
+	enum COMPONENT_TYPE
+	{
+		COMPONENT_WORLD,	// 'w'
+		COMPONENT_CHARS,	// 'c'
+		COMPONENT_ACCOUNTS,	// 'a'
+		COMPONENT_SERVERS,	// 's'
+		COMPONENT_QTY,
+	};
+	int m_iSaveCount;
+	bool m_fPending;
+	unsigned m_dwRotated;	// bit (1 << COMPONENT_TYPE) per backup taken.
+	CGString m_sArchive[COMPONENT_QTY];	// empty: not recorded (older manifest).
+
+	CSaveManifest( int iSaveCount = 0, bool fPending = false ) :
+		m_iSaveCount( iSaveCount ), m_fPending( fPending ), m_dwRotated( 0 )
+	{
+	}
+};
+
 extern class CWorld : public CWorldThread
 {
 	// the world. Stuff saved in *World.SCP
@@ -411,8 +437,8 @@ private:
 
 	bool SaveTry(bool fForceImmediate); // Save world state
 	bool FailSave( LPCTSTR pszReason );
-	static bool ReadSaveManifest( LPCTSTR pszBaseDir, int& iSaveCount, bool& fPending, unsigned& dwRotated );
-	static bool WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPending, unsigned dwRotated );
+	static bool ReadSaveManifest( LPCTSTR pszBaseDir, CSaveManifest& manifest );
+	static bool WriteSaveManifest( LPCTSTR pszBaseDir, const CSaveManifest& manifest );
 	static void RemoveSaveManifest( LPCTSTR pszBaseDir );
 	static void GetSaveTempName( CGString& sTemp, LPCTSTR pszBaseDir, LPCTSTR pszBaseName );
 	static bool PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszArchive );
@@ -487,7 +513,7 @@ public:
 	static void GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int savecount );
 	static bool PublishSaveFile( LPCTSTR pszTemp, LPCTSTR pszCurrent );
 	static bool SyncSaveDirectory( LPCTSTR pszBaseDir );
-	static bool PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount );
+	static bool PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fStartManifest = false );
 	bool IsSaveRetry() const { return m_fSaveRetry; }
 	void ReSyncLoad();
 	void ReSyncUnload();

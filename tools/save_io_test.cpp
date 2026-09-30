@@ -10,6 +10,7 @@
 #endif
 
 #include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cstdio>
@@ -40,6 +41,40 @@ static std::string ReadFile( const std::string& sPath )
 	std::ostringstream contents;
 	contents << file.rdbuf();
 	return contents.str();
+}
+
+static LOG_GROUP_TYPE s_dwTestLogGroups = 0;
+
+// Send the daily log, including save events, into a fresh directory for one
+// step of a test case.
+static bool OpenTestLog( const std::string& sLogDir )
+{
+	s_dwTestLogGroups = g_Log.GetLogGroupMask();
+	g_Log.SetLogGroupMask( s_dwTestLogGroups | LOG_GROUP_SAVE );
+	return mkdir( sLogDir.c_str(), 0700 ) == 0 && g_Log.OpenLog( sLogDir.c_str());
+}
+
+// Close the daily log opened by OpenTestLog; return its contents and remove it.
+static std::string CloseTestLog( const std::string& sLogDir )
+{
+	g_Log.Close();
+	g_Log.SetLogGroupMask( s_dwTestLogGroups );
+	std::string sContents;
+	DIR* pDir = opendir( sLogDir.c_str());
+	if ( pDir == NULL )
+		return sContents;
+	struct dirent* pEntry;
+	while ( ( pEntry = readdir( pDir )) != NULL )
+	{
+		if ( !std::strcmp( pEntry->d_name, "." ) || !std::strcmp( pEntry->d_name, ".." ))
+			continue;
+		const std::string sPath = sLogDir + "/" + pEntry->d_name;
+		sContents += ReadFile( sPath );
+		unlink( sPath.c_str());
+	}
+	closedir( pDir );
+	rmdir( sLogDir.c_str());
+	return sContents;
 }
 
 static bool RunEmptyWriteCase()
@@ -322,12 +357,12 @@ static bool PrepareAccountRetryCase( const char* pszTempDir )
 	return static_cast<bool>( account );
 }
 
-static bool RunAccountSave( CFileText::TEST_FAULT fault, const char* pszTarget )
+static bool RunAccountSave( CFileText::TEST_FAULT fault, const char* pszTarget, int iSkip = 0 )
 {
 	if ( fault == CFileText::TEST_FAULT_NONE )
 		CFileText::ClearTestFault();
 	else
-		CFileText::SetTestFault( fault, pszTarget );
+		CFileText::SetTestFault( fault, pszTarget, iSkip );
 	g_Serv.m_iExitFlag = SPHEREERR_OK;
 	CGVariant vArgs;
 	vArgs.SetInt( 1 );
@@ -430,19 +465,159 @@ static bool RunRetryLostAccountArchiveFailsClosedCase()
 	const bool fArchived = ReadFile( sArchivePath ).find( ACCOUNT_SENTINEL ) != std::string::npos;
 	unlink( sArchivePath.c_str());
 
+	const std::string sLogDir = std::string( szTempDir ) + "/logs";
+	const bool fLogOpened = OpenTestLog( sLogDir );
 	const bool fRetryRefused = !RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
 		g_World.m_iSaveCountID == 1;
-	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
+	const std::string sLog = CloseTestLog( sLogDir );
+	const std::string sPendingPath = std::string( szTempDir ) + "/sphere.save.pending";
+	const std::string sPending = ReadFile( sPendingPath );
+	// The refusal names the missing backup and the manifest to remove.
+	const bool fExplained = sLog.find( "'" + sArchivePath + "'" ) != std::string::npos &&
+		sLog.find( "remove '" + sPendingPath + "'" ) != std::string::npos;
 	const bool fPassed = fInitial && fFailed && fArchived && fRetryRefused &&
 		ReadFile( sArchivePath ).empty() &&
 		sPending.find( "STATE=PENDING" ) != std::string::npos &&
-		sPending.find( "ROTATED=4" ) != std::string::npos;
+		sPending.find( "ROTATED=4" ) != std::string::npos && fLogOpened && fExplained;
 	if ( !fPassed )
 	{
 		std::fprintf( stderr,
-			"retry re-rotated a lost account archive: initial=%d failed=%d archived=%d refused=%d archive_after=%zu\n",
+			"retry re-rotated a lost account archive: initial=%d failed=%d archived=%d refused=%d archive_after=%zu explained=%d\n%s\n",
 			fInitial ? 1 : 0, fFailed ? 1 : 0, fArchived ? 1 : 0, fRetryRefused ? 1 : 0,
-			ReadFile( sArchivePath ).size());
+			ReadFile( sArchivePath ).size(), fExplained ? 1 : 0, sLog.c_str());
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
+// Replace a key of the pending manifest, keeping every other line.
+static bool SetManifestKey( const std::string& sPath, const std::string& sKey, const std::string& sValue )
+{
+	std::istringstream manifest( ReadFile( sPath ));
+	const std::string sPrefix = sKey + "=";
+	std::string sOut;
+	bool fInserted = false;
+	std::string sLine;
+	while ( std::getline( manifest, sLine ))
+	{
+		if ( sLine.compare( 0, sPrefix.size(), sPrefix ) == 0 )
+			continue;
+		if ( !fInserted && sLine == "[EOF]" )
+		{
+			sOut += sPrefix + sValue + "\n";
+			fInserted = true;
+		}
+		sOut += sLine + "\n";
+	}
+	std::ofstream out( sPath.c_str(), std::ios::out | std::ios::trunc );
+	out << sOut;
+	return fInserted && static_cast<bool>( out );
+}
+
+static bool FileExists( const std::string& sPath )
+{
+	return access( sPath.c_str(), F_OK ) == 0;
+}
+
+// Backup names depend on BACKUPLEVELS.  A retry after the setting
+// changed (for example across a restart) must reuse the backups the failed
+// attempt recorded, both when loading and when saving, instead of looking
+// for them under recomputed names.
+static bool RunRetryAfterBackupLevelChangeCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-levels-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	const int iLevelsBefore = g_Cfg.m_iSaveBackupLevels;
+	g_Cfg.m_iSaveBackupLevels = 3;
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	// Generation 64 (octal 100) is named sphereb21*.scp with three levels.
+	g_World.m_iSaveCountID = 63;
+	const bool fInitial = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 64;
+	const std::string sWorldBefore = ReadFile( sBaseDir + "/sphereworld.scp" );
+	const std::string sCharsBefore = ReadFile( sBaseDir + "/spherechars.scp" );
+	const std::string sAccountsBefore = ReadFile( sBaseDir + "/sphereaccu.scp" );
+
+	// The account and world backups are recorded; recording the character
+	// backup (the fourth manifest write) fails.
+	const bool fFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphere.save.pending.tmp", 3 ) &&
+		g_World.m_iSaveCountID == 64 && CFileText::WasTestFaultTriggered();
+	const std::string sPending = ReadFile( sBaseDir + "/sphere.save.pending" );
+	const bool fRecorded = sPending.find( "ROTATED=5\n" ) != std::string::npos;
+
+	// With one level the same generation is named sphereb10*.scp.
+	g_Cfg.m_iSaveBackupLevels = 1;
+	const std::string sLogDir = sBaseDir + "/logs";
+	const bool fLogOpened = OpenTestLog( sLogDir );
+	g_World.Close( false );
+	const bool fReloaded = g_World.LoadAll() && g_World.m_iSaveCountID == 64;
+	const std::string sLog = CloseTestLog( sLogDir );
+	const bool fLoadedRecorded =
+		sLog.find( "Loading save backup '" + sBaseDir + "/sphereb21w.scp'" ) != std::string::npos;
+
+	const bool fRecovered = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 65;
+	const bool fKept = ReadFile( sBaseDir + "/sphereb21w.scp" ) == sWorldBefore &&
+		ReadFile( sBaseDir + "/sphereb21a.scp" ) == sAccountsBefore &&
+		ReadFile( sBaseDir + "/sphereb10c.scp" ) == sCharsBefore &&
+		!FileExists( sBaseDir + "/sphereb10w.scp" ) &&
+		!FileExists( sBaseDir + "/sphereb10a.scp" );
+	g_Cfg.m_iSaveBackupLevels = iLevelsBefore;
+	const bool fPassed = fInitial && fFailed && fRecorded && fLogOpened && fReloaded &&
+		fLoadedRecorded && fRecovered && fKept;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"retry after a backup level change lost its recorded backups: initial=%d failed=%d recorded=%d "
+			"reloaded=%d loaded_recorded=%d recovered=%d kept=%d\n",
+			fInitial ? 1 : 0, fFailed ? 1 : 0, fRecorded ? 1 : 0, fReloaded ? 1 : 0,
+			fLoadedRecorded ? 1 : 0, fRecovered ? 1 : 0, fKept ? 1 : 0 );
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
+// The server list backup is named after the current date.  An attempt that
+// took it before midnight and a retry after midnight compute different names;
+// the retry must reuse the recorded backup instead of failing every save.
+static bool RunRetryKeepsDatedServerBackupCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-serv-date-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_Cfg.m_sMainLogServerDir.Format( "%s/", szTempDir );
+	g_World.m_iSaveCountID = 0;
+	const std::string sServer = sBaseDir + "/sphereserv.scp";
+	const bool fInitial = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 1 && FileExists( sServer );
+	const std::string sServerBefore = ReadFile( sServer );
+
+	const bool fFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphereworld.scp.tmp" ) &&
+		g_World.m_iSaveCountID == 1 && CFileText::WasTestFaultTriggered();
+	CGString sToday;
+	CWorld::GetBackupName( sToday, g_Cfg.m_sMainLogServerDir, 's', 1 );
+	// Move the backup to the name an attempt on an earlier day records.
+	const std::string sEarlier = sBaseDir + "/spheres19991231.scp";
+	const bool fMoved = rename( (LPCTSTR)sToday, sEarlier.c_str()) == 0 &&
+		SetManifestKey( sBaseDir + "/sphere.save.pending", "ARCHIVE_S", sEarlier );
+
+	const bool fRecovered = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 2;
+	const bool fKept = ReadFile( sEarlier ) == sServerBefore &&
+		!FileExists( (LPCTSTR)sToday ) && FileExists( sServer );
+	g_Cfg.m_sMainLogServerDir.Empty();
+	const bool fPassed = fInitial && fFailed && fMoved && fRecovered && fKept;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"retry after a date change lost the server list backup: initial=%d failed=%d moved=%d recovered=%d kept=%d\n",
+			fInitial ? 1 : 0, fFailed ? 1 : 0, fMoved ? 1 : 0, fRecovered ? 1 : 0, fKept ? 1 : 0 );
 	}
 	FinishAccountRetryCase( szTempDir );
 	return fPassed;
@@ -577,7 +752,10 @@ int main()
 	const bool fAccountLate = RunRetryTakesMissingAccountArchiveCase();
 	const bool fAccountLost = RunRetryLostAccountArchiveFailsClosedCase();
 	const bool fFirstRetry = RunFirstSaveRetryWithoutArchiveCase();
-	if ( !fAccountReuse || !fAccountLate || !fAccountLost || !fFirstRetry )
+	const bool fLevelChange = RunRetryAfterBackupLevelChangeCase();
+	const bool fDateChange = RunRetryKeepsDatedServerBackupCase();
+	if ( !fAccountReuse || !fAccountLate || !fAccountLost || !fFirstRetry ||
+		!fLevelChange || !fDateChange )
 		return 1;
 	if ( !RunShutdownCompletionCase() )
 	{

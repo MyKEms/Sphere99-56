@@ -741,26 +741,61 @@ void CWorld::GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType
 		SCRIPT_EXT );
 }
 
-static unsigned SaveManifestBit( LPCTSTR pszBaseName )
+// The manifest component of a save base name ("world", "chars", "accu",
+// "serv"), or -1.  Its bit in ROTATED is 1 << component.
+static int SaveManifestComponent( LPCTSTR pszBaseName )
 {
 	if ( !pszBaseName || !pszBaseName[0] )
-		return 0;
+		return -1;
 	switch ( tolower( (unsigned char) pszBaseName[0] ))
 	{
-	case 'w': return 0x01;
-	case 'c': return 0x02;
-	case 'a': return 0x04;
-	case 's': return 0x08;
-	default: return 0;
+	case 'w': return CSaveManifest::COMPONENT_WORLD;
+	case 'c': return CSaveManifest::COMPONENT_CHARS;
+	case 'a': return CSaveManifest::COMPONENT_ACCOUNTS;
+	case 's': return CSaveManifest::COMPONENT_SERVERS;
+	default: return -1;
 	}
 }
+
+// Manifest key suffix of each component's recorded backup path (ARCHIVE_W=...).
+static const char sm_chSaveManifestKind[CSaveManifest::COMPONENT_QTY] = { 'W', 'C', 'A', 'S' };
 
 static void GetSaveManifestName( CGString& sManifest, LPCTSTR pszBaseDir )
 {
 	sManifest.Format( "%s" SPHERE_FILE ".save.pending", pszBaseDir ? pszBaseDir : "" );
 }
 
-bool CWorld::ReadSaveManifest( LPCTSTR pszBaseDir, int& iSaveCount, bool& fPending, unsigned& dwRotated )
+// The backup of a component for generation iSaveCount: the path the manifest
+// recorded when the backup was taken.  A manifest written before paths were
+// recorded falls back to the computed name.
+static void GetManifestArchive( const CSaveManifest& manifest, int iComponent,
+	LPCTSTR pszBaseDir, TCHAR chType, int iSaveCount, CGString& sArchive )
+{
+	if ( iComponent >= 0 && iComponent < CSaveManifest::COMPONENT_QTY &&
+		!manifest.m_sArchive[iComponent].IsEmpty())
+	{
+		sArchive = manifest.m_sArchive[iComponent];
+		return;
+	}
+	CWorld::GetBackupName( sArchive, pszBaseDir ? pszBaseDir : "", chType, iSaveCount );
+}
+
+// A backup the pending manifest recorded is gone: the save stops instead of
+// backing up the live file again (it may already hold the failed attempt's
+// output).  Name the missing file and the two ways to recover.
+static void LogMissingSaveArchive( int iSaveCount, LPCTSTR pszArchive, LPCTSTR pszCurrent )
+{
+	CGString sManifest;
+	GetSaveManifestName( sManifest, g_Cfg.m_sWorldBaseDir );
+	CGString sMsg;
+	sMsg.Format( "Save generation %d cannot find its recorded backup '%s' of '%s'; refusing to back it up again. "
+		"Restore that backup, or remove '%s' to abandon the interrupted generation "
+		"(the next save then backs up the current files)." LOG_CR,
+		iSaveCount, pszArchive, pszCurrent, (LPCTSTR)sManifest );
+	g_Log.EventStr( LOG_GROUP_SAVE, LOGL_CRIT, sMsg );
+}
+
+bool CWorld::ReadSaveManifest( LPCTSTR pszBaseDir, CSaveManifest& manifest )
 {
 	CGString sManifest;
 	GetSaveManifestName( sManifest, pszBaseDir );
@@ -768,27 +803,35 @@ bool CWorld::ReadSaveManifest( LPCTSTR pszBaseDir, int& iSaveCount, bool& fPendi
 	if ( !pFile )
 		return false;
 
-	char szLine[256];
+	char szLine[SCRIPT_MAX_LINE_LEN];
 	bool fSaveCount = false;
 	bool fEOF = false;
-	fPending = true;
-	dwRotated = 0;
+	manifest = CSaveManifest( 0, true );
 	while ( fgets( szLine, sizeof(szLine), pFile ) != NULL )
 	{
+		size_t iLen = strlen( szLine );
+		while ( iLen > 0 && ( szLine[iLen - 1] == '\n' || szLine[iLen - 1] == '\r' ))
+			szLine[--iLen] = '\0';
 		if ( !strncmp( szLine, "SAVECOUNT=", 10 ))
 		{
-			if ( sscanf( szLine + 10, "%d", &iSaveCount ) == 1 )
+			if ( sscanf( szLine + 10, "%d", &manifest.m_iSaveCount ) == 1 )
 				fSaveCount = true;
 		}
 		else if ( !strncmp( szLine, "STATE=", 6 ))
 		{
-			fPending = strncmp( szLine + 6, "COMMITTED", 9 ) != 0;
+			manifest.m_fPending = strncmp( szLine + 6, "COMMITTED", 9 ) != 0;
 		}
 		else if ( !strncmp( szLine, "ROTATED=", 8 ))
 		{
 			unsigned iRotated = 0;
 			if ( sscanf( szLine + 8, "%u", &iRotated ) == 1 )
-				dwRotated = iRotated;
+				manifest.m_dwRotated = iRotated;
+		}
+		else if ( !strncmp( szLine, "ARCHIVE_", 8 ) && szLine[8] && szLine[9] == '=' )
+		{
+			const int iComponent = SaveManifestComponent( szLine + 8 );
+			if ( iComponent >= 0 )
+				manifest.m_sArchive[iComponent] = szLine + 10;
 		}
 		else if ( !strncmp( szLine, "[EOF]", 5 ))
 		{
@@ -797,11 +840,11 @@ bool CWorld::ReadSaveManifest( LPCTSTR pszBaseDir, int& iSaveCount, bool& fPendi
 	}
 	fclose( pFile );
 	if ( !fEOF )
-		fPending = true;
+		manifest.m_fPending = true;
 	return fSaveCount;
 }
 
-bool CWorld::WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPending, unsigned dwRotated )
+bool CWorld::WriteSaveManifest( LPCTSTR pszBaseDir, const CSaveManifest& manifest )
 {
 	CGString sManifest;
 	GetSaveManifestName( sManifest, pszBaseDir );
@@ -811,9 +854,17 @@ bool CWorld::WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPendin
 	remove( sManifestTemp );
 	if ( !s.Open( sManifestTemp, OF_WRITE|OF_CREATE|OF_TEXT ))
 		return false;
-	s.WriteKeyInt( "SAVECOUNT", iSaveCount );
-	s.WriteKey( "STATE", fPending ? "PENDING" : "COMMITTED" );
-	s.WriteKeyInt( "ROTATED", (int) dwRotated );
+	s.WriteKeyInt( "SAVECOUNT", manifest.m_iSaveCount );
+	s.WriteKey( "STATE", manifest.m_fPending ? "PENDING" : "COMMITTED" );
+	s.WriteKeyInt( "ROTATED", (int) manifest.m_dwRotated );
+	for ( int i = 0; i < CSaveManifest::COMPONENT_QTY; i++ )
+	{
+		if ( manifest.m_sArchive[i].IsEmpty())
+			continue;
+		CGString sKey;
+		sKey.Format( "ARCHIVE_%c", sm_chSaveManifestKind[i] );
+		s.WriteKey( sKey, manifest.m_sArchive[i] );
+	}
 	s.WriteSection( "EOF" );
 	const bool fWriteOK = !s.HasIOError() && s.Sync();
 	const bool fCloseOK = s.CloseChecked();
@@ -936,34 +987,37 @@ bool CWorld::PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszArchive )
 	return SaveCopyFile( pszSource, pszArchive );
 }
 
-bool CWorld::PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount )
+bool CWorld::PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fStartManifest )
 {
 	// Preserve the live component as this generation's backup exactly once,
-	// without ever removing the live name.  The pending manifest records each
-	// backup that has been taken: a retry reuses it instead of archiving the
-	// file that the failed attempt already published, and a recorded backup
-	// that has disappeared stops the save instead of rotating again.
+	// without ever removing the live name.  The pending manifest records the
+	// path of each backup that has been taken: a retry reuses it instead of
+	// archiving the file that the failed attempt already published, and a
+	// recorded backup that has disappeared stops the save instead of rotating
+	// again.  Without a pending manifest for this generation the backup is
+	// recorded only when fStartManifest asks to start one.
 	ASSERT( pszBaseName && pszBaseName[0] );
+	if ( !pszBaseDir )
+		pszBaseDir = "";
 	CGString sCurrent;
-	sCurrent.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir ? pszBaseDir : "", pszBaseName );
-	CGString sArchive;
-	GetBackupName( sArchive, pszBaseDir ? pszBaseDir : "", pszBaseName[0], iSaveCount );
-	const unsigned dwManifestBit = SaveManifestBit( pszBaseName );
-	int iManifestSaveCount = 0;
-	bool fManifestPending = false;
-	unsigned dwRotated = 0;
-	const bool fPendingManifest = dwManifestBit && ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
-		iManifestSaveCount, fManifestPending, dwRotated ) && fManifestPending &&
-		iManifestSaveCount == iSaveCount;
-	if ( fPendingManifest && ( dwRotated & dwManifestBit ))
+	sCurrent.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir, pszBaseName );
+	const int iComponent = SaveManifestComponent( pszBaseName );
+	CSaveManifest manifest;
+	const bool fPendingManifest = iComponent >= 0 &&
+		ReadSaveManifest( g_Cfg.m_sWorldBaseDir, manifest ) &&
+		manifest.m_fPending && manifest.m_iSaveCount == iSaveCount;
+	const unsigned dwBit = iComponent >= 0 ? ( 1u << iComponent ) : 0;
+	if ( fPendingManifest && ( manifest.m_dwRotated & dwBit ))
 	{
+		CGString sArchive;
+		GetManifestArchive( manifest, iComponent, pszBaseDir, pszBaseName[0], iSaveCount, sArchive );
 		if ( SaveFileExists( sArchive ))
 			return true;
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
-			"Save generation %d lost archive '%s'; refusing to re-rotate '%s'" LOG_CR,
-			iSaveCount, (LPCTSTR)sArchive, (LPCTSTR)sCurrent );
+		LogMissingSaveArchive( iSaveCount, sArchive, sCurrent );
 		return false;
 	}
+	CGString sArchive;
+	GetBackupName( sArchive, pszBaseDir, pszBaseName[0], iSaveCount );
 	if ( !PreserveSaveFile( sCurrent, sArchive ))
 	{
 		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
@@ -973,15 +1027,29 @@ bool CWorld::PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int
 	}
 	// Record only a backup that was actually taken; the first generation has
 	// no live file to preserve.
-	if ( fPendingManifest && SaveFileExists( sCurrent ))
+	if ( iComponent < 0 || !SaveFileExists( sCurrent ))
+		return true;
+	if ( !fPendingManifest )
 	{
-		dwRotated |= dwManifestBit;
-		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, iSaveCount, true, dwRotated ))
-		{
-			g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
-				"Save manifest update FAILED after preserving '%s'" LOG_CR, (LPCTSTR)sCurrent );
-			return false;
-		}
+		if ( !fStartManifest )
+			return true;
+		manifest = CSaveManifest( iSaveCount, true );
+	}
+	// The backup must be durable in its own directory (the account directory
+	// can differ from the world directory) before the manifest names it.
+	if ( !SyncSaveDirectory( pszBaseDir ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save directory sync FAILED after preserving '%s'" LOG_CR, (LPCTSTR)sCurrent );
+		return false;
+	}
+	manifest.m_dwRotated |= dwBit;
+	manifest.m_sArchive[iComponent] = sArchive;
+	if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, manifest ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save manifest update FAILED after preserving '%s'" LOG_CR, (LPCTSTR)sCurrent );
+		return false;
 	}
 	return true;
 }
@@ -1103,54 +1171,11 @@ bool CWorld::PublishSavePair()
 		return false;
 	}
 
-	CGString sWorldArchive;
-	CGString sCharsArchive;
-	GetBackupName( sWorldArchive, g_Cfg.m_sWorldBaseDir, 'w', m_iSaveCountID );
-	GetBackupName( sCharsArchive, g_Cfg.m_sWorldBaseDir, 'c', m_iSaveCountID );
-	int iManifestSaveCount = 0;
-	bool fManifestPending = false;
-	unsigned dwRotated = 0;
-	const bool fRetryManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
-		iManifestSaveCount, fManifestPending, dwRotated ) && fManifestPending &&
-		iManifestSaveCount == m_iSaveCountID;
-	if ( !fRetryManifest )
-		dwRotated = 0;
-	if ( ! ( dwRotated & 0x01 ))
-	{
-		if ( !PreserveSaveFile( sWorldCurrent, sWorldArchive ))
-			return false;
-		if ( SaveFileExists( sWorldCurrent ))
-		{
-			dwRotated |= 0x01;
-			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
-				return false;
-		}
-	}
-	else if ( !SaveFileExists( sWorldArchive ))
-	{
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
-			"Save generation %d lost its world archive; refusing to re-rotate the live pair" LOG_CR,
-			m_iSaveCountID );
+	// Back up the live pair once per generation (a retry reuses the recorded
+	// backups), recording each backup even if the pending manifest is gone.
+	if ( !PreserveSaveComponent( g_Cfg.m_sWorldBaseDir, "world", m_iSaveCountID, true ) ||
+		!PreserveSaveComponent( g_Cfg.m_sWorldBaseDir, "chars", m_iSaveCountID, true ))
 		return false;
-	}
-	if ( ! ( dwRotated & 0x02 ))
-	{
-		if ( !PreserveSaveFile( sCharsCurrent, sCharsArchive ))
-			return false;
-		if ( SaveFileExists( sCharsCurrent ))
-		{
-			dwRotated |= 0x02;
-			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
-				return false;
-		}
-	}
-	else if ( !SaveFileExists( sCharsArchive ))
-	{
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
-			"Save generation %d lost its character archive; refusing to re-rotate the live pair" LOG_CR,
-			m_iSaveCountID );
-		return false;
-	}
 
 	// Each publication syncs the directory, so once both return the pair is
 	// the durable current generation and the caller records the commit.
@@ -1162,32 +1187,32 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 {
 	ASSERT(pszBaseName);
 
-	CGString sArchive;
-	GetBackupName( sArchive, pszBaseDir, pszBaseName[0], iSaveCount );
-	const unsigned dwManifestBit = SaveManifestBit( pszBaseName );
-	int iManifestSaveCount = 0;
-	bool fManifestPending = false;
-	unsigned dwRotated = 0;
-	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount,
-		fManifestPending, dwRotated ) && fManifestPending && iManifestSaveCount == iSaveCount;
-	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit &&
-		( dwRotated & dwManifestBit ) && SaveFileExists( sArchive );
-	if ( fRetry && fHaveManifest && dwManifestBit && ( dwRotated & dwManifestBit ) &&
-		!SaveFileExists( sArchive ))
-	{
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
-			"Save retry lost archive '%s'; refusing to re-rotate '%s'" LOG_CR,
-			(LPCTSTR)sArchive, (LPCTSTR)pszBaseName );
-		return false;
-	}
-
 	CGString sSaveName;
 	sSaveName.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir, pszBaseName );
+	const int iComponent = SaveManifestComponent( pszBaseName );
+	CSaveManifest manifest;
+	const bool fHaveManifest = iComponent >= 0 &&
+		ReadSaveManifest( g_Cfg.m_sWorldBaseDir, manifest ) &&
+		manifest.m_fPending && manifest.m_iSaveCount == iSaveCount;
+	const unsigned dwBit = iComponent >= 0 ? ( 1u << iComponent ) : 0;
 
-	if ( !fArchiveReady )
+	if ( fRetry && fHaveManifest && ( manifest.m_dwRotated & dwBit ))
 	{
-		// A retry keeps an archive already rotated by the failed generation. If
-		// this component was not reached before the failure, rotate it now.
+		// A retry keeps the backup the failed generation already took, at the
+		// path it recorded (a recomputed name can carry a later date).
+		CGString sArchive;
+		GetManifestArchive( manifest, iComponent, pszBaseDir, pszBaseName[0], iSaveCount, sArchive );
+		if ( !SaveFileExists( sArchive ))
+		{
+			LogMissingSaveArchive( iSaveCount, sArchive, sSaveName );
+			return false;
+		}
+	}
+	else
+	{
+		// If this component was not reached before a failure, rotate it now.
+		CGString sArchive;
+		GetBackupName( sArchive, pszBaseDir, pszBaseName[0], iSaveCount );
 		remove( sArchive );
 		const bool fRotated = rename( sSaveName, sArchive ) == 0;
 		if ( !fRotated )
@@ -1201,10 +1226,11 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 				"Save directory sync FAILED after rotating '%s'" LOG_CR, (LPCTSTR) pszBaseName );
 			return false;
 		}
-		if ( fHaveManifest && dwManifestBit && fRotated )
+		if ( fHaveManifest && fRotated )
 		{
-			dwRotated |= dwManifestBit;
-			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount, true, dwRotated ))
+			manifest.m_dwRotated |= dwBit;
+			manifest.m_sArchive[iComponent] = sArchive;
+			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, manifest ))
 			{
 				g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT, "Save manifest update FAILED after rotating '%s'" LOG_CR, (LPCTSTR) pszBaseName );
 				return false;
@@ -1360,7 +1386,7 @@ bool CWorld::SaveStage() // Save world state in stages.
 			return FailSave( "publishing paired world files" );
 		// Record the commit as soon as both files are published: a pending
 		// manifest would make the next start prefer the previous backups.
-		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, false, 0 ))
+		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, CSaveManifest( m_iSaveCountID, false )))
 			return FailSave( "committing save manifest" );
 
 		CGString sWorldCurrent;
@@ -1459,15 +1485,12 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 		}
 		return !m_fSaveFailed;
 	}
-	int iManifestSaveCount = 0;
-	bool fManifestPending = false;
-	unsigned dwRotated = 0;
-	const bool fHasManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
-		iManifestSaveCount, fManifestPending, dwRotated );
-	if ( fHasManifest && !fManifestPending )
+	CSaveManifest manifest;
+	const bool fHasManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir, manifest );
+	if ( fHasManifest && !manifest.m_fPending )
 		RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
-	const bool fRetry = fHasManifest && fManifestPending &&
-		iManifestSaveCount == m_iSaveCountID;
+	const bool fRetry = fHasManifest && manifest.m_fPending &&
+		manifest.m_iSaveCount == m_iSaveCountID;
 	m_fSaveRetry = fRetry;
 	m_fSaveFailed = false;
 	m_ullSaveStartMillis = SaveClockMillis();
@@ -1481,7 +1504,7 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 		m_iSaveCountID, m_iSaveStartItems, m_iSaveStartChars );
 #endif
 	if ( !fRetry && !WriteSaveManifest( g_Cfg.m_sWorldBaseDir,
-		m_iSaveCountID, true, 0 ))
+		CSaveManifest( m_iSaveCountID, true )))
 		return FailSave( "opening save manifest" );
 
 	// Do the write async from here in the future.
@@ -1777,17 +1800,16 @@ bool CWorld::LoadWorld() // Load world from script
 	sWorldName.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR) g_Cfg.m_sWorldBaseDir );
 	CGString sCharsName;
 	sCharsName.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR) g_Cfg.m_sWorldBaseDir );
-	int iPendingSaveCount = 0;
-	bool fPendingManifest = false;
-	unsigned dwRotated = 0;
-	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
-		iPendingSaveCount, fPendingManifest, dwRotated );
+	CSaveManifest manifest;
+	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir, manifest );
+	const bool fPendingManifest = fHaveManifest && manifest.m_fPending;
+	const int iPendingSaveCount = manifest.m_iSaveCount;
 	int iLiveWorldCount = INT_MIN;
 	int iLiveCharsCount = INT_MIN;
 	// Both live files carrying the pending generation's SAVECOUNT means both
 	// were published (each was validated before its rename); only the commit
 	// record is missing.  That pair is the newest complete generation.
-	const bool fPublishedPending = fHaveManifest && fPendingManifest &&
+	const bool fPublishedPending = fPendingManifest &&
 		ReadSaveFileCount( sWorldName, iLiveWorldCount ) &&
 		ReadSaveFileCount( sCharsName, iLiveCharsCount ) &&
 		iLiveWorldCount == iPendingSaveCount && iLiveCharsCount == iPendingSaveCount;
@@ -1802,21 +1824,23 @@ bool CWorld::LoadWorld() // Load world from script
 			"Save generation %d was published before its commit was recorded; loading the published pair" LOG_CR,
 			iPendingSaveCount );
 	}
-	else if ( fHaveManifest && fPendingManifest )
+	else if ( fPendingManifest )
 	{
 		// A pending marker means the active files may be incomplete. Prefer the
 		// matching archives, falling back to an active component that was not
 		// reached before the failed save.
 		m_iSaveCountID = iPendingSaveCount;
 		CGString sArchive;
-		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'w', iPendingSaveCount );
-		if (( dwRotated & 0x01 ) && SaveFileExists( sArchive ))
+		GetManifestArchive( manifest, CSaveManifest::COMPONENT_WORLD, g_Cfg.m_sWorldBaseDir,
+			'w', iPendingSaveCount, sArchive );
+		if (( manifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_WORLD )) && SaveFileExists( sArchive ))
 		{
 			sWorldName = sArchive;
 			LogSaveBackupSelected( sWorldName );
 		}
-		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'c', iPendingSaveCount );
-		if (( dwRotated & 0x02 ) && SaveFileExists( sArchive ))
+		GetManifestArchive( manifest, CSaveManifest::COMPONENT_CHARS, g_Cfg.m_sWorldBaseDir,
+			'c', iPendingSaveCount, sArchive );
+		if (( manifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_CHARS )) && SaveFileExists( sArchive ))
 		{
 			sCharsName = sArchive;
 			LogSaveBackupSelected( sCharsName );
