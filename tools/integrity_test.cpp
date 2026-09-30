@@ -134,8 +134,64 @@ static bool TestLogBudgetIsPerCycle()
 	return fReported && fBounded;
 }
 
+static CSphereUID FindFreeResource( RES_TYPE restype )
+{
+	for ( int i = 0; i < RID_INDEX_MASK; ++i )
+	{
+		CSphereUID rid( restype, i );
+		if ( g_Cfg.ResourceGetDef( rid ) == NULL )
+			return rid;
+	}
+	return CSphereUID();
+}
+
+static bool TestResourceTableDropIsReported()
+{
+	const CSphereUID ridDialog = FindFreeResource( RES_Dialog );
+	const CSphereUID ridFunction = FindFreeResource( RES_Function );
+	if ( !ridDialog.IsValidRID() || !ridFunction.IsValidRID())
+		return false;
+
+	CResourceDefPtr pDialog = new CResourceDef( ridDialog, "INTEGRITY_TEST_DIALOG" );
+	CResourceDefPtr pFunction = new CResourceDef( ridFunction, "INTEGRITY_TEST_FUNCTION" );
+	g_Cfg.m_ResHash.AddSortKey( pDialog, ridDialog );
+	g_Cfg.m_ResHash.AddSortKey( pFunction, ridFunction );
+	g_Cfg.m_Const.SetKeyInt( "INTEGRITY_TEST_DEFNAME", ridDialog.GetHashCode());
+
+	if ( g_World.CheckIntegrity( 0 ) != 0 )
+		return false;
+
+	const int iDefName = g_Cfg.m_Const.FindKey( "INTEGRITY_TEST_DEFNAME" );
+	if ( iDefName < 0 )
+		return false;
+	g_Cfg.m_Const.RemoveAt( iDefName );
+	const bool fDefName = g_World.CheckIntegrity( 0 ) > 0;
+	g_Cfg.m_Const.SetKeyInt( "INTEGRITY_TEST_DEFNAME", ridDialog.GetHashCode());
+
+	const int iDialog = g_Cfg.m_ResHash.FindKey( ridDialog );
+	if ( iDialog < 0 )
+		return false;
+	g_Cfg.m_ResHash.RemoveAt( iDialog );
+	const bool fDialog = g_World.CheckIntegrity( 0 ) > 0;
+	g_Cfg.m_ResHash.AddSortKey( pDialog, ridDialog );
+
+	const int iFunction = g_Cfg.m_ResHash.FindKey( ridFunction );
+	if ( iFunction < 0 )
+		return false;
+	g_Cfg.m_ResHash.RemoveAt( iFunction );
+	const bool fFunction = g_World.CheckIntegrity( 0 ) > 0;
+	g_Cfg.m_ResHash.AddSortKey( pFunction, ridFunction );
+
+	return fDefName && fDialog && fFunction;
+}
+
 int main()
 {
+	if ( !TestResourceTableDropIsReported())
+	{
+		std::fprintf( stderr, "resource-table loss was not reported\n" );
+		return 1;
+	}
 	if ( !TestMissingContainerIsReported())
 		return 1;
 	if ( !TestContainerCycleIsReported())
@@ -158,5 +214,6 @@ int main()
 	std::printf( "integrity watchdog: injected missing container reported\n" );
 	std::printf( "integrity watchdog: injected container cycle reported\n" );
 	std::printf( "integrity watchdog: count drift and per-cycle log budget verified\n" );
+	std::printf( "integrity watchdog: resource-table loss reported\n" );
 	return 0;
 }

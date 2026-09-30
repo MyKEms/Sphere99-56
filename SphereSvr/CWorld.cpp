@@ -362,6 +362,16 @@ CWorld::CWorld()
 	m_iIntegrityLastLogs = 0;
 	m_iIntegrityCycleChanges = CObjBase::sm_iChangeCount;
 	m_iIntegrityCycleStartMs = 0;
+	m_fIntegrityResourceBaseline = false;
+	m_iIntegrityResourceDefNames = 0;
+	m_iIntegrityResourceDialogs = 0;
+	m_iIntegrityResourceFunctions = 0;
+	m_ridIntegrityResourceDefName.InitUID();
+	m_ridIntegrityResourceDialog.InitUID();
+	m_ridIntegrityResourceFunction.InitUID();
+	m_sIntegrityResourceDefName.Empty();
+	m_sIntegrityResourceDialog.Empty();
+	m_sIntegrityResourceFunction.Empty();
 	ResetLoadIntegrity();
 }
 
@@ -2154,6 +2164,126 @@ LPCTSTR CWorld::GetGameTime() const
 	return( GetTimeDescFromMinutes( GetGameWorldTime()));
 }
 
+void CWorld::CaptureResourceIntegrityBaseline()
+{
+	m_iIntegrityResourceDefNames = static_cast<int>(g_Cfg.m_Const.GetCount());
+	m_iIntegrityResourceDialogs = 0;
+	m_iIntegrityResourceFunctions = 0;
+	m_ridIntegrityResourceDefName.InitUID();
+	m_ridIntegrityResourceDialog.InitUID();
+	m_ridIntegrityResourceFunction.InitUID();
+	m_sIntegrityResourceDefName.Empty();
+	m_sIntegrityResourceDialog.Empty();
+	m_sIntegrityResourceFunction.Empty();
+
+	for ( size_t i = 0; i < g_Cfg.m_Const.GetCount(); ++i )
+	{
+		CVarDef* pVar = g_Cfg.m_Const.GetAt(i);
+		if ( pVar == NULL )
+			continue;
+		CSphereUID rid( pVar->GetDWORD());
+		if ( rid.IsValidRID() && g_Cfg.ResourceGetDef( rid ) != NULL )
+		{
+			m_ridIntegrityResourceDefName = rid;
+			m_sIntegrityResourceDefName = pVar->GetKey();
+			break;
+		}
+	}
+
+	for ( int i = 0; i < static_cast<int>(g_Cfg.m_ResHash.GetCount()); ++i )
+	{
+		CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAt(i);
+		if ( pResDef == NULL )
+			continue;
+		CSphereUID rid = pResDef->GetUIDIndex();
+		if ( rid.GetResType() == RES_Dialog && rid.GetResPage() == 0 )
+		{
+			++m_iIntegrityResourceDialogs;
+			if ( !m_ridIntegrityResourceDialog.IsValidRID())
+			{
+				m_ridIntegrityResourceDialog = rid;
+				m_sIntegrityResourceDialog = pResDef->GetResourceName();
+			}
+		}
+		else if ( rid.GetResType() == RES_Function && rid.GetResPage() == 0 )
+		{
+			++m_iIntegrityResourceFunctions;
+			if ( !m_ridIntegrityResourceFunction.IsValidRID())
+			{
+				m_ridIntegrityResourceFunction = rid;
+				m_sIntegrityResourceFunction = pResDef->GetResourceName();
+			}
+		}
+	}
+	m_fIntegrityResourceBaseline = true;
+}
+
+int CWorld::CheckResourceIntegrity( int& iLogBudget )
+{
+	if ( !m_fIntegrityResourceBaseline )
+		CaptureResourceIntegrityBaseline();
+
+	int iDialogs = 0;
+	int iFunctions = 0;
+	for ( int i = 0; i < static_cast<int>(g_Cfg.m_ResHash.GetCount()); ++i )
+	{
+		CResourceDefPtr pResDef = g_Cfg.m_ResHash.GetAt(i);
+		if ( pResDef == NULL )
+			continue;
+		CSphereUID rid = pResDef->GetUIDIndex();
+		if ( rid.GetResPage() != 0 )
+			continue;
+		if ( rid.GetResType() == RES_Dialog )
+			++iDialogs;
+		else if ( rid.GetResType() == RES_Function )
+			++iFunctions;
+	}
+
+	int iViolations = 0;
+	if ( static_cast<int>(g_Cfg.m_Const.GetCount()) < m_iIntegrityResourceDefNames )
+	{
+		char szDetail[96];
+		snprintf( szDetail, sizeof(szDetail), "count=%d baseline=%d",
+			static_cast<int>(g_Cfg.m_Const.GetCount()), m_iIntegrityResourceDefNames );
+		iViolations += IntegrityViolation( "resource_defnames", NULL, szDetail, iLogBudget );
+	}
+	if ( iDialogs < m_iIntegrityResourceDialogs )
+	{
+		char szDetail[96];
+		snprintf( szDetail, sizeof(szDetail), "count=%d baseline=%d", iDialogs, m_iIntegrityResourceDialogs );
+		iViolations += IntegrityViolation( "resource_dialogs", NULL, szDetail, iLogBudget );
+	}
+	if ( iFunctions < m_iIntegrityResourceFunctions )
+	{
+		char szDetail[96];
+		snprintf( szDetail, sizeof(szDetail), "count=%d baseline=%d", iFunctions, m_iIntegrityResourceFunctions );
+		iViolations += IntegrityViolation( "resource_functions", NULL, szDetail, iLogBudget );
+	}
+
+	const CSphereUID aKnown[] = {
+		m_ridIntegrityResourceDefName,
+		m_ridIntegrityResourceDialog,
+		m_ridIntegrityResourceFunction,
+	};
+	const CGString* aKnownNames[] = {
+		&m_sIntegrityResourceDefName,
+		&m_sIntegrityResourceDialog,
+		&m_sIntegrityResourceFunction,
+	};
+	for ( size_t i = 0; i < sizeof(aKnown) / sizeof(aKnown[0]); ++i )
+	{
+		const CSphereUID& rid = aKnown[i];
+		if ( rid.IsValidRID() && g_Cfg.ResourceGetDef( rid ) == NULL )
+		{
+			char szDetail[128];
+			snprintf( szDetail, sizeof(szDetail), "rid=0x%x name=%s",
+				static_cast<unsigned>(rid), (LPCTSTR)*aKnownNames[i] );
+			iViolations += IntegrityViolation( "resource_unresolved", NULL, szDetail, iLogBudget );
+		}
+	}
+	return iViolations;
+}
+
 int CWorld::CheckIntegrity( int iBudget )
 {
 	const DWORD dwUIDCount = GetUIDCount();
@@ -2167,19 +2297,24 @@ int CWorld::CheckIntegrity( int iBudget )
 		m_iIntegrityCycleViolations = 0;
 		m_iIntegrityLogBudget = INTEGRITY_LOG_BUDGET;
 		m_iIntegrityCycleStartMs = IntegrityNowMs();
+		if ( !m_fIntegrityResourceBaseline )
+			CaptureResourceIntegrityBaseline();
 	}
 	if ( dwUIDCount <= 1 )
 	{
+		const int iResourceViolations = CheckResourceIntegrity( m_iIntegrityLogBudget );
+		m_iIntegrityCycleViolations += iResourceViolations;
 		m_iIntegrityLastLogs = INTEGRITY_LOG_BUDGET - m_iIntegrityLogBudget;
 		g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,
-			"integrity watchdog cycle slots=0 objects=0 violations=0 elapsed_ms=0 logs=%d" LOG_CR,
+			"integrity watchdog cycle slots=0 objects=0 violations=%d elapsed_ms=0 logs=%d" LOG_CR,
+			m_iIntegrityCycleViolations,
 			m_iIntegrityLastLogs );
 		m_iIntegrityCursor = 1;
 		m_iIntegrityCycleObjects = 0;
 		m_iIntegrityCycleSlots = 0;
 		m_iIntegrityCycleViolations = 0;
 		m_iIntegrityCycleStartMs = 0;
-		return 0;
+		return iResourceViolations;
 	}
 
 	const DWORD dwStart = fComplete ? 1 :
@@ -2233,6 +2368,9 @@ int CWorld::CheckIntegrity( int iBudget )
 				m_iIntegrityCycleViolations += iCountViolation;
 			}
 		}
+		const int iResourceViolations = CheckResourceIntegrity( m_iIntegrityLogBudget );
+		iViolations += iResourceViolations;
+		m_iIntegrityCycleViolations += iResourceViolations;
 		const long long iElapsedMs = IntegrityNowMs() - m_iIntegrityCycleStartMs;
 		m_iIntegrityLastLogs = INTEGRITY_LOG_BUDGET - m_iIntegrityLogBudget;
 		g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,

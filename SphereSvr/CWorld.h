@@ -332,6 +332,16 @@ private:
 	int		m_iIntegrityLastLogs;	// lines emitted by the last completed cycle.
 	unsigned long long m_iIntegrityCycleChanges;	// creation/destruction count at cycle start.
 	long long m_iIntegrityCycleStartMs;	// monotonic start time for observability.
+	bool	m_fIntegrityResourceBaseline;
+	int		m_iIntegrityResourceDefNames;
+	int		m_iIntegrityResourceDialogs;
+	int		m_iIntegrityResourceFunctions;
+	CSphereUID m_ridIntegrityResourceDefName;
+	CSphereUID m_ridIntegrityResourceDialog;
+	CSphereUID m_ridIntegrityResourceFunction;
+	CGString m_sIntegrityResourceDefName;
+	CGString m_sIntegrityResourceDialog;
+	CGString m_sIntegrityResourceFunction;
 
 	int		m_iSaveStage;	// Current stage of the background save.
 
@@ -402,6 +412,8 @@ private:
 	static bool WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPending, unsigned dwRotated );
 	static void RemoveSaveManifest( LPCTSTR pszBaseDir );
 	void GarbageCollection_GMPages();
+	void CaptureResourceIntegrityBaseline();
+	int CheckResourceIntegrity( int& iLogBudget );
 	bool SaveStage();
 	void SaveForce(); // Save world state
 
