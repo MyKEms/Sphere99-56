@@ -37,6 +37,12 @@ up by the retry.  If a recorded backup has disappeared, the retry stops
 instead of rotating again; the log names the missing file and the manifest
 (`sphere.save.pending`) to remove if that backup cannot be restored.
 
+A backup is taken as a hard link to the live file, so the live name never
+disappears.  Where a hard link is not possible, the live file is copied to a
+temporary name that is then renamed over the backup name; the backup name is
+never opened for writing.  An old backup that cannot be removed stops the
+save, because it may still be a hard link to the live file.
+
 Save backups retain Sphere's stock names and rotation rule.  For generation
 `N`, the backup level is selected by the number of trailing zero octal digits
 in `N`; the resulting names are `sphereb<level><slot><kind>.scp`, where the

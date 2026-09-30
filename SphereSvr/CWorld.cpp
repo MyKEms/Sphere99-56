@@ -972,19 +972,66 @@ void CWorld::GetSaveTempName( CGString& sTemp, LPCTSTR pszBaseDir, LPCTSTR pszBa
 		pszBaseDir ? pszBaseDir : "", pszBaseName ? pszBaseName : "" );
 }
 
+// remove() for save backups; the save I/O test can make it fail.
+static int SaveRemoveFile( LPCTSTR pszPath )
+{
+#ifdef SPHERE_SAVE_IO_TEST
+	if ( CFileText::ShouldFailTestPath( CFileText::TEST_FAULT_REMOVE, pszPath ))
+	{
+		errno = EACCES;
+		return -1;
+	}
+#endif
+	return remove( pszPath );
+}
+
+// Hard-link a save backup to its source; the save I/O test can make it fail.
+static bool SaveLinkFile( LPCTSTR pszSource, LPCTSTR pszArchive )
+{
+#ifdef SPHERE_SAVE_IO_TEST
+	if ( CFileText::ShouldFailTestPath( CFileText::TEST_FAULT_LINK, pszArchive ))
+		return false;
+#endif
+#ifdef _WIN32
+	return CreateHardLink( pszArchive, pszSource, NULL ) != FALSE;
+#else
+	return link( pszSource, pszArchive ) == 0;
+#endif
+}
+
 bool CWorld::PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszArchive )
 {
 	if ( !SaveFileExists( pszSource ))
 		return true;
-	remove( pszArchive );
-#ifdef _WIN32
-	if ( CreateHardLink( pszArchive, pszSource, NULL ))
+	// The old backup can still be a hard link to the live file (an attempt
+	// that failed before publishing).  If it cannot be removed, stop: writing
+	// through that name would overwrite the live file.
+	if ( SaveRemoveFile( pszArchive ) != 0 && errno != ENOENT )
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save could not remove the old backup '%s' (error %d)" LOG_CR, pszArchive, errno );
+		return false;
+	}
+	if ( SaveLinkFile( pszSource, pszArchive ))
 		return true;
-#else
-	if ( link( pszSource, pszArchive ) == 0 )
-		return true;
-#endif
-	return SaveCopyFile( pszSource, pszArchive );
+	// Without a hard link, copy to a temporary name and rename it into place,
+	// so the backup name is never opened for writing.
+	CGString sTemp;
+	sTemp.Format( "%s.tmp", pszArchive );
+	if ( SaveRemoveFile( sTemp ) != 0 && errno != ENOENT )
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save could not remove the stale backup copy '%s' (error %d)" LOG_CR, (LPCTSTR)sTemp, errno );
+		return false;
+	}
+	if ( !SaveCopyFile( pszSource, sTemp ))
+		return false;
+	if ( !PublishSaveFile( sTemp, pszArchive ))
+	{
+		remove( sTemp );
+		return false;
+	}
+	return true;
 }
 
 bool CWorld::PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fStartManifest )

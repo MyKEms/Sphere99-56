@@ -654,6 +654,58 @@ static bool RunFirstSaveRetryWithoutArchiveCase()
 	return fPassed;
 }
 
+// A backup name can still be a hard link to the live file, for example after
+// an attempt that failed between taking the backup and publishing.  If the
+// stale backup cannot be removed, the copy fallback must not open that name
+// for writing: that would truncate the live file through the shared link.
+static bool RunBackupRemoveFailureKeepsLiveFileCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-link-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	const std::string sLive = sBaseDir + "/sphereworld.scp";
+	const std::string sBackup = sBaseDir + "/sphereb01w.scp";
+	const std::string sContent = "TITLE=Live world\nVERSION=0.99\nSAVECOUNT=0\n[EOF]\n";
+	{
+		std::ofstream live( sLive.c_str());
+		live << sContent;
+	}
+	const bool fLinked = link( sLive.c_str(), sBackup.c_str()) == 0;
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	CFileText::SetTestFault( CFileText::TEST_FAULT_REMOVE, "sphereb01w.scp" );
+	const bool fPreserved = CWorld::PreserveSaveComponent( g_Cfg.m_sWorldBaseDir, "world", 1 );
+	const bool fTriggered = CFileText::WasTestFaultTriggered();
+	CFileText::ClearTestFault();
+	const bool fLiveKept = ReadFile( sLive ) == sContent;
+
+	// Without a hard link the backup is copied through a temporary name that
+	// replaces the old backup, again leaving the live file untouched.
+	unlink( sBackup.c_str());
+	{
+		std::ofstream stale( sBackup.c_str());
+		stale << "stale backup\n";
+	}
+	CFileText::SetTestFault( CFileText::TEST_FAULT_LINK, "sphereb01w.scp" );
+	const bool fCopied = CWorld::PreserveSaveComponent( g_Cfg.m_sWorldBaseDir, "world", 1 ) &&
+		CFileText::WasTestFaultTriggered();
+	CFileText::ClearTestFault();
+	const bool fCopyExact = ReadFile( sBackup ) == sContent && ReadFile( sLive ) == sContent &&
+		!FileExists( sBackup + ".tmp" );
+	const bool fPassed = fLinked && fTriggered && !fPreserved && fLiveKept &&
+		!FileExists( sBackup + ".tmp" ) && fCopied && fCopyExact;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"failed backup removal damaged the live file: linked=%d triggered=%d preserved=%d live_kept=%d live=%zu copied=%d copy_exact=%d\n",
+			fLinked ? 1 : 0, fTriggered ? 1 : 0, fPreserved ? 1 : 0, fLiveKept ? 1 : 0,
+			ReadFile( sLive ).size(), fCopied ? 1 : 0, fCopyExact ? 1 : 0 );
+	}
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fPassed;
+}
+
 static bool RunFaultCase( CFileText::TEST_FAULT fault, const char* pszName, const char* pszTargetFile )
 {
 	char szTempDir[] = "/tmp/sphere-save-io-XXXXXX";
@@ -756,6 +808,8 @@ int main()
 	const bool fDateChange = RunRetryKeepsDatedServerBackupCase();
 	if ( !fAccountReuse || !fAccountLate || !fAccountLost || !fFirstRetry ||
 		!fLevelChange || !fDateChange )
+		return 1;
+	if ( !RunBackupRemoveFailureKeepsLiveFileCase() )
 		return 1;
 	if ( !RunShutdownCompletionCase() )
 	{
