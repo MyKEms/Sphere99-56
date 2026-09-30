@@ -654,6 +654,206 @@ static bool RunFirstSaveRetryWithoutArchiveCase()
 	return fPassed;
 }
 
+static std::string PairMarker()
+{
+	return std::string( (LPCTSTR) g_Cfg.m_Var.FindKeyStr( "PAIR_MARKER" ));
+}
+
+// Save generations 0 and 1 with a marker in the world file, then restart.
+// The loaded pair carries SAVECOUNT 1, and so does the first save after the
+// start-up: the count advances only once a save has committed.
+static bool PrepareFirstSaveAfterLoad( const std::string& sBaseDir,
+	std::string& sLoadedWorld, std::string& sLoadedChars )
+{
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", sBaseDir.c_str());
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_World.m_iSaveCountID = 0;
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "loaded" );
+	const bool fSaved = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) && g_World.m_iSaveCountID == 2;
+	sLoadedWorld = ReadFile( sBaseDir + "/sphereworld.scp" );
+	sLoadedChars = ReadFile( sBaseDir + "/spherechars.scp" );
+	g_World.Close( false );
+	g_Cfg.m_Var.RemoveKey( "PAIR_MARKER" );
+	return fSaved && g_World.LoadAll() && g_World.m_iSaveCountID == 1 &&
+		PairMarker() == "loaded" && sLoadedWorld.find( "SAVECOUNT=1\n" ) != std::string::npos;
+}
+
+// Restart the server: forget the marker, then load whatever the start-up picks.
+static bool RestartAfterInterruptedSave( std::string& sMarker )
+{
+	g_World.Close( false );
+	g_Cfg.m_Var.RemoveKey( "PAIR_MARKER" );
+	const bool fReloaded = g_World.LoadAll();
+	sMarker = PairMarker();
+	return fReloaded;
+}
+
+// The first save after a start-up writes the SAVECOUNT the loaded pair already
+// carries.  If it stops after publishing the world file but before publishing
+// the character file, both live files carry that count although they belong to
+// different generations.  The restart must load the recorded backups (the
+// loaded pair), never the new world with the old characters, and keep the
+// pending manifest so the retry reuses those backups instead of backing up
+// the half-published pair.
+static bool RunFirstSaveAfterLoadHalfPublishedCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-first-half-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	std::string sLoadedWorld;
+	std::string sLoadedChars;
+	const bool fPrepared = PrepareFirstSaveAfterLoad( sBaseDir, sLoadedWorld, sLoadedChars );
+
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "interrupted" );
+	const bool fInterrupted = !RunAccountSave( CFileText::TEST_FAULT_RENAME, "spherechars.scp" ) &&
+		CFileText::WasTestFaultTriggered() && g_World.m_iSaveCountID == 1;
+	CFileText::ClearTestFault();
+	const std::string sLiveWorld = ReadFile( sBaseDir + "/sphereworld.scp" );
+	const bool fHalfPublished = sLiveWorld.find( "SAVECOUNT=1\n" ) != std::string::npos &&
+		sLiveWorld.find( "PAIR_MARKER=interrupted" ) != std::string::npos &&
+		ReadFile( sBaseDir + "/spherechars.scp" ) == sLoadedChars;
+
+	std::string sMarker;
+	const std::string sLogDir = sBaseDir + "/logs";
+	const bool fLogOpened = OpenTestLog( sLogDir );
+	const bool fReloaded = RestartAfterInterruptedSave( sMarker ) && g_World.m_iSaveCountID == 1;
+	const std::string sLog = CloseTestLog( sLogDir );
+	// Both files come from the recorded backups.
+	const bool fBackupsLoaded = fLogOpened &&
+		sLog.find( "Loading save backup '" + sBaseDir + "/sphereb01w.scp'" ) != std::string::npos &&
+		sLog.find( "Loading save backup '" + sBaseDir + "/sphereb01c.scp'" ) != std::string::npos;
+	const std::string sPending = ReadFile( sBaseDir + "/sphere.save.pending" );
+	const bool fPendingKept = sPending.find( "SAVECOUNT=1\n" ) != std::string::npos &&
+		sPending.find( "STATE=PENDING" ) != std::string::npos;
+
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "retried" );
+	const bool fRetried = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 2;
+	const bool fBackupsKept = ReadFile( sBaseDir + "/sphereb01w.scp" ) == sLoadedWorld &&
+		ReadFile( sBaseDir + "/sphereb01c.scp" ) == sLoadedChars;
+	const bool fCommitted = ReadFile( sBaseDir + "/sphereworld.scp" ).find( "PAIR_MARKER=retried" ) != std::string::npos &&
+		!FileExists( sBaseDir + "/sphere.save.pending" );
+	g_Cfg.m_Var.RemoveKey( "PAIR_MARKER" );
+	const bool fPassed = fPrepared && fInterrupted && fHalfPublished && fReloaded &&
+		sMarker == "loaded" && fBackupsLoaded && fPendingKept && fRetried && fBackupsKept && fCommitted;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"first save after a start-up, stopped between the two publications, mixed generations: "
+			"prepared=%d interrupted=%d half_published=%d reloaded=%d loaded_marker=%s backups_loaded=%d "
+			"pending_kept=%d retried=%d backups_kept=%d committed=%d\n",
+			fPrepared ? 1 : 0, fInterrupted ? 1 : 0, fHalfPublished ? 1 : 0, fReloaded ? 1 : 0,
+			sMarker.c_str(), fBackupsLoaded ? 1 : 0, fPendingKept ? 1 : 0, fRetried ? 1 : 0,
+			fBackupsKept ? 1 : 0, fCommitted ? 1 : 0 );
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
+// The same first save after a start-up, stopped before either file was
+// published: the restart loads a consistent pair (the unchanged live pair or
+// its backups, which are the same files), and the next save still backs up
+// that pair before replacing it.
+static bool RunFirstSaveAfterLoadUnpublishedCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-first-none-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	std::string sLoadedWorld;
+	std::string sLoadedChars;
+	const bool fPrepared = PrepareFirstSaveAfterLoad( sBaseDir, sLoadedWorld, sLoadedChars );
+
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "interrupted" );
+	const bool fInterrupted = !RunAccountSave( CFileText::TEST_FAULT_RENAME, "sphereworld.scp" ) &&
+		CFileText::WasTestFaultTriggered() && g_World.m_iSaveCountID == 1;
+	CFileText::ClearTestFault();
+	const bool fUnpublished = ReadFile( sBaseDir + "/sphereworld.scp" ) == sLoadedWorld &&
+		ReadFile( sBaseDir + "/spherechars.scp" ) == sLoadedChars;
+
+	std::string sMarker;
+	const bool fReloaded = RestartAfterInterruptedSave( sMarker ) && g_World.m_iSaveCountID == 1;
+
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "next" );
+	const bool fSaved = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 2;
+	const bool fBackedUp = ReadFile( sBaseDir + "/sphereb01w.scp" ) == sLoadedWorld &&
+		ReadFile( sBaseDir + "/sphereb01c.scp" ) == sLoadedChars;
+	const bool fCommitted = ReadFile( sBaseDir + "/sphereworld.scp" ).find( "PAIR_MARKER=next" ) != std::string::npos &&
+		!FileExists( sBaseDir + "/sphere.save.pending" );
+	g_Cfg.m_Var.RemoveKey( "PAIR_MARKER" );
+	const bool fPassed = fPrepared && fInterrupted && fUnpublished && fReloaded &&
+		sMarker == "loaded" && fSaved && fBackedUp && fCommitted;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"first save after a start-up, stopped before publishing, lost the loaded pair: "
+			"prepared=%d interrupted=%d unpublished=%d reloaded=%d loaded_marker=%s saved=%d "
+			"backed_up=%d committed=%d\n",
+			fPrepared ? 1 : 0, fInterrupted ? 1 : 0, fUnpublished ? 1 : 0, fReloaded ? 1 : 0,
+			sMarker.c_str(), fSaved ? 1 : 0, fBackedUp ? 1 : 0, fCommitted ? 1 : 0 );
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
+// The first save after a start-up publishes both files, then recording its
+// commit fails.  Both files differ from the backups taken of them (the world
+// clock has advanced, so even the character file's header differs), so the
+// restart still loads the published pair and the next save backs it up.
+static bool RunFirstSaveAfterLoadPublishedCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-first-published-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir( szTempDir );
+	std::string sLoadedWorld;
+	std::string sLoadedChars;
+	const bool fPrepared = PrepareFirstSaveAfterLoad( sBaseDir, sLoadedWorld, sLoadedChars );
+
+	CGVariant vTime;
+	vTime.SetInt( g_World.GetCurrentTime().GetTimeRaw() + 10 * TICKS_PER_SEC );
+	g_World.s_PropSet( "TIME", vTime );
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "published" );
+	// The manifest is written when the save starts and after each backup
+	// (accounts, world, characters); the fifth write records the commit.
+	const bool fCommitFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphere.save.pending.tmp", 4 ) &&
+		CFileText::WasTestFaultTriggered() && g_World.m_iSaveCountID == 1;
+	CFileText::ClearTestFault();
+	const std::string sPublishedWorld = ReadFile( sBaseDir + "/sphereworld.scp" );
+	const std::string sPublishedChars = ReadFile( sBaseDir + "/spherechars.scp" );
+	const bool fPublished = sPublishedWorld.find( "PAIR_MARKER=published" ) != std::string::npos &&
+		sPublishedChars.find( "SAVECOUNT=1\n" ) != std::string::npos &&
+		sPublishedChars != sLoadedChars &&
+		ReadFile( sBaseDir + "/sphere.save.pending" ).find( "STATE=PENDING" ) != std::string::npos;
+
+	std::string sMarker;
+	const bool fReloaded = RestartAfterInterruptedSave( sMarker ) && g_World.m_iSaveCountID == 1;
+	const bool fDropped = !FileExists( sBaseDir + "/sphere.save.pending" );
+
+	g_Cfg.m_Var.SetKeyStr( "PAIR_MARKER", "next" );
+	const bool fSaved = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 2;
+	const bool fBackedUp = ReadFile( sBaseDir + "/sphereb01w.scp" ) == sPublishedWorld &&
+		ReadFile( sBaseDir + "/sphereb01c.scp" ) == sPublishedChars;
+	g_Cfg.m_Var.RemoveKey( "PAIR_MARKER" );
+	const bool fPassed = fPrepared && fCommitFailed && fPublished && fReloaded &&
+		sMarker == "published" && fDropped && fSaved && fBackedUp;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"first save after a start-up, published before its commit, was discarded: "
+			"prepared=%d commit_failed=%d published=%d reloaded=%d loaded_marker=%s dropped=%d "
+			"saved=%d backed_up=%d\n",
+			fPrepared ? 1 : 0, fCommitFailed ? 1 : 0, fPublished ? 1 : 0, fReloaded ? 1 : 0,
+			sMarker.c_str(), fDropped ? 1 : 0, fSaved ? 1 : 0, fBackedUp ? 1 : 0 );
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
 // A backup name can still be a hard link to the live file, for example after
 // an attempt that failed between taking the backup and publishing.  If the
 // stale backup cannot be removed, the copy fallback must not open that name
@@ -808,6 +1008,12 @@ int main()
 	const bool fDateChange = RunRetryKeepsDatedServerBackupCase();
 	if ( !fAccountReuse || !fAccountLate || !fAccountLost || !fFirstRetry ||
 		!fLevelChange || !fDateChange )
+		return 1;
+	// Run every first-save-after-start-up case so one run reports each failure.
+	const bool fHalfPublished = RunFirstSaveAfterLoadHalfPublishedCase();
+	const bool fUnpublished = RunFirstSaveAfterLoadUnpublishedCase();
+	const bool fPublishedFirst = RunFirstSaveAfterLoadPublishedCase();
+	if ( !fHalfPublished || !fUnpublished || !fPublishedFirst )
 		return 1;
 	if ( !RunBackupRemoveFailureKeepsLiveFileCase() )
 		return 1;

@@ -14,10 +14,22 @@ available, so a restart can select the last complete pair if publication was
 interrupted.  The commit is recorded in the manifest as soon as the second
 rename and its directory sync have completed; re-reading the published files
 afterwards is only a diagnostic and never discards the committed generation.
-If the commit record is missing but both live files already carry the pending
-generation's `SAVECOUNT`, publication had completed: the restart loads that
-pair and drops the stale pending record, so the next save backs the pair up
-before replacing it.
+
+If the commit record is missing, the restart loads the live pair as the
+published generation only when both files carry the pending generation's
+`SAVECOUNT` and each was replaced after the generation backed it up: its
+recorded backup exists, and the live file is a different file (device and
+inode) with different contents.  The restart then drops the stale pending
+record, so the next save backs the pair up before replacing it.  The count
+alone is not proof.  The counter advances only after a committed save, so the
+first save after a start-up writes the count that the loaded pair, and the
+backups taken of it, already carry; a publication interrupted between the two
+renames leaves a new world file next to the old character file, both with
+that count.  Whenever publication is not proven this way (no backup was
+recorded, a live file is still its hard-linked backup, or a copied backup has
+the same contents), the restart loads the recorded backups as for any other
+interrupted generation and keeps the pending record, so the retry reuses
+them.
 
 The account file follows the same keep-then-replace rule: the previous
 `sphereaccu.scp` remains readable while a new generation is serialized to a

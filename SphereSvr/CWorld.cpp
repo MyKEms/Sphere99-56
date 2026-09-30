@@ -905,6 +905,11 @@ bool CWorld::PublishSaveFile( LPCTSTR pszTemp, LPCTSTR pszCurrent )
 {
 	if ( !pszTemp || !pszCurrent )
 		return false;
+#ifdef SPHERE_SAVE_IO_TEST
+	// The save I/O test stops a publication before this rename, as a crash would.
+	if ( CFileText::ShouldFailTestPath( CFileText::TEST_FAULT_RENAME, pszCurrent ))
+		return false;
+#endif
 	bool fPublished = false;
 #ifdef _WIN32
 	fPublished = MoveFileEx( pszTemp, pszCurrent,
@@ -1170,6 +1175,69 @@ static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 	}
 	fclose( pFile );
 	return fEOF && !fAfterEOF;
+}
+
+// Whether a live save file has been replaced since its backup was taken.  A
+// backup is a hard link to, or a copy of, the live file, taken before either
+// file of the pair is published.  A live file that is still that backup (the
+// same device and inode) or has the same contents was therefore not replaced.
+// A file that cannot be read counts as not replaced.  The identity and size
+// checks only shortcut the comparison: a stat() that fails (a 32-bit build
+// cannot report a 64-bit inode number) falls through to the contents.
+static bool SaveFileReplacedSince( LPCTSTR pszCurrent, LPCTSTR pszArchive )
+{
+	struct stat stCurrent;
+	struct stat stArchive;
+	if ( stat( pszCurrent, &stCurrent ) == 0 && stat( pszArchive, &stArchive ) == 0 )
+	{
+#ifndef _WIN32
+		if ( stCurrent.st_dev == stArchive.st_dev && stCurrent.st_ino == stArchive.st_ino )
+			return false;
+#endif
+		if ( stCurrent.st_size != stArchive.st_size )
+			return true;
+	}
+	FILE* pCurrent = fopen( pszCurrent, "rb" );
+	if ( !pCurrent )
+		return false;
+	FILE* pArchive = fopen( pszArchive, "rb" );
+	if ( !pArchive )
+	{
+		fclose( pCurrent );
+		return false;
+	}
+	char szCurrent[16 * 1024];
+	char szArchive[16 * 1024];
+	bool fDiffer = false;
+	for (;;)
+	{
+		const size_t iCurrent = fread( szCurrent, 1, sizeof(szCurrent), pCurrent );
+		const size_t iArchive = fread( szArchive, 1, sizeof(szArchive), pArchive );
+		if ( iCurrent != iArchive || memcmp( szCurrent, szArchive, iCurrent ) != 0 )
+		{
+			fDiffer = true;
+			break;
+		}
+		if ( iCurrent < sizeof(szCurrent) )
+			break;
+	}
+	const bool fReadOK = !ferror( pCurrent ) && !ferror( pArchive );
+	fclose( pCurrent );
+	fclose( pArchive );
+	return fReadOK && fDiffer;
+}
+
+// Whether the pending generation recorded a backup of a live component and
+// the live file has been replaced since.
+static bool SaveComponentReplaced( const CSaveManifest& manifest, int iComponent,
+	TCHAR chType, LPCTSTR pszCurrent )
+{
+	if ( !( manifest.m_dwRotated & ( 1u << iComponent )))
+		return false;
+	CGString sArchive;
+	GetManifestArchive( manifest, iComponent, g_Cfg.m_sWorldBaseDir, chType,
+		manifest.m_iSaveCount, sArchive );
+	return SaveFileExists( sArchive ) && SaveFileReplacedSince( pszCurrent, sArchive );
 }
 
 // Name a selected save backup with its own SAVECOUNT and save time (the file's
@@ -1853,13 +1921,21 @@ bool CWorld::LoadWorld() // Load world from script
 	const int iPendingSaveCount = manifest.m_iSaveCount;
 	int iLiveWorldCount = INT_MIN;
 	int iLiveCharsCount = INT_MIN;
-	// Both live files carrying the pending generation's SAVECOUNT means both
-	// were published (each was validated before its rename); only the commit
-	// record is missing.  That pair is the newest complete generation.
-	const bool fPublishedPending = fPendingManifest &&
+	const bool fLivePendingCount = fPendingManifest &&
 		ReadSaveFileCount( sWorldName, iLiveWorldCount ) &&
 		ReadSaveFileCount( sCharsName, iLiveCharsCount ) &&
 		iLiveWorldCount == iPendingSaveCount && iLiveCharsCount == iPendingSaveCount;
+	// The live pair is the published generation, with only its commit record
+	// missing, when both files carry the pending SAVECOUNT and each was
+	// replaced since the generation backed it up.  The count alone is not
+	// proof: the first save after a start-up writes the count the loaded pair
+	// already carries, so an interrupted publication can leave a new world
+	// file next to the old character file with the same count.  Without proof
+	// the recorded backups are loaded, and the pending record is kept so the
+	// retry reuses them.
+	const bool fPublishedPending = fLivePendingCount &&
+		SaveComponentReplaced( manifest, CSaveManifest::COMPONENT_WORLD, 'w', sWorldName ) &&
+		SaveComponentReplaced( manifest, CSaveManifest::COMPONENT_CHARS, 'c', sCharsName );
 	if ( fHaveManifest && !fPendingManifest )
 	{
 		RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
@@ -1877,6 +1953,12 @@ bool CWorld::LoadWorld() // Load world from script
 		// matching archives, falling back to an active component that was not
 		// reached before the failed save.
 		m_iSaveCountID = iPendingSaveCount;
+		if ( fLivePendingCount )
+		{
+			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+				"Save generation %d: the live files carry its SAVECOUNT but are not proven to be its published pair; each recorded backup is loaded instead of its live file" LOG_CR,
+				iPendingSaveCount );
+		}
 		CGString sArchive;
 		GetManifestArchive( manifest, CSaveManifest::COMPONENT_WORLD, g_Cfg.m_sWorldBaseDir,
 			'w', iPendingSaveCount, sArchive );

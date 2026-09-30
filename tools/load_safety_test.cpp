@@ -354,6 +354,108 @@ static bool TestMismatchedPairRecovery()
 	return fRecovered;
 }
 
+static bool WriteTextFile( const std::string& sPath, const char* pszText )
+{
+	std::ofstream file( sPath.c_str(), std::ios::out | std::ios::trunc );
+	file << pszText;
+	return static_cast<bool>( file );
+}
+
+// Load with a pending manifest for generation 1 that recorded its world and
+// character backups; report the loaded markers and whether the manifest is
+// still pending afterwards.
+static bool LoadPendingGeneration( const std::string& sBaseDir, std::string& sWorldMarker,
+	std::string& sCharsMarker, bool& fManifestKept )
+{
+	const std::string sManifest = sBaseDir + "sphere.save.pending";
+	const std::string sText = "SAVECOUNT=1\nSTATE=PENDING\nROTATED=3\nARCHIVE_W=" + sBaseDir +
+		"sphereb01w.scp\nARCHIVE_C=" + sBaseDir + "sphereb01c.scp\n[EOF]\n";
+	if ( !WriteTextFile( sManifest, sText.c_str()))
+		return false;
+	g_Cfg.m_Var.RemoveKey( "PAIR_WORLD" );
+	g_Cfg.m_Var.RemoveKey( "PAIR_CHARS" );
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	const bool fLoaded = g_World.LoadWorldForTest() && g_World.m_iSaveCountID == 1;
+	sWorldMarker = (LPCTSTR) g_Cfg.m_Var.FindKeyStr( "PAIR_WORLD" );
+	sCharsMarker = (LPCTSTR) g_Cfg.m_Var.FindKeyStr( "PAIR_CHARS" );
+	g_World.Close( false );
+	g_Cfg.m_Var.RemoveKey( "PAIR_WORLD" );
+	g_Cfg.m_Var.RemoveKey( "PAIR_CHARS" );
+	fManifestKept = access( sManifest.c_str(), F_OK ) == 0;
+	unlink( sManifest.c_str());
+	return fLoaded;
+}
+
+// The first save after a start-up writes the SAVECOUNT that the loaded pair
+// (and so each backup it takes) already carries.  A pending generation whose
+// live files both carry its count is therefore only proven published when each
+// live file differs from its recorded backup: a hard-linked backup that is
+// still the live file, or a copied backup with the same contents, means that
+// file was never replaced, and the start-up must load the backups instead of a
+// new world with old characters.
+static bool TestPendingSameCountPair()
+{
+	char szTempDir[] = "/tmp/sphere-save-same-count-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const std::string sWorldBackup = sBaseDir + "sphereb01w.scp";
+	const std::string sCharsBackup = sBaseDir + "sphereb01c.scp";
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+
+	const char* pszLiveWorld = "TITLE=World\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_WORLD=live\n[EOF]\n";
+	const char* pszBackupWorld = "TITLE=World\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_WORLD=backup\n[EOF]\n";
+	const char* pszLiveChars = "TITLE=Chars\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_CHARS=live\n[EOF]\n";
+	const char* pszBackupChars = "TITLE=Chars\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_CHARS=backup\n[EOF]\n";
+	// The world file was published; its backup is the previous world.
+	const bool fWorldWritten = WriteTextFile( sWorld, pszLiveWorld ) &&
+		WriteTextFile( sWorldBackup, pszBackupWorld );
+
+	// The character backup is a hard link that is still the live file.
+	std::string sLinkedWorld, sLinkedChars;
+	bool fLinkedKept = false;
+	const bool fLinked = fWorldWritten && WriteTextFile( sCharsBackup, pszBackupChars ) &&
+		link( sCharsBackup.c_str(), sChars.c_str()) == 0 &&
+		LoadPendingGeneration( sBaseDir, sLinkedWorld, sLinkedChars, fLinkedKept ) &&
+		sLinkedWorld == "backup" && sLinkedChars == "backup" && fLinkedKept;
+
+	// The character backup is a copy with the live file's contents.
+	std::string sCopiedWorld, sCopiedChars;
+	bool fCopiedKept = false;
+	const bool fCopied = unlink( sChars.c_str()) == 0 && WriteTextFile( sChars, pszBackupChars ) &&
+		LoadPendingGeneration( sBaseDir, sCopiedWorld, sCopiedChars, fCopiedKept ) &&
+		sCopiedWorld == "backup" && sCopiedChars == "backup" && fCopiedKept;
+
+	// Both live files were replaced: the published pair is loaded and the
+	// stale pending record dropped.
+	std::string sPublishedWorld, sPublishedChars;
+	bool fPublishedKept = true;
+	const bool fPublished = WriteTextFile( sChars, pszLiveChars ) &&
+		LoadPendingGeneration( sBaseDir, sPublishedWorld, sPublishedChars, fPublishedKept ) &&
+		sPublishedWorld == "live" && sPublishedChars == "live" && !fPublishedKept;
+
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	unlink( sWorldBackup.c_str());
+	unlink( sCharsBackup.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	if ( !fLinked || !fCopied || !fPublished )
+	{
+		std::fprintf( stderr,
+			"pending pair with an unchanged count: linked=%d (world=%s chars=%s kept=%d) "
+			"copied=%d (world=%s chars=%s kept=%d) published=%d (world=%s chars=%s kept=%d)\n",
+			fLinked ? 1 : 0, sLinkedWorld.c_str(), sLinkedChars.c_str(), fLinkedKept ? 1 : 0,
+			fCopied ? 1 : 0, sCopiedWorld.c_str(), sCopiedChars.c_str(), fCopiedKept ? 1 : 0,
+			fPublished ? 1 : 0, sPublishedWorld.c_str(), sPublishedChars.c_str(), fPublishedKept ? 1 : 0 );
+		return false;
+	}
+	return true;
+}
+
 int main()
 {
 	if ( !TestUIDReset() )
@@ -380,6 +482,12 @@ int main()
 		return 1;
 	}
 	std::printf( "paired save load: mismatched current pair rejected; pending archives recover atomically\n" );
+	if ( !TestPendingSameCountPair() )
+	{
+		std::fprintf( stderr, "pending pair with an unchanged count was loaded without proof of publication\n" );
+		return 1;
+	}
+	std::printf( "paired save load: unchanged-count pending pair loads backups unless both files were replaced\n" );
 	if ( !TestLegacyPairRequiresBothUncounted() )
 	{
 		std::fprintf( stderr, "save pair accepted a file without SAVECOUNT next to a counted file\n" );

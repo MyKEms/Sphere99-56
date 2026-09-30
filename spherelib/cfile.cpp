@@ -501,7 +501,7 @@ bool CFileText::WasTestFaultTriggered()
 	return g_fTestFaultTriggered;
 }
 
-// A path operation (remove, link) outside CFileText consults this hook.
+// A path operation (remove, link, rename) outside CFileText consults this hook.
 bool CFileText::ShouldFailTestPath( TEST_FAULT fault, LPCTSTR pszPath )
 {
 	return g_eTestFault == fault && pszPath &&
