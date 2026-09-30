@@ -15,6 +15,10 @@
 #include <stdio.h>
 #include <chrono>
 #include <set>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 #include <signal.h>
@@ -712,9 +716,9 @@ bool CWorld::WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPendin
 	s.WriteKey( "STATE", fPending ? "PENDING" : "COMMITTED" );
 	s.WriteKeyInt( "ROTATED", (int) dwRotated );
 	s.WriteSection( "EOF" );
-	const bool fWriteOK = !s.HasIOError();
+	const bool fWriteOK = !s.HasIOError() && s.Sync();
 	const bool fCloseOK = s.CloseChecked();
-	return fWriteOK && fCloseOK;
+	return fWriteOK && fCloseOK && SyncSaveDirectory( pszBaseDir );
 }
 
 void CWorld::RemoveSaveManifest( LPCTSTR pszBaseDir )
@@ -733,6 +737,71 @@ static bool SaveFileExists( LPCTSTR pszPath )
 		return false;
 	fclose( pFile );
 	return true;
+}
+
+bool CWorld::PublishSaveFile( LPCTSTR pszTemp, LPCTSTR pszCurrent )
+{
+	if ( !pszTemp || !pszCurrent )
+		return false;
+	bool fPublished = false;
+#ifdef _WIN32
+	fPublished = MoveFileEx( pszTemp, pszCurrent,
+		MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH ) != 0;
+#else
+	fPublished = rename( pszTemp, pszCurrent ) == 0;
+#endif
+	if ( !fPublished )
+		return false;
+
+	const char* pszSlash = strrchr( pszCurrent, '/' );
+#ifdef _WIN32
+	const char* pszBackslash = strrchr( pszCurrent, '\\' );
+	if ( pszBackslash && ( !pszSlash || pszBackslash > pszSlash ))
+		pszSlash = pszBackslash;
+#endif
+	CGString sDirectory;
+	if ( pszSlash )
+	{
+		if ( pszSlash == pszCurrent )
+			sDirectory.Copy( "/" );
+		else
+		{
+			sDirectory.Copy( pszCurrent );
+			sDirectory.SetLength( (int)( pszSlash - pszCurrent ));
+		}
+	}
+	else
+		sDirectory.Copy( "." );
+	return SyncSaveDirectory( sDirectory );
+}
+
+bool CWorld::SyncSaveDirectory( LPCTSTR pszBaseDir )
+{
+	const LPCTSTR pszDir = ( pszBaseDir && pszBaseDir[0] ) ? pszBaseDir : ".";
+#ifdef _WIN32
+	HANDLE hDir = CreateFile( pszDir, GENERIC_READ,
+		FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+		FILE_FLAG_BACKUP_SEMANTICS, NULL );
+	if ( hDir == INVALID_HANDLE_VALUE )
+		return false;
+	const BOOL fOK = FlushFileBuffers( hDir );
+	CloseHandle( hDir );
+	return fOK != FALSE;
+#else
+	const int iFD = open( pszDir, O_RDONLY
+#ifdef O_DIRECTORY
+		| O_DIRECTORY
+#endif
+#ifdef O_CLOEXEC
+		| O_CLOEXEC
+#endif
+	);
+	if ( iFD < 0 )
+		return false;
+	const bool fOK = fsync( iFD ) == 0;
+	close( iFD );
+	return fOK;
+#endif
 }
 
 bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fRetry )
@@ -761,6 +830,12 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 		{
 			// May not exist if this is the first time.
 			g_Log.Event( LOG_GROUP_SAVE, LOGL_WARN, "Rename %s to '%s' FAILED code %d?" LOG_CR, (LPCTSTR) sSaveName, (const TCHAR*) sArchive, CGFile::GetLastError() );
+		}
+		else if ( !SyncSaveDirectory( pszBaseDir ))
+		{
+			g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+				"Save directory sync FAILED after rotating '%s'" LOG_CR, (LPCTSTR) pszBaseName );
+			return false;
 		}
 		if ( fHaveManifest && dwManifestBit )
 		{
@@ -924,7 +999,7 @@ bool CWorld::SaveStage() // Save world state in stages.
 		m_timeSave.InitTimeCurrent( g_Cfg.m_iSavePeriod );	// next save time.
 		RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
 
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_TRACE, "World data saved (%s)." LOG_CR, (LPCTSTR) m_FileWorld.GetFilePath());
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT, "World data saved (%s)." LOG_CR, (LPCTSTR) m_FileWorld.GetFilePath());
 
 		// Now clean up all the held over UIDs
 		SetAllowUIDReuse();

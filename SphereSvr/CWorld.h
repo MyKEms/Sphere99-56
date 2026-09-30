@@ -403,7 +403,6 @@ private:
 	static void RemoveSaveManifest( LPCTSTR pszBaseDir );
 	void GarbageCollection_GMPages();
 	bool SaveStage();
-	static void GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int savecount );
 	void SaveForce(); // Save world state
 
 public:
@@ -466,6 +465,9 @@ public:
 	CItemPtr CheckNaturalResource( const CPointMap& pt, IT_TYPE Type, bool fTest = true );
 
 	static bool OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int savecount, bool fRetry = false );
+	static void GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int savecount );
+	static bool PublishSaveFile( LPCTSTR pszTemp, LPCTSTR pszCurrent );
+	static bool SyncSaveDirectory( LPCTSTR pszBaseDir );
 	bool IsSaveRetry() const { return m_fSaveRetry; }
 	void ReSyncLoad();
 	void ReSyncUnload();

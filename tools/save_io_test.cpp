@@ -65,6 +65,25 @@ static bool RunEmptyWriteCase()
 	return fPassed;
 }
 
+static bool RunDirectorySyncCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-directory-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+
+	const bool fDirectory = CWorld::SyncSaveDirectory( szTempDir );
+	const bool fMissing = CWorld::SyncSaveDirectory( "/tmp/sphere-save-directory-missing" );
+	if ( !fDirectory || fMissing )
+	{
+		std::fprintf( stderr,
+			"directory durability check failed: existing=%d missing=%d\n",
+			fDirectory ? 1 : 0, fMissing ? 1 : 0 );
+	}
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fDirectory && !fMissing;
+}
+
 static bool RunHealthyCase()
 {
 	char szTempDir[] = "/tmp/sphere-save-healthy-XXXXXX";
@@ -203,6 +222,8 @@ static bool RunFaultCase( CFileText::TEST_FAULT fault, const char* pszName, cons
 int main()
 {
 	if ( !RunEmptyWriteCase() )
+		return 1;
+	if ( !RunDirectorySyncCase() )
 		return 1;
 	if ( !RunHealthyCase() )
 		return 1;

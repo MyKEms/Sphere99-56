@@ -7,6 +7,63 @@
 #include "caccountbase.h"
 #include "caccount.h"
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
+namespace
+{
+	static bool AccountFileExists( LPCTSTR pszPath )
+	{
+		if ( !pszPath || !pszPath[0] )
+			return false;
+		FILE* pFile = fopen( pszPath, "rb" );
+		if ( !pFile )
+			return false;
+		fclose( pFile );
+		return true;
+	}
+
+	static bool PreserveAccountFile( LPCTSTR pszSource, LPCTSTR pszArchive )
+	{
+		if ( !AccountFileExists( pszSource ))
+			return true;
+		remove( pszArchive );
+#ifdef _WIN32
+		return CopyFile( pszSource, pszArchive, FALSE ) != FALSE;
+#else
+		if ( link( pszSource, pszArchive ) == 0 )
+			return true;
+		FILE* pSource = fopen( pszSource, "rb" );
+		FILE* pArchive = fopen( pszArchive, "wb" );
+		if ( !pSource || !pArchive )
+		{
+			if ( pSource )
+				fclose( pSource );
+			if ( pArchive )
+				fclose( pArchive );
+			return false;
+		}
+		char szBuffer[8192];
+		size_t iRead = 0;
+		bool fOK = true;
+		while (( iRead = fread( szBuffer, 1, sizeof(szBuffer), pSource )) > 0 )
+		{
+			if ( fwrite( szBuffer, 1, iRead, pArchive ) != iRead )
+			{
+				fOK = false;
+				break;
+			}
+		}
+		if ( ferror( pSource ) || fflush( pArchive ) != 0 )
+			fOK = false;
+		if ( fclose( pSource ) != 0 || fclose( pArchive ) != 0 )
+			fOK = false;
+		return fOK;
+#endif
+	}
+}
+
 //**********************************************************************
 // -CAccountMgr
 
@@ -238,8 +295,17 @@ bool CAccountMgr::Account_SaveAll()
 		sBaseDir = g_Cfg.m_sAcctBaseDir;
 	}
 
+	CGString sCurrent;
+	sCurrent.Format( "%s" SPHERE_FILE "accu" SCRIPT_EXT, (LPCTSTR)sBaseDir );
+	CGString sTemp;
+	sTemp.Format( "%s.tmp", (LPCTSTR)sCurrent );
+	remove( sTemp );
+
+	// Keep the published account file readable while the next generation is
+	// being serialized.  The temporary file is closed and durable before the
+	// live name is replaced, so a concurrent loader never observes a gap.
 	CScript s;
-	if ( ! CWorld::OpenScriptBackup( s, sBaseDir, "accu", g_World.m_iSaveCountID, g_World.IsSaveRetry()))
+	if ( ! s.Open( sTemp, OF_WRITE|OF_CREATE|OF_TEXT ))
 		return( false );
 
 	s.Printf( "\\\\ " SPHERE_TITLE " %s accounts file" LOG_CR
@@ -258,10 +324,34 @@ bool CAccountMgr::Account_SaveAll()
 
 	// Write [EOF]
 	s.WriteSection( "EOF" );
-	const bool fWriteOK = !s.HasIOError();
+	const bool fWriteOK = !s.HasIOError() && s.Sync();
 	const bool fCloseOK = s.CloseChecked();
 	if ( !fWriteOK || !fCloseOK )
+	{
+		remove( sTemp );
 		return( false );
+	}
+
+	CGString sArchive;
+	CWorld::GetBackupName( sArchive, sBaseDir, 'a', g_World.m_iSaveCountID );
+	if ( !g_World.IsSaveRetry() &&
+		!PreserveAccountFile( sCurrent, sArchive ))
+	{
+		remove( sTemp );
+		return( false );
+	}
+	if ( !CWorld::PublishSaveFile( sTemp, sCurrent ))
+	{
+		remove( sTemp );
+		return( false );
+	}
+	if ( !CWorld::SyncSaveDirectory( sBaseDir ))
+	{
+		g_pLog->Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Account save directory sync FAILED after publishing '%s'" LOG_CR,
+			(LPCTSTR)sCurrent );
+		return( false );
+	}
 
 	Account_LoadAll( true, true );	// clear the change file now.
 	return( true );

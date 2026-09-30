@@ -102,6 +102,7 @@ def _login_existing(binary: Path, root: Path, port: int) -> tuple[int | None, st
         startup_timeout=180.0,
         log_path=root / f"account-{port}.log",
         action=action,
+        watch_path=root / "accounts" / "sphereaccu.scp",
     )
     chars, world = wait_for_saved_pair(root, 30.0)
     accounts = (root / "accounts" / "sphereaccu.scp").read_text(
