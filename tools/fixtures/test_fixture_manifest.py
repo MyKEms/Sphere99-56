@@ -16,15 +16,32 @@ from modes.fragments.allowlists import unknown_keyword_allowlist
 from modes.registry import FixtureMode, validate_modes
 
 ROOT = Path(__file__).resolve().parent
-SAVECOUNT_RE = re.compile(r"^SAVECOUNT=(.*)$", re.MULTILINE)
+SAVECOUNT_RE = re.compile(r"^\s*SAVECOUNT(?:\s*=\s*|\s+)(.*)$", re.IGNORECASE)
 
 
 def _save_count(path: Path) -> str | None:
+    """Return the header SAVECOUNT the server's pair check reads.
+
+    Like the server, only the header is searched: the keys before the first
+    section, or a leading [SPHERE] section.  The key matches in any case.
+    """
+
     if not path.is_file():
         return None
-    header = path.read_text(encoding="utf-8", errors="replace").split("[EOF]", 1)[0]
-    match = SAVECOUNT_RE.search(header)
-    return match.group(1).strip() if match else None
+    count = None
+    in_header = True
+    section_seen = False
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("[EOF]"):
+            break
+        if line.startswith("["):
+            in_header = not section_seen and line[:8].upper() == "[SPHERE]"
+            section_seen = True
+            continue
+        match = SAVECOUNT_RE.match(line) if in_header else None
+        if match:
+            count = match.group(1).strip()
+    return count
 
 
 def check_seeded_save_pairs(errors: list[str]) -> None:

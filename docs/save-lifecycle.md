@@ -32,7 +32,11 @@ kind is `w` (world), `c` (characters), or `a` (accounts).  This keeps existing
 
 Current files are authoritative on startup.  The live world and character
 files must carry the same `SAVECOUNT`; a pair whose counts differ, or where
-only one file carries a count, is rejected.  Legacy files without any
+only one file carries a count, is rejected.  The count is read only from a
+file's header (the keys before the first section, or a leading `[SPHERE]`
+section as older servers write it) and the key matches in any case, so
+`SaveCount=` is recognised and a global variable named `SAVECOUNT` in
+`[VARNAMES]` is never taken for the count.  Legacy files without any
 `SAVECOUNT` header (for example `[EOF]`-only placeholders) are accepted only
 when neither file of the pair carries one.  Older backups are considered only
 for an interrupted transaction recorded by the pending manifest, or when the

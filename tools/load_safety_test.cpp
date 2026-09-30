@@ -232,6 +232,66 @@ static bool TestLegacyPairRequiresBothUncounted()
 	return true;
 }
 
+// The pair check reads SAVECOUNT only from a file's header, matching the key
+// case-insensitively.  The header is the key block before the first section;
+// older writers put the same keys, as "SaveCount=", into a leading [SPHERE]
+// section.  A later section, such as a global variable named SAVECOUNT in
+// [VARNAMES], must never be taken for the header count.
+static bool TestSaveCountHeaderOnly()
+{
+	char szTempDir[] = "/tmp/sphere-save-header-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+
+	const char* pszMixedThree = "TITLE=Mixed case\nVERSION=0.99\nSaveCount=3\n[EOF]\n";
+	const char* pszMixedFour = "TITLE=Mixed case\nVERSION=0.99\nSaveCount=4\n[EOF]\n";
+	const char* pszSphereThree = "[SPHERE]\nSaveCount=3\n[EOF]\n";
+	const char* pszSphereFour = "[SPHERE]\nSaveCount=4\n[EOF]\n";
+	const char* pszLegacy = "[EOF]\n";
+	const char* pszCountedTwo = "TITLE=Counted\nVERSION=0.99\nSAVECOUNT=2\n[EOF]\n";
+	const char* pszCountedTwoWithVar =
+		"TITLE=Counted\nVERSION=0.99\nSAVECOUNT=2\n[VARNAMES]\nSAVECOUNT=7\n[EOF]\n";
+	const char* pszLegacyWithVar = "[VARNAMES]\nSAVECOUNT=7\n[EOF]\n";
+
+	const bool fMixedMatchAccepted = WriteSavePair( sWorld, pszMixedThree, sChars, pszMixedThree ) &&
+		LoadPairForTest();
+	const bool fMixedMismatchRejected = WriteSavePair( sWorld, pszMixedThree, sChars, pszMixedFour ) &&
+		!LoadPairForTest();
+	const bool fMixedHalfRejected = WriteSavePair( sWorld, pszMixedThree, sChars, pszLegacy ) &&
+		!LoadPairForTest();
+	const bool fSphereMatchAccepted = WriteSavePair( sWorld, pszSphereThree, sChars, pszSphereThree ) &&
+		LoadPairForTest();
+	const bool fSphereMismatchRejected = WriteSavePair( sWorld, pszSphereThree, sChars, pszSphereFour ) &&
+		!LoadPairForTest();
+	const bool fVarIgnoredCounted = WriteSavePair( sWorld, pszCountedTwoWithVar, sChars, pszCountedTwo ) &&
+		LoadPairForTest();
+	const bool fVarIgnoredLegacy = WriteSavePair( sWorld, pszLegacyWithVar, sChars, pszLegacy ) &&
+		LoadPairForTest();
+	g_Cfg.m_Var.RemoveKey( "SAVECOUNT" );
+
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	if ( !fMixedMatchAccepted || !fMixedMismatchRejected || !fMixedHalfRejected ||
+		!fSphereMatchAccepted || !fSphereMismatchRejected ||
+		!fVarIgnoredCounted || !fVarIgnoredLegacy )
+	{
+		std::fprintf( stderr,
+			"save pair header count: mixed_match=%d mixed_mismatch_rejected=%d mixed_half_rejected=%d "
+			"sphere_match=%d sphere_mismatch_rejected=%d var_ignored_counted=%d var_ignored_legacy=%d\n",
+			fMixedMatchAccepted ? 1 : 0, fMixedMismatchRejected ? 1 : 0, fMixedHalfRejected ? 1 : 0,
+			fSphereMatchAccepted ? 1 : 0, fSphereMismatchRejected ? 1 : 0,
+			fVarIgnoredCounted ? 1 : 0, fVarIgnoredLegacy ? 1 : 0 );
+		return false;
+	}
+	return true;
+}
+
 static bool TestMismatchedPairRecovery()
 {
 	char szTempDir[] = "/tmp/sphere-save-pair-XXXXXX";
@@ -326,6 +386,12 @@ int main()
 		return 1;
 	}
 	std::printf( "paired save load: uncounted legacy pair accepted; half-counted pair rejected\n" );
+	if ( !TestSaveCountHeaderOnly() )
+	{
+		std::fprintf( stderr, "save pair count was not read from the file header only\n" );
+		return 1;
+	}
+	std::printf( "paired save load: header SAVECOUNT matched in any case; later sections ignored\n" );
 
 	char szTempDir[] = "/tmp/sphere-load-safety-XXXXXX";
 	if ( mkdtemp( szTempDir ) == NULL )

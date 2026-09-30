@@ -122,6 +122,46 @@ static bool RunHealthyCase()
 	return fPassed;
 }
 
+// A global variable named SAVECOUNT is written into [VARNAMES] as
+// "SAVECOUNT=<value>".  The validation of the temporary files reads the count
+// only from the file header, so such a variable must not fail every save.
+static bool RunSaveCountVariableCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-var-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_World.m_iSaveCountID = 0;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	CFileText::ClearTestFault();
+	g_Cfg.m_Var.SetKeyInt( "SAVECOUNT", 99 );
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	const bool fFirst = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 1;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fSecond = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 2;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const std::string sWorld = ReadFile( std::string( szTempDir ) + "/sphereworld.scp" );
+	g_Cfg.m_Var.RemoveKey( "SAVECOUNT" );
+	const bool fVarWritten = sWorld.find( "[VARNAMES]\nSAVECOUNT=" ) != std::string::npos;
+	const bool fPassed = fFirst && fSecond && fVarWritten;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"global SAVECOUNT variable broke save validation: first=%d second=%d var_written=%d\n",
+			fFirst ? 1 : 0, fSecond ? 1 : 0, fVarWritten ? 1 : 0 );
+	}
+	g_World.Close( false );
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fPassed;
+}
+
 static bool RunRepeatedFailureCase()
 {
 	char szTempDir[] = "/tmp/sphere-save-retry-XXXXXX";
@@ -449,6 +489,8 @@ int main()
 	if ( !RunDirectorySyncCase() )
 		return 1;
 	if ( !RunHealthyCase() )
+		return 1;
+	if ( !RunSaveCountVariableCase() )
 		return 1;
 	if ( !RunFaultCase( CFileText::TEST_FAULT_SHORT_WRITE, "short write", "spherechars.scp.tmp" ))
 		return 1;

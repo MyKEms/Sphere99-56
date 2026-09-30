@@ -986,6 +986,32 @@ bool CWorld::PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int
 	return true;
 }
 
+// Parse a "SAVECOUNT=<n>" header line, matching the key in any case (older
+// writers use "SaveCount=").  Like the script parser, the key ends at '=' or
+// whitespace.
+static bool ParseSaveCountLine( const char* pszLine, int& iSaveCount )
+{
+	while ( *pszLine == ' ' || *pszLine == '\t' )
+		pszLine++;
+	static const char sm_szKey[] = "SAVECOUNT";
+	const size_t iKeyLen = sizeof(sm_szKey) - 1;
+	if ( _strnicmp( pszLine, sm_szKey, iKeyLen ))
+		return false;
+	pszLine += iKeyLen;
+	if ( *pszLine != '=' && *pszLine != ' ' && *pszLine != '\t' )
+		return false;
+	while ( *pszLine == ' ' || *pszLine == '\t' )
+		pszLine++;
+	if ( *pszLine == '=' )
+		pszLine++;
+	return sscanf( pszLine, "%d", &iSaveCount ) == 1;
+}
+
+// Read the SAVECOUNT from a save file's header and check that the file ends
+// with its [EOF] section.  The header is the key block the writer puts before
+// the first section (see s_WriteProps); older writers put the same keys into a
+// leading [SPHERE] section instead.  Any later section ends the header, so a
+// global variable named SAVECOUNT in [VARNAMES] is never read as the count.
 static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 {
 	iSaveCount = INT_MIN;
@@ -993,23 +1019,39 @@ static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 	if ( !pFile )
 		return false;
 	char szLine[512];
+	bool fHeader = true;
+	bool fSectionSeen = false;
 	bool fEOF = false;
 	bool fAfterEOF = false;
+	bool fLineStart = true;
 	while ( fgets( szLine, sizeof(szLine), pFile ) != NULL )
 	{
+		// A line longer than the buffer arrives in several pieces; only the
+		// first piece starts a line.
+		const bool fContinuation = !fLineStart;
+		fLineStart = strchr( szLine, '\n' ) != NULL;
 		if ( fEOF )
 		{
 			if ( szLine[0] != '\n' && szLine[0] != '\r' && szLine[0] != '\0' )
 				fAfterEOF = true;
 			continue;
 		}
-		if ( !strncmp( szLine, "SAVECOUNT=", 10 ))
-			sscanf( szLine + 10, "%d", &iSaveCount );
+		if ( fContinuation )
+			continue;
 		if ( !strncmp( szLine, "[EOF]", 5 ))
 		{
 			fEOF = true;
 			continue;
 		}
+		if ( szLine[0] == '[' )
+		{
+			fHeader = !fSectionSeen && !_strnicmp( szLine, "[SPHERE]", 8 );
+			fSectionSeen = true;
+			continue;
+		}
+		int iHeaderCount = 0;
+		if ( fHeader && ParseSaveCountLine( szLine, iHeaderCount ))
+			iSaveCount = iHeaderCount;
 	}
 	fclose( pFile );
 	return fEOF && !fAfterEOF;
