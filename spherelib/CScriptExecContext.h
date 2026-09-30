@@ -1504,10 +1504,15 @@ public:
 				if ( hRoot == NO_ERROR && pRootObj )
 				{
 					HRESULT hRes;
-					if ( fPropertySet )
+					// A dotted command with a space-separated value is a property
+					// write in 0.99 (SRC.TAG.name value and SERV.LOG path).  Keep
+					// call-form methods such as SRC.SYSMESSAGE(...) on the method
+					// path, and fall through when the object has no such property.
+					if ( fPropertySet || (!fCallForm && pszArg && *pszArg) )
 					{
 						// ROOT.KEY=value is a property write on the referenced
-						// object (SRC.NAME=x, FINDUID(uid).TAG.KEY=x).
+						// object (SRC.NAME=x, FINDUID(uid).TAG.KEY=x).  The same
+						// setter also handles the legacy space form above.
 						CGVariant vVal(pszArg);
 						hRes = pRootObj->s_PropSet(pszDot + 1, vVal);
 						rejected.Observe(hRes, pszDot + 1, pRootObj);
