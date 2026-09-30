@@ -377,6 +377,8 @@ public:
 	* @brief Write changes to disk.
 	*/
 	bool Flush() const;
+	// Flush userspace buffers and make a completed write durable on disk.
+	bool Sync() const;
 	bool CloseChecked();
 	bool HasIOError() const { return m_fIOError; }
 	/**

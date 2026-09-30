@@ -333,6 +333,30 @@ bool CFileText::Flush() const
 	return true;
 }
 
+bool CFileText::Sync() const
+{
+	if ( !Flush())
+		return false;
+	if ( !m_pStream )
+		return !m_fIOError;
+#ifdef _WIN32
+	const int iFD = _fileno( m_pStream );
+	const intptr_t iHandle = iFD >= 0 ? _get_osfhandle( iFD ) : -1;
+	if ( iHandle == -1 || !FlushFileBuffers( (HANDLE)iHandle ))
+	{
+		m_fIOError = true;
+		return false;
+	}
+#else
+	if ( fsync( fileno( m_pStream )) != 0 )
+	{
+		m_fIOError = true;
+		return false;
+	}
+#endif
+	return !m_fIOError;
+}
+
 bool CFileText::CloseChecked()
 {
 	if ( !m_pStream )

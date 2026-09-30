@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
+import os
 import re
+import select
+import struct
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -49,6 +54,7 @@ def run_server(
     startup_timeout: float,
     log_path: Path,
     action: Callable[[], None],
+    watch_path: Optional[Path] = None,
 ) -> tuple[Optional[int], Optional[str], str]:
     runner_error = None
     server_returncode = None
@@ -57,6 +63,62 @@ def run_server(
         log_file = log_path.open("wb")
     except OSError as error:
         return None, f"unable to open server log: {error}", ""
+
+    watch_stop = threading.Event()
+    watch_errors: list[str] = []
+    watch_thread: Optional[threading.Thread] = None
+
+    def watch_published_path() -> None:
+        if watch_path is None:
+            return
+        path = watch_path.resolve()
+        fd = -1
+        try:
+            libc = ctypes.CDLL(None, use_errno=True)
+            init1 = getattr(libc, "inotify_init1", None)
+            add_watch = getattr(libc, "inotify_add_watch", None)
+            if init1 is not None and add_watch is not None:
+                fd = init1(os.O_NONBLOCK | os.O_CLOEXEC)
+                if fd >= 0:
+                    mask = 0x00000040 | 0x00000200  # IN_MOVED_FROM | IN_DELETE
+                    if add_watch(fd, str(path.parent).encode(), mask) < 0:
+                        os.close(fd)
+                        fd = -1
+
+            while not watch_stop.is_set():
+                if not path.exists():
+                    watch_errors.append(f"published file was absent: {path.name}")
+                    return
+                if fd < 0:
+                    watch_stop.wait(0.001)
+                    continue
+                readable, _, _ = select.select([fd], [], [], 0.05)
+                if not readable:
+                    continue
+                try:
+                    data = os.read(fd, 8192)
+                except BlockingIOError:
+                    continue
+                offset = 0
+                while offset + 16 <= len(data):
+                    _, event_mask, _, name_len = struct.unpack_from(
+                        "iIII", data, offset
+                    )
+                    raw_name = data[offset + 16 : offset + 16 + name_len]
+                    name = raw_name.split(b"\0", 1)[0].decode(errors="replace")
+                    offset += 16 + name_len
+                    if name == path.name and event_mask & (0x00000040 | 0x00000200):
+                        watch_errors.append(
+                            f"published file was moved/deleted: {path.name}"
+                        )
+                        return
+        finally:
+            if fd >= 0:
+                os.close(fd)
+
+    if watch_path is not None:
+        watch_thread = threading.Thread(target=watch_published_path, daemon=True)
+        watch_thread.start()
 
     with log_file:
         try:
@@ -80,6 +142,12 @@ def run_server(
                     server_returncode = stop_server(process)
                 except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
                     runner_error = runner_error or f"server shutdown failed: {error}"
+
+    watch_stop.set()
+    if watch_thread is not None:
+        watch_thread.join(timeout=2.0)
+    if watch_errors:
+        runner_error = runner_error or "; ".join(watch_errors)
 
     try:
         log_contents = log_path.read_text(encoding="utf-8", errors="replace")
