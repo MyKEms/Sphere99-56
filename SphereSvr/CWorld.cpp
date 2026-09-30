@@ -135,17 +135,12 @@ namespace
 			strncat( pszOut, pszPart, iOutLen - iUsed - 1 );
 	}
 
-	static int IntegrityViolation( const char* pszRule, const CObjBase* pObj,
-		const char* pszChain, int& iLogBudget )
+	static int IntegrityViolation( CWorld* pWorld, const char* pszRule,
+		const CObjBase* pObj, const char* pszChain, int& iLogBudget,
+		DWORD dwUIDOverride = 0 )
 	{
-		if ( iLogBudget <= 0 )
-			return 1;
-		--iLogBudget;
-		const unsigned dwUID = pObj ? static_cast<unsigned>(pObj->GetUID()) : 0;
-		g_Log.Event( LOG_GROUP_INIT, LOGL_CRIT,
-			"integrity watchdog rule=%s uid=0x%x chain=%s" LOG_CR,
-			pszRule, dwUID, pszChain ? pszChain : "-" );
-		return 1;
+		return pWorld->ReportIntegrityViolation( pszRule, pObj, pszChain,
+			iLogBudget, dwUIDOverride );
 	}
 
 	static void IntegrityChain( const CObjBase* pObj, char* pszOut, size_t iOutLen )
@@ -199,19 +194,19 @@ namespace
 
 		CGObList* pParent = pObj->GetParent();
 		if ( ! IntegrityParentAllowed( pObj, pParent ))
-			iViolations += IntegrityViolation( pParent ? "invalid_parent" : "parent_missing",
+		iViolations += IntegrityViolation( pWorld, pParent ? "invalid_parent" : "parent_missing",
 				pObj, szChain, iLogBudget );
 		else if ( pParent != NULL && ! pParent->IsMyChild( pObj ))
-			iViolations += IntegrityViolation( "parent_missing_link", pObj, szChain, iLogBudget );
+			iViolations += IntegrityViolation( pWorld, "parent_missing_link", pObj, szChain, iLogBudget );
 
 		if (( pObj->GetUIDIndex() & UID_INDEX_MASK ) != dwUIDIndex )
-			iViolations += IntegrityViolation( "uid_slot_mismatch", pObj, szChain, iLogBudget );
+			iViolations += IntegrityViolation( pWorld, "uid_slot_mismatch", pObj, szChain, iLogBudget );
 
 		if ( pObj->IsItem())
 		{
 			CContainer* pParentContainer = dynamic_cast<CContainer*>(pParent);
 			if ( pParentContainer != NULL && ! pParentContainer->IsMyChild(pObj))
-				iViolations += IntegrityViolation( "container_missing_child", pObj, szChain, iLogBudget );
+				iViolations += IntegrityViolation( pWorld, "container_missing_child", pObj, szChain, iLogBudget );
 
 			std::set<const CObjBase*> seen;
 			const CObjBase* pCurrent = pObj;
@@ -223,7 +218,7 @@ namespace
 					break;
 				if ( ! seen.insert( pContainer ).second )
 				{
-					iViolations += IntegrityViolation( "container_cycle", pObj, szChain, iLogBudget );
+					iViolations += IntegrityViolation( pWorld, "container_cycle", pObj, szChain, iLogBudget );
 					break;
 				}
 				pCurrent = pContainer;
@@ -235,7 +230,7 @@ namespace
 		const bool fTopItem = pObj->IsItem() && dynamic_cast<CItemsList*>(pParent) != NULL;
 		const bool fActiveChar = pObj->IsChar() && dynamic_cast<CCharsActiveList*>(pParent) != NULL;
 		if (( fTopItem || fActiveChar ) && ! pObj->GetTopPoint().IsValidPoint())
-			iViolations += IntegrityViolation( "invalid_top_point", pObj, szChain, iLogBudget );
+			iViolations += IntegrityViolation( pWorld, "invalid_top_point", pObj, szChain, iLogBudget );
 
 		CContainer* pContainer = dynamic_cast<CContainer*>(pObj);
 		if ( pContainer != NULL && iWorkBudget != 0 )
@@ -245,10 +240,10 @@ namespace
 				if ( iWorkBudget > 0 )
 					--iWorkBudget;
 				if ( pChild->GetParent() != pContainer )
-					iViolations += IntegrityViolation( "child_parent_backlink", pChild, szChain, iLogBudget );
+					iViolations += IntegrityViolation( pWorld, "child_parent_backlink", pChild, szChain, iLogBudget );
 				CObjBase* pLinked = pWorld->ObjFind( pChild->GetUID());
 				if ( pLinked != pChild )
-					iViolations += IntegrityViolation( "child_uid_link", pChild, szChain, iLogBudget );
+					iViolations += IntegrityViolation( pWorld, "child_uid_link", pChild, szChain, iLogBudget );
 				if ( iWorkBudget == 0 )
 					break;
 			}
@@ -446,6 +441,8 @@ CWorld::CWorld()
 	m_iIntegrityCycleViolations = 0;
 	m_iIntegrityLogBudget = INTEGRITY_LOG_BUDGET;
 	m_iIntegrityLastLogs = 0;
+	m_iIntegritySuppressed = 0;
+	m_iIntegrityLastSuppressed = 0;
 	m_iIntegrityCycleChanges = CObjBase::sm_iChangeCount;
 	m_iIntegrityCycleStartMs = 0;
 	m_fIntegrityResourceBaseline = false;
@@ -2872,19 +2869,19 @@ int CWorld::CheckResourceIntegrity( int& iLogBudget )
 		char szDetail[96];
 		snprintf( szDetail, sizeof(szDetail), "count=%d baseline=%d",
 			static_cast<int>(g_Cfg.m_Const.GetCount()), m_iIntegrityResourceDefNames );
-		iViolations += IntegrityViolation( "resource_defnames", NULL, szDetail, iLogBudget );
+		iViolations += IntegrityViolation( this, "resource_defnames", NULL, szDetail, iLogBudget );
 	}
 	if ( iDialogs < m_iIntegrityResourceDialogs )
 	{
 		char szDetail[96];
 		snprintf( szDetail, sizeof(szDetail), "count=%d baseline=%d", iDialogs, m_iIntegrityResourceDialogs );
-		iViolations += IntegrityViolation( "resource_dialogs", NULL, szDetail, iLogBudget );
+		iViolations += IntegrityViolation( this, "resource_dialogs", NULL, szDetail, iLogBudget );
 	}
 	if ( iFunctions < m_iIntegrityResourceFunctions )
 	{
 		char szDetail[96];
 		snprintf( szDetail, sizeof(szDetail), "count=%d baseline=%d", iFunctions, m_iIntegrityResourceFunctions );
-		iViolations += IntegrityViolation( "resource_functions", NULL, szDetail, iLogBudget );
+		iViolations += IntegrityViolation( this, "resource_functions", NULL, szDetail, iLogBudget );
 	}
 
 	const CSphereUID aKnown[] = {
@@ -2905,10 +2902,49 @@ int CWorld::CheckResourceIntegrity( int& iLogBudget )
 			char szDetail[128];
 			snprintf( szDetail, sizeof(szDetail), "rid=0x%x name=%s",
 				static_cast<unsigned>(rid), (LPCTSTR)*aKnownNames[i] );
-			iViolations += IntegrityViolation( "resource_unresolved", NULL, szDetail, iLogBudget );
+			iViolations += IntegrityViolation( this, "resource_unresolved", NULL, szDetail, iLogBudget );
 		}
 	}
 	return iViolations;
+}
+
+int CWorld::ReportIntegrityViolation( const char* pszRule, const CObjBase* pObj,
+	const char* pszChain, int& iLogBudget, DWORD dwUIDOverride )
+{
+	const DWORD dwUID = pObj ? static_cast<DWORD>(pObj->GetUID()) : dwUIDOverride;
+	char szKey[96];
+	snprintf( szKey, sizeof(szKey), "%s:0x%x", pszRule ? pszRule : "-",
+		static_cast<unsigned>(dwUID) );
+	const std::string sKey( szKey );
+	m_sIntegritySeen.insert( sKey );
+	if ( ! m_sIntegrityActive.insert( sKey ).second )
+	{
+		if ( m_iIntegritySuppressed < INT_MAX )
+			++m_iIntegritySuppressed;
+		return 1;
+	}
+	if ( iLogBudget <= 0 )
+		return 1;
+	--iLogBudget;
+	g_Log.Event( LOG_GROUP_INIT, LOGL_CRIT,
+		"integrity watchdog rule=%s uid=0x%x chain=%s" LOG_CR,
+		pszRule ? pszRule : "-", static_cast<unsigned>(dwUID),
+		pszChain ? pszChain : "-" );
+	return 1;
+}
+
+void CWorld::FinishIntegrityCycleViolations()
+{
+	m_iIntegrityLastSuppressed = m_iIntegritySuppressed;
+	if ( m_iIntegritySuppressed > 0 )
+	{
+		g_Log.Event( LOG_GROUP_INIT, LOGL_EVENT,
+			"integrity watchdog repeats suppressed=%d" LOG_CR,
+			m_iIntegritySuppressed );
+	}
+	std::set<std::string> active;
+	active.insert( m_sIntegritySeen.begin(), m_sIntegritySeen.end());
+	m_sIntegrityActive.swap( active );
 }
 
 int CWorld::CheckIntegrity( int iBudget )
@@ -2923,6 +2959,8 @@ int CWorld::CheckIntegrity( int iBudget )
 		m_iIntegrityCycleSlots = 0;
 		m_iIntegrityCycleViolations = 0;
 		m_iIntegrityLogBudget = INTEGRITY_LOG_BUDGET;
+		m_iIntegritySuppressed = 0;
+		m_sIntegritySeen.clear();
 		m_iIntegrityCycleStartMs = IntegrityNowMs();
 		if ( !m_fIntegrityResourceBaseline )
 			CaptureResourceIntegrityBaseline();
@@ -2936,6 +2974,7 @@ int CWorld::CheckIntegrity( int iBudget )
 			"integrity watchdog cycle slots=0 objects=0 violations=%d elapsed_ms=0 logs=%d" LOG_CR,
 			m_iIntegrityCycleViolations,
 			m_iIntegrityLastLogs );
+		FinishIntegrityCycleViolations();
 		m_iIntegrityCursor = 1;
 		m_iIntegrityCycleObjects = 0;
 		m_iIntegrityCycleSlots = 0;
@@ -2962,7 +3001,7 @@ int CWorld::CheckIntegrity( int iBudget )
 			{
 				char szChain[32];
 				snprintf( szChain, sizeof(szChain), "slot=0x%x", static_cast<unsigned>(i));
-				iViolations += IntegrityViolation( "uid_slot_type", NULL, szChain, m_iIntegrityLogBudget );
+				iViolations += IntegrityViolation( this, "uid_slot_type", NULL, szChain, m_iIntegrityLogBudget, i );
 			}
 			else
 			{
@@ -2990,7 +3029,7 @@ int CWorld::CheckIntegrity( int iBudget )
 			{
 				char szCount[64];
 				snprintf( szCount, sizeof(szCount), "uid=%d objects=%d", iExpectedObjects, CObjBase::sm_iCount );
-				const int iCountViolation = IntegrityViolation( "count_drift", NULL, szCount, m_iIntegrityLogBudget );
+				const int iCountViolation = IntegrityViolation( this, "count_drift", NULL, szCount, m_iIntegrityLogBudget );
 				iViolations += iCountViolation;
 				m_iIntegrityCycleViolations += iCountViolation;
 			}
@@ -3005,6 +3044,7 @@ int CWorld::CheckIntegrity( int iBudget )
 			m_iIntegrityCycleSlots, m_iIntegrityCycleObjects,
 			m_iIntegrityCycleViolations, iElapsedMs >= 0 ? iElapsedMs : 0,
 			m_iIntegrityLastLogs );
+		FinishIntegrityCycleViolations();
 		m_iIntegrityCursor = 1;
 		m_iIntegrityCycleObjects = 0;
 		m_iIntegrityCycleSlots = 0;
