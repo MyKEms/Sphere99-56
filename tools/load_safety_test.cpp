@@ -120,6 +120,66 @@ static bool TestBackupFallbackRequiresOptIn()
 	return fExplicitFallback;
 }
 
+static bool WriteSavePair( const std::string& sWorld, const char* pszWorld,
+	const std::string& sChars, const char* pszChars )
+{
+	std::ofstream world( sWorld.c_str(), std::ios::out | std::ios::trunc );
+	std::ofstream chars( sChars.c_str(), std::ios::out | std::ios::trunc );
+	world << pszWorld;
+	chars << pszChars;
+	return static_cast<bool>( world ) && static_cast<bool>( chars );
+}
+
+static bool LoadPairForTest()
+{
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	const bool fLoaded = g_World.LoadWorldForTest();
+	g_World.Close( false );
+	return fLoaded;
+}
+
+// Every save the server writes carries the same SAVECOUNT header in both files,
+// so only a pair in which neither file carries one (legacy [EOF]-only
+// placeholders) is accepted without a count.  A pair in which only one file
+// carries a count cannot be proven to be one generation and is rejected.
+static bool TestLegacyPairRequiresBothUncounted()
+{
+	char szTempDir[] = "/tmp/sphere-save-legacy-pair-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const char* pszLegacy = "[EOF]\n";
+	const char* pszCounted = "TITLE=Counted save\nVERSION=0.99\nSAVECOUNT=0\n[EOF]\n";
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+
+	const bool fLegacyAccepted = WriteSavePair( sWorld, pszLegacy, sChars, pszLegacy ) &&
+		LoadPairForTest();
+	const bool fCountedAccepted = WriteSavePair( sWorld, pszCounted, sChars, pszCounted ) &&
+		LoadPairForTest();
+	const bool fCountedCharsRejected = WriteSavePair( sWorld, pszLegacy, sChars, pszCounted ) &&
+		!LoadPairForTest();
+	const bool fCountedWorldRejected = WriteSavePair( sWorld, pszCounted, sChars, pszLegacy ) &&
+		!LoadPairForTest();
+
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	if ( !fLegacyAccepted || !fCountedAccepted || !fCountedCharsRejected || !fCountedWorldRejected )
+	{
+		std::fprintf( stderr,
+			"save pair header rule: legacy_accepted=%d counted_accepted=%d "
+			"uncounted_world_rejected=%d uncounted_chars_rejected=%d\n",
+			fLegacyAccepted ? 1 : 0, fCountedAccepted ? 1 : 0,
+			fCountedCharsRejected ? 1 : 0, fCountedWorldRejected ? 1 : 0 );
+		return false;
+	}
+	return true;
+}
+
 static bool TestMismatchedPairRecovery()
 {
 	char szTempDir[] = "/tmp/sphere-save-pair-XXXXXX";
@@ -208,6 +268,12 @@ int main()
 		return 1;
 	}
 	std::printf( "paired save load: mismatched current pair rejected; pending archives recover atomically\n" );
+	if ( !TestLegacyPairRequiresBothUncounted() )
+	{
+		std::fprintf( stderr, "save pair accepted a file without SAVECOUNT next to a counted file\n" );
+		return 1;
+	}
+	std::printf( "paired save load: uncounted legacy pair accepted; half-counted pair rejected\n" );
 
 	char szTempDir[] = "/tmp/sphere-load-safety-XXXXXX";
 	if ( mkdtemp( szTempDir ) == NULL )

@@ -23,14 +23,29 @@ ACCOUNT_NAME = "WorldSaveProbe"
 LOGIN_VALUE = "world-save-pw"
 
 
-def wait_for_saved_pair(fixture: Path, timeout: float) -> tuple[str, str]:
-    chars_path = fixture / "save" / "spherechars.scp"
-    world_path = fixture / "save" / "sphereworld.scp"
+def read_saved_pair(fixture: Path) -> tuple[str, str]:
+    chars = (fixture / "save" / "spherechars.scp").read_text(
+        encoding="ascii", errors="replace"
+    )
+    world = (fixture / "save" / "sphereworld.scp").read_text(
+        encoding="ascii", errors="replace"
+    )
+    return chars, world
+
+
+def wait_for_saved_pair(
+    fixture: Path, timeout: float, previous: Optional[tuple[str, str]] = None
+) -> tuple[str, str]:
+    """Return the published (chars, world) pair once a save has completed.
+
+    With ``previous`` (the pair read before the server ran), both files must
+    also differ from it, so a seeded pair is never mistaken for a new save.
+    """
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            chars = chars_path.read_text(encoding="ascii", errors="replace")
-            world = world_path.read_text(encoding="ascii", errors="replace")
+            chars, world = read_saved_pair(fixture)
         except OSError:
             time.sleep(0.1)
             continue
@@ -39,6 +54,10 @@ def wait_for_saved_pair(fixture: Path, timeout: float) -> tuple[str, str]:
             and len(world) > len("[EOF]\n")
             and "[EOF]" in chars
             and "[EOF]" in world
+            and (
+                previous is None
+                or (chars != previous[0] and world != previous[1])
+            )
         ):
             return chars, world
         time.sleep(0.1)
