@@ -139,9 +139,11 @@ GUMP_FALLBACK_CHILD_SERIAL = 5
 ARG_LOCALS_ACCOUNT = "ArgLocalsProbe"
 ARG_LOCALS_MARKER = "SPHERE_ARG_LOCALS"
 
-# Object-root function dispatch probe.  The two calls deliberately use an
+# Object-root function dispatch probe.  The two CONT calls deliberately use an
 # empty argument list and three positional values so ARGVCOUNT/ARGV handling
-# is exercised on the same path as legacy object-root commands.
+# is exercised on the same path as legacy object-root commands.  Further rows
+# cover an SRC root, roots that are not world objects (the server, a
+# definition), and function calls inside escapes.
 OBJECT_ROOT_DISPATCH_ACCOUNT = "ObjectRootDispatchProbe"
 OBJECT_ROOT_DISPATCH_MARKER = "SPHERE_OBJECT_ROOT"
 OBJECT_ROOT_DISPATCH_ITEM_ID = 0x0EA6
@@ -743,7 +745,12 @@ RETURN <scratch_1>-<SCRATCH_2>-<scratch_3>-<SCRATCH_4>-<scratch_5>-<SCRATCH_6>
 
 
 def object_root_dispatch_scripts() -> tuple[str, str]:
-    """Return empty- and positional-ARGV object-root calls."""
+    """Return the object-root call probe.
+
+    The login part reports the two CONT calls.  The functions below are also
+    called from the item trigger through an SRC root, through roots that are
+    not world objects, and from escapes; see object_root_dispatch_trigger().
+    """
 
     login = [
         "NEWITEM SYNTHETIC_OBJECT_ROOT",
@@ -772,8 +779,58 @@ ARG(i,<arg(i)>+1)
 ENDWHILE
 TAG.object_root_args=<ARGVCOUNT>|<ARG(i)>|<ARG(last)>
 RETURN 0
+
+[FUNCTION f_object_root_report]
+TAG.object_root_report=<ARGVCOUNT>|<ARGV(0)>|<ARGV(1)>
+RETURN 0
+
+[FUNCTION f_object_root_serv]
+VAR(object_root_serv,ran)
+RETURN 0
+
+[FUNCTION f_object_root_definition]
+VAR(object_root_definition,ran)
+RETURN 0
+
+[FUNCTION f_object_root_inc]
+RETURN <EVAL <ARGV(0)>+1>
 """
     return "\n".join(login) + "\n", sections
+
+
+def object_root_dispatch_trigger() -> str:
+    """Return the item trigger body of the object-root probe.
+
+    The trigger runs with the item as the default object and the equipping
+    character as both CONT and SRC.  Each row is reported as soon as its call
+    returns, so a call that does not run leaves an empty value.
+    """
+
+    marker = OBJECT_ROOT_DISPATCH_MARKER
+    return "\n".join(
+        [
+            "CONT.f_object_root_empty()",
+            "CONT.f_object_root_args(1,2,3)",
+            # The source character is a world object as well.
+            "SRC.f_object_root_report(7,8)",
+            f"SRC.SYSMESSAGE {marker} C|src_call|[<SRC.TAG.object_root_report>]",
+            # The server object and a definition are reference roots, but not
+            # world objects: a script function is not run with them as base.
+            "SERV.f_object_root_serv()",
+            f"SRC.SYSMESSAGE {marker} C|serv|[<VAR(object_root_serv)>]",
+            "FINDRES(ITEMDEF,SYNTHETIC_OBJECT).f_object_root_definition()",
+            f"SRC.SYSMESSAGE {marker} C|definition|[<VAR(object_root_definition)>]",
+            # The same two functions do run on a world object.
+            "CONT.f_object_root_serv()",
+            "CONT.f_object_root_definition()",
+            f"SRC.SYSMESSAGE {marker} C|live_control|"
+            "[<VAR(object_root_serv)>|<VAR(object_root_definition)>]",
+            # Function calls inside escapes are resolved by the expression
+            # evaluator, with and without a root.
+            f"SRC.SYSMESSAGE {marker} C|escape|"
+            "[<?f_object_root_inc(41)?>|<SRC.f_object_root_inc(7)>]",
+        ]
+    ) + "\n"
 
 
 def findarg_scripts() -> tuple[str, str]:
@@ -1732,8 +1789,7 @@ def write_scripts(
         "TYPE=T_EQ_SCRIPT\n"
         "LAYER=30\n"
         "ON=@Equip\n"
-        "CONT.f_object_root_empty()\n"
-        "CONT.f_object_root_args(1,2,3)\n"
+        + object_root_dispatch_trigger()
         if object_root_dispatch_probe
         else ""
     )

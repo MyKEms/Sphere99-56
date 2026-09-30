@@ -116,6 +116,14 @@ protected:
 		return false;
 	}
 
+	// True when the reference is an object of the running world (an item or a
+	// character): its own UID resolves back to it.  Definitions, the server
+	// and other reference roots are resource objects too, but not world objects.
+	bool IsWorldObject(CResourceObj* pObj)
+	{
+		return pObj != NULL && ResolveUIDObject(pObj->GetUIDIndex()) == pObj;
+	}
+
 	CResourceObj* ResolveObjectResult(const CGVariant& value, LPCTSTR pszFunctionRoot)
 	{
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(value.GetRef());
@@ -1532,7 +1540,9 @@ public:
 					// referenced object as the active base. A built-in object root
 					// such as LASTNEW is resolved through Function_Dispatch too, but
 					// it is not itself a script function and must retain this path.
-					if ( !fPropertySet )
+					// Only a live world object can be that base: a definition, the
+					// server or any other reference root keeps the historical path.
+					if ( !fPropertySet && IsWorldObject(pRootObj) )
 					{
 						TCHAR szFunctionName[SCRIPT_MAX_LINE_LEN];
 						CGVariant vFunctionArgs;

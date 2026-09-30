@@ -5,6 +5,12 @@ The fixture equips a synthetic item and calls two script functions through its
 ``CONT`` character root.  Each function advances an ``ARG`` counter through
 ``ARGV`` so both an empty call and a three-argument call exercise the dotted
 command dispatch path without re-entering the root function.
+
+The item trigger also calls a function through an ``SRC`` root, through two
+roots that are not world objects (the server object and a definition), and
+from escapes.  Only a world object becomes the base of a script function; the
+other roots and the escape forms keep the behaviour they have without this
+dispatch path.
 """
 
 from __future__ import annotations
@@ -27,7 +33,19 @@ MARKER_RE = re.compile(
 )
 # Current master preserves a literal zero ARG as its two-character form. The
 # empty call still reports a numeric zero counter and must terminate boundedly.
-EXPECTED = {"empty": "0|00|", "args": "3|2|2"}
+EXPECTED = {
+    "empty": "0|00|",
+    "args": "3|2|2",
+    # SRC is a world object too: the call form passes two counted arguments.
+    "src_call": "2|7|8",
+    # Roots that are not world objects do not run the function ...
+    "serv": "",
+    "definition": "",
+    # ... while the same functions run with a world object as base.
+    "live_control": "ran|ran",
+    # Escapes resolve function calls on their own path.
+    "escape": "42|8",
+}
 
 
 def system_messages(data: bytes) -> list[str]:
