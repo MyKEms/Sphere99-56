@@ -3,13 +3,85 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
 from fixture_cases import FIXTURE_CASES, MODE_GENERATORS, MODES
 from modes.fragments.allowlists import unknown_keyword_allowlist
 from modes.registry import FixtureMode, validate_modes
 
+ROOT = Path(__file__).resolve().parent
+SAVECOUNT_RE = re.compile(r"^\s*SAVECOUNT(?:\s*=\s*|\s+)(.*)$", re.IGNORECASE)
+
+
+def _save_count(path: Path) -> str | None:
+    """Return the header SAVECOUNT the server's pair check reads.
+
+    Like the server, only the header is searched: the keys before the first
+    section, or a leading [SPHERE] section.  The key matches in any case.
+    """
+
+    if not path.is_file():
+        return None
+    count = None
+    in_header = True
+    section_seen = False
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("[EOF]"):
+            break
+        if line.startswith("["):
+            in_header = not section_seen and line[:8].upper() == "[SPHERE]"
+            section_seen = True
+            continue
+        match = SAVECOUNT_RE.match(line) if in_header else None
+        if match:
+            count = match.group(1).strip()
+    return count
+
+
+def check_seeded_save_pairs(errors: list[str]) -> None:
+    """Every generated fixture must seed a world/chars pair the server loads.
+
+    The server writes the same SAVECOUNT header into both files of a save and
+    rejects a pair unless neither file carries one or both carry the same one.
+    """
+
+    with tempfile.TemporaryDirectory(prefix="sphere-fixture-pairs-") as temporary:
+        root = Path(temporary)
+        generated: list[tuple[str, Path]] = []
+        for name, generate in sorted(MODE_GENERATORS.items()):
+            output = root / f"mode-{name}"
+            with contextlib.redirect_stdout(io.StringIO()):
+                generate(output)
+            generated.append((name, output))
+        for name, case in sorted(FIXTURE_CASES.items()):
+            if case.generator == "make_fixture.py" or case.output is None:
+                continue
+            output = root / f"case-{name}"
+            subprocess.run(
+                [sys.executable, str(ROOT / case.generator), str(output), *case.generator_args],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+            generated.append((name, output))
+        for name, output in generated:
+            world = _save_count(output / "save" / "sphereworld.scp")
+            chars = _save_count(output / "save" / "spherechars.scp")
+            if world != chars:
+                errors.append(
+                    f"{name} seeds a save pair the server rejects: "
+                    f"world SAVECOUNT={world} chars SAVECOUNT={chars}"
+                )
+
 
 def main() -> int:
     errors: list[str] = []
+    check_seeded_save_pairs(errors)
     for mode in MODES:
         if mode.fixture_args is not None and mode.name not in MODE_GENERATORS:
             errors.append(f"{mode.name} has no auto-discovered generator")

@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 from run_suite import shutdown_failures
-from test_world_save_roundtrip import run_server, wait_for_saved_pair
+from test_world_save_roundtrip import read_saved_pair, run_server, wait_for_saved_pair
 
 ACCOUNT_NAME = "AccountProbe"
 ACCOUNT_PASSWORD = "account_probe_pw"
@@ -20,6 +20,7 @@ PACK_SERIAL = 2
 PACK_UID = 0x40000000 | PACK_SERIAL
 ITEM_SERIAL = 3
 ITEM_UID = 0x40000000 | ITEM_SERIAL
+SAVE_HEADER = "TITLE=Sphere 0.99 account fixture\nVERSION=0.99\nSAVECOUNT=0\n"
 
 
 def _write_fixture(root: Path) -> None:
@@ -42,11 +43,14 @@ def _write_fixture(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "accounts" / "sphereacct.scp").write_text("[EOF]\n", encoding="utf-8")
-    (root / "save" / "sphereworld.scp").write_text("[EOF]\n", encoding="utf-8")
+    # The server writes the same SAVECOUNT header into both files of a save,
+    # and rejects a pair in which only one file carries it.  The empty world
+    # therefore carries the characters' generation header too.
+    (root / "save" / "sphereworld.scp").write_text(
+        SAVE_HEADER + "[EOF]\n", encoding="utf-8"
+    )
     (root / "save" / "spherechars.scp").write_text(
-        "TITLE=Sphere 0.99 account fixture\n"
-        "VERSION=0.99\n"
-        "SAVECOUNT=0\n"
+        SAVE_HEADER +
         "[WORLDCHAR c_MAN]\n"
         f"SERIAL={CHAR_SERIAL}\n"
         f"ACCOUNT={ACCOUNT_NAME}\n"
@@ -94,6 +98,7 @@ def _login_existing(binary: Path, root: Path, port: int) -> tuple[int | None, st
         finally:
             sock.close()
 
+    seeded_pair = read_saved_pair(root)
     returncode, runner_error, log_contents = run_server(
         fixture=root,
         binary=binary,
@@ -104,7 +109,14 @@ def _login_existing(binary: Path, root: Path, port: int) -> tuple[int | None, st
         action=action,
         watch_path=root / "accounts" / "sphereaccu.scp",
     )
-    chars, world = wait_for_saved_pair(root, 30.0)
+    try:
+        chars, world = wait_for_saved_pair(root, 30.0, previous=seeded_pair)
+    except RuntimeError as error:
+        # Report why the server never saved (for example a rejected load)
+        # instead of only the missing save.
+        fatal = [line for line in log_contents.splitlines() if "[FATAL]" in line]
+        detail = [runner_error] if runner_error else []
+        raise RuntimeError("; ".join([str(error), *detail, *fatal[-3:]])) from error
     accounts = (root / "accounts" / "sphereaccu.scp").read_text(
         encoding="utf-8", errors="replace"
     )

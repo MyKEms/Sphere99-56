@@ -123,6 +123,7 @@ CSphereResourceMgr::CSphereResourceMgr()
 	m_iSaveBackupLevels = 3;
 	m_iSaveBackgroundTime = 5* 60* TICKS_PER_SEC;	// Use the new background save.
 	m_fSaveGarbageCollect = false;	// Always force a full garbage collection.
+	m_fSaveBackupFallback = false;
 	m_iSavePeriod = 15*60*TICKS_PER_SEC;
 
 	// In game effects.

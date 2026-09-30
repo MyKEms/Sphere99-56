@@ -104,6 +104,16 @@ CHARUID=3
 """,
         encoding="ascii",
     )
+    # Both files of a save carry the same SAVECOUNT header; the server
+    # rejects a pair in which only the character file has one.
+    (output / "save" / "sphereworld.scp").write_text(
+        """TITLE=Sphere synthetic script gaps fixture
+VERSION=0.99
+SAVECOUNT=0
+[EOF]
+""",
+        encoding="ascii",
+    )
     (output / "save" / "spherechars.scp").write_text(
         f"""TITLE=Sphere synthetic script gaps fixture
 VERSION=0.99

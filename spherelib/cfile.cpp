@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#else
+#include <io.h>
 #endif
 
 #ifdef SPHERE_SAVE_IO_TEST
@@ -20,12 +22,12 @@ static bool g_fTestFaultTriggered = false;
 static CGString g_sTestFaultTarget;
 static int g_iTestFaultSkip = 0;
 
-static bool ShouldTriggerTestFault( const CFileText& file )
+static bool ShouldTriggerTestFaultTitle( LPCTSTR pszTitle )
 {
 	if ( g_eTestFault == CFileText::TEST_FAULT_NONE || g_fTestFaultTriggered )
 		return false;
 	if ( !g_sTestFaultTarget.IsEmpty() &&
-		g_sTestFaultTarget.CompareNoCase( file.GetFileTitle()) != 0 )
+		g_sTestFaultTarget.CompareNoCase( pszTitle ) != 0 )
 	{
 		return false;
 	}
@@ -36,6 +38,11 @@ static bool ShouldTriggerTestFault( const CFileText& file )
 	}
 	g_fTestFaultTriggered = true;
 	return true;
+}
+
+static bool ShouldTriggerTestFault( const CFileText& file )
+{
+	return ShouldTriggerTestFaultTitle( file.GetFileTitle());
 }
 #endif
 
@@ -492,6 +499,13 @@ void CFileText::ClearTestFault()
 bool CFileText::WasTestFaultTriggered()
 {
 	return g_fTestFaultTriggered;
+}
+
+// A path operation (remove, link, rename) outside CFileText consults this hook.
+bool CFileText::ShouldFailTestPath( TEST_FAULT fault, LPCTSTR pszPath )
+{
+	return g_eTestFault == fault && pszPath &&
+		ShouldTriggerTestFaultTitle( CGFile::GetFilesTitle( pszPath ));
 }
 #endif
 

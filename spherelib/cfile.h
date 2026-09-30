@@ -320,10 +320,14 @@ public:
 		TEST_FAULT_SHORT_WRITE,
 		TEST_FAULT_FLUSH,
 		TEST_FAULT_CLOSE,
+		TEST_FAULT_REMOVE,	// removing the target path fails (see ShouldFailTestPath)
+		TEST_FAULT_LINK,	// hard-linking to the target path fails
+		TEST_FAULT_RENAME,	// publishing (renaming) onto the target path fails
 	};
 	static void SetTestFault( TEST_FAULT fault, LPCTSTR pszTargetFile = NULL, int iSkip = 0 );
 	static void ClearTestFault();
 	static bool WasTestFaultTriggered();
+	static bool ShouldFailTestPath( TEST_FAULT fault, LPCTSTR pszPath );
 #endif
 	static const char* m_sClassName;
 	FILE* m_pStream;		///< The current open script type file.

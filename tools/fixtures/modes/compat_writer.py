@@ -2644,7 +2644,19 @@ def write_escape_overflow_save(root: Path) -> None:
         ),
     )
     write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
-    write_text(root / "save" / "sphereworld.scp", "[EOF]")
+    # Both files of a save carry the same SAVECOUNT header; the server rejects
+    # a pair in which only the character file has one.
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            (
+                "TITLE=Sphere synthetic login escape fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            )
+        ),
+    )
     write_text(
         root / "save" / "spherechars.scp",
         "\n".join(
@@ -3659,6 +3671,9 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
         ]
 
     chars = [
+        "TITLE=Sphere synthetic sibling mutation fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
         *char_header(MUTATION_DESTINATION_OWNER_SERIAL, 180),
         "[WORLDITEM DEFAULTITEM]",
         "SERIAL=210",
