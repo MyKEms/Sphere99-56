@@ -906,13 +906,13 @@ SYSMESSAGE {marker} wrong
 
 
 def dialog_argo_tag_scripts() -> tuple[str, str]:
-    """Return a dialog whose button dispatches a command stored in ARGO.TAG."""
+    """Return a dialog whose quoted argument drives an ARGO.TAG command."""
 
-    login = f"DIALOG({DIALOG_ARGO_TAG_NAME})\n"
+    login = f'DIALOG({DIALOG_ARGO_TAG_NAME},"f_dialog_argo_tag_forward")\n'
     sections = f"""
 [DIALOG {DIALOG_ARGO_TAG_NAME}]
 0 0
-ARGO.TAG(forward,f_dialog_argo_tag_forward)
+ARGO.TAG(forward,<ARGV(0)>)
 button 20 20 2151 2152 1 0 {DIALOG_ARGO_TAG_BUTTON}
 
 [DIALOG {DIALOG_ARGO_TAG_NAME} BUTTON]
