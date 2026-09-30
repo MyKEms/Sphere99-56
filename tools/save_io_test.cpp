@@ -138,18 +138,22 @@ static bool RunRepeatedFailureCase()
 	CGVariant vValRet;
 	const bool fInitial = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
 		g_World.m_iSaveCountID == 1;
+	const std::string sWorldBefore = ReadFile( std::string( szTempDir ) + "/sphereworld.scp" );
+	const std::string sCharsBefore = ReadFile( std::string( szTempDir ) + "/spherechars.scp" );
 
-	CFileText::SetTestFault( CFileText::TEST_FAULT_SHORT_WRITE, "sphereworld.scp" );
+	CFileText::SetTestFault( CFileText::TEST_FAULT_SHORT_WRITE, "sphereworld.scp.tmp" );
 	g_Serv.m_iExitFlag = SPHEREERR_OK;
 	const bool fFirstFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
 		g_World.m_iSaveCountID == 1;
 	const std::string sArchivePath = std::string( szTempDir ) + "/sphereb01w.scp";
 	const std::string sArchiveBefore = ReadFile( sArchivePath );
+	const std::string sWorldAfterFirstFailure = ReadFile( std::string( szTempDir ) + "/sphereworld.scp" );
+	const std::string sCharsAfterFirstFailure = ReadFile( std::string( szTempDir ) + "/spherechars.scp" );
 	g_Serv.m_iExitFlag = SPHEREERR_OK;
 	g_World.Close( false );
 	const bool fReloaded = g_World.LoadAll() && g_World.m_iSaveCountID == 1;
 
-	CFileText::SetTestFault( CFileText::TEST_FAULT_SHORT_WRITE, "sphereworld.scp" );
+	CFileText::SetTestFault( CFileText::TEST_FAULT_SHORT_WRITE, "sphereworld.scp.tmp" );
 	g_Serv.m_iExitFlag = SPHEREERR_OK;
 	const bool fSecondFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
 		g_World.m_iSaveCountID == 1;
@@ -162,10 +166,10 @@ static bool RunRepeatedFailureCase()
 	const std::string sArchiveRecovered = ReadFile( sArchivePath );
 	const std::string sActiveWorld = ReadFile( std::string( szTempDir ) + "/sphereworld.scp" );
 	const bool fPassed = fInitial && fFirstFailed && fReloaded && fSecondFailed &&
-		!sArchiveBefore.empty() && sArchiveBefore == sArchiveAfter &&
-		sArchiveAfter.find( "[EOF]" ) != std::string::npos &&
+		sWorldBefore == sWorldAfterFirstFailure && sCharsBefore == sCharsAfterFirstFailure &&
+		sArchiveBefore.empty() && sArchiveAfter.empty() &&
 		sPendingManifest.find( "STATE=PENDING" ) != std::string::npos &&
-		fRecovered && sArchiveRecovered == sArchiveBefore &&
+		fRecovered && !sArchiveRecovered.empty() && sArchiveRecovered == sWorldBefore &&
 		sActiveWorld.find( "[EOF]" ) != std::string::npos &&
 		ReadFile( std::string( szTempDir ) + "/sphere.save.pending" ).empty();
 	if ( !fPassed )
@@ -179,6 +183,96 @@ static bool RunRepeatedFailureCase()
 			sActiveWorld.find( "[EOF]" ) != std::string::npos ? 1 : 0 );
 	}
 	g_World.Close( false );
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fPassed;
+}
+
+static bool RunRetryPreservesAccountArchiveCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-account-retry-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_World.m_iSaveCountID = 0;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	CFileText::ClearTestFault();
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	const bool fInitial = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 1;
+	const std::string sArchivePath = std::string( szTempDir ) + "/sphereb01a.scp";
+	{
+		std::ofstream account( ( std::string( szTempDir ) + "/sphereaccu.scp" ).c_str(),
+			std::ios::out | std::ios::app );
+		account << "RETRY_SENTINEL=preserve-first-archive\n";
+	}
+
+	CFileText::SetTestFault( CFileText::TEST_FAULT_CLOSE, "sphereaccu.scp" );
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
+		g_World.m_iSaveCountID == 1 && CFileText::WasTestFaultTriggered();
+	const std::string sArchiveBefore = ReadFile( sArchivePath );
+	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
+
+	CFileText::ClearTestFault();
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fRecovered = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 2;
+	const std::string sArchiveAfter = ReadFile( sArchivePath );
+	const bool fPassed = fInitial && fFailed && !sArchiveBefore.empty() &&
+		sPending.find( "ROTATED=4" ) != std::string::npos && fRecovered &&
+		sArchiveAfter == sArchiveBefore;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"retry re-rotated account archive: initial=%d failed=%d recovered=%d archive_before=%zu archive_after=%zu rotated=%d\n",
+			fInitial ? 1 : 0, fFailed ? 1 : 0, fRecovered ? 1 : 0,
+			sArchiveBefore.size(), sArchiveAfter.size(),
+			sPending.find( "ROTATED=4" ) != std::string::npos ? 1 : 0 );
+	}
+	g_World.Close( false );
+	CFileText::ClearTestFault();
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fPassed;
+}
+
+static bool RunFirstSaveRetryWithoutArchiveCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-first-retry-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_World.m_iSaveCountID = 0;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	CFileText::SetTestFault( CFileText::TEST_FAULT_CLOSE, "sphereaccu.scp" );
+	const bool fFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
+		g_World.m_iSaveCountID == 0 && CFileText::WasTestFaultTriggered();
+	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
+	CFileText::ClearTestFault();
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fRecovered = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 1;
+	const bool fPassed = fFailed && fRecovered &&
+		sPending.find( "ROTATED=4" ) == std::string::npos;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"first save retry incorrectly required absent archive: failed=%d recovered=%d rotated=%d\n",
+			fFailed ? 1 : 0, fRecovered ? 1 : 0,
+			sPending.find( "ROTATED=4" ) != std::string::npos ? 1 : 0 );
+	}
+	g_World.Close( false );
+	CFileText::ClearTestFault();
 	RemoveDirectoryContents( szTempDir );
 	rmdir( szTempDir );
 	return fPassed;
@@ -219,6 +313,44 @@ static bool RunFaultCase( CFileText::TEST_FAULT fault, const char* pszName, cons
 	return fFailed;
 }
 
+static bool RunShutdownCompletionCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-shutdown-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const int iBackgroundBefore = g_Cfg.m_iSaveBackgroundTime;
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_Cfg.m_iSaveBackgroundTime = TICKS_PER_SEC;
+	g_World.m_iSaveCountID = 0;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	const bool fInitial = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 1;
+	const bool fStarted = fInitial && g_World.Save( false ) && g_World.IsSaving();
+	// SIGTERM only sets the orderly exit flag.  Close() must finish the
+	// already-open generation before the process exits, and a second request
+	// must not start a second generation.
+	g_Serv.SetExitFlag( SPHEREERR_TIMED_CLOSE );
+	g_Serv.SetExitFlag( SPHEREERR_TIMED_CLOSE );
+	g_World.Close( false );
+	const int iAfterFirstClose = g_World.m_iSaveCountID;
+	g_World.Close( false );
+	const std::string sWorld = ReadFile( std::string( szTempDir ) + "/sphereworld.scp" );
+	const std::string sChars = ReadFile( std::string( szTempDir ) + "/spherechars.scp" );
+	const bool fCompleted = fStarted && iAfterFirstClose == 2 &&
+		g_World.m_iSaveCountID == iAfterFirstClose &&
+		sWorld.find( "[EOF]" ) != std::string::npos &&
+		sChars.find( "[EOF]" ) != std::string::npos &&
+		ReadFile( std::string( szTempDir ) + "/sphere.save.pending" ).empty();
+	g_Cfg.m_iSaveBackgroundTime = iBackgroundBefore;
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fCompleted;
+}
+
 int main()
 {
 	if ( !RunEmptyWriteCase() )
@@ -227,14 +359,23 @@ int main()
 		return 1;
 	if ( !RunHealthyCase() )
 		return 1;
-	if ( !RunFaultCase( CFileText::TEST_FAULT_SHORT_WRITE, "short write", "spherechars.scp" ))
+	if ( !RunFaultCase( CFileText::TEST_FAULT_SHORT_WRITE, "short write", "spherechars.scp.tmp" ))
 		return 1;
-	if ( !RunFaultCase( CFileText::TEST_FAULT_FLUSH, "flush failure", "spherechars.scp" ))
+	if ( !RunFaultCase( CFileText::TEST_FAULT_FLUSH, "flush failure", "spherechars.scp.tmp" ))
 		return 1;
-	if ( !RunFaultCase( CFileText::TEST_FAULT_CLOSE, "close failure", "sphereworld.scp" ))
+	if ( !RunFaultCase( CFileText::TEST_FAULT_CLOSE, "close failure", "sphereworld.scp.tmp" ))
 		return 1;
 	if ( !RunRepeatedFailureCase() )
 		return 1;
+	if ( !RunRetryPreservesAccountArchiveCase() )
+		return 1;
+	if ( !RunFirstSaveRetryWithoutArchiveCase() )
+		return 1;
+	if ( !RunShutdownCompletionCase() )
+	{
+		std::fprintf( stderr, "orderly shutdown did not finish the active save exactly once\n" );
+		return 1;
+	}
 	std::printf( "save I/O: short-write, flush, and close failures rejected without generation advance\n" );
 	return 0;
 }

@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#else
+#include <io.h>
 #endif
 
 #ifdef SPHERE_SAVE_IO_TEST

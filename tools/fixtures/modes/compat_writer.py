@@ -3659,6 +3659,9 @@ def write_timer_sibling_mutation_save(root: Path) -> None:
         ]
 
     chars = [
+        "TITLE=Sphere synthetic sibling mutation fixture",
+        "VERSION=0.99",
+        "SAVECOUNT=0",
         *char_header(MUTATION_DESTINATION_OWNER_SERIAL, 180),
         "[WORLDITEM DEFAULTITEM]",
         "SERIAL=210",

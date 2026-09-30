@@ -13,16 +13,99 @@
 #endif
 
 #include <stdio.h>
-#include <chrono>
-#include <set>
+#include <errno.h>
+#include <sys/stat.h>
 #ifndef _WIN32
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
+#else
+#include <windows.h>
+#include <io.h>
 #endif
+#include <chrono>
+#include <set>
 #if defined(SPHERE_CRASH_RECOVERY_ENABLED)
 #include <setjmp.h>
 #include <signal.h>
 #endif
+
+static unsigned long long SaveClockMillis()
+{
+#ifdef _WIN32
+	return (unsigned long long)GetTickCount();
+#else
+	struct timespec ts;
+	if ( clock_gettime( CLOCK_MONOTONIC, &ts ) != 0 )
+		return 0;
+	return (unsigned long long)ts.tv_sec * 1000ULL +
+		(unsigned long long)ts.tv_nsec / 1000000ULL;
+#endif
+}
+
+static unsigned long long SaveFileSize( LPCTSTR pszPath )
+{
+	if ( !pszPath || !pszPath[0] )
+		return 0;
+	struct stat st;
+	if ( stat( pszPath, &st ) != 0 )
+		return 0;
+	return (unsigned long long)st.st_size;
+}
+
+static bool SaveSyncStream( FILE* pFile )
+{
+	if ( !pFile || fflush( pFile ) != 0 )
+		return false;
+#ifdef _WIN32
+	const int iFD = _fileno( pFile );
+	if ( iFD < 0 )
+		return false;
+	const intptr_t iHandle = _get_osfhandle( iFD );
+	return iHandle != -1 && FlushFileBuffers((HANDLE)iHandle) != 0;
+#else
+	return fsync( fileno( pFile )) == 0;
+#endif
+}
+
+static bool SaveCopyFile( LPCTSTR pszSource, LPCTSTR pszTarget )
+{
+	FILE* pSource = fopen( pszSource, "rb" );
+	if ( !pSource )
+		return false;
+	FILE* pTarget = fopen( pszTarget, "wb" );
+	if ( !pTarget )
+	{
+		fclose( pSource );
+		return false;
+	}
+	char szBuffer[64 * 1024];
+	bool fOK = true;
+	for (;;)
+	{
+		size_t iRead = fread( szBuffer, 1, sizeof(szBuffer), pSource );
+		if ( iRead > 0 && fwrite( szBuffer, 1, iRead, pTarget ) != iRead )
+		{
+			fOK = false;
+			break;
+		}
+		if ( iRead < sizeof(szBuffer) )
+		{
+			if ( ferror( pSource ))
+				fOK = false;
+			break;
+		}
+	}
+	if ( fOK && !SaveSyncStream( pTarget ))
+		fOK = false;
+	if ( fclose( pTarget ) != 0 )
+		fOK = false;
+	if ( fclose( pSource ) != 0 )
+		fOK = false;
+	if ( !fOK )
+		remove( pszTarget );
+	return fOK;
+}
 
 static const SOUND_TYPE sm_Sounds_Ghost[] =
 {
@@ -354,6 +437,9 @@ CWorld::CWorld()
 	m_iSaveCountID = 0;
 	m_iSaveStage = 0;
 	m_fSaveRetry = false;
+	m_ullSaveStartMillis = 0;
+	m_iSaveStartItems = 0;
+	m_iSaveStartChars = 0;
 	m_iIntegrityCursor = 1;
 	m_iIntegrityCycleObjects = 0;
 	m_iIntegrityCycleSlots = 0;
@@ -719,8 +805,11 @@ bool CWorld::WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPendin
 {
 	CGString sManifest;
 	GetSaveManifestName( sManifest, pszBaseDir );
+	CGString sManifestTemp;
+	sManifestTemp.Format( "%s.tmp", (LPCTSTR)sManifest );
 	CScript s;
-	if ( !s.Open( sManifest, OF_WRITE|OF_CREATE|OF_TEXT ))
+	remove( sManifestTemp );
+	if ( !s.Open( sManifestTemp, OF_WRITE|OF_CREATE|OF_TEXT ))
 		return false;
 	s.WriteKeyInt( "SAVECOUNT", iSaveCount );
 	s.WriteKey( "STATE", fPending ? "PENDING" : "COMMITTED" );
@@ -728,7 +817,19 @@ bool CWorld::WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPendin
 	s.WriteSection( "EOF" );
 	const bool fWriteOK = !s.HasIOError() && s.Sync();
 	const bool fCloseOK = s.CloseChecked();
-	return fWriteOK && fCloseOK && SyncSaveDirectory( pszBaseDir );
+	if ( !fWriteOK || !fCloseOK )
+	{
+		remove( sManifestTemp );
+		return false;
+	}
+	// Replace the manifest atomically, then synchronize its directory so the
+	// recorded state survives a sudden restart.
+	if ( !PublishSaveFile( sManifestTemp, sManifest ))
+	{
+		remove( sManifestTemp );
+		return false;
+	}
+	return true;
 }
 
 void CWorld::RemoveSaveManifest( LPCTSTR pszBaseDir )
@@ -814,6 +915,139 @@ bool CWorld::SyncSaveDirectory( LPCTSTR pszBaseDir )
 #endif
 }
 
+void CWorld::GetSaveTempName( CGString& sTemp, LPCTSTR pszBaseDir, LPCTSTR pszBaseName )
+{
+	sTemp.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT ".tmp",
+		pszBaseDir ? pszBaseDir : "", pszBaseName ? pszBaseName : "" );
+}
+
+bool CWorld::PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszArchive )
+{
+	if ( !SaveFileExists( pszSource ))
+		return true;
+	remove( pszArchive );
+#ifdef _WIN32
+	if ( CreateHardLink( pszArchive, pszSource, NULL ))
+		return true;
+#else
+	if ( link( pszSource, pszArchive ) == 0 )
+		return true;
+#endif
+	return SaveCopyFile( pszSource, pszArchive );
+}
+
+static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
+{
+	iSaveCount = INT_MIN;
+	FILE* pFile = fopen( pszPath, "rb" );
+	if ( !pFile )
+		return false;
+	char szLine[512];
+	bool fEOF = false;
+	bool fAfterEOF = false;
+	while ( fgets( szLine, sizeof(szLine), pFile ) != NULL )
+	{
+		if ( fEOF )
+		{
+			if ( szLine[0] != '\n' && szLine[0] != '\r' && szLine[0] != '\0' )
+				fAfterEOF = true;
+			continue;
+		}
+		if ( !strncmp( szLine, "SAVECOUNT=", 10 ))
+			sscanf( szLine + 10, "%d", &iSaveCount );
+		if ( !strncmp( szLine, "[EOF]", 5 ))
+		{
+			fEOF = true;
+			continue;
+		}
+	}
+	fclose( pFile );
+	return fEOF && !fAfterEOF;
+}
+
+bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
+{
+	int iFound = 0;
+	return ReadSaveFileCount( pszPath, iFound ) && iFound != INT_MIN &&
+		iFound == iSaveCount;
+}
+
+bool CWorld::PublishSavePair()
+{
+	CGString sWorldTemp;
+	CGString sCharsTemp;
+	GetSaveTempName( sWorldTemp, g_Cfg.m_sWorldBaseDir, "world" );
+	GetSaveTempName( sCharsTemp, g_Cfg.m_sWorldBaseDir, "chars" );
+	CGString sWorldCurrent;
+	CGString sCharsCurrent;
+	sWorldCurrent.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
+	sCharsCurrent.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
+
+	if ( !VerifySaveFile( sWorldTemp, m_iSaveCountID ) ||
+		!VerifySaveFile( sCharsTemp, m_iSaveCountID ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save generation %d failed validation: both files require matching SAVECOUNT and [EOF]" LOG_CR,
+			m_iSaveCountID );
+		return false;
+	}
+
+	CGString sWorldArchive;
+	CGString sCharsArchive;
+	GetBackupName( sWorldArchive, g_Cfg.m_sWorldBaseDir, 'w', m_iSaveCountID );
+	GetBackupName( sCharsArchive, g_Cfg.m_sWorldBaseDir, 'c', m_iSaveCountID );
+	int iManifestSaveCount = 0;
+	bool fManifestPending = false;
+	unsigned dwRotated = 0;
+	const bool fRetryManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
+		iManifestSaveCount, fManifestPending, dwRotated ) && fManifestPending &&
+		iManifestSaveCount == m_iSaveCountID;
+	if ( !fRetryManifest )
+		dwRotated = 0;
+	if ( ! ( dwRotated & 0x01 ))
+	{
+		if ( !PreserveSaveFile( sWorldCurrent, sWorldArchive ))
+			return false;
+		if ( SaveFileExists( sWorldCurrent ))
+		{
+			dwRotated |= 0x01;
+			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
+				return false;
+		}
+	}
+	else if ( !SaveFileExists( sWorldArchive ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save generation %d lost its world archive; refusing to re-rotate the live pair" LOG_CR,
+			m_iSaveCountID );
+		return false;
+	}
+	if ( ! ( dwRotated & 0x02 ))
+	{
+		if ( !PreserveSaveFile( sCharsCurrent, sCharsArchive ))
+			return false;
+		if ( SaveFileExists( sCharsCurrent ))
+		{
+			dwRotated |= 0x02;
+			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, true, dwRotated ))
+				return false;
+		}
+	}
+	else if ( !SaveFileExists( sCharsArchive ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save generation %d lost its character archive; refusing to re-rotate the live pair" LOG_CR,
+			m_iSaveCountID );
+		return false;
+	}
+
+	if ( !PublishSaveFile( sWorldTemp, sWorldCurrent ) ||
+		!PublishSaveFile( sCharsTemp, sCharsCurrent ))
+		return false;
+	return VerifySaveFile( sWorldCurrent, m_iSaveCountID ) &&
+		VerifySaveFile( sCharsCurrent, m_iSaveCountID );
+}
+
 bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount, bool fRetry )
 {
 	ASSERT(pszBaseName);
@@ -826,7 +1060,16 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 	unsigned dwRotated = 0;
 	const bool fHaveManifest = ReadSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount,
 		fManifestPending, dwRotated ) && fManifestPending && iManifestSaveCount == iSaveCount;
-	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit && (dwRotated & dwManifestBit);
+	const bool fArchiveReady = fRetry && fHaveManifest && dwManifestBit &&
+		( dwRotated & dwManifestBit ) && SaveFileExists( sArchive );
+	if ( fRetry && fHaveManifest && dwManifestBit && ( dwRotated & dwManifestBit ) &&
+		!SaveFileExists( sArchive ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save retry lost archive '%s'; refusing to re-rotate '%s'" LOG_CR,
+			(LPCTSTR)sArchive, (LPCTSTR)pszBaseName );
+		return false;
+	}
 
 	CGString sSaveName;
 	sSaveName.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir, pszBaseName );
@@ -836,7 +1079,8 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 		// A retry keeps an archive already rotated by the failed generation. If
 		// this component was not reached before the failure, rotate it now.
 		remove( sArchive );
-		if ( rename( sSaveName, sArchive ))
+		const bool fRotated = rename( sSaveName, sArchive ) == 0;
+		if ( !fRotated )
 		{
 			// May not exist if this is the first time.
 			g_Log.Event( LOG_GROUP_SAVE, LOGL_WARN, "Rename %s to '%s' FAILED code %d?" LOG_CR, (LPCTSTR) sSaveName, (const TCHAR*) sArchive, CGFile::GetLastError() );
@@ -847,7 +1091,7 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 				"Save directory sync FAILED after rotating '%s'" LOG_CR, (LPCTSTR) pszBaseName );
 			return false;
 		}
-		if ( fHaveManifest && dwManifestBit )
+		if ( fHaveManifest && dwManifestBit && fRotated )
 		{
 			dwRotated |= dwManifestBit;
 			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount, true, dwRotated ))
@@ -876,6 +1120,11 @@ bool CWorld::FailSave( LPCTSTR pszReason )
 	SetAllowUIDReuse();
 	m_FileWorld.CloseChecked();
 	m_FilePlayers.CloseChecked();
+	CGString sTemp;
+	GetSaveTempName( sTemp, g_Cfg.m_sWorldBaseDir, "world" );
+	remove( sTemp );
+	GetSaveTempName( sTemp, g_Cfg.m_sWorldBaseDir, "chars" );
+	remove( sTemp );
 	m_iSaveStage = INT_MAX;
 	return false;
 }
@@ -990,26 +1239,46 @@ bool CWorld::SaveStage() // Save world state in stages.
 		m_FilePlayers.WriteSection( "EOF" );
 		if ( m_FileWorld.HasIOError() || m_FilePlayers.HasIOError())
 			return FailSave( "writing EOF" );
+		if ( !m_FileWorld.Sync() || !m_FilePlayers.Sync())
+			return FailSave( "syncing world files" );
 		const bool fWorldCloseOK = m_FileWorld.CloseChecked();
 		const bool fPlayersCloseOK = m_FilePlayers.CloseChecked();
 		if ( !fWorldCloseOK || !fPlayersCloseOK )
 			return FailSave( "closing world files" );
 
-		int iManifestSaveCount = 0;
-		bool fManifestPending = false;
-		unsigned dwRotated = 0;
-		if ( !ReadSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount,
-			fManifestPending, dwRotated ) || !fManifestPending ||
-			iManifestSaveCount != m_iSaveCountID ||
-			!WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, false, dwRotated ))
+		if ( !PublishSavePair())
+			return FailSave( "publishing paired world files" );
+		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, m_iSaveCountID, false, 0 ))
 			return FailSave( "committing save manifest" );
 
+		const int iCommittedSaveCount = m_iSaveCountID;
 		m_iSaveCountID++;	// Save only counts if we get to the end without trapping.
 		m_fSaveRetry = false;
 		m_timeSave.InitTimeCurrent( g_Cfg.m_iSavePeriod );	// next save time.
 		RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
 
-		g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT, "World data saved (%s)." LOG_CR, (LPCTSTR) m_FileWorld.GetFilePath());
+		const unsigned long long iNowMillis = SaveClockMillis();
+		const unsigned long long iDuration = iNowMillis >= m_ullSaveStartMillis ?
+			iNowMillis - m_ullSaveStartMillis : 0;
+		CGString sWorldCurrent;
+		CGString sCharsCurrent;
+		sWorldCurrent.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
+		sCharsCurrent.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR)g_Cfg.m_sWorldBaseDir );
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT,
+			"World save ended: SaveCount=%d duration_ms=%llu objects=%d/%d files=%llu/%llu" LOG_CR,
+			iCommittedSaveCount, iDuration,
+			g_Serv.StatGet( SERV_STAT_ITEMS ), g_Serv.StatGet( SERV_STAT_CHARS ),
+			SaveFileSize( sWorldCurrent ), SaveFileSize( sCharsCurrent ));
+#ifndef _WIN32
+		fprintf( stderr,
+			"[INFO] World save ended: SaveCount=%d duration_ms=%llu objects=%d/%d files=%llu/%llu\n",
+			iCommittedSaveCount, iDuration,
+			g_Serv.StatGet( SERV_STAT_ITEMS ), g_Serv.StatGet( SERV_STAT_CHARS ),
+			SaveFileSize( sWorldCurrent ), SaveFileSize( sCharsCurrent ));
+#endif
+		// The stock event line names the published live file, never the
+		// temporary file the generation was written to.
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT, "World data saved (%s)." LOG_CR, (LPCTSTR) sWorldCurrent);
 
 		// Now clean up all the held over UIDs
 		SetAllowUIDReuse();
@@ -1078,6 +1347,16 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 		iManifestSaveCount == m_iSaveCountID;
 	m_fSaveRetry = fRetry;
 	m_fSaveFailed = false;
+	m_ullSaveStartMillis = SaveClockMillis();
+	m_iSaveStartItems = g_Serv.StatGet( SERV_STAT_ITEMS );
+	m_iSaveStartChars = g_Serv.StatGet( SERV_STAT_CHARS );
+	g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT,
+		"World save started: SaveCount=%d objects=%d/%d" LOG_CR,
+		m_iSaveCountID, m_iSaveStartItems, m_iSaveStartChars );
+#ifndef _WIN32
+	fprintf( stderr, "[INFO] World save started: SaveCount=%d objects=%d/%d\n",
+		m_iSaveCountID, m_iSaveStartItems, m_iSaveStartChars );
+#endif
 	if ( !fRetry && !WriteSaveManifest( g_Cfg.m_sWorldBaseDir,
 		m_iSaveCountID, true, 0 ))
 		return FailSave( "opening save manifest" );
@@ -1088,13 +1367,20 @@ bool CWorld::SaveTry( bool fForceImmediate ) // Save world state
 		GarbageCollection();
 	}
 
-	// Determine the save name based on the time.
-	// exponentially degrade the saves over time.
-	if ( ! OpenScriptBackup( m_FileWorld, g_Cfg.m_sWorldBaseDir, "world", m_iSaveCountID, fRetry ))
+	// Write both components beside the live pair.  Their current paths remain
+	// untouched until both temporary files have reached EOF and passed the
+	// matching SAVECOUNT validation in PublishSavePair().
+	CGString sWorldTemp;
+	CGString sCharsTemp;
+	GetSaveTempName( sWorldTemp, g_Cfg.m_sWorldBaseDir, "world" );
+	GetSaveTempName( sCharsTemp, g_Cfg.m_sWorldBaseDir, "chars" );
+	remove( sWorldTemp );
+	remove( sCharsTemp );
+	if ( !m_FileWorld.Open( sWorldTemp, OF_WRITE|OF_CREATE|OF_TEXT ))
 	{
 		return FailSave( "opening world save" );
 	}
-	if ( ! OpenScriptBackup( m_FilePlayers, g_Cfg.m_sWorldBaseDir, "chars", m_iSaveCountID, fRetry ))
+	if ( !m_FilePlayers.Open( sCharsTemp, OF_WRITE|OF_CREATE|OF_TEXT ))
 	{
 		return FailSave( "opening character save" );
 	}
@@ -1337,6 +1623,7 @@ bool CWorld::LoadFile( LPCTSTR pszLoadName ) // Load world from script
 #ifdef SPHERE_LOAD_SAFETY_TEST
 bool CWorld::LoadFileForTest( LPCTSTR pszName )
 {
+	ResetLoadIntegrity();
 	bool fLoaded = LoadFile( pszName );
 	CleanupLoadOrphans();
 	CaptureLoadCounts();
@@ -1344,18 +1631,29 @@ bool CWorld::LoadFileForTest( LPCTSTR pszName )
 	ReportLoadIntegrity();
 	return fLoaded;
 }
+
+bool CWorld::LoadWorldForTest()
+{
+	Close( false );
+	ResetLoadIntegrity();
+	SERVMODE_TYPE iModePrv = g_Serv.SetServerMode( SERVMODE_Loading );
+	const bool fLoaded = LoadWorld();
+	CleanupLoadOrphans();
+	g_Serv.SetServerMode( iModePrv );
+	return fLoaded;
+}
 #endif
 
 bool CWorld::LoadWorld() // Load world from script
 {
-	// Auto change to the most recent previous backup !
-	// Try to load a backup file instead ?
-	// NOTE: WE MUST Sync these files ! CHAR and WORLD !!!
+	// Current files are authoritative.  A previous backup is considered only
+	// for an interrupted transaction (the pending manifest) or when the
+	// operator explicitly enables SaveBackupFallback in the INI.
 
 	CGString sWorldName;
-	sWorldName.Format( "%s" SPHERE_FILE "world", (LPCTSTR) g_Cfg.m_sWorldBaseDir );
+	sWorldName.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, (LPCTSTR) g_Cfg.m_sWorldBaseDir );
 	CGString sCharsName;
-	sCharsName.Format( "%s" SPHERE_FILE "chars", (LPCTSTR) g_Cfg.m_sWorldBaseDir );
+	sCharsName.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, (LPCTSTR) g_Cfg.m_sWorldBaseDir );
 	int iPendingSaveCount = 0;
 	bool fPendingManifest = false;
 	unsigned dwRotated = 0;
@@ -1374,12 +1672,29 @@ bool CWorld::LoadWorld() // Load world from script
 		CGString sArchive;
 		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'w', iPendingSaveCount );
 		if (( dwRotated & 0x01 ) && SaveFileExists( sArchive ))
+		{
 			sWorldName = sArchive;
+			int iArchiveSaveCount = INT_MIN;
+			ReadSaveFileCount( sWorldName, iArchiveSaveCount );
+			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+				"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
+				(LPCTSTR)sWorldName, iArchiveSaveCount,
+				(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
+		}
 		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'c', iPendingSaveCount );
 		if (( dwRotated & 0x02 ) && SaveFileExists( sArchive ))
+		{
 			sCharsName = sArchive;
+			int iArchiveSaveCount = INT_MIN;
+			ReadSaveFileCount( sCharsName, iArchiveSaveCount );
+			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+				"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
+				(LPCTSTR)sCharsName, iArchiveSaveCount,
+				(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
+		}
 	}
 
+	const bool fAllowBackupFallback = fPendingManifest || g_Cfg.m_fSaveBackupFallback;
 	int iPrevSaveCount = m_iSaveCountID;
 	for(;;)
 	{
@@ -1389,17 +1704,38 @@ bool CWorld::LoadWorld() // Load world from script
 		m_iLoadReadChars = 0;
 		m_iLoadItems = 0;
 		m_iLoadChars = 0;
-		if ( LoadFile( sWorldName ))
+		int iWorldSaveCount = 0;
+		int iCharsSaveCount = 0;
+		const bool fWorldReadable = ReadSaveFileCount( sWorldName, iWorldSaveCount );
+		const bool fCharsReadable = ReadSaveFileCount( sCharsName, iCharsSaveCount );
+		const bool fWorldHasCount = iWorldSaveCount != INT_MIN;
+		const bool fCharsHasCount = iCharsSaveCount != INT_MIN;
+		const bool fMatchingPair = ! ( fWorldHasCount || fCharsHasCount ) ||
+			( fWorldReadable && fCharsReadable && fWorldHasCount && fCharsHasCount &&
+				iWorldSaveCount == iCharsSaveCount );
+		if ( !fMatchingPair )
 		{
-			// Version 0.99 stores chars in separate file — always try to load it.
-			// (m_iLoadVersion check removed: "0.99z8" parses as 0, but chars file is always present)
-			LoadFile( sCharsName );
+			g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL,
+				"World/chars save pair mismatch: world=%d%s chars=%d%s" LOG_CR,
+				iWorldSaveCount, iWorldSaveCount == INT_MIN ? "(missing)" : "",
+				iCharsSaveCount, iCharsSaveCount == INT_MIN ? "(missing)" : "" );
+			if ( !fPendingManifest && iWorldSaveCount != INT_MIN )
+				m_iSaveCountID = iWorldSaveCount;
+		}
+		const bool fWorldLoaded = fMatchingPair && LoadFile( sWorldName );
+		const bool fCharsLoaded = fWorldLoaded && LoadFile( sCharsName );
+		if ( fWorldLoaded && fCharsLoaded )
+		{
 			if ( fPendingManifest )
 				m_iSaveCountID = iPendingSaveCount;
 			return( true );
 		}
 
-		// If we could not open the file at all then it was a bust!
+		if ( !fAllowBackupFallback )
+			break;
+
+		// If we could not open the file at all then it was a bust.  Do not walk
+		// backups unless the manifest or the explicit INI option authorizes it.
 		if ( m_iSaveCountID == iPrevSaveCount )
 		{
 			break;
@@ -1416,6 +1752,12 @@ bool CWorld::LoadWorld() // Load world from script
 			break;
 		}
 		sWorldName = sArchive;
+		int iArchiveSaveCount = INT_MIN;
+		ReadSaveFileCount( sWorldName, iArchiveSaveCount );
+		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+			"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
+			(LPCTSTR)sWorldName, iArchiveSaveCount,
+			(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
 
 		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'c', m_iSaveCountID );
 		if ( ! sArchive.CompareNoCase( sCharsName ))	// ! same file ? break endless loop.
@@ -1423,6 +1765,12 @@ bool CWorld::LoadWorld() // Load world from script
 			break;
 		}
 		sCharsName = sArchive;
+		iArchiveSaveCount = INT_MIN;
+		ReadSaveFileCount( sCharsName, iArchiveSaveCount );
+		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
+			"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
+			(LPCTSTR)sCharsName, iArchiveSaveCount,
+			(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
 	}
 
 	g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL, "No previous backup available ?" LOG_CR );
@@ -1738,6 +2086,8 @@ void CWorld::Close( bool fResources )
 {
 	if ( IsSaving())	// Must complete save now !
 	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_EVENT,
+			"Shutdown is completing active save SaveCount=%d" LOG_CR, m_iSaveCountID );
 		Save( true );
 	}
 	m_GuildStones.RemoveAll();

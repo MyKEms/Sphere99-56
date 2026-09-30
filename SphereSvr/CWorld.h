@@ -367,6 +367,9 @@ private:
 	bool	m_fSaveBlockedByLoad;
 	bool	m_fSaveFailed;
 	bool	m_fSaveRetry;
+	unsigned long long m_ullSaveStartMillis;
+	int		m_iSaveStartItems;
+	int		m_iSaveStartChars;
 	bool	m_fLoadIntegrityReported;
 	bool	m_fLoadCountsCaptured;
 
@@ -411,6 +414,10 @@ private:
 	static bool ReadSaveManifest( LPCTSTR pszBaseDir, int& iSaveCount, bool& fPending, unsigned& dwRotated );
 	static bool WriteSaveManifest( LPCTSTR pszBaseDir, int iSaveCount, bool fPending, unsigned dwRotated );
 	static void RemoveSaveManifest( LPCTSTR pszBaseDir );
+	static void GetSaveTempName( CGString& sTemp, LPCTSTR pszBaseDir, LPCTSTR pszBaseName );
+	static bool PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszArchive );
+	static bool VerifySaveFile( LPCTSTR pszPath, int iSaveCount );
+	bool PublishSavePair();
 	void GarbageCollection_GMPages();
 	void CaptureResourceIntegrityBaseline();
 	int CheckResourceIntegrity( int& iLogBudget );
@@ -558,6 +565,7 @@ public:
 
 #ifdef SPHERE_LOAD_SAFETY_TEST
 	bool LoadFileForTest( LPCTSTR pszName );
+	bool LoadWorldForTest();
 #endif
 
 	DWORD LoadUID( DWORD dwUID, CResourceObj* pObj ) { return AllocUID(pObj, dwUID); }

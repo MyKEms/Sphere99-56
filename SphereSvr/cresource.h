@@ -675,6 +675,7 @@ public:
 	int  m_iSaveBackgroundTime;	// Speed of the background save in minutes.
 	bool m_fSaveGarbageCollect;	// Always force a full garbage collection.
 	bool m_fSaveInBackground;	// Do background save stuff.
+	bool m_fSaveBackupFallback;	// Explicitly allow loading an older save backup.
 
 	// Account
 	bool m_fRequireEmail;		// Valid Email required to leave GUEST mode.
