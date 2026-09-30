@@ -885,7 +885,6 @@ static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 	if ( !pFile )
 		return false;
 	char szLine[512];
-	bool fHeader = false;
 	bool fEOF = false;
 	bool fAfterEOF = false;
 	while ( fgets( szLine, sizeof(szLine), pFile ) != NULL )
@@ -897,10 +896,7 @@ static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 			continue;
 		}
 		if ( !strncmp( szLine, "SAVECOUNT=", 10 ))
-		{
-			if ( sscanf( szLine + 10, "%d", &iSaveCount ) == 1 )
-				fHeader = true;
-		}
+			sscanf( szLine + 10, "%d", &iSaveCount );
 		if ( !strncmp( szLine, "[EOF]", 5 ))
 		{
 			fEOF = true;
@@ -908,13 +904,14 @@ static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 		}
 	}
 	fclose( pFile );
-	return fHeader && fEOF && !fAfterEOF;
+	return fEOF && !fAfterEOF;
 }
 
 bool CWorld::VerifySaveFile( LPCTSTR pszPath, int iSaveCount )
 {
 	int iFound = 0;
-	return ReadSaveFileCount( pszPath, iFound ) && iFound == iSaveCount;
+	return ReadSaveFileCount( pszPath, iFound ) && iFound != INT_MIN &&
+		iFound == iSaveCount;
 }
 
 bool CWorld::PublishSavePair()
@@ -1638,10 +1635,13 @@ bool CWorld::LoadWorld() // Load world from script
 		m_iLoadChars = 0;
 		int iWorldSaveCount = 0;
 		int iCharsSaveCount = 0;
-		const bool fWorldHeader = ReadSaveFileCount( sWorldName, iWorldSaveCount );
-		const bool fCharsHeader = ReadSaveFileCount( sCharsName, iCharsSaveCount );
-		const bool fMatchingPair = fWorldHeader && fCharsHeader &&
-			iWorldSaveCount == iCharsSaveCount;
+		const bool fWorldReadable = ReadSaveFileCount( sWorldName, iWorldSaveCount );
+		const bool fCharsReadable = ReadSaveFileCount( sCharsName, iCharsSaveCount );
+		const bool fWorldHasCount = iWorldSaveCount != INT_MIN;
+		const bool fCharsHasCount = iCharsSaveCount != INT_MIN;
+		const bool fMatchingPair = ! ( fWorldHasCount || fCharsHasCount ) ||
+			( fWorldReadable && fCharsReadable && fWorldHasCount && fCharsHasCount &&
+				iWorldSaveCount == iCharsSaveCount );
 		if ( !fMatchingPair )
 		{
 			g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL,
