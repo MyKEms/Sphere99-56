@@ -176,10 +176,130 @@ static bool TestBoundaryArithmetic()
 	return Expect(fClamped, "large stack weight saturates instead of overflowing");
 }
 
+// The indexed table must answer every lookup exactly as the plain table
+// does, and keep its elements in the same order.
+static bool SameTables(const CVarDefArray& plain, const CVarDefIndexedArray& indexed,
+	const char* const* ppszKeys, int iKeys, const char* pszStep)
+{
+	if ( !Expect(plain.GetSize() == indexed.GetSize(), pszStep))
+		return false;
+	for ( int i = 0; i < (int) plain.GetSize(); i++ )
+	{
+		if ( !Expect(!strcmp(plain.GetAt(i)->GetKey(), indexed.GetAt(i)->GetKey()) &&
+			!strcmp(plain.GetAt(i)->GetValStr(), indexed.GetAt(i)->GetValStr()), pszStep))
+			return false;
+	}
+	for ( int i = 0; i < iKeys; i++ )
+	{
+		CVarDef* pPlain = plain.FindKeyPtr(ppszKeys[i]);
+		CVarDef* pIndexed = indexed.FindKeyPtr(ppszKeys[i]);
+		if ( !Expect((pPlain == NULL) == (pIndexed == NULL), pszStep))
+			return false;
+		if ( pPlain && !Expect(!strcmp(pPlain->GetKey(), pIndexed->GetKey()) &&
+			!strcmp(pPlain->GetValStr(), pIndexed->GetValStr()), pszStep))
+			return false;
+	}
+	return true;
+}
+
+static bool TestIndexedVariableTable()
+{
+	static const char* const sm_Keys[] =
+	{
+		"alpha", "ALPHA", "Beta", "beta", "gamma", "delta", "missing", "", "Alpha_2", "alpha_2",
+	};
+	const int iKeys = (int) (sizeof(sm_Keys) / sizeof(sm_Keys[0]));
+
+	CVarDefArray plain;
+	CVarDefIndexedArray indexed;
+	bool fOk = true;
+#define BOTH(call) do { plain.call; indexed.call; } while (0)
+	BOTH(SetKeyInt("Alpha", 1));
+	BOTH(SetKeyStr("beta", "two"));
+	BOTH(SetKeyInt("GAMMA", 3));
+	BOTH(SetKeyStr("alpha_2", "four"));
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after inserts");
+
+	// Keys compare without case; a write through another spelling updates
+	// the existing entry instead of adding one.
+	BOTH(SetKeyInt("ALPHA", 10));
+	BOTH(SetKeyStr("BETA", "second"));
+	fOk = fOk && Expect(indexed.GetSize() == 4, "case-insensitive write keeps one entry");
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after updates");
+
+	// A value that changes its type is removed and added again at the end.
+	BOTH(SetKeyStr("alpha", "text"));
+	BOTH(SetKeyInt("beta", 22));
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after type changes");
+
+	BOTH(RemoveKey("gamma"));
+	BOTH(RemoveKey("missing"));
+	fOk = fOk && Expect(indexed.FindKeyPtr("GAMMA") == NULL, "removed key is not found");
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after key removal");
+
+	// Removal by position, as the definition table is edited.
+	for ( int i = 0; i < (int) plain.GetSize(); i++ )
+	{
+		if ( !_stricmp(plain.GetAt(i)->GetKey(), "alpha_2"))
+		{
+			CVarDef* pPlain = plain.GetAt(i);
+			CVarDef* pIndexed = indexed.GetAt(i);
+			plain.RemoveAt(i);
+			indexed.RemoveAt(i);
+			delete pPlain;
+			delete pIndexed;
+			break;
+		}
+	}
+	fOk = fOk && Expect(indexed.FindKeyPtr("Alpha_2") == NULL, "entry removed by position is not found");
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after positional removal");
+
+	BOTH(SetKeyInt("gamma", 33));
+	BOTH(SetKeyInt("delta", 4));
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after re-adding a key");
+
+	// Copying replaces the content and the index together.
+	CVarDefIndexedArray copy;
+	copy.SetKeyInt("stale", 1);
+	CVarDef* pStale = copy.FindKeyPtr("stale");
+	copy = plain;
+	delete pStale;
+	fOk = fOk && Expect(copy.FindKeyPtr("stale") == NULL, "copy drops the previous keys");
+	fOk = fOk && SameTables(plain, copy, sm_Keys, iKeys, "indexed copy");
+
+	// Many keys: every one is found, in insertion order, and a miss stays a miss.
+	for ( int i = 0; i < 5000; i++ )
+	{
+		TCHAR szKey[32];
+		snprintf(szKey, sizeof(szKey), "Bulk_%d", i);
+		BOTH(SetKeyInt(szKey, (DWORD) i));
+	}
+	for ( int i = 0; i < 5000 && fOk; i += 97 )
+	{
+		TCHAR szKey[32];
+		snprintf(szKey, sizeof(szKey), "bulk_%d", i);
+		fOk = Expect((int) indexed.FindKeyInt(szKey) == i && plain.FindKeyPtr(szKey) != NULL,
+			"bulk key is found without case");
+	}
+	fOk = fOk && Expect(indexed.FindKeyPtr("bulk_5000") == NULL, "bulk miss");
+	fOk = fOk && SameTables(plain, indexed, sm_Keys, iKeys, "indexed table after bulk inserts");
+#undef BOTH
+
+	for ( CVarDefArray* pTable : { &plain, static_cast<CVarDefArray*>(&indexed), static_cast<CVarDefArray*>(&copy) } )
+	{
+		for ( int i = 0; i < (int) pTable->GetSize(); i++ )
+			delete pTable->GetAt(i);
+	}
+	indexed.RemoveAll();
+	return fOk && Expect(indexed.FindKeyPtr("alpha") == NULL && indexed.GetSize() == 0,
+		"cleared indexed table is empty");
+}
+
 int main()
 {
 	if ( !TestIntegerRanges() || !TestByteRanges() ||
-		!TestPropertyAndLookupDispatch() || !TestBoundaryArithmetic() )
+		!TestPropertyAndLookupDispatch() || !TestBoundaryArithmetic() ||
+		!TestIndexedVariableTable() )
 		return 1;
 	std::printf("value ranges, property lookups, and boundary arithmetic: all checks passed\n");
 	return 0;

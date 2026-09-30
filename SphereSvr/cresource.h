@@ -439,8 +439,9 @@ typedef CResLockNameArray<CServerDef> CServArray;	// use CThreadLockPtr
 class CResourceMgr
 {
 public:
-	CVarDefArray m_Const;
-	CVarDefArray m_Var;
+	// Both tables are read for every identifier a script evaluates.
+	CVarDefIndexedArray m_Const;
+	CVarDefIndexedArray m_Var;
 	CHashArray<CResourceDef> m_ResHash;
 	CGString m_sSCPBaseDir;		// if we want to get *.SCP files from elsewhere.
 	CGRefArray<CResourceScript> m_ResourceFiles;

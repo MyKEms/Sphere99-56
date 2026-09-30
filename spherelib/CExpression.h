@@ -3,6 +3,16 @@
 
 #include "CAtom.h"
 
+// The historical min/max macros collide with the standard headers.
+#pragma push_macro("min")
+#pragma push_macro("max")
+#undef min
+#undef max
+#include <string>
+#include <unordered_map>
+#pragma pop_macro("max")
+#pragma pop_macro("min")
+
 #ifndef SCRIPT_MAX_LINE_LEN
 #define SCRIPT_MAX_LINE_LEN 4096
 #endif
@@ -752,10 +762,15 @@ protected:
 	{
 		int i = this->GetSize();
 		this->SetAtGrow(i, pVar);
+		OnKeyAdded(pVar);
 		return i;
 	}
-public:
-	CVarDefPtr FindKeyPtr(LPCTSTR pszKey) const
+	// A derived array can keep an index of its keys.  These hooks report
+	// every change of the key set that is made through this class.
+	virtual void OnKeyAdded(CVarDef* pVar) { (void)pVar; }
+	virtual void OnKeyRemoved(CVarDef* pVar) { (void)pVar; }
+	virtual void OnKeysRemoved() {}
+	CVarDefPtr FindKeyPtrLinear(LPCTSTR pszKey) const
 	{
 		for (int i = 0; i < (int)this->GetSize(); i++)
 		{
@@ -763,6 +778,11 @@ public:
 				return this->GetAt(i);
 		}
 		return NULL;
+	}
+public:
+	virtual CVarDefPtr FindKeyPtr(LPCTSTR pszKey) const
+	{
+		return FindKeyPtrLinear(pszKey);
 	}
 	int SetKeyStr(LPCTSTR pszKey, LPCTSTR pszVal)
 	{
@@ -850,11 +870,31 @@ public:
 		{
 			if (_stricmp(this->GetAt(i)->GetKey(), pszKey) == 0)
 			{
-				delete this->GetAt(i);
+				CVarDef* pVar = this->GetAt(i);
 				this->RemoveAt(i);
+				delete pVar;
 				return;
 			}
 		}
+	}
+	// Removals by position and of the whole content also change the key set.
+	void RemoveAt(size_t nIndex)
+	{
+		if (!this->IsValidIndex(nIndex))
+			return;
+		CVarDef* pVar = this->GetAt(nIndex);
+		CGSortedArray<CVarDef*, CVarDef*, LPCTSTR>::RemoveAt(nIndex);
+		if (pVar)
+			OnKeyRemoved(pVar);
+	}
+	void RemoveAll()
+	{
+		CGSortedArray<CVarDef*, CVarDef*, LPCTSTR>::RemoveAll();
+		OnKeysRemoved();
+	}
+	void Empty()
+	{
+		RemoveAll();
 	}
 	void Copy(const CVarDefArray* pArray)
 	{
@@ -956,6 +996,57 @@ public:
 	void s_WriteTags(CScript& script, LPCTSTR pszName = NULL); // implemented in stubs.cpp
 
 	CVarDefArray& operator = (const CVarDefArray& array)
+	{
+		Copy(&array);
+		return(*this);
+	}
+};
+
+// A CVarDefArray with a hash index over its keys.  The element order is
+// unchanged (it is the order the table is written in); only the lookup by
+// key stops being a scan of the whole table.  Used for the tables that are
+// read for every identifier a script evaluates.
+struct CVarDefIndexedArray : public CVarDefArray
+{
+private:
+	std::unordered_map<std::string, CVarDef*> m_Index;
+
+	// Keys compare without case, as in the linear search.
+	static std::string IndexKey(LPCTSTR pszKey)
+	{
+		std::string sKey(pszKey ? pszKey : "");
+		for (size_t i = 0; i < sKey.size(); i++)
+			sKey[i] = (char)tolower((unsigned char)sKey[i]);
+		return sKey;
+	}
+protected:
+	virtual void OnKeyAdded(CVarDef* pVar)
+	{
+		// The first entry of a key stays the one that is found.
+		m_Index.insert(std::make_pair(IndexKey(pVar->GetKey()), pVar));
+	}
+	virtual void OnKeyRemoved(CVarDef* pVar)
+	{
+		std::unordered_map<std::string, CVarDef*>::iterator it = m_Index.find(IndexKey(pVar->GetKey()));
+		if (it == m_Index.end() || it->second != pVar)
+			return;
+		m_Index.erase(it);
+		// A later entry with the same key becomes the one that is found.
+		CVarDef* pNext = FindKeyPtrLinear(pVar->GetKey());
+		if (pNext)
+			m_Index.insert(std::make_pair(IndexKey(pNext->GetKey()), pNext));
+	}
+	virtual void OnKeysRemoved()
+	{
+		m_Index.clear();
+	}
+public:
+	virtual CVarDefPtr FindKeyPtr(LPCTSTR pszKey) const
+	{
+		std::unordered_map<std::string, CVarDef*>::const_iterator it = m_Index.find(IndexKey(pszKey));
+		return it == m_Index.end() ? NULL : it->second;
+	}
+	CVarDefIndexedArray& operator = (const CVarDefArray& array)
 	{
 		Copy(&array);
 		return(*this);
