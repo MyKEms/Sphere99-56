@@ -222,6 +222,43 @@ static bool RunRetryPreservesAccountArchiveCase()
 	return fPassed;
 }
 
+static bool RunFirstSaveRetryWithoutArchiveCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-first-retry-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_World.m_iSaveCountID = 0;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	CFileText::SetTestFault( CFileText::TEST_FAULT_CLOSE, "sphereaccu.scp" );
+	const bool fFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
+		g_World.m_iSaveCountID == 0 && CFileText::WasTestFaultTriggered();
+	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
+	CFileText::ClearTestFault();
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	const bool fRecovered = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+		g_World.m_iSaveCountID == 1;
+	const bool fPassed = fFailed && fRecovered &&
+		sPending.find( "ROTATED=4" ) == std::string::npos;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"first save retry incorrectly required absent archive: failed=%d recovered=%d rotated=%d\n",
+			fFailed ? 1 : 0, fRecovered ? 1 : 0,
+			sPending.find( "ROTATED=4" ) != std::string::npos ? 1 : 0 );
+	}
+	g_World.Close( false );
+	CFileText::ClearTestFault();
+	RemoveDirectoryContents( szTempDir );
+	rmdir( szTempDir );
+	return fPassed;
+}
+
 static bool RunFaultCase( CFileText::TEST_FAULT fault, const char* pszName, const char* pszTargetFile )
 {
 	char szTempDir[] = "/tmp/sphere-save-io-XXXXXX";
@@ -310,6 +347,8 @@ int main()
 	if ( !RunRepeatedFailureCase() )
 		return 1;
 	if ( !RunRetryPreservesAccountArchiveCase() )
+		return 1;
+	if ( !RunFirstSaveRetryWithoutArchiveCase() )
 		return 1;
 	if ( !RunShutdownCompletionCase() )
 	{

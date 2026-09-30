@@ -1021,12 +1021,13 @@ bool CWorld::OpenScriptBackup( CScript& s, LPCTSTR pszBaseDir, LPCTSTR pszBaseNa
 		// A retry keeps an archive already rotated by the failed generation. If
 		// this component was not reached before the failure, rotate it now.
 		remove( sArchive );
-		if ( rename( sSaveName, sArchive ))
+		const bool fRotated = rename( sSaveName, sArchive ) == 0;
+		if ( !fRotated )
 		{
 			// May not exist if this is the first time.
 			g_Log.Event( LOG_GROUP_SAVE, LOGL_WARN, "Rename %s to '%s' FAILED code %d?" LOG_CR, (LPCTSTR) sSaveName, (const TCHAR*) sArchive, CGFile::GetLastError() );
 		}
-		if ( fHaveManifest && dwManifestBit )
+		if ( fHaveManifest && dwManifestBit && fRotated )
 		{
 			dwRotated |= dwManifestBit;
 			if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, iManifestSaveCount, true, dwRotated ))
