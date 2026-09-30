@@ -121,7 +121,6 @@ static bool TestDeferredUIDReuseKeepsNewOwner()
 	CItemDef itemDef( ITEMID_MULTI_MAX );
 	CIntegrityContainer* pContainerRaw = new CIntegrityContainer( ITEMID_MULTI_MAX, &containerDef );
 	CItemPtr pContainer = pContainerRaw;
-	pContainerRaw->Detach();
 	CItem* pOld = new CIntegrityItem( ITEMID_MULTI_MAX, &itemDef );
 	const DWORD dwIndex = pOld->GetUIDIndex() & UID_INDEX_MASK;
 	pOld->DeleteThis();
@@ -142,10 +141,17 @@ static bool TestDeferredUIDReuseKeepsNewOwner()
 	}
 
 	// The old object is still pending while the replacement is live in the
-	// same slot.  Its final destructor must not clear the replacement's UID.
-	g_World.GarbageCollection_New();
+	// same slot.  Reproduce its deferred destructor while the replacement is
+	// contained: before the fix this clears the replacement's UID and leaves
+	// both count_drift and child_uid_link corruption for the watchdog.
+	pOld->Detach();
+	const bool fDeleteRealPrev = CObjBase::sm_fDeleteReal;
+	CObjBase::sm_fDeleteReal = true;
+	delete pOld;
+	CObjBase::sm_fDeleteReal = fDeleteRealPrev;
+	const int iIntegrity = g_World.CheckIntegrity( 0 );
 	const bool fPreserved = g_World.FindUIDObj( dwIndex ) == pNew &&
-		pNew->GetParent() == pContainerRaw;
+		pNew->GetParent() == pContainerRaw && iIntegrity == 0;
 	pNew->DeleteThis();
 	pContainer->DeleteThis();
 	g_World.GarbageCollection_New();
