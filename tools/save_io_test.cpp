@@ -188,13 +188,14 @@ static bool RunRepeatedFailureCase()
 	return fPassed;
 }
 
-static bool RunRetryPreservesAccountArchiveCase()
-{
-	char szTempDir[] = "/tmp/sphere-save-account-retry-XXXXXX";
-	if ( mkdtemp( szTempDir ) == NULL )
-		return false;
+static const char* const ACCOUNT_SENTINEL = "RETRY_SENTINEL=preserve-first-archive";
 
-	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
+// Save generation 0, then append a sentinel to the live account file so the
+// test can tell the previous generation's account file from any file that a
+// later attempt publishes (the server serializes accounts from memory).
+static bool PrepareAccountRetryCase( const char* pszTempDir )
+{
+	g_Cfg.m_sWorldBaseDir.Format( "%s/", pszTempDir );
 	g_Cfg.m_sAcctBaseDir.Empty();
 	g_World.m_iSaveCountID = 0;
 	g_Serv.m_iExitFlag = SPHEREERR_OK;
@@ -202,45 +203,144 @@ static bool RunRetryPreservesAccountArchiveCase()
 	CGVariant vArgs;
 	vArgs.SetInt( 1 );
 	CGVariant vValRet;
-	const bool fInitial = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
-		g_World.m_iSaveCountID == 1;
-	const std::string sArchivePath = std::string( szTempDir ) + "/sphereb01a.scp";
-	{
-		std::ofstream account( ( std::string( szTempDir ) + "/sphereaccu.scp" ).c_str(),
-			std::ios::out | std::ios::app );
-		account << "RETRY_SENTINEL=preserve-first-archive\n";
-	}
+	if ( g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR ||
+		g_World.m_iSaveCountID != 1 )
+		return false;
+	std::ofstream account( ( std::string( pszTempDir ) + "/sphereaccu.scp" ).c_str(),
+		std::ios::out | std::ios::app );
+	account << ACCOUNT_SENTINEL << "\n";
+	return static_cast<bool>( account );
+}
 
-	CFileText::SetTestFault( CFileText::TEST_FAULT_CLOSE, "sphereaccu.scp" );
+static bool RunAccountSave( CFileText::TEST_FAULT fault, const char* pszTarget )
+{
+	if ( fault == CFileText::TEST_FAULT_NONE )
+		CFileText::ClearTestFault();
+	else
+		CFileText::SetTestFault( fault, pszTarget );
 	g_Serv.m_iExitFlag = SPHEREERR_OK;
-	const bool fFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
+	CGVariant vArgs;
+	vArgs.SetInt( 1 );
+	CGVariant vValRet;
+	const bool fSaved = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR;
+	g_Serv.m_iExitFlag = SPHEREERR_OK;
+	return fSaved;
+}
+
+static void FinishAccountRetryCase( char* pszTempDir )
+{
+	g_World.Close( false );
+	CFileText::ClearTestFault();
+	RemoveDirectoryContents( pszTempDir );
+	rmdir( pszTempDir );
+}
+
+// The account archive for a generation is taken once.  A failure after it was
+// taken (here: closing the world file, after the accounts were published)
+// leaves the pending manifest recording it, and the retry reuses it instead of
+// archiving the account file that the failed attempt published.
+static bool RunRetryPreservesAccountArchiveCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-account-retry-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const bool fInitial = PrepareAccountRetryCase( szTempDir );
+	const std::string sArchivePath = std::string( szTempDir ) + "/sphereb01a.scp";
+
+	const bool fFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphereworld.scp.tmp" ) &&
 		g_World.m_iSaveCountID == 1 && CFileText::WasTestFaultTriggered();
 	const std::string sArchiveBefore = ReadFile( sArchivePath );
 	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
 
-	CFileText::ClearTestFault();
-	g_Serv.m_iExitFlag = SPHEREERR_OK;
-	const bool fRecovered = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+	const bool fRecovered = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
 		g_World.m_iSaveCountID == 2;
 	const std::string sArchiveAfter = ReadFile( sArchivePath );
-	const bool fPassed = fInitial && fFailed && !sArchiveBefore.empty() &&
-		sPending.find( "ROTATED=4" ) != std::string::npos && fRecovered &&
-		sArchiveAfter == sArchiveBefore;
+	const bool fRotated = sPending.find( "ROTATED=4" ) != std::string::npos;
+	const bool fPassed = fInitial && fFailed &&
+		sArchiveBefore.find( ACCOUNT_SENTINEL ) != std::string::npos &&
+		fRotated && fRecovered && sArchiveAfter == sArchiveBefore;
 	if ( !fPassed )
 	{
 		std::fprintf( stderr,
 			"retry re-rotated account archive: initial=%d failed=%d recovered=%d archive_before=%zu archive_after=%zu rotated=%d\n",
 			fInitial ? 1 : 0, fFailed ? 1 : 0, fRecovered ? 1 : 0,
-			sArchiveBefore.size(), sArchiveAfter.size(),
-			sPending.find( "ROTATED=4" ) != std::string::npos ? 1 : 0 );
+			sArchiveBefore.size(), sArchiveAfter.size(), fRotated ? 1 : 0 );
 	}
-	g_World.Close( false );
-	CFileText::ClearTestFault();
-	RemoveDirectoryContents( szTempDir );
-	rmdir( szTempDir );
+	FinishAccountRetryCase( szTempDir );
 	return fPassed;
 }
 
+// A failure before the account archive was taken (here: closing the account
+// temporary file) must not leave the generation without an account backup:
+// the retry takes it from the still-unchanged live account file.
+static bool RunRetryTakesMissingAccountArchiveCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-account-late-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const bool fInitial = PrepareAccountRetryCase( szTempDir );
+	const std::string sArchivePath = std::string( szTempDir ) + "/sphereb01a.scp";
+
+	const bool fFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphereaccu.scp.tmp" ) &&
+		g_World.m_iSaveCountID == 1 && CFileText::WasTestFaultTriggered();
+	const std::string sArchiveBefore = ReadFile( sArchivePath );
+	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
+	const std::string sLiveAfterFailure = ReadFile( std::string( szTempDir ) + "/sphereaccu.scp" );
+
+	const bool fRecovered = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 2;
+	const std::string sArchiveAfter = ReadFile( sArchivePath );
+	const bool fPassed = fInitial && fFailed && sArchiveBefore.empty() &&
+		sPending.find( "ROTATED=0" ) != std::string::npos &&
+		sLiveAfterFailure.find( ACCOUNT_SENTINEL ) != std::string::npos &&
+		fRecovered && sArchiveAfter == sLiveAfterFailure;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"retry skipped the account archive: initial=%d failed=%d recovered=%d archive_before=%zu archive_after=%zu live=%zu\n",
+			fInitial ? 1 : 0, fFailed ? 1 : 0, fRecovered ? 1 : 0,
+			sArchiveBefore.size(), sArchiveAfter.size(), sLiveAfterFailure.size());
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
+// If the account archive recorded by the pending manifest disappears, the
+// retry must stop instead of archiving the file the failed attempt published.
+static bool RunRetryLostAccountArchiveFailsClosedCase()
+{
+	char szTempDir[] = "/tmp/sphere-save-account-lost-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const bool fInitial = PrepareAccountRetryCase( szTempDir );
+	const std::string sArchivePath = std::string( szTempDir ) + "/sphereb01a.scp";
+
+	const bool fFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphereworld.scp.tmp" ) &&
+		g_World.m_iSaveCountID == 1 && CFileText::WasTestFaultTriggered();
+	const bool fArchived = ReadFile( sArchivePath ).find( ACCOUNT_SENTINEL ) != std::string::npos;
+	unlink( sArchivePath.c_str());
+
+	const bool fRetryRefused = !RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
+		g_World.m_iSaveCountID == 1;
+	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
+	const bool fPassed = fInitial && fFailed && fArchived && fRetryRefused &&
+		ReadFile( sArchivePath ).empty() &&
+		sPending.find( "STATE=PENDING" ) != std::string::npos &&
+		sPending.find( "ROTATED=4" ) != std::string::npos;
+	if ( !fPassed )
+	{
+		std::fprintf( stderr,
+			"retry re-rotated a lost account archive: initial=%d failed=%d archived=%d refused=%d archive_after=%zu\n",
+			fInitial ? 1 : 0, fFailed ? 1 : 0, fArchived ? 1 : 0, fRetryRefused ? 1 : 0,
+			ReadFile( sArchivePath ).size());
+	}
+	FinishAccountRetryCase( szTempDir );
+	return fPassed;
+}
+
+// The very first generation has no live account file to archive.  A failure
+// after the accounts were published must not record an archive that was never
+// taken, or every retry would fail closed.
 static bool RunFirstSaveRetryWithoutArchiveCase()
 {
 	char szTempDir[] = "/tmp/sphere-save-first-retry-XXXXXX";
@@ -250,19 +350,13 @@ static bool RunFirstSaveRetryWithoutArchiveCase()
 	g_Cfg.m_sWorldBaseDir.Format( "%s/", szTempDir );
 	g_Cfg.m_sAcctBaseDir.Empty();
 	g_World.m_iSaveCountID = 0;
-	g_Serv.m_iExitFlag = SPHEREERR_OK;
-	CGVariant vArgs;
-	vArgs.SetInt( 1 );
-	CGVariant vValRet;
-	CFileText::SetTestFault( CFileText::TEST_FAULT_CLOSE, "sphereaccu.scp" );
-	const bool fFailed = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) != NO_ERROR &&
+	const bool fFailed = !RunAccountSave( CFileText::TEST_FAULT_CLOSE, "sphereworld.scp.tmp" ) &&
 		g_World.m_iSaveCountID == 0 && CFileText::WasTestFaultTriggered();
 	const std::string sPending = ReadFile( std::string( szTempDir ) + "/sphere.save.pending" );
-	CFileText::ClearTestFault();
-	g_Serv.m_iExitFlag = SPHEREERR_OK;
-	const bool fRecovered = g_Serv.s_Method( "SAVE", vArgs, vValRet, NULL ) == NO_ERROR &&
+	const bool fRecovered = RunAccountSave( CFileText::TEST_FAULT_NONE, NULL ) &&
 		g_World.m_iSaveCountID == 1;
 	const bool fPassed = fFailed && fRecovered &&
+		sPending.find( "STATE=PENDING" ) != std::string::npos &&
 		sPending.find( "ROTATED=4" ) == std::string::npos;
 	if ( !fPassed )
 	{
@@ -271,10 +365,7 @@ static bool RunFirstSaveRetryWithoutArchiveCase()
 			fFailed ? 1 : 0, fRecovered ? 1 : 0,
 			sPending.find( "ROTATED=4" ) != std::string::npos ? 1 : 0 );
 	}
-	g_World.Close( false );
-	CFileText::ClearTestFault();
-	RemoveDirectoryContents( szTempDir );
-	rmdir( szTempDir );
+	FinishAccountRetryCase( szTempDir );
 	return fPassed;
 }
 
@@ -367,9 +458,12 @@ int main()
 		return 1;
 	if ( !RunRepeatedFailureCase() )
 		return 1;
-	if ( !RunRetryPreservesAccountArchiveCase() )
-		return 1;
-	if ( !RunFirstSaveRetryWithoutArchiveCase() )
+	// Run every account retry case so one run reports each failing case.
+	const bool fAccountReuse = RunRetryPreservesAccountArchiveCase();
+	const bool fAccountLate = RunRetryTakesMissingAccountArchiveCase();
+	const bool fAccountLost = RunRetryLostAccountArchiveFailsClosedCase();
+	const bool fFirstRetry = RunFirstSaveRetryWithoutArchiveCase();
+	if ( !fAccountReuse || !fAccountLate || !fAccountLost || !fFirstRetry )
 		return 1;
 	if ( !RunShutdownCompletionCase() )
 	{

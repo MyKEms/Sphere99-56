@@ -7,63 +7,6 @@
 #include "caccountbase.h"
 #include "caccount.h"
 
-#ifndef _WIN32
-#include <unistd.h>
-#endif
-
-namespace
-{
-	static bool AccountFileExists( LPCTSTR pszPath )
-	{
-		if ( !pszPath || !pszPath[0] )
-			return false;
-		FILE* pFile = fopen( pszPath, "rb" );
-		if ( !pFile )
-			return false;
-		fclose( pFile );
-		return true;
-	}
-
-	static bool PreserveAccountFile( LPCTSTR pszSource, LPCTSTR pszArchive )
-	{
-		if ( !AccountFileExists( pszSource ))
-			return true;
-		remove( pszArchive );
-#ifdef _WIN32
-		return CopyFile( pszSource, pszArchive, FALSE ) != FALSE;
-#else
-		if ( link( pszSource, pszArchive ) == 0 )
-			return true;
-		FILE* pSource = fopen( pszSource, "rb" );
-		FILE* pArchive = fopen( pszArchive, "wb" );
-		if ( !pSource || !pArchive )
-		{
-			if ( pSource )
-				fclose( pSource );
-			if ( pArchive )
-				fclose( pArchive );
-			return false;
-		}
-		char szBuffer[8192];
-		size_t iRead = 0;
-		bool fOK = true;
-		while (( iRead = fread( szBuffer, 1, sizeof(szBuffer), pSource )) > 0 )
-		{
-			if ( fwrite( szBuffer, 1, iRead, pArchive ) != iRead )
-			{
-				fOK = false;
-				break;
-			}
-		}
-		if ( ferror( pSource ) || fflush( pArchive ) != 0 )
-			fOK = false;
-		if ( fclose( pSource ) != 0 || fclose( pArchive ) != 0 )
-			fOK = false;
-		return fOK;
-#endif
-	}
-}
-
 //**********************************************************************
 // -CAccountMgr
 
@@ -332,10 +275,9 @@ bool CAccountMgr::Account_SaveAll()
 		return( false );
 	}
 
-	CGString sArchive;
-	CWorld::GetBackupName( sArchive, sBaseDir, 'a', g_World.m_iSaveCountID );
-	if ( !g_World.IsSaveRetry() &&
-		!PreserveAccountFile( sCurrent, sArchive ))
+	// Take this generation's account backup before the live name is replaced.
+	// A retry reuses a backup already recorded by the pending save manifest.
+	if ( !CWorld::PreserveSaveComponent( sBaseDir, "accu", g_World.m_iSaveCountID ))
 	{
 		remove( sTemp );
 		return( false );

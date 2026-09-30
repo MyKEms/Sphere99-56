@@ -936,6 +936,56 @@ bool CWorld::PreserveSaveFile( LPCTSTR pszSource, LPCTSTR pszArchive )
 	return SaveCopyFile( pszSource, pszArchive );
 }
 
+bool CWorld::PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount )
+{
+	// Preserve the live component as this generation's backup exactly once,
+	// without ever removing the live name.  The pending manifest records each
+	// backup that has been taken: a retry reuses it instead of archiving the
+	// file that the failed attempt already published, and a recorded backup
+	// that has disappeared stops the save instead of rotating again.
+	ASSERT( pszBaseName && pszBaseName[0] );
+	CGString sCurrent;
+	sCurrent.Format( "%s" SPHERE_FILE "%s" SCRIPT_EXT, pszBaseDir ? pszBaseDir : "", pszBaseName );
+	CGString sArchive;
+	GetBackupName( sArchive, pszBaseDir ? pszBaseDir : "", pszBaseName[0], iSaveCount );
+	const unsigned dwManifestBit = SaveManifestBit( pszBaseName );
+	int iManifestSaveCount = 0;
+	bool fManifestPending = false;
+	unsigned dwRotated = 0;
+	const bool fPendingManifest = dwManifestBit && ReadSaveManifest( g_Cfg.m_sWorldBaseDir,
+		iManifestSaveCount, fManifestPending, dwRotated ) && fManifestPending &&
+		iManifestSaveCount == iSaveCount;
+	if ( fPendingManifest && ( dwRotated & dwManifestBit ))
+	{
+		if ( SaveFileExists( sArchive ))
+			return true;
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save generation %d lost archive '%s'; refusing to re-rotate '%s'" LOG_CR,
+			iSaveCount, (LPCTSTR)sArchive, (LPCTSTR)sCurrent );
+		return false;
+	}
+	if ( !PreserveSaveFile( sCurrent, sArchive ))
+	{
+		g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+			"Save could not preserve '%s' as '%s'" LOG_CR,
+			(LPCTSTR)sCurrent, (LPCTSTR)sArchive );
+		return false;
+	}
+	// Record only a backup that was actually taken; the first generation has
+	// no live file to preserve.
+	if ( fPendingManifest && SaveFileExists( sCurrent ))
+	{
+		dwRotated |= dwManifestBit;
+		if ( !WriteSaveManifest( g_Cfg.m_sWorldBaseDir, iSaveCount, true, dwRotated ))
+		{
+			g_Log.Event( LOG_GROUP_SAVE, LOGL_CRIT,
+				"Save manifest update FAILED after preserving '%s'" LOG_CR, (LPCTSTR)sCurrent );
+			return false;
+		}
+	}
+	return true;
+}
+
 static bool ReadSaveFileCount( LPCTSTR pszPath, int& iSaveCount )
 {
 	iSaveCount = INT_MIN;

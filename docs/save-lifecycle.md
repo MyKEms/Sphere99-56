@@ -19,9 +19,10 @@ temporary file, then the temporary file is renamed into place.  The directory
 is synchronized after that publication so the rename survives a sudden restart.
 
 A retry of a failed generation reuses every backup that the pending manifest
-records as already taken instead of overwriting it with a file published by
-the failed attempt.  If a recorded backup has disappeared, the retry stops
-instead of rotating again.
+records as already taken (world, characters, and accounts) instead of
+overwriting it with a file published by the failed attempt.  A component that
+the failed attempt did not reach is backed up by the retry.  If a recorded
+backup has disappeared, the retry stops instead of rotating again.
 
 Save backups retain Sphere's stock names and rotation rule.  For generation
 `N`, the backup level is selected by the number of trailing zero octal digits

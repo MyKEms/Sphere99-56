@@ -487,6 +487,7 @@ public:
 	static void GetBackupName( CGString& sArchive, LPCTSTR pszBaseDir, TCHAR chType, int savecount );
 	static bool PublishSaveFile( LPCTSTR pszTemp, LPCTSTR pszCurrent );
 	static bool SyncSaveDirectory( LPCTSTR pszBaseDir );
+	static bool PreserveSaveComponent( LPCTSTR pszBaseDir, LPCTSTR pszBaseName, int iSaveCount );
 	bool IsSaveRetry() const { return m_fSaveRetry; }
 	void ReSyncLoad();
 	void ReSyncUnload();
