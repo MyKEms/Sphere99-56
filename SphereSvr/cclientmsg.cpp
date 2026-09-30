@@ -3496,6 +3496,11 @@ void CClient::Setup_CreateDialog( const CUOEvent* pEvent ) // All the character 
 		return;
 	}
 	SPHERE_LOG_NET("Setup_CreateDialog: char='%s' uid=0x%x", (LPCTSTR)pChar->GetName(), (DWORD)pChar->GetUID());
+	// Character creation is a stock-compatible daily event; the detailed
+	// Setup_CreateDialog traces stay on stderr through SPHERE_LOG_NET.
+	g_Log.Event( 0, LOGL_EVENT,
+		"%x:Setup_CreateDialog acct='%s', char='%s'" LOG_CR,
+		m_Socket.GetSocket(), (LPCTSTR)GetAccount()->GetName(), (LPCTSTR)pChar->GetName());
 
 	try {
 		Setup_Start( pChar );

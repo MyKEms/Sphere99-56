@@ -90,6 +90,12 @@ ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
+# Daily-log parity uses a separate empty account so the probe covers the
+# character-creation record without changing the existing escape fixture.
+DAILY_LOG_CREATE_ACCOUNT = "DailyCreate"
+DAILY_LOG_CREATE_PASSWORD = "daily_create_pw"
+DAILY_LOG_CREATE_NAME = "DailyProbe"
+
 # Dedicated runaway-loop fixture.  The normal engine default remains
 # generous; this mode sets a small value so the bounded return and the
 # second-client check complete quickly.
@@ -2508,6 +2514,8 @@ def write_escape_overflow_save(root: Path) -> None:
                 f"PASSWORD={ESCAPE_OVERFLOW_PASSWORD}",
                 "CHARUID=1",
                 "LASTCHARUID=1",
+                f"[{DAILY_LOG_CREATE_ACCOUNT}]",
+                f"PASSWORD={DAILY_LOG_CREATE_PASSWORD}",
                 "[EOF]",
             )
         ),
