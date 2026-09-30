@@ -119,6 +119,11 @@ void CClient::DeleteThis()
 		return;
 	m_fDeleteQueued = true;
 
+	// Keep the connection lifecycle record in the stock-compatible daily
+	// stream.  The verbose trace below remains stderr-only.
+	g_Log.Event( 0, LOGL_EVENT,
+		"%x:Client disconnected [Total:%d]" LOG_CR,
+		m_Socket.GetSocket(), g_Serv.StatGet( SERV_STAT_CLIENTS ) - 1 );
 	SPHERE_LOG_NET("CClient::DeleteThis sock=%d total=%d", m_Socket.GetSocket(), g_Serv.StatGet(SERV_STAT_CLIENTS)-1);
 
 	CharDisconnect();	// am i a char in game ?

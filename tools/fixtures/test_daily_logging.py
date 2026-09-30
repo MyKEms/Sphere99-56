@@ -11,6 +11,9 @@ import time
 from pathlib import Path
 
 from modes.compat_writer import (
+    DAILY_LOG_CREATE_ACCOUNT,
+    DAILY_LOG_CREATE_NAME,
+    DAILY_LOG_CREATE_PASSWORD,
     ESCAPE_OVERFLOW_ACCOUNT,
     ESCAPE_OVERFLOW_PASSWORD,
 )
@@ -21,7 +24,9 @@ DAILY_MARKERS = (
     SCRIPT_ERROR,
     re.compile(r"Client connected \[Total:\d+\] from '[^']+'\."),
     re.compile(r"Login '[^']+'"),
+    re.compile(r"Setup_CreateDialog acct='[^']+', char='[^']+'"),
     re.compile(r"Setup_Start acct='[^']+', char='[^']+'"),
+    re.compile(r"Client disconnected \[Total:\d+\]"),
 )
 
 # These are implementation traces used while diagnosing the Linux logging
@@ -69,6 +74,7 @@ def main() -> int:
         decode_game_response,
         find_start_packet,
         game_connect,
+        make_char_create,
         make_char_play,
         recv_until_game_start,
     )
@@ -87,6 +93,23 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
             )
             wait_for_port(args.host, args.port, args.startup_timeout)
+            create_sock, _ = game_connect(
+                args.host,
+                args.port,
+                DAILY_LOG_CREATE_ACCOUNT,
+                DAILY_LOG_CREATE_PASSWORD,
+                game_port=args.port + 1000,
+            )
+            if create_sock is None:
+                raise RuntimeError("daily logging probe did not reach the creation character list")
+            try:
+                create_sock.sendall(make_char_create(name=DAILY_LOG_CREATE_NAME, start_loc=1))
+                create_response = recv_until_game_start(create_sock, timeout=30.0)
+                if find_start_packet(decode_game_response(create_response)) is None:
+                    raise RuntimeError("daily logging probe did not enter after character creation")
+            finally:
+                create_sock.close()
+
             sock, _ = game_connect(
                 args.host,
                 args.port,
