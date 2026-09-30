@@ -116,6 +116,14 @@ protected:
 		return false;
 	}
 
+	// True when the reference is an object of the running world (an item or a
+	// character): its own UID resolves back to it.  Definitions, the server
+	// and other reference roots are resource objects too, but not world objects.
+	bool IsWorldObject(CResourceObj* pObj)
+	{
+		return pObj != NULL && ResolveUIDObject(pObj->GetUIDIndex()) == pObj;
+	}
+
 	CResourceObj* ResolveObjectResult(const CGVariant& value, LPCTSTR pszFunctionRoot)
 	{
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(value.GetRef());
@@ -1525,6 +1533,44 @@ public:
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					if ( hRes == NO_ERROR )
 						return NO_ERROR;
+
+					// A referenced object can also be the base of a script
+					// function (for example CONT.F_SETUP). Native methods
+					// take precedence, then dispatch the script function with the
+					// referenced object as the active base. A built-in object root
+					// such as LASTNEW is resolved through Function_Dispatch too, but
+					// it is not itself a script function and must retain this path.
+					// Only a live world object can be that base: a definition, the
+					// server or any other reference root keeps the historical path.
+					if ( !fPropertySet && IsWorldObject(pRootObj) )
+					{
+						TCHAR szFunctionName[SCRIPT_MAX_LINE_LEN];
+						CGVariant vFunctionArgs;
+						const size_t iSuffixLen = strlen(pszDot + 1);
+						const bool fRootFromScriptFunction =
+							fRootFromFunction && IsScriptFunction(szRootName);
+						if ( SplitDottedSegment(pszDot + 1, iSuffixLen,
+							szFunctionName, sizeof(szFunctionName), vFunctionArgs) &&
+								IsScriptFunction(szFunctionName) && !fRootFromScriptFunction )
+						{
+							// "ROOT.F a,b" is the space-separated form and
+							// "ROOT.F(a,b)" the call form.  The function sees either
+							// one exactly as it does when it is called without a root.
+							const bool fOwnArgs = !vFunctionArgs.IsVoid();
+							if ( !fOwnArgs )
+								vFunctionArgs = vArgs;
+							CScriptObj* pOldBase = GetBaseObject();
+							const bool fPreviousSpaceCall = m_fSpaceSeparatedFunctionArgs;
+							m_fSpaceSeparatedFunctionArgs = !fOwnArgs && !fCallForm && *pszArg != '\0';
+							SetBaseObject(pRootObj);
+							hRes = Function_Dispatch(szFunctionName, vFunctionArgs, vValRet);
+							SetBaseObject(pOldBase);
+							m_fSpaceSeparatedFunctionArgs = fPreviousSpaceCall;
+							rejected.Observe(hRes, pszDot + 1, pRootObj);
+							if ( hRes == NO_ERROR )
+								return NO_ERROR;
+						}
+					}
 				}
 			}
 		}
