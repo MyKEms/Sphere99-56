@@ -6,11 +6,11 @@ The fixture equips a synthetic item and calls two script functions through its
 ``ARGV`` so both an empty call and a three-argument call exercise the dotted
 command dispatch path without re-entering the root function.
 
-The item trigger also calls a function through an ``SRC`` root, through two
-roots that are not world objects (the server object and a definition), and
-from escapes.  Only a world object becomes the base of a script function; the
-other roots and the escape forms keep the behaviour they have without this
-dispatch path.
+The item trigger also calls a function through an ``SRC`` root in the call
+form and in the space-separated form, through two roots that are not world
+objects (the server object and a definition), and from escapes.  Only a world
+object becomes the base of a script function; the other roots and the escape
+forms keep the behaviour they have without this dispatch path.
 """
 
 from __future__ import annotations
@@ -38,6 +38,9 @@ EXPECTED = {
     "args": "3|2|2",
     # SRC is a world object too: the call form passes two counted arguments.
     "src_call": "2|7|8",
+    # The space-separated form reports the same values with and without a root.
+    "src_space": "0|9|10",
+    "plain_space": "0|9|10",
     # Roots that are not world objects do not run the function ...
     "serv": "",
     "definition": "",
