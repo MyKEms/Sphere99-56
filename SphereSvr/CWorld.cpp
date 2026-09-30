@@ -1607,18 +1607,22 @@ bool CWorld::LoadWorld() // Load world from script
 		if (( dwRotated & 0x01 ) && SaveFileExists( sArchive ))
 		{
 			sWorldName = sArchive;
+			int iArchiveSaveCount = INT_MIN;
+			ReadSaveFileCount( sWorldName, iArchiveSaveCount );
 			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
 				"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
-				(LPCTSTR)sWorldName, iPendingSaveCount,
+				(LPCTSTR)sWorldName, iArchiveSaveCount,
 				(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
 		}
 		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'c', iPendingSaveCount );
 		if (( dwRotated & 0x02 ) && SaveFileExists( sArchive ))
 		{
 			sCharsName = sArchive;
+			int iArchiveSaveCount = INT_MIN;
+			ReadSaveFileCount( sCharsName, iArchiveSaveCount );
 			g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
 				"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
-				(LPCTSTR)sCharsName, iPendingSaveCount,
+				(LPCTSTR)sCharsName, iArchiveSaveCount,
 				(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
 		}
 	}
@@ -1681,9 +1685,11 @@ bool CWorld::LoadWorld() // Load world from script
 			break;
 		}
 		sWorldName = sArchive;
+		int iArchiveSaveCount = INT_MIN;
+		ReadSaveFileCount( sWorldName, iArchiveSaveCount );
 		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
 			"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
-			(LPCTSTR)sWorldName, m_iSaveCountID,
+			(LPCTSTR)sWorldName, iArchiveSaveCount,
 			(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
 
 		GetBackupName( sArchive, g_Cfg.m_sWorldBaseDir, 'c', m_iSaveCountID );
@@ -1692,9 +1698,11 @@ bool CWorld::LoadWorld() // Load world from script
 			break;
 		}
 		sCharsName = sArchive;
+		iArchiveSaveCount = INT_MIN;
+		ReadSaveFileCount( sCharsName, iArchiveSaveCount );
 		g_Log.Event( LOG_GROUP_INIT, LOGL_WARN,
 			"Loading save backup '%s' SaveCount=%d time=%s" LOG_CR,
-			(LPCTSTR)sCharsName, m_iSaveCountID,
+			(LPCTSTR)sCharsName, iArchiveSaveCount,
 			(LPCTSTR)CGTime::GetCurrentTime().Format( NULL ));
 	}
 
