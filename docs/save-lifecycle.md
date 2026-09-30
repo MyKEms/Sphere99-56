@@ -36,8 +36,9 @@ only one file carries a count, is rejected.  Legacy files without any
 `SAVECOUNT` header (for example `[EOF]`-only placeholders) are accepted only
 when neither file of the pair carries one.  Older backups are considered only
 for an interrupted transaction recorded by the pending manifest, or when the
-operator explicitly enables `SAVEBACKUPFALLBACK=1`; an enabled fallback is
-reported with the selected path, save count, and wall-clock time.
+operator explicitly enables `SAVEBACKUPFALLBACK=1`.  Each selected backup is
+reported with its path, its own `SAVECOUNT` and save time (the file's
+modification time), and the wall-clock time of the selection.
 
 The daily log retains the stock event line `World data saved (...)`, naming
 the published live world file, and also records the engine's save diagnostics

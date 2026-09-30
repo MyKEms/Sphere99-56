@@ -10,11 +10,14 @@
 #endif
 
 #include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <string>
 
 static int CountDirectoryEntries( const char* pszDir )
@@ -73,6 +76,28 @@ static bool TestLoadDetailBudgetScope()
 	return fRuntimeVisible;
 }
 
+// Concatenate the daily log files written into pszDir, then remove them.
+static std::string TakeDailyLogs( const std::string& sDir )
+{
+	std::string sContents;
+	DIR* pDir = opendir( sDir.c_str());
+	if ( pDir == NULL )
+		return sContents;
+	struct dirent* pEntry;
+	while ( ( pEntry = readdir( pDir )) != NULL )
+	{
+		const std::string sName = pEntry->d_name;
+		if ( sName.size() < 4 || sName.compare( sName.size() - 4, 4, ".log" ) != 0 )
+			continue;
+		const std::string sPath = sDir + "/" + sName;
+		std::ifstream file( sPath.c_str());
+		sContents.append( std::istreambuf_iterator<char>( file ), std::istreambuf_iterator<char>());
+		unlink( sPath.c_str());
+	}
+	closedir( pDir );
+	return sContents;
+}
+
 static bool TestBackupFallbackRequiresOptIn()
 {
 	char szTempDir[] = "/tmp/sphere-save-fallback-XXXXXX";
@@ -95,6 +120,15 @@ static bool TestBackupFallbackRequiresOptIn()
 		if ( !currentWorld || !currentChars || !backupWorld || !backupChars )
 			return false;
 	}
+	// Give the backups a known save time so the fallback report can be checked.
+	const time_t tBackupSaved = 1000000000;
+	struct utimbuf backupTimes;
+	backupTimes.actime = tBackupSaved;
+	backupTimes.modtime = tBackupSaved;
+	if ( utime( sWorldBackup.c_str(), &backupTimes ) != 0 ||
+		utime( sCharsBackup.c_str(), &backupTimes ) != 0 )
+		return false;
+	const std::string sBackupSaved = CGTime( tBackupSaved ).Format( NULL );
 
 	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
 	g_Cfg.m_fSaveBackupFallback = false;
@@ -108,7 +142,11 @@ static bool TestBackupFallbackRequiresOptIn()
 
 	g_Cfg.m_fSaveBackupFallback = true;
 	g_World.m_iSaveCountID = 0;
+	const std::string sLogDir = sBaseDir + "logs";
+	const bool fLogOpened = mkdir( sLogDir.c_str(), 0700 ) == 0 && g_Log.OpenLog( sLogDir.c_str());
 	const bool fExplicitFallback = g_World.LoadWorldForTest();
+	g_Log.Close();
+	const std::string sLog = TakeDailyLogs( sLogDir );
 	g_World.Close( false );
 	g_Cfg.m_fSaveBackupFallback = false;
 	g_World.m_iSaveCountID = 0;
@@ -116,7 +154,21 @@ static bool TestBackupFallbackRequiresOptIn()
 	unlink( sChars.c_str());
 	unlink( sWorldBackup.c_str());
 	unlink( sCharsBackup.c_str());
+	rmdir( sLogDir.c_str());
 	rmdir( szTempDir );
+
+	// The fallback names each selected backup with its own SAVECOUNT and save time.
+	const bool fWorldReported = sLog.find( "Loading save backup '" + sWorldBackup +
+		"' SaveCount=1 saved=" + sBackupSaved + " time=" ) != std::string::npos;
+	const bool fCharsReported = sLog.find( "Loading save backup '" + sCharsBackup +
+		"' SaveCount=1 saved=" + sBackupSaved + " time=" ) != std::string::npos;
+	if ( !fLogOpened || !fWorldReported || !fCharsReported )
+	{
+		std::fprintf( stderr,
+			"backup fallback report: log=%d world=%d chars=%d\n%s\n",
+			fLogOpened ? 1 : 0, fWorldReported ? 1 : 0, fCharsReported ? 1 : 0, sLog.c_str());
+		return false;
+	}
 	return fExplicitFallback;
 }
 
