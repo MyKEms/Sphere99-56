@@ -15,10 +15,10 @@ MODE = register_mode(
     FixtureMode(
         name="object-root-dispatch",
         fixture_args=("--object-root-dispatch-probe",),
-        # Keep this mode above all blocks currently in the fixture registry
-        # and other pending fixture modes. Recheck before adding new modes.
-        order=70,
-        id_block=70,
+        # Keep this mode in the next free block after current master. Recheck
+        # the registry before adding another mode.
+        order=75,
+        id_block=75,
         case=FixtureCase(
             name="object-root-dispatch",
             mode="object-root-dispatch",

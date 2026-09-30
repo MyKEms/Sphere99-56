@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Check named ARG locals and positional object references in a fixture.
-
-The fixture deliberately uses all three local read forms (``ARG.i``,
-``ARG(i)`` and a bare ``i``), updates the counter with Sphere's ``#+1``
-current-value form, and passes a UID through ``ARGV(0)``.  It also exercises
-the legacy ``LASTNEW`` root and an ``ARGV(0).TYPE`` property write.  The
-scratch row mirrors six underscore-named locals read without ``ARG`` syntax.
-The GATA rows cover a reference-valued ``ARG(gata,<LASTNEW>)`` local, including
-property reads, writes and a method call through the dotted object root.
-"""
+"""Check the calibrated 0.99 right-to-left expression grammar."""
 
 from __future__ import annotations
 
@@ -19,29 +10,24 @@ import sys
 import time
 from pathlib import Path
 
-from make_fixture import ARG_LOCALS_ACCOUNT, ARG_LOCALS_MARKER
+from modes.fragments.expression_chain import (
+    EXPRESSION_CHAIN_ACCOUNT,
+    EXPRESSION_CHAIN_MARKER,
+    EXPRESSION_CHAIN_ORACLE_ROWS,
+    EXPRESSION_CHAIN_PASSWORD,
+    EXPRESSION_CHAIN_QUIRK_EXPECTED,
+)
 from run_suite import shutdown_failures
 
 
-LOGIN_VALUE = "arg-locals-probe-pw"
-END_MARKER = ARG_LOCALS_MARKER + " C_END"
+END_MARKER = EXPRESSION_CHAIN_MARKER + "_END"
 MARKER_RE = re.compile(
-    re.escape(ARG_LOCALS_MARKER) + r" C\|([a-z0-9_]+)\|\[(.*)\]$"
+    re.escape(EXPRESSION_CHAIN_MARKER) + r" ([a-z0-9_]+)\|\[(.*)\]$"
 )
 
 EXPECTED = {
-    "lastnew_name": "synthetic object",
-    "before": "00|00|00",
-    "counter_after": "3|3|3",
-    "bare_after": "5",
-    "object_before": "synthetic object|synthetic object|T_NORMAL",
-    "object_after": "T_NORMAL|T_NORMAL",
-    "gata_before": "synthetic object|synthetic object|040000008",
-    "gata_after": "0123|synthetic gata|040000008",
-    "scratch": "101|202|303|404|505|606",
-    "scratch_object": "synthetic gata|T_NORMAL",
-    # RETURN parses the hyphens right-to-left, as the 0.99 evaluator does.
-    "scratch_return": "-303",
+    **{key: expected for key, _expression, expected in EXPRESSION_CHAIN_ORACLE_ROWS},
+    **EXPRESSION_CHAIN_QUIRK_EXPECTED,
 }
 
 
@@ -71,7 +57,7 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=2732)
+    parser.add_argument("--port", type=int, default=2804)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
@@ -79,7 +65,7 @@ def main() -> int:
     binary = args.binary.resolve()
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
-    from test_world_save_roundtrip import run_server as run_fixture_server
+    from test_world_save_roundtrip import run_server
     from uo_test_client import (
         decode_game_response,
         find_start_packet,
@@ -95,16 +81,16 @@ def main() -> int:
         sock, _ = game_connect(
             args.host,
             args.port,
-            ARG_LOCALS_ACCOUNT,
-            LOGIN_VALUE,
+            EXPRESSION_CHAIN_ACCOUNT,
+            EXPRESSION_CHAIN_PASSWORD,
             game_port=args.port + 1000,
         )
         if sock is None:
-            raise RuntimeError("ARG-local probe account did not reach the character list")
+            raise RuntimeError("expression-chain probe did not reach the character list")
         try:
             sock.sendall(
                 make_char_create(
-                    name=ARG_LOCALS_ACCOUNT,
+                    name=EXPRESSION_CHAIN_ACCOUNT,
                     sex=0,
                     start_loc=1,
                     skill1=25,
@@ -117,9 +103,9 @@ def main() -> int:
             )
             response = recv_until_game_start(sock, timeout=30.0)
             if not response or find_start_packet(decode_game_response(response)) is None:
-                raise RuntimeError("ARG-local probe character did not enter the world")
+                raise RuntimeError("expression-chain probe character did not enter the world")
             data = bytearray(response)
-            deadline = time.monotonic() + 12.0
+            deadline = time.monotonic() + 20.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(data))
@@ -138,7 +124,7 @@ def main() -> int:
         finally:
             sock.close()
 
-    returncode, runner_error, log_contents = run_fixture_server(
+    returncode, runner_error, log_contents = run_server(
         fixture=fixture,
         binary=binary,
         host=args.host,
@@ -150,9 +136,9 @@ def main() -> int:
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
-
     if END_MARKER not in messages:
-        failures.append("ARG-local probe did not reach its end marker within the bounded timeout")
+        failures.append("expression-chain probe did not reach its end marker")
+
     rows = parse_rows(messages)
     for key, expected in EXPECTED.items():
         value = rows.get(key)
@@ -160,11 +146,14 @@ def main() -> int:
             failures.append(f"{key}: got {value!r}; expected {expected!r}")
 
     if failures:
-        print(f"ARG-local probe failed: {len(EXPECTED) - len(failures)}/{len(EXPECTED)} checks passed", file=sys.stderr)
+        print(
+            f"expression-chain probe failed: {len(EXPECTED) - len(failures)}/{len(EXPECTED)} checks passed",
+            file=sys.stderr,
+        )
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print(f"ARG-local probe passed: {len(EXPECTED)}/{len(EXPECTED)} checks")
+    print(f"expression-chain probe passed: {len(EXPECTED)}/{len(EXPECTED)} checks")
     return 0
 
 

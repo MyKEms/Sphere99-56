@@ -212,7 +212,7 @@ LOGIN_ERR_TYPE CClient::Login_ServerList( const char* pszAccount, const char* ps
 	if ( g_Log.IsLogged( LOGL_TRACE ))
 	{
 		// Never write client passwords to the trace log.
-		DEBUG_MSG(( "%x:Login_ServerList account '%s'" LOG_CR, m_Socket.GetSocket(), pszAccount ));
+		SPHERE_LOG_NET("%x:Login_ServerList account '%s'", m_Socket.GetSocket(), pszAccount );
 	}
 
 	// don't bother logging in yet.

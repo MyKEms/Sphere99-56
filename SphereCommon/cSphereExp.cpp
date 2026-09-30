@@ -1028,7 +1028,8 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if (pFunctionLink)
 				ScriptExecutionCoverageHit(pFunctionLink->GetScriptCoverageToken());
 			// create a new sub-context with new args.
-			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs );
+			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs,
+				!m_fSpaceSeparatedFunctionArgs );
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
 			vValRet = exec.m_vValRet;
 			return( NO_ERROR );
@@ -1501,7 +1502,7 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 		}
 		break;
 	case F_ArgVCount:
-		vValRet.SetInt( m_vVal.MakeArraySize());
+		vValRet.SetInt( m_fParseArgv ? m_vVal.MakeArraySize() : 0 );
 		break;
 	default:
 		DEBUG_CHECK(0);

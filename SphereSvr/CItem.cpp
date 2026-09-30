@@ -4716,6 +4716,15 @@ bool CItem::OnTick()
 	}
 	}
 
+	// A timer handler may remove its own item and fall through without an
+	// explicit RETURN.  The pending deletion is already the complete timer
+	// outcome; do not run the type switch or report a misleading DECAY error.
+	if ( IsDeletePending())
+	{
+		LogTimerRemoval( "script" );
+		return true;
+	}
+
 	switch ( GetType())
 	{
 	case IT_EQ_TRADE_WINDOW:

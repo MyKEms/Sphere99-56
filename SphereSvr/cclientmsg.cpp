@@ -3279,7 +3279,8 @@ LOGIN_ERR_TYPE CClient::Setup_Start( CChar* pChar ) // Send character startup st
 
 	CharDisconnect();	// I'm already logged in as someone else ?
 
-	g_Log.Event( LOG_GROUP_CLIENTS, LOGL_TRACE, "%x:Setup_Start acct='%s', char='%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) GetAccount()->GetName(), (LPCTSTR) pChar->GetName());
+	// This is a stock compatibility event, not verbose client tracing.
+	g_Log.Event( 0, LOGL_EVENT, "%x:Setup_Start acct='%s', char='%s'" LOG_CR, m_Socket.GetSocket(), (LPCTSTR) GetAccount()->GetName(), (LPCTSTR) pChar->GetName());
 
 #ifndef _DEBUG
 #ifdef _WIN32
@@ -3438,7 +3439,7 @@ LOGIN_ERR_TYPE CClient::Setup_Start( CChar* pChar ) // Send character startup st
 		}
 	}
 
-	DEBUG_TRACE(( "%x:Setup_Start done" LOG_CR, m_Socket.GetSocket()));
+	SPHERE_LOG_NET("%x:Setup_Start done", m_Socket.GetSocket());
 	return LOGIN_SUCCESS;
 }
 
@@ -3511,7 +3512,7 @@ bool CClient::Setup_Play( int iSlot ) // After hitting "Play Character" button
 	SPHERE_LOG_NET("Setup_Play: slot=%d sock=%d", iSlot, m_Socket.GetSocket());
 	// Mode == CLIMODE_SETUP_CHARLIST
 
-	DEBUG_TRACE(( "%x:Setup_Play slot %d" LOG_CR, m_Socket.GetSocket(), iSlot ));
+	SPHERE_LOG_NET("%x:Setup_Play slot %d", m_Socket.GetSocket(), iSlot );
 
 	if ( ! GetAccount())
 		return( false );

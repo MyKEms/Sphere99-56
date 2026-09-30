@@ -79,6 +79,12 @@ CClient::CClient( SOCKET client ) :
 	g_Serv.m_Clients.InsertHead( this );
 
 	CSocketAddress PeerName = m_Socket.GetPeerName();
+	// This compatibility record must remain visible even when an installation
+	// narrows LOGMASK for verbose client diagnostics.
+	g_Log.Event( 0, LOGL_EVENT,
+		"%x:Client connected [Total:%d] from '%s'." LOG_CR,
+		m_Socket.GetSocket(), g_Serv.StatGet( SERV_STAT_CLIENTS ),
+		(LPCTSTR) PeerName.GetAddrStr());
 	SPHERE_LOG_NET("CClient::CClient constructed sock=%d peer=%s total=%d", m_Socket.GetSocket(), (LPCTSTR) PeerName.GetAddrStr(), g_Serv.StatGet( SERV_STAT_CLIENTS ));
 
 #ifdef _WIN32

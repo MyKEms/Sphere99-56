@@ -165,6 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="seed a production-shaped created-memory script timer",
     )
     parser.add_argument(
+        "--timer-default-remove-probe",
+        action="store_true",
+        help="exercise an @Timer handler that removes its item without RETURN",
+    )
+    parser.add_argument(
         "--dotted-expression-probe",
         action="store_true",
         help="evaluate dotted reference expressions and commands at login",
@@ -260,6 +265,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="open, by name, dialogs whose layouts use IF/WHILE/DOSWITCH/RETURN at login",
     )
     parser.add_argument(
+        "--dialog-argv-probe",
+        action="store_true",
+        help="open a dialog with positional values consumed by its layout through ARGV",
+    )
+    parser.add_argument(
         "--dialog-argo-tag-probe",
         action="store_true",
         help="store a command with ARGO.TAG(name,value) and dispatch it from a button",
@@ -295,6 +305,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="log in an existing character through a near-limit escape expansion",
     )
     parser.add_argument(
+        "--daily-logging-probe",
+        action="store_true",
+        help="exercise daily logging for script, connection, and login messages",
+    )
+    parser.add_argument(
         "--runaway-loop-probe",
         action="store_true",
         help="exercise a configurable bounded WHILE loop and a second login",
@@ -318,6 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--gump-fallback-probe",
         action="store_true",
         help="load a container with no TDATA2 gump and round-trip its child",
+    )
+    parser.add_argument(
+        "--expression-chain-probe",
+        action="store_true",
+        help="exercise the 0.99 right-to-left expression grammar",
     )
     return parser
 

@@ -101,6 +101,7 @@ size_t CUIDRefArray::InsertObj(const CObjBase* pObj, size_t i)
 }
 
 int CObjBase::sm_iCount = 0;	// UID table.
+unsigned long long CObjBase::sm_iChangeCount = 0;
 bool CObjBase::sm_fDeleteReal = false;	// UID table.
 
 CObjBase::CObjBase( UID_INDEX dwUIDMask )
@@ -108,6 +109,7 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 	// based on CObjBaseTemplate
 	// dwUIDMask = UID_F_ITEM;
 	sm_iCount ++;
+	sm_iChangeCount ++;
 	m_fDeletePending = false;
 	m_fLoadToleratedLegacy = false;
 	m_fLoadRejectedProperty = false;
@@ -136,6 +138,7 @@ CObjBase::CObjBase( UID_INDEX dwUIDMask )
 CObjBase::~CObjBase()
 {
 	sm_iCount --;
+	sm_iChangeCount ++;
 	// ASSERT(sm_fDeleteReal);
 	// ASSERT( GetParent() == NULL || GetParent() == &g_World.m_ObjDelete );
 
@@ -1219,7 +1222,12 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 			CSphereUID ridName = g_Cfg.ResourceCheckIDType( RES_Dialog, pszName );
 			if ( ridName.IsValidRID())
 				rid = ridName;
-			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, rid, this ))
+			// The first argument names the dialog.  The remaining values are the
+			// positional ARGV values visible while its layout is evaluated.
+			CGVariant vDialogArgs( vArgs );
+			vDialogArgs.MakeArraySize();
+			vDialogArgs.RemoveArrayElement( 0 );
+			if ( ! pClientSrc->Dialog_Setup( CLIMODE_DIALOG, rid, this, &vDialogArgs ))
 				return(HRES_BAD_ARGUMENTS);
 		}
 		break;

@@ -172,10 +172,14 @@ public:
 	void Dump( const BYTE* pData, int len );
 
 	virtual int EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg );
+	// Write a message through the daily sink without duplicating the Linux
+	// stderr diagnostic.  The SPHERE_LOG_* compatibility macros use this
+	// after emitting their historical stderr line.
+	int EventStrDaily( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg );
 	void _cdecl CatchEvent( CGException* pErr, const char* pszCatchContext, ...  ) __printfargs(3, 4);
 
 	bool IsLogged(LOGL_TYPE level) const { return level <= m_logLevel; }
-	bool IsLogged(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level) const { return IsLoggedGroupMask(dwGroupMask) && level <= m_logLevel; }
+	bool IsLogged(LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level) const { return (dwGroupMask == 0 || IsLoggedGroupMask(dwGroupMask)) && level <= m_logLevel; }
 	bool IsLoggedGroupMask(LOG_GROUP_TYPE dwGroupMask) const { return (m_dwGroupMask & dwGroupMask) != 0; }
 
 	void SetLogLevel(LOGL_TYPE level) { m_logLevel = level; }
@@ -189,6 +193,7 @@ public:
 
 protected:
 	void EventStrPrint( int iColorType, const char* pMsg );
+	int EventStrInternal( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, const char* pszMsg, bool fEmitStderr );
 
 private:
 	LOGL_TYPE m_logLevel;
@@ -860,7 +865,8 @@ public:
 	bool CanSee( const CObjBaseTemplate* pObj ) const;
 	bool CanHear( const CObjBaseTemplate* pSrc, TALKMODE_TYPE mode ) const;
 
-	bool Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj );
+	bool Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj,
+		const CGVariant* pDialogArgs = NULL );
 	bool Menu_Setup( CSphereUID ridMenu, CObjBase* pObj, bool fContextMenu = false );
 
 	int OnSkill_Info( SKILL_TYPE skill, CSphereUID uid, int iTestLevel, bool fTest );

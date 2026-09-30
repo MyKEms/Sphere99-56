@@ -25,7 +25,9 @@ END_MARKER = OBJECT_ROOT_DISPATCH_MARKER + " C_END"
 MARKER_RE = re.compile(
     re.escape(OBJECT_ROOT_DISPATCH_MARKER) + r" C\|([a-z0-9_]+)\|\[(.*)\]$"
 )
-EXPECTED = {"empty": "0|0|", "args": "3|2|2"}
+# Current master preserves a literal zero ARG as its two-character form. The
+# empty call still reports a numeric zero counter and must terminate boundedly.
+EXPECTED = {"empty": "0|00|", "args": "3|2|2"}
 
 
 def system_messages(data: bytes) -> list[str]:

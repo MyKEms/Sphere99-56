@@ -57,7 +57,16 @@ bool CLog::OpenLog( LPCTSTR pszBaseDirName )	// name set previously.
 	CGString sFileName = GetMergedFileName( m_sBaseDir, sName );
 
 	// Use the OF_READWRITE to append to an existing file.
-	return( CFileText::Open( sFileName, OF_SHARE_DENY_NONE|OF_READWRITE|OF_TEXT ));
+	if ( ! CFileText::Open( sFileName, OF_SHARE_DENY_NONE|OF_READWRITE|OF_TEXT ))
+		return false;
+
+	// The startup banner is emitted before the configuration's LOG= path is
+	// loaded.  Repeat the generic build stamp when the daily file is opened so
+	// every stock-format log identifies the server build that produced it.
+	WriteString( LOG_CR );
+	WriteString( g_szServerDescription );
+	WriteString( LOG_CR "Compiled on " __DATE__ " (" __TIME__ ")" LOG_CR LOG_CR );
+	return true;
 }
 
 void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
@@ -73,31 +82,45 @@ void CLog::EventStrPrint( int iColorType, LPCTSTR pszMsg )
 #endif
 #endif
 
-	// Write out to log file.
-#ifdef _WIN32
+	// Write out to the configured daily log on every platform.  The Linux
+	// stderr channel below remains available for tooling and crash triage.
 	WriteString( pszMsg );
-#endif
 
 	// print to all client consoles.
 	g_Serv.Event_PrintClient( pszMsg );	// echo out to admin telnets.
 
 	// Send event to the external monitors.
+	// Linux's legacy path did not mirror log chunks into the console.  Keep
+	// that console stream stable: the daily file above is the new sink, while
+	// stderr remains the existing tooling channel.
+#ifdef _WIN32
 	g_Serv.OnTriggerEvent( SERVTRIG_ServerMsg, reinterpret_cast<uintptr_t>(pszMsg), static_cast<uintptr_t>(iColorType) );
+#endif
 }
 
 int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
+{
+	return EventStrInternal( dwGroupMask, level, pszMsg, true );
+}
+
+int CLog::EventStrDaily( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg )
+{
+	return EventStrInternal( dwGroupMask, level, pszMsg, false );
+}
+
+int CLog::EventStrInternal( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg, bool fEmitStderr )
 {
 	if ( pszMsg == NULL || *pszMsg == '\0' )
 		return( 0 );
 
 #ifndef _WIN32
-	// Linux: skip file I/O entirely. SPHERE_LOG_* macros handle stderr output.
+	// Keep the stderr channel for tooling and crash triage.  The daily file is
+	// written below through the same formatter used by the Windows build.
 	// g_Log.Event is called thousands of times during script loading, so only
 	// problems (FATAL/CRITICAL/ERROR) go to stderr — and always, whatever
-	// LOGMASK says: EventError()/DEBUG_ERR pass group 0, which never matches
-	// the mask, and dropping these hid why the server exits (e.g. "No previous
-	// backup available ?" on an empty save/).
-	if ( level <= LOGL_ERROR )
+	// LOGMASK says. Group 0 is the ungrouped compatibility path used by
+	// EventError()/DEBUG_ERR.
+	if ( fEmitStderr && level <= LOGL_ERROR )
 	{
 		LPCTSTR pszLabel = ( level == LOGL_FATAL ) ? "FATAL" : ( level == LOGL_CRIT ) ? "CRITICAL" : "ERROR";
 		fprintf( stderr, "[%s] %s", pszLabel, pszMsg );
@@ -106,12 +129,7 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 			fputc( '\n', stderr );
 		fflush( stderr );
 	}
-	if ( ! IsLogged( dwGroupMask, level ))
-		return( 0 );
-	try { g_Serv.Event_PrintClient( pszMsg ); }
-	catch (...) { fprintf( stderr, "[ERROR] CLog::Event_PrintClient threw\n" ); }
-	return 1;
-#else
+#endif
 	if ( ! IsLogged( dwGroupMask, level ))
 		return( 0 );
 
@@ -173,7 +191,6 @@ int CLog::EventStr( LOG_GROUP_TYPE dwGroupMask, LOGL_TYPE level, LPCTSTR pszMsg 
 		iRet = 0;
 	}
 	return( iRet );
-#endif
 }
 
 CGTime CLog::sm_prevCatchTick;

@@ -86,35 +86,6 @@ private:
 		return SCRIPT_UNKNOWN_GET;
 	}
 
-	// ARG locals retain their source text so quoted values and object serials
-	// remain usable as strings.  A numeric local can also be assigned an
-	// expanded expression (for example ARG(i,<ARG(i)>+1)); recognize that
-	// expression when the local is read by the numeric evaluator.
-	static bool IsSimpleNumericExpression(LPCTSTR pszValue)
-	{
-		if ( pszValue == NULL || *pszValue == '\0' )
-			return false;
-		bool fDigit = false;
-		bool fOperator = false;
-		for ( LPCTSTR p = pszValue; *p; ++p )
-		{
-			if ( isdigit((unsigned char)*p) )
-			{
-				fDigit = true;
-				continue;
-			}
-			if ( ISWHITESPACE(*p) )
-				continue;
-			if ( strchr("+-*/%()<>!=&|~", *p) != NULL )
-			{
-				fOperator = true;
-				continue;
-			}
-			return false;
-		}
-		return fDigit && fOperator;
-	}
-
 protected:
 	// The server supplies its configured per-invocation limit.  The generic
 	// context keeps the historical default so libraries using it remain safe.
@@ -437,6 +408,7 @@ protected:
 
 		// Find argument separator: space or '('
 		TCHAR* pszArgs = szKey;
+		bool fSpaceCall = false;
 		while ( *pszArgs && *pszArgs != ' ' && *pszArgs != '(' )
 			pszArgs++;
 
@@ -460,6 +432,25 @@ protected:
 			*pszArgs++ = '\0';
 			while ( ISWHITESPACE(*pszArgs) ) pszArgs++;
 			vArgs = pszArgs;
+			fSpaceCall = true;
+		}
+
+		// The space-separated EVAL form is a one-token legacy command.  Keep
+		// its argument boundary here; parenthesized EVAL retains the complete
+		// expression and therefore can contain spaces.
+		if ( fSpaceCall && !_stricmp(szKey, "EVAL") )
+		{
+			LPCTSTR pszText = vArgs.GetPSTR();
+			TCHAR szToken[SCRIPT_MAX_LINE_LEN];
+			size_t iToken = 0;
+			while ( pszText && pszText[iToken] && !ISWHITESPACE(pszText[iToken]) &&
+				iToken + 1 < sizeof(szToken) )
+			{
+				szToken[iToken] = pszText[iToken];
+				iToken++;
+			}
+			szToken[iToken] = '\0';
+			vArgs.SetStr(szToken);
 		}
 
 		// Reference chains with function roots and per-segment arguments.
@@ -643,15 +634,7 @@ public:
 		if ( vValue.IsEmpty() )
 			return true;
 		LPCTSTR pszValue = vValue.GetPSTR();
-		if ( IsSimpleNumericExpression(pszValue) )
-		{
-			TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
-			strncpy(szExpression, pszValue, sizeof(szExpression) - 1);
-			szExpression[sizeof(szExpression) - 1] = '\0';
-			iValue = GetComplex(szExpression);
-		}
-		else
-			iValue = GetSingle(pszValue);
+		iValue = GetSingle(pszValue);
 		return true;
 	}
 
@@ -695,15 +678,50 @@ public:
 	// Named ARG variables belong to this function/trigger execution context.
 	// Nested contexts get fresh storage and discard it on return.
 	CScriptLocalArgs m_LocalArgs;
+	// A script function invoked with the legacy space-separated form ("F a,b")
+	// does not expose those tokens through ARGV/ARGVCOUNT.  Keep this syntax
+	// distinction on the dispatch context so the function evaluator can retain
+	// the raw argument text while reporting the stock count.
+	bool m_fSpaceSeparatedFunctionArgs;
 
 	CScriptExecContext(CScriptObj* pObj, CScriptConsole* pConsole)
-		: m_pBaseObj(pObj), m_pSrc(pConsole)
+		: m_pBaseObj(pObj), m_pSrc(pConsole), m_fSpaceSeparatedFunctionArgs(false)
 	{
 	}
 
 public:
 	virtual HRESULT Function_Dispatch(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet)
 	{
+		// FINDCONT is an object method on the active container, but the
+		// reference-chain evaluator dispatches its root through this function
+		// table first.  Forward the root here so a valid method is not recorded
+		// as an unknown function before the object fallback runs.
+		if ( !_stricmp(pszKey, "FINDCONT") && m_pBaseObj )
+		{
+			CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+			if ( pObj )
+			{
+				HRESULT hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+				if ( hRes == NO_ERROR )
+					return hRes;
+			}
+		}
+		// FLAG_IMMOBILE is both a character property and a zero/one-argument
+		// method in 0.99 scripts.  Resolve the active object before the global
+		// function lookup so valid reads and calls do not create rejected-key
+		// diagnostics.
+		if ( !_stricmp(pszKey, "FLAG_IMMOBILE") && m_pBaseObj )
+		{
+			CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+			if ( pObj )
+			{
+				HRESULT hRes = vArgs.IsEmpty()
+					? pObj->s_PropGet(pszKey, vValRet, m_pSrc)
+					: pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+				if ( hRes == NO_ERROR )
+					return hRes;
+			}
+		}
 		if ( !_stricmp(pszKey, "ARG") )
 		{
 			LPCTSTR pszArgs = vArgs.GetPSTR();
@@ -741,15 +759,17 @@ public:
 					snprintf(szExpression, sizeof(szExpression), "%d%s", vCurrent.GetInt(), pszValue + 1);
 					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(szExpression));
 				}
-				else if ( IsSimpleNumericExpression(pszValue) )
-				{
-					TCHAR szExpression[SCRIPT_MAX_LINE_LEN];
-					strncpy(szExpression, pszValue, sizeof(szExpression) - 1);
-					szExpression[sizeof(szExpression) - 1] = '\0';
-					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(szExpression));
-				}
+				else if ( IsPureArithmeticExpression(pszValue) )
+					m_LocalArgs.SetKeyInt(pszName, (DWORD)GetComplex(pszValue));
 				else
-					m_LocalArgs.SetKeyStr(pszName, pszValue);
+				{
+					// Stock preserves a literal zero in its two-character hex form;
+					// expressions that evaluate to zero still use the normal "0".
+					if ( pszValue[0] == '0' && pszValue[1] == '\0' )
+						m_LocalArgs.SetKeyStr(pszName, "00");
+					else
+						m_LocalArgs.SetKeyStr(pszName, pszValue);
+				}
 			}
 			if ( !m_LocalArgs.FindKeyVar(pszName, vValRet) )
 				vValRet.SetStr("");
@@ -773,6 +793,36 @@ public:
 
 		// Subclasses override this for additional functions.
 		return HRES_UNKNOWN_PROPERTY;
+	}
+
+	static bool IsPureArithmeticExpression(LPCTSTR pszValue)
+	{
+		if ( pszValue == NULL || *pszValue == '\0' )
+			return false;
+		bool fDigit = false;
+		bool fOperator = false;
+		for ( const unsigned char* p = reinterpret_cast<const unsigned char*>(pszValue);
+			*p; p++ )
+		{
+			if ( isdigit(*p) )
+			{
+				fDigit = true;
+				continue;
+			}
+			if ( ISWHITESPACE(*p) )
+				continue;
+			if ( strchr("+-*/%|&^().", *p) )
+			{
+				fOperator = true;
+				continue;
+			}
+			if ( (*p == 'x' || *p == 'X') && fDigit )
+				continue;
+			if ( isxdigit(*p) && fDigit )
+				continue;
+			return false;
+		}
+		return fDigit && fOperator;
 	}
 
 	int GetScriptExpression(TCHAR* pszArg, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
@@ -1507,7 +1557,10 @@ public:
 		{
 			CGVariant vArgs(pszArg);
 			CGVariant vValRet;
+			const bool fPreviousSpaceCall = m_fSpaceSeparatedFunctionArgs;
+			m_fSpaceSeparatedFunctionArgs = !fCallForm && pszArg != NULL && *pszArg != '\0';
 			HRESULT hRes = Function_Dispatch(pszKey, vArgs, vValRet);
+			m_fSpaceSeparatedFunctionArgs = fPreviousSpaceCall;
 			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 				return NO_ERROR;
