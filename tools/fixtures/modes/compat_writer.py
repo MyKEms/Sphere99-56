@@ -1016,8 +1016,20 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         # Commands whose left side is a reference.
         "TAG.cmd_base_set=23",
         "SRC.TAG.cmd_src_set=21",
+        # 0.99 accepts a dotted property write with a space separator, not
+        # only the key=value spelling.
+        "SRC.TAG.cmd_space_set 22",
         "F_DOTTED_SERIAL.TAG.cmd_function_set=30",
         "FINDUID(1).TAG.cmd_finduid_set=41",
+        # Global VAR dotted writes and server LOG property writes use the same
+        # command splitter as object-root commands.
+        "VAR.dotted_dot_set=44",
+        "VAR(command_var_call,5)",
+        "SERV.LOG command_probe.log",
+        f"SYSMESSAGE {marker} C|cmd_space_tag|[<tag(cmd_space_set)>]",
+        f"SYSMESSAGE {marker} C|cmd_var_dot|[<VAR.dotted_dot_set>]",
+        f"SYSMESSAGE {marker} C|cmd_var_call|[<VAR(command_var_call)>]",
+        f"SYSMESSAGE {marker} C|cmd_serv_log|[<SERV.LOG>]",
         "SRC.SYSMESSAGE " + marker + " C|cmd_src_method|[reached]",
         # The legacy command form resolves an object method before dispatching
         # the dotted operation.  These writes are read back below so a parser

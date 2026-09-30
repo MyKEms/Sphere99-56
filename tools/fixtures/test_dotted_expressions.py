@@ -292,6 +292,10 @@ EXPECTED: dict[str, Expectation] = {
     # Commands: base TAG, SRC.TAG, F_FUNC.TAG, FINDUID(uid).TAG, and the
     # item trigger's SRC.TAG, then SRC.NAME= and F_FUNC.REMOVE.
     "C|cmd_src_method": "reached",
+    "C|cmd_space_tag": "22",
+    "C|cmd_var_dot": "44",
+    "C|cmd_var_call": "5",
+    "C|cmd_serv_log": "command_probe.log",
     "C|cmd_readback": "23|21|30|41|11",
     "I|cmd_readback": "18",
     "C|cmd_src_name_set": "DottedRenamed",

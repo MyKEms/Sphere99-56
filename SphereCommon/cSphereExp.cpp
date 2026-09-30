@@ -1010,6 +1010,27 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		}
 	}
 
+	// 0.99 accepts global variables in dotted command form as well as the
+	// VAR(name,value) method form.  A non-empty argument is the setter path;
+	// an empty argument is a read and deliberately returns an empty value for
+	// an undefined name, matching VAR(name).
+	if ( !_strnicmp(pszKey, "VAR.", 4) && pszKey[4] )
+	{
+		LPCTSTR pszName = pszKey + 4;
+		if ( !vArgs.IsEmpty() )
+		{
+			TCHAR szAssignment[SCRIPT_MAX_LINE_LEN];
+			snprintf(szAssignment, sizeof(szAssignment), "%s=%s", pszName,
+				vArgs.GetPSTR() ? vArgs.GetPSTR() : "");
+			CGVariant vAssignment(szAssignment);
+			return g_Cfg.m_Var.s_PropSetTags(vAssignment);
+		}
+		if ( g_Cfg.m_Var.FindKeyVar(pszName, vValRet) )
+			return NO_ERROR;
+		vValRet.SetStr("");
+		return NO_ERROR;
+	}
+
 	int iProp = s_FindKeyInTable( pszKey, sm_Functions );
 	if ( iProp < 0 )
 	{
