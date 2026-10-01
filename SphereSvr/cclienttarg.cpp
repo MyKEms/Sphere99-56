@@ -78,8 +78,13 @@ bool CClient::OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand )
 
 		if ( ! strchr( pszCommand, '.' ))
 		{
+			TCHAR szPropKey[SCRIPT_MAX_LINE_LEN];
+			strncpy( szPropKey, pszCommand, sizeof(szPropKey) - 1 );
+			szPropKey[sizeof(szPropKey) - 1] = '\0';
+			TCHAR* pszPropArg = NULL;
+			Str_Parse( szPropKey, &pszPropArg );
 			CGVariant vValRet;
-			HRESULT hResGet = pObj->s_PropGet( pszCommand, vValRet, this );
+			HRESULT hResGet = pObj->s_PropGet( szPropKey, vValRet, this );
 			if ( hResGet == NO_ERROR )
 			{
 				Printf( "'%s' is now set to '%s'",

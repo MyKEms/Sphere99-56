@@ -357,7 +357,12 @@ void CAccount::TogPrivFlags( WORD wPrivFlags, CGVariant& vVal )
 	// No args = toggle the flag.
 	// 1 = set the flag.
 	// 0 = clear the flag.
-	m_PrivFlags = vVal.GetDWORDMask( m_PrivFlags, wPrivFlags );
+	if ( vVal.IsEmpty())
+		m_PrivFlags ^= wPrivFlags;
+	else if ( vVal.GetDWORD() != 0 )
+		m_PrivFlags |= wPrivFlags;
+	else
+		m_PrivFlags &= ~wPrivFlags;
 }
 
 void CAccount::OnLogin( CClient* pClient )
