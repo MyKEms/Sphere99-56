@@ -85,6 +85,29 @@ def make_char_play(slot=0):
     struct.pack_into('>I', pkt, 69, 0x7f000001)
     return bytes(pkt)
 
+
+def make_unicode_talk(
+    text="fixture unicode speech", mode=3, hue=0x03B2, font=3, language="ENU"
+):
+    """Build a variable-length Unicode speech packet (XCMD_TalkUNICODE)."""
+    if len(language) != 3 or not language.isascii():
+        raise ValueError("language must be a three-character ASCII code")
+    payload = text.encode("utf-16-be") + b"\0\0"
+    packet_length = 12 + len(payload)
+    return (
+        struct.pack(
+            ">BHBHH4s",
+            0xAD,
+            packet_length,
+            mode,
+            hue,
+            font,
+            language.encode("ascii") + b"\0",
+        )
+        + payload
+    )
+
+
 def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25, int_val=25,
                      skill1=0, val1=50, skill2=1, val2=50, skill3=17, val3=1):
     """Build XCMD_Create (0x00) — 104 bytes. Creates a new character.

@@ -2607,6 +2607,7 @@ def write_runtime_files(
     timer_removal_provenance: bool = False,
     debug_level: int = 0,
     gm_command_log_probe: bool = False,
+    daily_logging_probe: bool = False,
 ) -> None:
     timer_provenance_setting = (
         "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
@@ -2614,6 +2615,11 @@ def write_runtime_files(
     unknown_keyword_report_setting = (
         f"UNKNOWNKEYWORDREPORT=logs/unknown-keywords.{unknown_keyword_report_format}\n"
         if unknown_keyword_report
+        else ""
+    )
+    daily_logging_setting = (
+        "VERBOSE=1\nLOGMASK=0x1ffff\nHEARALL=1\n"
+        if daily_logging_probe
         else ""
     )
     write_text(
@@ -2631,7 +2637,7 @@ WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
 DEBUGLEVEL=""" + str(debug_level) + """
-""" + ("LOGMASK=0x1ffff\nVERBOSE=1\n" if gm_command_log_probe else "") + """
+""" + daily_logging_setting + ("LOGMASK=0x1ffff\nVERBOSE=1\n" if gm_command_log_probe else "") + """
 """ + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
@@ -4351,6 +4357,7 @@ def generate_fixture(
         ),
         debug_level=2 if args.daily_logging_probe else 0,
         gm_command_log_probe=args.gm_command_log_probe,
+        daily_logging_probe=args.daily_logging_probe,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
