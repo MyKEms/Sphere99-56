@@ -42,7 +42,9 @@ public:
 	}
 
 	int GetDistZ(const CGPointBase& pt) const;
-	int GetDist(const CGPointBase& pt) const; // Distance between points
+	// Distance between points on the same logical map plane.  Use GetDistBase
+	// for administrative/all-show searches that intentionally ignore planes.
+	int GetDist(const CGPointBase& pt) const;
 	int GetDist3D(const CGPointBase& pt) const; // 3D Distance between points
 	int GetDistBase(const CGPointBase& pt) const
 	{
