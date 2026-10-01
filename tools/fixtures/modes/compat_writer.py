@@ -96,6 +96,18 @@ DAILY_LOG_CREATE_ACCOUNT = "DailyCreate"
 DAILY_LOG_CREATE_PASSWORD = "daily_create_pw"
 DAILY_LOG_CREATE_NAME = "DailyProbe"
 
+# The command-log probe uses the same synthetic existing-character path as the
+# daily logging fixture, then dispatches twelve marker-bearing commands through
+# the script-level accMsg helper.  The markers are intentionally generic so the
+# fixture checks only the public command-log contract.
+GM_COMMAND_LOG_MARKERS = tuple(
+    f"TEST: SUCCESS - GM command marker {index:02d}" for index in range(1, 13)
+)
+GM_COMMAND_LOG_MARKER = "GM_COMMAND_LOG_MARKER"
+GM_COMMAND_LOG_ACCOUNT = "GmCommandLogProbe"
+GM_COMMAND_LOG_PASSWORD = "gm_cmd_log_pw"
+GM_COMMAND_LOG_CHAR_NAME = "GmCommandLogCharacter"
+
 # Dedicated runaway-loop fixture.  The normal engine default remains
 # generous; this mode sets a small value so the bounded return and the
 # second-client check complete quickly.
@@ -1703,6 +1715,7 @@ def write_scripts(
     spawn_point_probe: bool = False,
     metadata_roundtrip_probe: bool = False,
     escape_overflow_probe: bool = False,
+    gm_command_log_probe: bool = False,
     runaway_loop_probe: bool = False,
     recursion_depth_probe: bool = False,
     movement_stairs_probe: bool = False,
@@ -1929,6 +1942,19 @@ def write_scripts(
             escape_line
             + "\n"
             + f"SYSMESSAGE {ESCAPE_OVERFLOW_MARKER}\n"
+        )
+    gm_command_log_login = ""
+    gm_command_log_sections = ""
+    if gm_command_log_probe:
+        gm_command_log_login = "".join(
+            f"ACCMSG({marker})\n" for marker in GM_COMMAND_LOG_MARKERS
+        ) + f"SYSMESSAGE {GM_COMMAND_LOG_MARKER}_DONE\n"
+        gm_command_log_sections = (
+            "\n[FUNCTION s]\n"
+            "RETURN 0\n"
+            "\n[FUNCTION accMsg]\n"
+            "TRY S(NAME=<ARGS>)\n"
+            "RETURN 0\n"
         )
     runaway_loop_login = (
         f"SYSMESSAGE {RUNAWAY_LOOP_MARKER}_CONFIG <SERV.SCRIPTLOOPLIMIT>\n"
@@ -2460,7 +2486,7 @@ DEX=100
 [EVENTS e_AllPlayers]
 ON=@LogIn
 """ + events_method_login + """
-""" + world_save_logout_event_login + escape_overflow_login + recursion_depth_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_logout_event_login + escape_overflow_login + gm_command_log_login + recursion_depth_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 """ + runaway_loop_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
@@ -2565,7 +2591,7 @@ ITEMNEWBIE=0x0E73
         + spawn_point_product_itemdef
         + movement_stairs_itemdefs
         + book_pages_probe_sections
-        + stacking_itemdef,
+        + stacking_itemdef + gm_command_log_sections,
     )
 
 
@@ -2578,6 +2604,7 @@ def write_runtime_files(
     runaway_loop_probe: bool = False,
     timer_removal_provenance: bool = False,
     debug_level: int = 0,
+    gm_command_log_probe: bool = False,
 ) -> None:
     timer_provenance_setting = (
         "TIMERREMOVALPROVENANCE=1\n" if timer_removal_provenance else ""
@@ -2602,6 +2629,7 @@ WORLDSAVE=save/
 ACCTFILES=accounts/
 LOG=logs/
 DEBUGLEVEL=""" + str(debug_level) + """
+""" + ("LOGMASK=0x1ffff\nVERBOSE=1\n" if gm_command_log_probe else "") + """
 """ + timer_provenance_setting + """
 CLIENTMAX=64
 CLIENTSPERIP=64
@@ -2668,6 +2696,60 @@ def write_escape_overflow_save(root: Path) -> None:
                 "SERIAL=1",
                 f"ACCOUNT={ESCAPE_OVERFLOW_ACCOUNT}",
                 f"NAME={ESCAPE_OVERFLOW_NAME}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "DEX=100",
+                "INT=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            )
+        ),
+    )
+
+
+def write_gm_command_log_save(root: Path) -> None:
+    """Write one existing admin character for the command-log probe."""
+
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            (
+                f"[{GM_COMMAND_LOG_ACCOUNT}]",
+                f"PASSWORD={GM_COMMAND_LOG_PASSWORD}",
+                "PLEVEL=Admin",
+                "CHARUID=1",
+                "LASTCHARUID=1",
+                "[EOF]",
+            )
+        ),
+    )
+    write_text(root / "accounts" / "sphereacct.scp", "[EOF]")
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            (
+                "TITLE=Sphere synthetic command-log fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            )
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            (
+                "TITLE=Sphere synthetic command-log fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=1",
+                f"ACCOUNT={GM_COMMAND_LOG_ACCOUNT}",
+                f"NAME={GM_COMMAND_LOG_CHAR_NAME}",
                 "EVENTS=e_AllPlayers",
                 "STR=100",
                 "DEX=100",
@@ -3993,6 +4075,29 @@ def generate_fixture(
         parser.error("choose only one world-load fixture mode")
     if args.spawn_gem_duplicate_serial_probe:
         args.spawn_gem_probe = True
+    if args.gm_command_log_probe and any(
+        (
+            args.world_load_counts,
+            args.timer_lifetime_probe,
+            args.memory_timer_probe,
+            args.timer_default_remove_probe,
+            args.timer_lifetime_item_first_probe,
+            args.timer_sibling_mutation_probe,
+            args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
+            args.container_shutdown_probe,
+            args.events_attr_probe,
+            args.legacy_metadata_probe,
+            args.book_pages_probe,
+            args.dword_hex_probe,
+            args.region_weather_probe,
+            args.spawn_gem_probe,
+            args.spawn_point_probe,
+            args.escape_overflow_probe,
+            args.daily_logging_probe,
+        )
+    ):
+        parser.error("GM command-log probe cannot be combined with another fixture mode")
     if args.events_method_probe:
         conflicts = [
             name
@@ -4240,6 +4345,7 @@ def generate_fixture(
             args.memory_timer_probe or args.timer_default_remove_probe
         ),
         debug_level=2 if args.daily_logging_probe else 0,
+        gm_command_log_probe=args.gm_command_log_probe,
         force_garbage_collect=(
             args.timer_lifetime_probe
             or args.timer_lifetime_item_first_probe
@@ -4267,6 +4373,7 @@ def generate_fixture(
         named_item_name_probe=args.named_item_names,
         named_resource_id_probe=args.named_resource_ids,
         metadata_roundtrip_probe=args.metadata_roundtrip_probe,
+        gm_command_log_probe=args.gm_command_log_probe,
         timer_lifetime_probe=args.timer_lifetime_probe,
         memory_timer_probe=args.memory_timer_probe,
         timer_default_remove_probe=args.timer_default_remove_probe,
@@ -4357,6 +4464,8 @@ def generate_fixture(
         write_spawn_point_save(root)
     if args.escape_overflow_probe or args.daily_logging_probe:
         write_escape_overflow_save(root)
+    if args.gm_command_log_probe:
+        write_gm_command_log_save(root)
     if args.movement_stairs_probe:
         write_movement_stairs_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
