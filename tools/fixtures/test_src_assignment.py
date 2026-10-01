@@ -23,8 +23,15 @@ EXPECTED = {
     "caller_before": "SrcProbe",
     "target_name": "synthetic SRC target",
     "target_serial": "040000005",
-    "nested_before": "SrcProbe",
-    "nested_inside": "synthetic SRC target",
+    "numeric_before": "SrcProbe",
+    "numeric_inside": "synthetic SRC target",
+    "literal_before": "SrcProbe",
+    "literal_inside": "synthetic SRC target",
+    "var_before": "SrcProbe",
+    "var_inside": "synthetic SRC target",
+    "missing_before": "SrcProbe",
+    "missing_inside": "SrcProbe",
+    "tag_probe": "tag-probe",
     "caller_after": "SrcProbe",
     "timer_source": "SrcProbe",
     "timer_after": "SrcProbe",
@@ -129,6 +136,12 @@ def main() -> int:
         value = rows.get(key)
         if value != expected:
             failures.append(f"{key}: got {value!r}; expected {expected!r}")
+    # This row is a direct probe for the production ``TAG(combatTarget,<ACT>)``
+    # form.  It is intentionally reported but not value-asserted here: the
+    # same empty result is present on master and on this SRC-only change, so
+    # that separate stock-parity gap must not be folded into this fix.
+    if "tag_hit" not in rows:
+        failures.append("TAG hit probe did not execute")
     if failures:
         print("SRC assignment probe failed", file=sys.stderr)
         for failure in failures:
@@ -141,6 +154,7 @@ def main() -> int:
     print("SRC assignment rows:")
     for key in EXPECTED:
         print(f"- {key}={rows.get(key)}")
+    print(f"- tag_hit_probe={rows['tag_hit']}")
     return 0
 
 
