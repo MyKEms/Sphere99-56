@@ -27,6 +27,9 @@ jobs:
       - name: Build
         run: make -j"$(nproc)" 2>&1 | tee build.log
 
+      - name: Reject command-line options before startup
+        run: python3 tools/test_command_line.py --binary ./sphere99svr
+
       - name: Run container-list regression
         run: |
           make container-list-test
@@ -188,6 +191,9 @@ jobs:
 
       - name: Test fixture shutdown gate
         run: python3 tools/fixtures/test_run_suite.py
+
+      - name: Test fixture runner port ownership
+        run: python3 tools/fixtures/test_runner_safety.py
 
       - name: Validate fixture manifest
         run: python3 tools/fixtures/test_fixture_manifest.py

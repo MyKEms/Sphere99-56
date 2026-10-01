@@ -17,6 +17,7 @@ from pathlib import Path
 
 from fixture_cases import FIXTURE_CASES, FixtureCase
 from modes.fragments.allowlists import write_unknown_keyword_allowlist
+from port_guard import assert_port_free
 
 
 ROOT = Path(__file__).resolve().parent
@@ -121,6 +122,10 @@ def run_case(case_name: str, variant: str, binary: Path, root: Path, repo: Path)
             # Two checkers may intentionally consume the same generated save;
             # each still gets its own named CI step/case invocation.
             pass
+        if test.pass_port:
+            if port is None:
+                raise RuntimeError(f"{test.script} requires a port")
+            assert_port_free(case_name, port)
         command = _test_command(
             test.script,
             fixture,
