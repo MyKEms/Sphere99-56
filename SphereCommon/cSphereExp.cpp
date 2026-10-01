@@ -1218,8 +1218,8 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 					vValRet = vInnerRet;
 					break;
 				}
-				if ( !rejected.RecordIfPresent() )
-					ScriptUnknownRecord(SCRIPT_UNKNOWN_REJECTED, pszStr, GetBaseObject());
+				// SAFE converts an unresolved expression to its numeric fallback;
+				// expected missing properties must stay silent in the unknown report.
 				// Try as a numeric expression.
 				long lVal = GetValue(pszStr);
 				vValRet.SetInt(lVal);

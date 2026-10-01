@@ -140,6 +140,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|strgettok_quoted": "beta",
     "C|safe_src_name": DOTTED_PROBE_ACCOUNT,
     "C|safe_missing_tag": "",
+    "C|safe_missing_tag_direct": "",
     "C|tag_paren": "chartext",
     "I|tag_paren": "itemtext",
     "C|tag_current_initial": "10",
@@ -229,6 +230,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|cond_tag_paren": "1",
     "C|cond_tag_unset": "0",
     "C|cond_tag0_unset": "1",
+    "C|cond_safe_tag_missing": "0",
     "C|cond_base_tag": "1",
     "C|cond_isplayer": "1",
     "C|cond_literal_one": "1",
@@ -474,7 +476,20 @@ def report_failures(report_path: Path) -> list[str]:
         for entry in report.get("entries", [])
         if misparsed_report_key(entry)
     )
-    return [f"unknown-keyword report contains misparsed key {key}" for key in bogus]
+    failures = [f"unknown-keyword report contains misparsed key {key}" for key in bogus]
+    safe_missing = [
+        entry for entry in report.get("entries", [])
+        if entry.get("kind") == "rejected"
+        and str(entry.get("keyword", "")).upper() in {
+            "TAG",
+            "TAG(PROBE_MISSING)",
+            "<EMPTY>",
+            "PROBE_MISSING",
+        }
+    ]
+    if safe_missing:
+        failures.append("safe missing-tag read was recorded as an unknown rejection")
+    return failures
 
 
 def main() -> int:

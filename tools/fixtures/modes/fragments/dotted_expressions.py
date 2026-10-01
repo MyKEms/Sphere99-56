@@ -50,6 +50,7 @@ DOTTED_EXPRESSION_ROWS = (
     ("strgettok_quoted", '<strgettok "alpha,beta,gamma",1,",">', "C"),
     ("safe_src_name", "<safe src.name>", "C"),
     ("safe_missing_tag", "<safe src.tag(probe_missing)>", "C"),
+    ("safe_missing_tag_direct", "<safe.tag(probe_missing)>", "C"),
     ("tag_paren", "<tag(probe_text)>", "CI"),
     ("function_plain", "<f_dotted_serial>", "CI"),
     ("serial", "<serial>", "I"),
@@ -141,6 +142,7 @@ DOTTED_CONDITION_ROWS = (
     ("cond_tag_paren", "(src.tag(probe_num)==7)"),
     ("cond_tag_unset", "(src.tag.probe_missing==1)"),
     ("cond_tag0_unset", "(src.tag0.probe_missing==0)"),
+    ("cond_safe_tag_missing", "(safe.tag(probe_missing))"),
     ("cond_base_tag", "(tag.probe_num==7)"),
     # Object predicates are valid bare operands in script conditions.  Keep
     # this form explicit so the resolver cannot regress to DEFNAME-only

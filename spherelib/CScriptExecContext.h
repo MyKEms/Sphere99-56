@@ -1090,15 +1090,19 @@ public:
 
 				if ( !fResolved )
 				{
-					if ( !rejected.RecordIfPresent() )
-						ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 					if ( fSafe )
 					{
+						// SAFE deliberately converts an unresolved read to the stock
+						// zero/empty value.  Do not turn that expected fallback into
+						// an unknown-keyword rejection (for example safe.tag(name)
+						// when the tag is absent).
 						sResult = "";
 						fResolved = true;
 					}
 					else
 					{
+						if ( !rejected.RecordIfPresent() )
+							ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 						pszBuf[iEnd - 1] = '?'; // restore
 						i++; // skip past '?'
 						continue;
@@ -1195,15 +1199,19 @@ public:
 
 			if ( !fResolved )
 			{
-				if ( !rejected.RecordIfPresent() )
-					ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 				if ( fSafe )
 				{
+					// SAFE deliberately converts an unresolved read to the stock
+					// zero/empty value.  Do not turn that expected fallback into
+					// an unknown-keyword rejection (for example safe.tag(name)
+					// when the tag is absent).
 					sResult = "";
 					fResolved = true;
 				}
 				else
 				{
+					if ( !rejected.RecordIfPresent() )
+						ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 					// Restore the '>' and skip — don't modify unresolvable tags.
 					pszBuf[iEnd] = chEnd;
 					continue;
