@@ -32,6 +32,9 @@ int CGPointBase::GetDistZ(const CGPointBase& pt) const
 
 int CGPointBase::GetDist(const CGPointBase& pt) const
 {
+	if (m_mapplane != pt.m_mapplane)
+		return SHRT_MAX;
+
 	// Get the basic 2d distance.
 	int dx = abs(m_x - pt.m_x);
 	int dy = abs(m_y - pt.m_y);
