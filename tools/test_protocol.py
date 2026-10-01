@@ -15,6 +15,7 @@ from uo_test_client import (
     make_charlist_req,
     make_login_packet,
     make_server_select,
+    make_unicode_talk,
 )
 from uo_packets import PacketStreamError, split_packet_stream
 from uo_gumps import (
@@ -81,6 +82,11 @@ class ProtocolPacketTests(unittest.TestCase):
         self.assertEqual(len(packet), 73)
         self.assertEqual(packet[0], 0x5D)
         self.assertEqual(struct.unpack_from(">I", packet, 65)[0], 3)
+
+    def test_unicode_talk_uses_network_order_and_terminator(self):
+        packet = make_unicode_talk("Hi", mode=3, hue=0x03B2, font=3, language="ENU")
+        self.assertEqual(packet[:12], b"\xad\x00\x12\x03\x03\xb2\x00\x03ENU\x00")
+        self.assertEqual(packet[12:], "Hi".encode("utf-16-be") + b"\0\0")
 
     def test_modern_character_create_layout(self):
         packet = make_char_create(
