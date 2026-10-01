@@ -41,6 +41,8 @@ public:
 	int FindMapDiff( DWORD ulBlockIndex ) const;
 	int FindStatDiff( DWORD ulBlockIndex ) const;
 	void LoadDiffs();
+	bool IsSameBlockSource( const CMulMap& map ) const;
+	int GetBlockSourceIndex() const;
 };
 
 extern CMulMap g_MulMap[8];
@@ -204,6 +206,8 @@ private:
 
 public:
 	// Block aligned of course.
+	// m_mapplane is the g_MulMap entry the block was read from.  Logical
+	// planes with the same block source share the block.
 	const CPointMap m_pt;	// The upper left corner. (ignore z) sort by this
 	CMulStaticsBlock m_Statics;
 	CServTime m_timeCache;	// keep track of the use time of this item. (client does not care about this)
@@ -232,9 +236,17 @@ public:
 		return( y - m_pt.m_y );
 	}
 
+	static HASH_INDEX GetBlockKey( int iSource, int x, int y )
+	{
+		// A distinct key for each 8x8 block of each block source.
+		// Valid block columns and rows fit in 12 bits each.
+		return(( static_cast<HASH_INDEX>( iSource & 0xff ) << 24 ) |
+			( static_cast<HASH_INDEX>(( x / SPHEREMAP_BLOCK_SIZE ) & 0xfff ) << 12 ) |
+			static_cast<HASH_INDEX>(( y / SPHEREMAP_BLOCK_SIZE ) & 0xfff ));
+	}
 	HASH_INDEX GetHashCode() const
 	{
-		return( m_pt.GetHashCode() );
+		return( GetBlockKey( m_pt.m_mapplane, m_pt.m_x, m_pt.m_y ));
 	}
 
 	const CMulMapMeter* GetTerrain( int xoffset, int yoffset ) const

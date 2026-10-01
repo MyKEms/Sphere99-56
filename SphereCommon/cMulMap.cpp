@@ -33,6 +33,34 @@ void CMulMap::LoadDiffs()
 
 }
 
+bool CMulMap::IsSameBlockSource( const CMulMap& map ) const
+{
+	// Would CMulMapBlock::Load() read the same data from both maps ?
+	// These are all of the map fields Load() and LoadStatics() use.
+	return( m_file == map.m_file &&
+		m_filedif == map.m_filedif &&
+		m_iSizeX == map.m_iSizeX &&
+		m_iSizeY == map.m_iSizeY &&
+		m_pMapDiff == map.m_pMapDiff &&
+		m_pStatDiff == map.m_pStatDiff );
+}
+
+int CMulMap::GetBlockSourceIndex() const
+{
+	// Several logical map planes read the same MUL data (planes outside the
+	// table fall back to entry 0, and the extra entries share map 0 files).
+	// Return the first g_MulMap entry with this map's block source so those
+	// planes can share their cached map blocks.
+	for ( int i=0; i<static_cast<int>(COUNTOF(g_MulMap)); i++ )
+	{
+		if ( IsSameBlockSource( g_MulMap[i] ))
+			return( i );
+	}
+	// CPointMapBase::GetMulMap() only returns table entries, and an entry
+	// always matches itself above.
+	return( 0 );
+}
+
 //////////////////////////////////////////////////////////////////
 // -CMulMapBlockState
 

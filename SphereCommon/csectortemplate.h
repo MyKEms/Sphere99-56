@@ -144,7 +144,11 @@ public:
 	CItemsList m_Items_Timer;	// CItem(s) in this CSector that need timers.
 	CItemsList m_Items_Inert;	// CItem(s) in this CSector. (no timer required)
 private:
-	CHashArray<CMulMapBlock> m_MapBlockCache;	// CMulMapBlock Cache Map Stuff. Max of 8*8=64 items in here. from MAP0.MUL file.
+	CHashArray<CMulMapBlock> m_MapBlockCache;	// CMulMapBlock Cache Map Stuff. Max of 8*8=64 items per block source.
 };
+
+// One cached block per 8x8 cell of a sector for each g_MulMap block source.
+#define SECTOR_MAP_BLOCK_QTY	(( SECTOR_SIZE_X / SPHEREMAP_BLOCK_SIZE ) * ( SECTOR_SIZE_Y / SPHEREMAP_BLOCK_SIZE ))
+#define SECTOR_MAP_BLOCK_CACHE_MAX	( SECTOR_MAP_BLOCK_QTY * static_cast<int>( COUNTOF( g_MulMap )))
 
 #endif // _INC_CSECTOR_H

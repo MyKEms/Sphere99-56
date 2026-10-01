@@ -99,6 +99,7 @@ CSectorTemplate::CSectorTemplate() :
 
 CSectorTemplate::~CSectorTemplate()
 {
+	CheckMapBlockCache( 0 );
 }
 
 int CSectorTemplate::GetIndex() const
@@ -125,14 +126,17 @@ void CSectorTemplate::CheckMapBlockCache( int iAge )
 	// Clean out the sectors map cache if it has not been used recently.
 	// iAge == 0 = delete all.
 
+	// The cache owns its blocks. Nothing keeps a block pointer past the
+	// current lookup, so a block can be freed when it leaves the cache.
+
 	int iQty = m_MapBlockCache.GetSize();
 	for ( int i=0; i<iQty; i++ )
 	{
 		CMulMapBlock* pMapBlock = m_MapBlockCache.ElementAt(i);
-		ASSERT(pMapBlock);
-		if ( iAge <= 0 || pMapBlock->m_timeCache.GetCacheAge() >= iAge )
+		if ( pMapBlock == NULL || iAge <= 0 || pMapBlock->m_timeCache.GetCacheAge() >= iAge )
 		{
 			m_MapBlockCache.RemoveAt(i);
+			delete pMapBlock;
 			i--;
 			iQty--;
 		}
@@ -149,13 +153,18 @@ const CMulMapColorBlock* CSectorTemplate::GetMapColorBlock( const CPointMap& pt 
 const CMulMapBlock* CSectorTemplate::GetMapBlock( const CPointMap& pt )
 {
 	// Get a map block from the cache. load it if not.
+	// Blocks are cached per block source, not per logical map plane.
+	// All the planes that read the same MUL data share one copy of a block,
+	// so a sector holds at most one block per 8x8 cell for each source.
 
 	ASSERT( pt.IsValidXY());
-	CPointMap pntBlock( SPHEREMAP_BLOCK_ALIGN(pt.m_x), SPHEREMAP_BLOCK_ALIGN(pt.m_y), 0, pt.m_mapplane );
-	ASSERT( m_MapBlockCache.GetSize() <= (SPHEREMAP_BLOCK_SIZE* SPHEREMAP_BLOCK_SIZE));
+	const CMulMap* pMulMap = pt.GetMulMap();
+	ASSERT( pMulMap );
+	int iSource = pMulMap->GetBlockSourceIndex();
+	CPointMap pntBlock( SPHEREMAP_BLOCK_ALIGN(pt.m_x), SPHEREMAP_BLOCK_ALIGN(pt.m_y), 0, (MAPPLANE_TYPE) iSource );
 
 	CMulMapBlock* pMapBlock=NULL;
-	HASH_INDEX dwHashIndex = pntBlock.GetHashCode();
+	HASH_INDEX dwHashIndex = CMulMapBlock::GetBlockKey( iSource, pntBlock.m_x, pntBlock.m_y );
 
 	// Find it in cache.
 	int i = m_MapBlockCache.FindKey(dwHashIndex);
@@ -194,6 +203,14 @@ const CMulMapBlock* CSectorTemplate::GetMapBlock( const CPointMap& pt )
 	ASSERT(pMapBlock);
 	if ( pMapBlock )
 	{
+		if ( m_MapBlockCache.GetSize() == SECTOR_MAP_BLOCK_CACHE_MAX )
+		{
+			// Only a lookup outside this sector can get here. The block is
+			// still valid, so keep serving it and let the periodic trim
+			// shrink the cache. Report once each time the bound is crossed.
+			DEBUG_ERR(( "Sector %d map block cache exceeds %d blocks at %d,%d source %d" LOG_CR,
+				GetIndex(), SECTOR_MAP_BLOCK_CACHE_MAX, pt.m_x, pt.m_y, iSource ));
+		}
 		m_MapBlockCache.AddSortKey( pMapBlock, dwHashIndex );
 	}
 	return( pMapBlock );
