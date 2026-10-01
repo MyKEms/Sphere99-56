@@ -847,7 +847,7 @@ public:
 
 	void addContextMenu( CLIMODE_TYPE mode, const CMenuItem* item, int count, CObjBase* pObj = NULL );
 	void addItemMenu( CLIMODE_TYPE mode, const CMenuItem* item, int count, CObjBase* pObj = NULL );
-	void addGumpDialog( CLIMODE_TYPE mode, CGStringArray& asControls, CGStringArray& asText, int x, int y, CObjBase* pObj );
+	bool addGumpDialog( CLIMODE_TYPE mode, CGStringArray& asControls, CGStringArray& asText, int x, int y, CObjBase* pObj );
 
 	bool addGumpDialogProps( CSphereUID uid );
 	void addGumpDialogAdmin( int iPage, int iSortType );
