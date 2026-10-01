@@ -1082,6 +1082,30 @@ HRESULT CServer::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet,
 
 //*********************************************************
 
+static HRESULT CServerCommandLineHelp( CServer& server )
+{
+	server.WriteString( SPHERE_TITLE " " SPHERE_VERSION LOG_CR
+		"Command Line Switches:" LOG_CR
+		"-? This help list." LOG_CR
+		"-INSTALL as NT service" LOG_CR
+		"-Lfilename Load this file for the world" LOG_CR
+		"-Nstring Set the sphere name." LOG_CR
+		"-P# Set the port number." LOG_CR
+		"-Tfilename Test this resource script" LOG_CR
+		"-Ofilename Output console to this file name" LOG_CR
+		"-Q Quit when finished." LOG_CR
+		"-D0 Dump all scripts to a single file dumpall.txt" LOG_CR
+		"-D1 Dump global variable DEFNAMEs to dumpdefs.txt" LOG_CR
+		"-D2## Dump itemdata.mul with this flag mask to dumpitems.txt" LOG_CR
+		"-D3 Dump the ground tiles database to dumpterrain.txt" LOG_CR
+		"-D4 Dump a list of all char types to dumpchars.txt" LOG_CR
+		"-4 Xref itemdata.mul with the scripts. list unscripted items." LOG_CR
+		"-5 Xref DUPEITEM= to write item DUPELIST=" LOG_CR
+		"-6 Xref char ANIM= defs with ANIM.IDX" LOG_CR
+		);
+	return HRES_INTERNAL_ERROR;
+}
+
 HRESULT CServer::CommandLineArg( TCHAR* pArg )
 {
 	// Console Command line.
@@ -1099,31 +1123,15 @@ HRESULT CServer::CommandLineArg( TCHAR* pArg )
 		return 0;
 	if ( ! _IS_SWITCH( pArg[0] ))
 		return 0;
+	if ( ! strcmpi( pArg, "-h" ) || ! strcmpi( pArg, "/h" ) ||
+		! strcmpi( pArg, "--help" ) || ! strcmpi( pArg, "/help" ))
+		return CServerCommandLineHelp( *this );
 
 	TCHAR ch = toupper( pArg[1] );
 	switch ( ch )
 	{
 	case '?':
-		WriteString( SPHERE_TITLE " " SPHERE_VERSION LOG_CR
-			"Command Line Switches:" LOG_CR
-			"-? This help list." LOG_CR
-			"-INSTALL as NT service" LOG_CR
-			"-Lfilename Load this file for the world" LOG_CR
-			"-Nstring Set the sphere name." LOG_CR
-			"-P# Set the port number." LOG_CR
-			"-Tfilename Test this resource script" LOG_CR
-			"-Ofilename Output console to this file name" LOG_CR
-			"-Q Quit when finished." LOG_CR
-			"-D0 Dump all scripts to a single file dumpall.txt" LOG_CR
-			"-D1 Dump global variable DEFNAMEs to dumpdefs.txt" LOG_CR
-			"-D2## Dump itemdata.mul with this flag mask to dumpitems.txt" LOG_CR
-			"-D3 Dump the ground tiles database to dumpterrain.txt" LOG_CR
-			"-D4 Dump a list of all char types to dumpchars.txt" LOG_CR
-			"-4 Xref itemdata.mul with the scripts. list unscripted items." LOG_CR
-			"-5 Xref DUPEITEM= to write item DUPELIST=" LOG_CR
-			"-6 Xref char ANIM= defs with ANIM.IDX" LOG_CR
-			);
-		return( HRES_INTERNAL_ERROR );
+		return CServerCommandLineHelp( *this );
 
 	case 'I': // ini or i = Load alternate m_scpIni file.
 		if ( ! strcmpi( pArg+1, "install" ))
@@ -1209,7 +1217,7 @@ HRESULT CServer::CommandLineArg( TCHAR* pArg )
 	default:
 do_unrecognized:
 		g_Log.Event( LOG_GROUP_INIT, LOGL_CRIT, "Don't recognize command line data '%s'" LOG_CR, pArg );
-		break;
+		return CServerCommandLineHelp( *this );
 	}
 
 	return( 0 );
