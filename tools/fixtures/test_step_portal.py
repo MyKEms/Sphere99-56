@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that a client can walk five steps on logical map plane 5."""
+"""Check that an item's @Step trigger gates a moongate before default teleport."""
 
 from __future__ import annotations
 
@@ -15,17 +15,19 @@ from pathlib import Path
 from run_suite import shutdown_failures, stop_server, tail, wait_for_port
 
 
-ACCOUNT = "MovementProbe"
-PASSWORD = "movement_pw"
-SANITIZER_MARKERS = (
-    "AddressSanitizer",
-    "UndefinedBehaviorSanitizer",
-    "runtime error:",
-)
+ACCOUNT = "StepPortalProbe"
+ACCOUNT_KEY = "step-portal-pw"
+EXPECTED_START = (128, 128, 0)
+PORTAL_DESTINATION = (130, 130, 0)
+QUALIFIED_START = (128, 130, 0)
+SANITIZER_MARKERS = ("AddressSanitizer", "UndefinedBehaviorSanitizer", "runtime error:")
 
 
-def _walk_packet(direction: int, sequence: int) -> bytes:
-    return struct.pack(">BBBI", 0x02, direction, sequence & 0xFF, 0)
+def _decode(data: bytes):
+    from uo_packets import split_packet_stream
+    from uo_test_client import decode_game_response
+
+    return split_packet_stream(decode_game_response(data), allow_truncated=True)
 
 
 def _talk(command: str) -> bytes:
@@ -33,35 +35,7 @@ def _talk(command: str) -> bytes:
     return struct.pack(">BHBHH", 0x03, 8 + len(encoded), 0, 0, 3) + encoded
 
 
-def _decoded_packets(data: bytes):
-    from uo_packets import split_packet_stream
-    from uo_test_client import decode_game_response
-
-    return split_packet_stream(decode_game_response(data), allow_truncated=True)
-
-
-def _recv_until_walk_reply(sock: socket.socket, timeout: float = 3.0) -> list:
-    data = bytearray()
-    deadline = time.monotonic() + timeout
-    sock.settimeout(0.2)
-    try:
-        while time.monotonic() < deadline:
-            packets = _decoded_packets(bytes(data))
-            if any(packet.command in (0x21, 0x22) for packet in packets):
-                return packets
-            try:
-                chunk = sock.recv(65536)
-            except socket.timeout:
-                continue
-            if not chunk:
-                return _decoded_packets(bytes(data))
-            data.extend(chunk)
-    finally:
-        sock.setblocking(True)
-    return _decoded_packets(bytes(data))
-
-
-def _drain(sock: socket.socket, timeout: float = 1.5) -> bytes:
+def _drain(sock: socket.socket, timeout: float = 1.0) -> bytes:
     data = bytearray()
     deadline = time.monotonic() + timeout
     sock.settimeout(0.2)
@@ -79,83 +53,101 @@ def _drain(sock: socket.socket, timeout: float = 1.5) -> bytes:
     return bytes(data)
 
 
+def _recv_until(sock: socket.socket, predicate, timeout: float = 5.0) -> bytes:
+    data = bytearray()
+    deadline = time.monotonic() + timeout
+    sock.settimeout(0.2)
+    try:
+        while time.monotonic() < deadline:
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            data.extend(chunk)
+            if predicate(_decode(bytes(data))):
+                return bytes(data)
+    finally:
+        sock.setblocking(True)
+    return bytes(data)
+
+
 def _system_text(packet) -> str:
     if packet.command != 0x1C or len(packet.data) < 45:
         return ""
     return packet.data[44:].split(b"\0", 1)[0].decode("latin1", errors="replace")
 
 
-def _where(sock: socket.socket) -> tuple[int, int, int, int] | None:
+def _where(sock: socket.socket) -> tuple[int, int, int] | None:
     sock.sendall(_talk("/WHERE"))
-    for packet in reversed(_decoded_packets(_drain(sock))):
-        match = re.search(
-            r"\(?(-?\d+),(-?\d+),(-?\d+)(?:,(-?\d+))?\)?",
-            _system_text(packet),
-        )
+    response = _drain(sock, 1.5)
+    for packet in reversed(_decode(response)):
+        match = re.search(r"\((-?\d+),(-?\d+),(-?\d+)\)", _system_text(packet))
         if match:
-            values = tuple(int(value) if value is not None else 0 for value in match.groups())
-            return values  # type: ignore[return-value]
+            return tuple(int(value) for value in match.groups())
     return None
 
 
-def _enter(port: int) -> socket.socket:
-    tools_path = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(tools_path))
-    from uo_test_client import (
-        decode_game_response,
-        find_start_packet,
-        game_connect,
-        make_char_play,
-        recv_until_game_start,
+def _walk(sock: socket.socket, direction: int, sequence: int) -> bytes:
+    sock.sendall(struct.pack(">BBBI", 0x02, direction, sequence & 0xFF, 0))
+    return _recv_until(
+        sock,
+        lambda packets: any(packet.command == 0x22 for packet in packets),
+        timeout=3.0,
     )
 
-    sock, _ = game_connect("127.0.0.1", port, ACCOUNT, PASSWORD, game_port=port + 1000)
+
+def _enter(port: int, slot: int) -> socket.socket:
+    tools_path = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(tools_path))
+    from uo_test_client import game_connect, make_char_play, recv_until_game_start
+
+    sock, _ = game_connect("127.0.0.1", port, ACCOUNT, ACCOUNT_KEY, game_port=port + 1000)
     if sock is None:
-        raise RuntimeError("plane walk fixture did not reach the character list")
-    sock.sendall(make_char_play(0))
-    initial = decode_game_response(recv_until_game_start(sock, timeout=10.0))
-    if find_start_packet(initial) is None:
+        raise RuntimeError(f"step portal fixture did not reach character list for slot {slot}")
+    sock.sendall(make_char_play(slot))
+    if not recv_until_game_start(sock, timeout=10.0):
         sock.close()
-        raise RuntimeError("plane walk fixture character did not enter the world")
-    version = b"3.0.9.0.1"
-    sock.sendall(bytes([0xBD]) + (3 + len(version)).to_bytes(2, "big") + version)
+        raise RuntimeError(f"step portal fixture slot {slot} did not enter the world")
+    _drain(sock, 0.3)
     return sock
+
+
+def _step(sock: socket.socket, sequence: int) -> tuple[tuple[int, int, int] | None, list[str]]:
+    _walk(sock, 2, sequence - 1)  # turn east
+    response = _walk(sock, 2, sequence)
+    return _where(sock), [_system_text(packet) for packet in _decode(response) if _system_text(packet)]
 
 
 def run_probe(port: int) -> list[str]:
     failures: list[str] = []
     sock = None
     try:
-        sock = _enter(port)
+        sock = _enter(port, 0)
         start = _where(sock)
-        if start != (128, 128, 0, 5):
-            failures.append(f"initial position was {start!r}, expected (128,128,0,5)")
+        if start != EXPECTED_START:
+            failures.append(f"unqualified character started at {start!r}, expected {EXPECTED_START!r}")
+        position, messages = _step(sock, 2)
+        if "SPHERE_STEP_BLOCKED" not in messages:
+            failures.append(f"unqualified @Step marker missing: {messages!r}")
+        if position == PORTAL_DESTINATION:
+            failures.append(f"unqualified character teleported to {position!r}")
+    except (OSError, RuntimeError, ValueError, struct.error) as error:
+        failures.append(str(error))
+    finally:
+        if sock is not None:
+            sock.close()
 
-        # The first packet establishes the facing direction.  The next five
-        # packets are actual northbound steps, each of which must be accepted.
-        replies = []
-        for sequence in range(1, 7):
-            sock.sendall(_walk_packet(0, sequence))
-            replies.append(_recv_until_walk_reply(sock))
-        acknowledgements = sum(
-            any(packet.command == 0x22 for packet in response)
-            for response in replies
-        )
-        cancels = [
-            packet
-            for response in replies
-            for packet in response
-            if packet.command == 0x21
-        ]
-        if acknowledgements != 6:
-            failures.append(
-                f"plane-5 walk acknowledged {acknowledgements}/6 packets"
-            )
-        if cancels:
-            failures.append(f"plane-5 walk returned {len(cancels)} cancellation packets")
-        end = _where(sock)
-        if end != (128, 123, 0, 5):
-            failures.append(f"five plane-5 steps ended at {end!r}, expected (128,123,0,5)")
+    sock = None
+    try:
+        sock = _enter(port, 1)
+        start = _where(sock)
+        if start != QUALIFIED_START:
+            failures.append(f"qualified character started at {start!r}, expected {QUALIFIED_START!r}")
+        _, messages = _step(sock, 2)
+        if "SPHERE_STEP_ALLOWED" not in messages:
+            failures.append(f"qualified @Step marker missing: {messages!r}")
     except (OSError, RuntimeError, ValueError, struct.error) as error:
         failures.append(str(error))
     finally:
@@ -168,9 +160,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--port", type=int, default=2937)
+    parser.add_argument("--port", type=int, default=2939)
+    parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
-
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
     if not fixture.is_dir():
@@ -179,9 +171,9 @@ def main() -> int:
         parser.error(f"server binary does not exist: {binary}")
 
     log_path = fixture / "server.log"
-    process: subprocess.Popen[bytes] | None = None
     failures: list[str] = []
-    returncode: int | None = None
+    process = None
+    returncode = None
     try:
         with log_path.open("wb") as log_file:
             process = subprocess.Popen(
@@ -191,7 +183,7 @@ def main() -> int:
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
             )
-            wait_for_port("127.0.0.1", args.port, 120.0)
+            wait_for_port("127.0.0.1", args.port, args.startup_timeout)
             failures.extend(run_probe(args.port))
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         failures.append(str(error))
@@ -208,24 +200,19 @@ def main() -> int:
         log_contents = ""
         failures.append(f"unable to read server log: {error}")
     failures.extend(shutdown_failures(returncode, log_contents))
-    refused_marker = "Event_Walk: MoveToChar refused destination"
-    if log_contents.count(refused_marker) != 0:
-        failures.append(
-            f"server log has {log_contents.count(refused_marker)} refused-step markers; expected 0"
-        )
     failures.extend(
         f"server log contains sanitizer output: {line}"
         for line in log_contents.splitlines()
         if any(marker in line for marker in SANITIZER_MARKERS)
     )
     if failures:
-        print("plane-walk-crash probe failed:", file=sys.stderr)
+        print("step portal probe failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         print("\n--- server log tail ---", file=sys.stderr)
         print(tail(log_path), file=sys.stderr)
         return 1
-    print("plane-walk-crash probe passed: five plane-5 steps were acknowledged")
+    print("step portal probe passed: both @Step branches gated the portal")
     return 0
 
 
