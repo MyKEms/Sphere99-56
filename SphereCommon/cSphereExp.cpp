@@ -1003,8 +1003,25 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		if ( !vArgs.IsEmpty() )
 		{
 			CScriptObj* pSource = vArgs.GetRef();
-			if ( pSource == NULL && vArgs.IsNumeric() )
-				pSource = ResolveUIDObject(vArgs.GetUID());
+			if ( pSource == NULL )
+			{
+				// Saved 0.99 scripts use #<hex-serial> for an object UID,
+				// including values returned by VAR().  It is an object token,
+				// not a numeric expression, so CGVariant deliberately keeps it
+				// as a string.  Resolve that spelling only for SRC assignment;
+				// a missing UID still rejects the assignment and leaves the
+				// caller's source unchanged.
+				LPCTSTR pszUID = vArgs.GetPSTR();
+				if ( pszUID && pszUID[0] == '#' && pszUID[1] )
+				{
+					char* pszEnd = NULL;
+					unsigned long ulUID = strtoul(pszUID + 1, &pszEnd, 16);
+					if ( pszEnd != pszUID + 1 && *pszEnd == '\0' )
+						pSource = ResolveUIDObject((UID_INDEX)ulUID);
+				}
+				else if ( vArgs.IsNumeric() )
+					pSource = ResolveUIDObject(vArgs.GetUID());
+			}
 			if ( pSource == NULL )
 				return HRES_INVALID_HANDLE;
 			SetSourceObject(pSource);
