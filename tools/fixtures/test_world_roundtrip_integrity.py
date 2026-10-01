@@ -58,11 +58,14 @@ def normalized_metadata_char_save(text: str) -> str:
     Client attach/detach updates EVENTS and the connected FLAGS bit as part of
     each login.  The metadata probe checks those lifecycle paths separately;
     its idempotence comparison must focus on saved character data and TAGs.
+    The shared login fixture also applies combat damage and advances food
+    while a sanitizer run crosses a tick boundary; those gameplay values are
+    outside this metadata contract.
     """
 
     normalized: list[str] = []
     for line in text.splitlines():
-        if line.startswith(("TIME=", "SAVECOUNT=", "AGE=", "TIMER=")):
+        if line.startswith(("TIME=", "SAVECOUNT=", "AGE=", "TIMER=", "HITS=", "FOOD=")):
             continue
         if line.startswith(("EVENTS=", "FLAGS=")):
             continue

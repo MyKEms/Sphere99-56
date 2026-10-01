@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from port_guard import assert_port_free
+
 
 SANITIZER_OUTPUT_RE = re.compile(
     r"AddressSanitizer|UndefinedBehaviorSanitizer|LeakSanitizer|"
@@ -286,6 +288,12 @@ def main() -> int:
         parser.error(f"server binary does not exist: {binary}")
     if not suite.is_file():
         parser.error(f"test suite does not exist: {suite}")
+
+    try:
+        assert_port_free("protocol suite", args.port)
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
     print(
         f"starting synthetic fixture: login {args.host}:{args.port}, "
