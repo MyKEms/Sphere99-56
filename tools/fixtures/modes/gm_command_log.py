@@ -13,8 +13,8 @@ MODE = register_mode(
     FixtureMode(
         name="gm-command-log",
         fixture_args=("--gm-command-log-probe",),
-        order=78,
-        id_block=78,
+        order=79,
+        id_block=79,
         case=FixtureCase(
             name="gm-command-log",
             mode="gm-command-log",
