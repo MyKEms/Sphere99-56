@@ -56,6 +56,7 @@ CClient::CClient( SOCKET client ) :
 	m_timeLastSend.InitTimeCurrent();
 	m_timeLastEvent.InitTimeCurrent();
 	m_timeLastDispatch.InitTimeCurrent();
+	m_iDispatchTokens = CLIENT_DISPATCH_BURST;
 
 	m_bin_PrvMsg = XCMD_QTY;
 	m_bin_msg_len = 0;

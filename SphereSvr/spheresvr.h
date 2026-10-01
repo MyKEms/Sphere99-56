@@ -466,6 +466,14 @@ struct CClientTargModeContext
 	};
 };
 
+// Client packet flood limit. Every game packet except walking, skill locks
+// and login costs one token. A client starts with a full burst allowance
+// and earns tokens back at a steady rate, so the background requests of a
+// normal client are dispatched at once and only a client that keeps
+// sending faster than the refill rate has to wait.
+#define CLIENT_DISPATCH_BURST	100	// tokens; the most a client can send at once
+#define CLIENT_DISPATCH_REFILL	5	// tokens per server tick (50 per second)
+
 class CClient : public CGObListRec, public CAccountConsole, public CResourceObj, public CChatClient
 {
 	// TCP/IP connection to the player or telnet console.
@@ -503,7 +511,8 @@ public:
 
 	CServTime m_timeLogin;		// World clock of login time. "LASTCONNECTTIME"
 	CServTime m_timeLastEvent;	// Last time we got event from client.
-	CServTime m_timeLastDispatch;	// Last time i processed a message. throttle this.
+	CServTime m_timeLastDispatch;	// Last refill of the dispatch flood limit.
+	int m_iDispatchTokens;		// Packets this client may still dispatch without waiting.
 	CServTime m_timeLastSend;	// Last time i tried to send to the client
 
 	//***************************************
@@ -735,6 +744,8 @@ public:
 	bool xProcessClientSetup( CUOEvent* pEvent, int iLen );
 	void xFinishProcessMsg( bool fGood );	// Finish Processing a packet
 	bool xDispatchMsg();
+	bool xIsMsgIncomplete( int iLenExpect ) const;
+	bool xTakeDispatchToken();
 	bool xRecvData();			// High Level Receive message from client
 
 	// Low level push world data to the client.
