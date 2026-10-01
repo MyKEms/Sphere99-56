@@ -1133,6 +1133,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
     login += [
+        # Keep the function-root lifetime check on a live object.  Before UID
+        # quarantine the removed disposable happened to become valid again
+        # when a later item reused its slot, which hid the intended check.
+        "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
+        "VAR dotted_disposable,<LASTNEW.SERIAL>",
         # Commands whose left side is a reference.
         "TAG.cmd_base_set=23",
         "SRC.TAG.cmd_src_set=21",
