@@ -994,15 +994,33 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 	// Skip to the end of the identifier name. ( + any args? )
 	// The name can only be valid.
 
-	// Access globals methods
-	// Get a global var ref - A key name that just links to another object.
-	// SRC is the source console's attached script object (normally its character).
-	// Returning the ref lets s_ParseEscapes resolve SRC.NAME, SRC.SERIAL, etc.
+	// Access globals methods. SRC normally names the source console's attached
+	// object, but 0.99 also permits SRC=<object> inside a trigger. Keep that
+	// replacement local to this execution context; nested script functions
+	// inherit it explicitly below and discard their own replacement on return.
+	if ( !_stricmp(pszKey, "SRC") )
+	{
+		if ( !vArgs.IsEmpty() )
+		{
+			CScriptObj* pSource = vArgs.GetRef();
+			if ( pSource == NULL && vArgs.IsNumeric() )
+				pSource = ResolveUIDObject(vArgs.GetUID());
+			if ( pSource == NULL )
+				return HRES_INVALID_HANDLE;
+			SetSourceObject(pSource);
+			vValRet.SetRef(pSource);
+			return NO_ERROR;
+		}
+	}
 	if ( !_stricmp(pszKey, "SRC") ||
 		(!_strnicmp(pszKey, "SRC.", 4) && pszKey[4]) )
 	{
-		CScriptConsole* pSrc = GetSrc();
-		CScriptObj* pSrcObj = pSrc ? pSrc->GetAttachedObj() : NULL;
+		CScriptObj* pSrcObj = GetSourceObject();
+		if ( pSrcObj == NULL )
+		{
+			CScriptConsole* pSrc = GetSrc();
+			pSrcObj = pSrc ? pSrc->GetAttachedObj() : NULL;
+		}
 		if ( pSrcObj )
 		{
 			vValRet.SetRef(pSrcObj);
@@ -1051,6 +1069,7 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			// create a new sub-context with new args.
 			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs,
 				!m_fSpaceSeparatedFunctionArgs );
+			exec.SetSourceObject(GetSourceObject());
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
 			vValRet = exec.m_vValRet;
 			return( NO_ERROR );
