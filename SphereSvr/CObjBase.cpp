@@ -29,6 +29,24 @@ static bool GetDeltaStr( CPointMap& pt, CGVariant& vArgs )
 	return( true );
 }
 
+// Call-form script strings retain their surrounding quotes in CGVariant.
+// Sphere's speech methods receive the payload without those delimiters.
+static LPCTSTR GetScriptSpeechText( CGVariant& vArgs, CGString& sText )
+{
+	LPCTSTR pszText = vArgs.GetPSTR();
+	if ( pszText == NULL )
+		return "";
+
+	size_t iLen = strlen(pszText);
+	if ( iLen >= 2 && pszText[0] == '"' && pszText[iLen - 1] == '"' )
+	{
+		sText.Copy(pszText + 1);
+		sText.SetLength((int)iLen - 2);
+		return sText.GetPtr();
+	}
+	return pszText;
+}
+
 /////////////////////////////////////////////////////////////////
 // -CObjBase stuff
 // Either a player, npc or item.
@@ -1025,13 +1043,19 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 		break;
 	case M_Say:
 	case M_Speak:	// speak so everyone can here
-		Speak( vArgs.GetPSTR());
+		{
+			CGString sText;
+			Speak( GetScriptSpeechText(vArgs, sText));
+		}
 		break;
 
 	case M_SayU:
 	case M_SpeakU:
 		// Speak in unicode from the UTF8 system format.
-		SpeakUTF8( vArgs.GetPSTR(), HUE_TEXT_DEF, TALKMODE_SAY, FONT_NORMAL );
+		{
+			CGString sText;
+			SpeakUTF8( GetScriptSpeechText(vArgs, sText), HUE_TEXT_DEF, TALKMODE_SAY, FONT_NORMAL );
+		}
 		break;
 
 	case M_SayUA:

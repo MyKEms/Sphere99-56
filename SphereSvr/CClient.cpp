@@ -8,6 +8,42 @@
 #include <netinet/tcp.h>
 #endif
 
+// SENDPACKET is a legacy raw-byte escape. Script authors use both comma
+// separated values and the stock space-separated form (for example,
+// ``01c 00 2d ...``). CGVariant's generic array parser only splits commas,
+// so treating the whole space-separated string as one number used to queue
+// just its first byte.
+static int ParseScriptPacketBytes( LPCTSTR pszArgs, BYTE* pData, int iMax )
+{
+	if ( pszArgs == NULL || pData == NULL || iMax <= 0 )
+		return 0;
+
+	int iQty = 0;
+	while ( *pszArgs && iQty < iMax )
+	{
+		while ( *pszArgs && ( ISWHITESPACE(*pszArgs) || *pszArgs == ',' ))
+			pszArgs++;
+		if ( ! *pszArgs )
+			break;
+
+		TCHAR szToken[64];
+		int iLen = 0;
+		while ( *pszArgs && !ISWHITESPACE(*pszArgs) && *pszArgs != ',' )
+		{
+			if ( iLen < (int)sizeof(szToken) - 1 )
+				szToken[iLen++] = *pszArgs;
+			pszArgs++;
+		}
+		szToken[iLen] = '\0';
+		if ( iLen <= 0 )
+			continue;
+
+		CGVariant vByte(szToken);
+		pData[iQty++] = (BYTE)vByte.GetDWORD();
+	}
+	return iQty;
+}
+
 static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
 	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
 }
@@ -951,14 +987,10 @@ HRESULT CClient::s_Method( int iProp, CGVariant& vArgs, CGVariant& vValRet, CScr
 		// DEBUG send client message.
 		if ( pSrc->GetPrivLevel() >= GetPrivLevel()) 
 		{
-			int iArgQty = vArgs.MakeArraySize();
-			if ( iArgQty < 1 )
-				return HRES_BAD_ARG_QTY;
 			BYTE bData[512];
-			for ( int i=0; i<iArgQty && i<COUNTOF(bData); i++ )
-			{
-				bData[i] = vArgs.GetArrayElement(i).GetDWORD();
-			}
+			int iArgQty = ParseScriptPacketBytes( vArgs.GetPSTR(), bData, COUNTOF(bData) );
+			if ( iArgQty <= 0 )
+				return HRES_BAD_ARG_QTY;
 			xSendReady( bData, iArgQty );
 		}
 		break;
