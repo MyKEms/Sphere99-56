@@ -1,4 +1,4 @@
-"""Registered synthetic fixture for refused plane-5 placement during walking."""
+"""Registered synthetic fixture for walking on logical map plane 5."""
 
 from pathlib import Path
 
@@ -8,12 +8,7 @@ from .registry import FixtureCase, FixtureMode, TestCase, register_mode
 
 
 def generate(output: Path) -> int:
-    """Start with the movement fixture, then place its player on map plane 5.
-
-    The destination area is deliberately only on the next tile.  The player
-    starts outside any area, so walk validation accepts the destination while
-    the client resource-level check refuses the actual placement.
-    """
+    """Start with the movement fixture, then place its player on map plane 5."""
 
     result = generate_recipe(output, STAIRS_MODE)
     if result:
@@ -26,13 +21,14 @@ def generate(output: Path) -> int:
     chars.write_text(text.replace("P=128,128,0\n", "P=128,128,0,5\n"), encoding="ascii")
 
     tables = output / "scripts" / "spheretables.scp"
+    text = tables.read_text(encoding="ascii")
+    if text.count("[AREA Synthetic world]\nP=128,128,0\n") != 1:
+        raise RuntimeError("plane walk fixture did not contain its shared area")
     tables.write_text(
-        tables.read_text(encoding="ascii")
-        + """
-[AREA Synthetic plane 5 walk target]
-P=128,127,0,5
-RECT=128,126,129,128
-""",
+        text.replace(
+            "[AREA Synthetic world]\nP=128,128,0\n",
+            "[AREA Synthetic world]\nP=128,128,0,255\n",
+        ),
         encoding="ascii",
     )
     return 0
