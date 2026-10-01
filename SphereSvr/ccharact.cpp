@@ -2624,7 +2624,11 @@ bool CChar::CheckLocation( bool fStanding )
 
 		{
 		CSphereExpArgs execArgs( pItem, this, (int) fStanding );
-		if ( pItem->OnTrigger( CItemDef::T_Step, execArgs ) == TRIGRET_RET_VAL )
+		const TRIGRET_TYPE iStepRet = pItem->OnTrigger( CItemDef::T_Step, execArgs );
+		// Sphere scripts use RETURN 1 for a handled step.  That value is
+		// TRIGRET_RET_TRUE; preserve the older RET_VAL form as well so either
+		// spelling blocks the item's default action (such as a telepad).
+		if ( iStepRet == TRIGRET_RET_TRUE || iStepRet == TRIGRET_RET_VAL )
 			continue;
 		}
 
