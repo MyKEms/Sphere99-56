@@ -238,6 +238,7 @@ protected:
 	virtual int GetScriptLoopLimit() const;
 	virtual bool IsExecutionBlocked() const;
 	virtual CResourceObj* ResolveUIDObject(UID_INDEX uid);
+	virtual CResourceObj* ResolveResourceObject(UID_INDEX uid);
 	virtual bool IsScriptFunction(LPCTSTR pszKey);
 
 public:

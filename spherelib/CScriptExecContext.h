@@ -115,6 +115,15 @@ protected:
 		return NULL;
 	}
 
+	// Resource definition UIDs are distinct from live world-object UIDs.  The
+	// concrete engine context supplies this lookup so a DEFNAME constant can be
+	// used as the root of a dotted definition-property chain.
+	virtual CResourceObj* ResolveResourceObject(UID_INDEX uid)
+	{
+		(void)uid;
+		return NULL;
+	}
+
 	virtual bool IsScriptFunction(LPCTSTR pszKey)
 	{
 		(void)pszKey;
@@ -147,6 +156,8 @@ protected:
 				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
 			if ( fUIDRoot )
 				pObj = ResolveUIDObject(value.GetUID());
+			if ( pObj == NULL )
+				pObj = ResolveResourceObject(value.GetUID());
 		}
 		return pObj;
 	}
