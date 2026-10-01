@@ -1954,8 +1954,21 @@ def write_scripts(
         gm_command_log_sections = (
             "\n[FUNCTION s]\n"
             "RETURN 0\n"
+
+            "\n[FUNCTION charExists]\n"
+            "IF (safe finduid(<ARGV(0)>).isChar)\n"
+            "  RETURN 1\n"
+            "ENDIF\n"
+            "RETURN 0\n"
+
             "\n[FUNCTION accMsg]\n"
-            "TRY S(NAME=<ARGS>)\n"
+            "IF (charExists(<UID>))\n"
+            "  IF (isPlayer)\n"
+            "    TRY S(NAME=<ARGS>)\n"
+            "  ENDIF\n"
+            "ELSEIF (safe SRC.isPlayer)\n"
+            "  SRC.TRY S(<ARGS>)\n"
+            "ENDIF\n"
             "RETURN 0\n"
         )
     runaway_loop_login = (
