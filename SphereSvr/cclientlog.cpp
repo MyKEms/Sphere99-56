@@ -376,6 +376,9 @@ bool CClient::OnRxConsoleLoginComplete()
 	if ( GetPrivLevel() < PLEVEL_Admin )	// this really should not happen.
 	{
 		WriteString( "Sorry you don't have telnet permission" LOG_CR );
+		// The receive loop closes the socket before DeleteThis() can flush a
+		// rejected login.  Send the refusal while the socket is still open.
+		xFlush();
 		return( false );
 	}
 
@@ -408,6 +411,10 @@ bool CClient::OnRxConsoleLogin()
 	CGString sMsg;
 	if ( LogIn( szUser, szPass ) != LOGIN_SUCCESS )
 	{
+		// LogIn() queues the refusal text, but the receive loop closes the
+		// socket as soon as this returns false.  Flush it before returning so
+		// a rejected console login is observable by the caller.
+		xFlush();
 		return( false );
 	}
 	m_Targ.m_sText.Empty();	// WriteString goes here.
