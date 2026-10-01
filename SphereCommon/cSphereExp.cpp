@@ -1143,7 +1143,17 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 	case F_FindUID:
 	case F_UID:
 		if ( vArgs.IsEmpty())
-			return( HRES_BAD_ARG_QTY );
+		{
+			// The stock script shorthand <UID> means the UID of the current
+			// object.  Keep the one-argument UID/FINDUID lookup unchanged, but
+			// let object-root functions such as accMsg use the shorthand while
+			// retaining their base object.
+			CResourceObj* pBase = dynamic_cast<CResourceObj*>(GetBaseObject());
+			if ( pBase == NULL )
+				return( HRES_BAD_ARG_QTY );
+			vValRet.SetUID(pBase->GetUIDIndex());
+			break;
+		}
 		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));
 		break;
 	case F_IsUIDValid:
@@ -1196,29 +1206,20 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
 			try
 			{
-				// Try as a function dispatch first.
-				TCHAR szKey[SCRIPT_MAX_LINE_LEN];
-				strncpy(szKey, pszStr, sizeof(szKey)-1);
-				szKey[sizeof(szKey)-1] = '\0';
-				// Split at first space or '('
-				TCHAR* pArg = szKey;
-				while ( *pArg && *pArg != ' ' && *pArg != '(' ) pArg++;
-				CGVariant vInnerArgs;
-				if ( *pArg )
-				{
-					*pArg++ = '\0';
-					if ( *pArg == '(' ) pArg++; // skip open paren
-					vInnerArgs = pArg;
-				}
+				// Use the normal expression resolver so function roots with a
+				// dotted suffix (for example FINDUID(uid).ISCHAR) keep their
+				// balanced arguments and object chain.  Splitting at the first
+				// parenthesis treated the suffix as part of the argument text and
+				// silently turned valid safe predicates into zero.
 				CGVariant vInnerRet;
-				HRESULT hRes = Function_Dispatch(szKey, vInnerArgs, vInnerRet);
-				if ( ScriptUnknownResultIsRejected(hRes) )
-					ScriptUnknownRecord(SCRIPT_UNKNOWN_REJECTED, szKey, GetBaseObject());
-				if ( hRes == NO_ERROR )
+				CScriptUnknownRejectTracker rejected;
+				if ( EvaluateEscapeValue(pszStr, vInnerRet, rejected) )
 				{
 					vValRet = vInnerRet;
 					break;
 				}
+				if ( !rejected.RecordIfPresent() )
+					ScriptUnknownRecord(SCRIPT_UNKNOWN_REJECTED, pszStr, GetBaseObject());
 				// Try as a numeric expression.
 				long lVal = GetValue(pszStr);
 				vValRet.SetInt(lVal);

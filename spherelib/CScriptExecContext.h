@@ -901,6 +901,29 @@ public:
 				++pszExpr;
 			}
 		}
+
+		// 0.99 uses a space-separated SAFE prefix in numeric conditions,
+		// notably `safe finduid(uid).isChar`.  The generic arithmetic reader
+		// otherwise sees SAFE as an ordinary identifier and never dispatches
+		// the protected expression. Resolve that prefix through the same
+		// reference evaluator used by escape expressions; a failed safe read is
+		// the documented numeric zero.
+		if ( !_strnicmp(pszExpr, "safe", 4) &&
+			(pszExpr[4] == ' ' || pszExpr[4] == '\t' || pszExpr[4] == '(') )
+		{
+			LPCTSTR pszSafe = pszExpr + 4;
+			while ( ISWHITESPACE(*pszSafe) ) pszSafe++;
+			CGVariant vSafe;
+			CScriptUnknownRejectTracker safeRejected;
+			if ( *pszSafe && EvaluateEscapeValue(pszSafe, vSafe, safeRejected) )
+			{
+				if ( vSafe.GetRef() != NULL )
+					return static_cast<int>(dynamic_cast<CResourceObj*>(vSafe.GetRef())
+						? dynamic_cast<CResourceObj*>(vSafe.GetRef())->GetUIDIndex() : 0);
+				return vSafe.IsEmpty() ? 0 : vSafe.GetInt();
+			}
+			return 0;
+		}
 		return GetComplex(pszExpr);
 	}
 
