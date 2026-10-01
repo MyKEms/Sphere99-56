@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify daily logging for script errors and client login activity."""
+"""Verify stock-compatible daily logging, including player speech."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ DAILY_MARKERS = (
     re.compile(r"Setup_CreateDialog acct='[^']+', char='[^']+'"),
     re.compile(r"Setup_Start acct='[^']+', char='[^']+'"),
     re.compile(r"Client disconnected \[Total:\d+\]"),
+    re.compile(r"Says UNICODE 'ENU' 'unicode fixture speech' mode=3"),
 )
 
 # These are implementation traces used while diagnosing the Linux logging
@@ -76,6 +77,7 @@ def main() -> int:
         game_connect,
         make_char_create,
         make_char_play,
+        make_unicode_talk,
         recv_until_game_start,
     )
 
@@ -122,6 +124,7 @@ def main() -> int:
             try:
                 sock.sendall(make_char_play(0))
                 response = recv_until_game_start(sock, timeout=30.0)
+                sock.sendall(make_unicode_talk("unicode fixture speech"))
             finally:
                 sock.close()
 
@@ -135,7 +138,7 @@ def main() -> int:
 
             if not all(marker_matches(daily_contents)):
                 failures.append(
-                    "daily file did not contain script error, connection, login, and setup markers"
+                    "daily file did not contain script error, connection, login, setup, and speech markers"
                 )
             leaked = [marker for marker in NON_STOCK_DAILY_MARKERS if marker in daily_contents]
             if leaked:
@@ -171,8 +174,8 @@ def main() -> int:
         return 1
 
     print(
-        "daily logging probe passed: script error, connection, login, and setup lines "
-        "reached the daily file before SIGKILL"
+        "daily logging probe passed: script error, connection, login, setup, and speech "
+        "lines reached the daily file before SIGKILL"
     )
     return 0
 

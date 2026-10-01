@@ -295,7 +295,13 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		m_ClientVerMin.SetCryptVer( vVal.GetPSTR());
 		break;
 	case P_HearAll:
-		g_Log.SetLogGroupMask( vVal.GetDWORDMask( g_Log.GetLogGroupMask(), LOG_GROUP_PLAYER_SPEAK ));
+		// HEARALL is a boolean configuration switch.  Applying the generic
+		// bit-mask helper to its value of 1 would replace the existing mask
+		// with bit zero and silently disable player-speech logging.
+		if ( vVal.GetBool())
+			g_Log.SetLogGroupMask( g_Log.GetLogGroupMask() | LOG_GROUP_PLAYER_SPEAK );
+		else
+			g_Log.SetLogGroupMask( g_Log.GetLogGroupMask() & ~LOG_GROUP_PLAYER_SPEAK );
 		break;
 	case P_DebugLevel:
 		{
@@ -844,7 +850,7 @@ PLEVEL_TYPE CSphereResourceMgr::GetPrivCommandLevel( LPCTSTR pszCmd ) const
 
 	char szTmp[EXPRESSION_MAX_KEY_LEN+1];
 	int i;
-	for ( i=0; isalnum(pszCmd[i]); i++ )
+	for ( i=0; i < EXPRESSION_MAX_KEY_LEN && isalnum(pszCmd[i]); i++ )
 	{
 		szTmp[i] = pszCmd[i];
 	}

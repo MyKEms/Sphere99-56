@@ -709,6 +709,128 @@ public:
 		return false;
 	}
 
+	// Sphere 0.99 accepts HTMLGUMPa as an inline-text variant of HTMLGUMP.
+	// The client packet has no inline-text control: append the text to the
+	// packet text table and emit the ordinary HTMLGUMP form with its index.
+	// Both the legacy space form and the ARGO comma form reach this helper.
+	static bool AddInlineHtmlGump(CGStringArray* pControls, CGStringArray* pTexts,
+		LPCTSTR pszKey, LPCTSTR pszArgs)
+	{
+		if ( pControls == NULL || pTexts == NULL || pszKey == NULL ||
+			_stricmp(pszKey, "htmlgumpa") != 0 || pszArgs == NULL )
+			return false;
+
+		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
+		szArgs[sizeof(szArgs) - 1] = '\0';
+
+		TCHAR* ppArgs[7] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+		TCHAR* p = szArgs;
+		if ( strchr(szArgs, ',') != NULL )
+		{
+			// The first four fields are numeric and the final two are the
+			// background/scroll flags.  Taking the final separators from the
+			// right leaves commas in the inline HTML untouched.
+			for ( int i = 0; i < 4; i++ )
+			{
+				ppArgs[i] = p;
+				TCHAR* pComma = strchr(p, ',');
+				if ( pComma == NULL )
+					return false;
+				*pComma = '\0';
+				p = pComma + 1;
+			}
+			TCHAR* pLast = strrchr(p, ',');
+			if ( pLast == NULL )
+				return false;
+			*pLast = '\0';
+			ppArgs[6] = pLast + 1;
+			TCHAR* pBeforeLast = strrchr(p, ',');
+			if ( pBeforeLast == NULL )
+				return false;
+			*pBeforeLast = '\0';
+			ppArgs[5] = pBeforeLast + 1;
+			ppArgs[4] = p;
+		}
+		else
+		{
+			// The direct form uses spaces and quotes around the HTML text.
+			for ( int i = 0; i < 4; i++ )
+			{
+				while ( ISWHITESPACE(*p) )
+					p++;
+				if ( *p == '\0' )
+					return false;
+				ppArgs[i] = p;
+				while ( *p && !ISWHITESPACE(*p) )
+					p++;
+				if ( *p )
+					*p++ = '\0';
+			}
+			while ( ISWHITESPACE(*p) )
+				p++;
+			if ( *p != '"' )
+				return false;
+			ppArgs[4] = ++p;
+			for ( ; *p; p++ )
+			{
+				if ( *p == '"' && (p == ppArgs[4] || p[-1] != '\\') )
+					break;
+			}
+			if ( *p != '"' )
+				return false;
+			*p++ = '\0';
+			for ( int i = 5; i < 7; i++ )
+			{
+				while ( ISWHITESPACE(*p) )
+					p++;
+				if ( *p == '\0' )
+					return false;
+				ppArgs[i] = p;
+				while ( *p && !ISWHITESPACE(*p) )
+					p++;
+				if ( *p )
+					*p++ = '\0';
+			}
+		}
+
+		for ( int i = 0; i < 7; i++ )
+		{
+			if ( ppArgs[i] == NULL )
+				return false;
+			while ( ISWHITESPACE(*ppArgs[i]) )
+				ppArgs[i]++;
+			TCHAR* pEnd = ppArgs[i] + strlen(ppArgs[i]);
+			while ( pEnd > ppArgs[i] && ISWHITESPACE(pEnd[-1]) )
+				*--pEnd = '\0';
+		}
+
+		// Remove one pair of quotes in comma form and turn escaped quotes in
+		// the text into the literal quote the client should display.
+		TCHAR* pszText = ppArgs[4];
+		const size_t iTextLen = strlen(pszText);
+		if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+		{
+			pszText[iTextLen - 1] = '\0';
+			pszText++;
+		}
+		TCHAR* pRead = pszText;
+		TCHAR* pWrite = pszText;
+		while ( *pRead )
+		{
+			if ( pRead[0] == '\\' && pRead[1] == '"' )
+				pRead++;
+			*pWrite++ = *pRead++;
+		}
+		*pWrite = '\0';
+
+		const int iTextID = pTexts->GetSize();
+		pTexts->Add(pszText);
+		pControls->AddFormat("htmlgump %s %s %s %s %d %s %s",
+			ppArgs[0], ppArgs[1], ppArgs[2], ppArgs[3], iTextID, ppArgs[5], ppArgs[6]);
+		return true;
+	}
+
 public:
 	static CScriptPropArray sm_FunctionsAll;
 
@@ -1739,6 +1861,9 @@ public:
 					s_szGA[len2-1] = '\0';
 				pGumpArgs = s_szGA;
 			}
+
+			if ( AddInlineHtmlGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) )
+				return NO_ERROR;
 
 			if ( IsGumpCommand(szGumpKey) )
 			{

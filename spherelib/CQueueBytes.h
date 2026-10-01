@@ -22,23 +22,24 @@ public:
 	{
 		// Append data to the end of the queue.
 		if ( iLen <= 0 || pBuf == NULL ) return;
-		int iOldQty = m_iDataQty;
-		if ( iOldQty > 0 && m_Mem.GetData() )
-			m_Mem.Resize( iOldQty + iLen );
-		else
-			m_Mem.Alloc( iOldQty + iLen );
-		memcpy( m_Mem.GetData() + iOldQty, pBuf, iLen );
+		BYTE* pDest = AddNewDataLock( iLen );
+		memcpy( pDest, pBuf, iLen );
 		m_iDataQty += iLen;
 	}
 	BYTE* AddNewDataLock(int iLen)
 	{
-		// Get space to write new data.
-		int iOldQty = m_iDataQty;
-		if ( iOldQty > 0 && m_Mem.GetData() )
-			m_Mem.Resize( iOldQty + iLen );
-		else
-			m_Mem.Alloc( iOldQty + iLen );
-		return m_Mem.GetData() + iOldQty;
+		// Get space to write new data after the queued data.
+		// RemoveDataAmount() never shrinks the buffer, so it is usually
+		// big enough already; reallocate only when it is too small.
+		size_t iNeed = m_iDataQty + ( iLen > 0 ? iLen : 0 );
+		if ( m_Mem.GetData() == NULL || iNeed > m_Mem.GetDataLength())
+		{
+			if ( m_iDataQty > 0 && m_Mem.GetData() )
+				m_Mem.Resize( iNeed );	// keeps the queued data
+			else
+				m_Mem.Alloc( iNeed ? iNeed : 1 );
+		}
+		return m_Mem.GetData() + m_iDataQty;
 	}
 	void AddNewDataFinish(int iLen)
 	{

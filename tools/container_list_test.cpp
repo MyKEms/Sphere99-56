@@ -1,9 +1,12 @@
-// Offline regression tests for re-entrant object lists and pointer-array growth.
+// Offline regression tests for re-entrant object lists, pointer-array growth
+// and byte-queue growth.
 
 #include "common.h"
 #include "crefobj.h"
 #include "cstring.h"
 #include "CArray.h"
+#include "CMemBlock.h"
+#include "CQueueBytes.h"
 
 #include <csignal>
 #include <cstdio>
@@ -159,12 +162,58 @@ static bool TestOwnedArrayRemoveAt()
 	return fPassed;
 }
 
+static bool ExpectQueue( const CGQueueBytes& queue, int iFirst, int iCount, const char* pszDescription )
+{
+	bool fMatch = queue.GetDataQty() == iCount;
+	const BYTE* pData = queue.RemoveDataLock();
+	for ( int i = 0; fMatch && i < iCount; ++i )
+		fMatch = pData != NULL && pData[i] == (BYTE)( iFirst + i );
+	return Expect( fMatch, pszDescription );
+}
+
+static bool TestByteQueueAppendAfterPartialRemove()
+{
+	// A client receive buffer appends new bytes while earlier packets are
+	// still queued.  A partial remove keeps the buffer size, so the new total
+	// can equal it exactly; that append must neither fail nor lose bytes.
+	CGQueueBytes queue;
+	BYTE abData[256];
+	for ( int i = 0; i < 256; ++i )
+		abData[i] = (BYTE) i;
+
+	queue.AddNewData( abData, 10 );
+	queue.RemoveDataAmount( 5 );
+	BYTE* pDest = queue.AddNewDataLock( 5 );
+	if ( !Expect( pDest != NULL, "receive append returns writable space" ))
+		return false;
+	memcpy( pDest, abData + 10, 5 );
+	queue.AddNewDataFinish( 5 );
+	if ( !ExpectQueue( queue, 5, 10, "receive append into the same-sized buffer keeps every byte" ))
+		return false;
+
+	// The outgoing path appends through AddNewData.
+	queue.RemoveDataAmount( 3 );
+	queue.AddNewData( abData + 15, 3 );
+	if ( !ExpectQueue( queue, 8, 10, "buffered append into the same-sized buffer keeps every byte" ))
+		return false;
+
+	// Growing past the buffer keeps the queued bytes in order.
+	queue.AddNewData( abData + 18, 200 );
+	if ( !ExpectQueue( queue, 8, 210, "growing the buffer keeps the queued bytes" ))
+		return false;
+
+	// An emptied queue reuses its buffer from the start.
+	queue.RemoveDataAmount( 210 );
+	queue.AddNewData( abData + 40, 4 );
+	return ExpectQueue( queue, 40, 4, "an emptied queue starts again at the front" );
+}
+
 int main()
 {
 	if ( !TestInsertAfterFailure() || !TestDeleteAllBounded() ||
 		!TestReservedPointerArray() || !TestReserveReinitializesSlots() ||
-		!TestOwnedArrayRemoveAt() )
+		!TestOwnedArrayRemoveAt() || !TestByteQueueAppendAfterPartialRemove() )
 		return 1;
-	std::printf( "container lists: reentrant ownership and array lifetime checks passed\n" );
+	std::printf( "container lists: reentrant ownership, array lifetime and byte-queue checks passed\n" );
 	return 0;
 }

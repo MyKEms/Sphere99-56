@@ -671,8 +671,16 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 		catch (...) { SPHERE_LOG_ERR("Event_Walk: reveal-on-move threw"); }
 
 		// Move the character
-		try { m_pChar->MoveToChar( pt ); }
+		bool fMoved = false;
+		try { fMoved = m_pChar->MoveToChar( pt ); }
 		catch (...) { SPHERE_LOG_ERR("Event_Walk: MoveToChar threw"); }
+		if ( ! fMoved )
+		{
+			SPHERE_LOG_ERR("Event_Walk: MoveToChar refused destination (%d,%d,%d,%d)",
+				pt.m_x, pt.m_y, pt.m_z, pt.m_mapplane);
+			addPlayerWalkCancel();
+			return;
+		}
 
 		// Should i update the weather?
 		if ( fRoof != m_pChar->IsStatFlag( STATF_InDoors ))
@@ -2861,6 +2869,54 @@ bool CClient::xCheckMsgSize( int iLenExpect )
 	return( true );
 }
 
+bool CClient::xIsMsgIncomplete( int iLenExpect ) const
+{
+	// Is the packet at the head of the queue still waiting for bytes?
+	// TCP is a stream: a read can end inside a packet. Only a plausible
+	// length waits; anything else goes on to xCheckMsgSize() and is rejected.
+	// ARGS:
+	//  iLenExpect = the packet's length from the table (>= 0x8000 = variable).
+
+	if ( iLenExpect <= 0 )
+		return( false );
+
+	int iLenAvail = m_bin.GetDataQty();
+	if ( iLenExpect >= 0x8000 ) // var length
+	{
+		if ( iLenAvail < 3 )
+			return( true );
+		const CUOEvent* pEvent = (const CUOEvent *) m_bin.RemoveDataLock();
+		iLenExpect = pEvent->Talk.m_len;
+		if ( iLenExpect < 3 || iLenExpect > (int) sizeof( CUOEvent ))
+			return( false );
+	}
+	return( iLenAvail < iLenExpect );
+}
+
+bool CClient::xTakeDispatchToken()
+{
+	// Flood limit: take one token for the packet at the head of the queue.
+	// RETURN:
+	//  false = the client has used up its burst; wait for the refill.
+
+	int iAge = m_timeLastDispatch.GetCacheAge();
+	if ( iAge != 0 )
+	{
+		if ( iAge > 0 )
+		{
+			int iRefill = ( iAge >= CLIENT_DISPATCH_BURST ) ? CLIENT_DISPATCH_BURST : ( iAge * CLIENT_DISPATCH_REFILL );
+			m_iDispatchTokens += iRefill;
+			if ( m_iDispatchTokens > CLIENT_DISPATCH_BURST )
+				m_iDispatchTokens = CLIENT_DISPATCH_BURST;
+		}
+		m_timeLastDispatch.InitTimeCurrent();
+	}
+	if ( m_iDispatchTokens <= 0 )
+		return( false );
+	m_iDispatchTokens--;
+	return( true );
+}
+
 bool CClient::xDispatchMsg()
 {
 	// Process a single message we have Received from client.
@@ -2893,8 +2949,24 @@ bool CClient::xDispatchMsg()
 		SPHERE_LOG_ERR("xDispatchMsg: BAD cmd=0x%02x >= XCMD_QTY=%d", pEvent->Default.m_Cmd, XCMD_QTY);
 		return( false );
 	}
-	// Throttle non-critical packets to prevent client flooding.
-	// Skip throttle for: walk, skill, and all login-phase packets.
+	// NOTE: What about client version differences !
+	// none so far since 2.0
+	// Crypt version 0 = NoCrypt client: its version is unknown, treat it as a
+	// current one (>= 1.26) like the rest of the code does, or 3.x packets
+	// are parsed with 2.5 layouts (e.g. 0x00 as 100 bytes instead of 104).
+	const bool fProtoV126 = ( ! m_ProtoVer.GetCryptVer() || m_ProtoVer.GetCryptVer() >= 0x126000 );
+
+	// A partial packet waits for the rest of its bytes. Discarding it would
+	// lose the bytes in flight and desynchronize the rest of the stream.
+	if ( fProtoV126 && xIsMsgIncomplete( g_Packet_Lengths[pEvent->Default.m_Cmd] ))
+	{
+		m_bin_msg_len = 0;	// wait for more data. then process this.
+		return true;
+	}
+
+	// Flood limit for game packets. Walking, skill locks and login are free.
+	// A packet over the limit stays at the head of the queue, so the client's
+	// packets are still processed in order.
 	if ( pEvent->Default.m_Cmd != XCMD_Walk &&
 		pEvent->Default.m_Cmd != XCMD_Skill &&
 		pEvent->Default.m_Cmd != XCMD_ServerSelect &&
@@ -2905,13 +2977,11 @@ bool CClient::xDispatchMsg()
 		m_ConnectType == CONNECT_GAME &&
 		GetAccount() != NULL )
 	{
-		int iAge = m_timeLastDispatch.GetCacheAge();
-		if ( iAge < TICKS_PER_SEC/2 )
+		if ( ! xTakeDispatchToken())
 		{
-			m_bin_msg_len = 0;	// wait longer. then process this.
+			m_bin_msg_len = 0;	// wait for the refill. then process this.
 			return true;
 		}
-		m_timeLastDispatch.InitTimeCurrent();
 	}
 
 	if ( pEvent->Default.m_Cmd == XCMD_Ping )
@@ -2923,12 +2993,6 @@ bool CClient::xDispatchMsg()
 		return( true );
 	}
 
-	// NOTE: What about client version differences ! 
-	// none so far since 2.0
-	// Crypt version 0 = NoCrypt client: its version is unknown, treat it as a
-	// current one (>= 1.26) like the rest of the code does, or 3.x packets
-	// are parsed with 2.5 layouts (e.g. 0x00 as 100 bytes instead of 104).
-	const bool fProtoV126 = ( ! m_ProtoVer.GetCryptVer() || m_ProtoVer.GetCryptVer() >= 0x126000 );
 	if ( fProtoV126 )
 	{
 		if ( ! xCheckMsgSize( g_Packet_Lengths[pEvent->Default.m_Cmd] ))
