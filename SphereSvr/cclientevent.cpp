@@ -671,8 +671,16 @@ void CClient::Event_Walking( DIR_TYPE dir, bool fRun, BYTE bWalkCount, DWORD dwE
 		catch (...) { SPHERE_LOG_ERR("Event_Walk: reveal-on-move threw"); }
 
 		// Move the character
-		try { m_pChar->MoveToChar( pt ); }
+		bool fMoved = false;
+		try { fMoved = m_pChar->MoveToChar( pt ); }
 		catch (...) { SPHERE_LOG_ERR("Event_Walk: MoveToChar threw"); }
+		if ( ! fMoved )
+		{
+			SPHERE_LOG_ERR("Event_Walk: MoveToChar refused destination (%d,%d,%d,%d)",
+				pt.m_x, pt.m_y, pt.m_z, pt.m_mapplane);
+			addPlayerWalkCancel();
+			return;
+		}
 
 		// Should i update the weather?
 		if ( fRoof != m_pChar->IsStatFlag( STATF_InDoors ))
