@@ -310,6 +310,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="exercise daily logging for script, connection, and login messages",
     )
     parser.add_argument(
+        "--gm-command-log-probe",
+        action="store_true",
+        help="exercise script-dispatched GM command logging and console input",
+    )
+    parser.add_argument(
         "--runaway-loop-probe",
         action="store_true",
         help="exercise a configurable bounded WHILE loop and a second login",
