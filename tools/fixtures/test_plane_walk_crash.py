@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Verify that a refused plane-5 step is cancelled without a server crash."""
+"""Verify that a client can walk five steps on logical map plane 5."""
 
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from run_suite import shutdown_failures, stop_server, tail, wait_for_port
@@ -26,6 +28,11 @@ def _walk_packet(direction: int, sequence: int) -> bytes:
     return struct.pack(">BBBI", 0x02, direction, sequence & 0xFF, 0)
 
 
+def _talk(command: str) -> bytes:
+    encoded = command.encode("ascii") + b"\0"
+    return struct.pack(">BHBHH", 0x03, 8 + len(encoded), 0, 0, 3) + encoded
+
+
 def _decoded_packets(data: bytes):
     from uo_packets import split_packet_stream
     from uo_test_client import decode_game_response
@@ -34,8 +41,6 @@ def _decoded_packets(data: bytes):
 
 
 def _recv_until_walk_reply(sock: socket.socket, timeout: float = 3.0) -> list:
-    import time
-
     data = bytearray()
     deadline = time.monotonic() + timeout
     sock.settimeout(0.2)
@@ -54,6 +59,43 @@ def _recv_until_walk_reply(sock: socket.socket, timeout: float = 3.0) -> list:
     finally:
         sock.setblocking(True)
     return _decoded_packets(bytes(data))
+
+
+def _drain(sock: socket.socket, timeout: float = 1.5) -> bytes:
+    data = bytearray()
+    deadline = time.monotonic() + timeout
+    sock.settimeout(0.2)
+    try:
+        while time.monotonic() < deadline:
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            data.extend(chunk)
+    finally:
+        sock.setblocking(True)
+    return bytes(data)
+
+
+def _system_text(packet) -> str:
+    if packet.command != 0x1C or len(packet.data) < 45:
+        return ""
+    return packet.data[44:].split(b"\0", 1)[0].decode("latin1", errors="replace")
+
+
+def _where(sock: socket.socket) -> tuple[int, int, int, int] | None:
+    sock.sendall(_talk("/WHERE"))
+    for packet in reversed(_decoded_packets(_drain(sock))):
+        match = re.search(
+            r"\(?(-?\d+),(-?\d+),(-?\d+)(?:,(-?\d+))?\)?",
+            _system_text(packet),
+        )
+        if match:
+            values = tuple(int(value) if value is not None else 0 for value in match.groups())
+            return values  # type: ignore[return-value]
+    return None
 
 
 def _enter(port: int) -> socket.socket:
@@ -85,27 +127,35 @@ def run_probe(port: int) -> list[str]:
     sock = None
     try:
         sock = _enter(port)
-        # The first packet establishes the facing direction.  The second is
-        # the valid plane-5 step whose placement is refused by master.
-        sock.sendall(_walk_packet(0, 1))
-        first = _recv_until_walk_reply(sock)
-        if not any(packet.command == 0x22 for packet in first):
-            failures.append("initial walk direction did not receive an acknowledgement")
-        sock.sendall(_walk_packet(0, 2))
-        second = _recv_until_walk_reply(sock)
-        cancels = [packet for packet in second if packet.command == 0x21]
-        if not cancels:
-            failures.append("refused plane-5 step did not receive a walk cancel")
-        else:
-            packet = cancels[-1]
-            if len(packet.data) < 8:
-                failures.append("walk cancel did not include the current position")
-            else:
-                x, y = struct.unpack_from(">HH", packet.data, 2)
-                if (x, y) != (128, 128):
-                    failures.append(
-                        f"walk cancel moved the character to ({x},{y}), expected (128,128)"
-                    )
+        start = _where(sock)
+        if start != (128, 128, 0, 5):
+            failures.append(f"initial position was {start!r}, expected (128,128,0,5)")
+
+        # The first packet establishes the facing direction.  The next five
+        # packets are actual northbound steps, each of which must be accepted.
+        replies = []
+        for sequence in range(1, 7):
+            sock.sendall(_walk_packet(0, sequence))
+            replies.append(_recv_until_walk_reply(sock))
+        acknowledgements = sum(
+            any(packet.command == 0x22 for packet in response)
+            for response in replies
+        )
+        cancels = [
+            packet
+            for response in replies
+            for packet in response
+            if packet.command == 0x21
+        ]
+        if acknowledgements != 6:
+            failures.append(
+                f"plane-5 walk acknowledged {acknowledgements}/6 packets"
+            )
+        if cancels:
+            failures.append(f"plane-5 walk returned {len(cancels)} cancellation packets")
+        end = _where(sock)
+        if end != (128, 123, 0, 5):
+            failures.append(f"five plane-5 steps ended at {end!r}, expected (128,123,0,5)")
     except (OSError, RuntimeError, ValueError, struct.error) as error:
         failures.append(str(error))
     finally:
@@ -159,9 +209,9 @@ def main() -> int:
         failures.append(f"unable to read server log: {error}")
     failures.extend(shutdown_failures(returncode, log_contents))
     refused_marker = "Event_Walk: MoveToChar refused destination"
-    if log_contents.count(refused_marker) != 1:
+    if log_contents.count(refused_marker) != 0:
         failures.append(
-            f"server log has {log_contents.count(refused_marker)} refused-step markers; expected 1"
+            f"server log has {log_contents.count(refused_marker)} refused-step markers; expected 0"
         )
     failures.extend(
         f"server log contains sanitizer output: {line}"
@@ -175,7 +225,7 @@ def main() -> int:
         print("\n--- server log tail ---", file=sys.stderr)
         print(tail(log_path), file=sys.stderr)
         return 1
-    print("plane-walk-crash probe passed: refused plane-5 step was cancelled")
+    print("plane-walk-crash probe passed: five plane-5 steps were acknowledged")
     return 0
 
 

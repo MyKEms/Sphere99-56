@@ -14,11 +14,14 @@ CMulMap g_MulMap[8] = // { ClientMapPlane, ClientResourceLevel, }
 	{ 0, 0, VERFILE_MAP0, VERFILEX_MAPDIFL0, UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Nice 	},	// Felucca 
 	{ 1, 2, VERFILE_MAP0, VERFILEX_MAPDIFL1, UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Desolate },	// Trammel
 	{ 2, 3, VERFILE_MAP2, VERFILEX_MAPDIFL2, UO_SIZE2_X, UO_SIZE2_Y, UO_SIZE2_X,	  SEASON_Nice	},	// Ilshenar
-	{ 0, 5, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
-	{ 0, 5, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
-	{ 0, 5, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
-	{ 0, 5, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
-	{ 0, 5, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
+	// Logical planes 3-7 reuse the base map0 data.  They must remain
+	// available to clients that announce the base/3D resource levels; using
+	// resource level 5 here makes CChar::MoveTo reject every client step.
+	{ 0, 0, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
+	{ 0, 0, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
+	{ 0, 0, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
+	{ 0, 0, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
+	{ 0, 0, VERFILE_MAP0, VERFILE_QTY,		 UO_SIZE0_X, UO_SIZE0_Y, UO_SIZE0_X_REAL, SEASON_Spring	},
 };
 
 CMulMap::~CMulMap()
