@@ -743,9 +743,15 @@ bool CClient::xProcessClientSetup( CUOEvent* pEvent, int iLen )
 		if ( ! m_Crypt.SetClientVerEnum( iVer ))
 			break;
 
-		// Re-initialize the crypt masks from the seed for each attempt,
-		// since the XOR rotation is stateful and modifies the masks.
-		m_Crypt.Init( m_Targ.m_tmSetup.m_dwCryptKey );
+		// Re-initialize the state from the seed for each attempt.  Login
+		// negotiation uses the rotary stream, while the game connection for
+		// clients >= 2.0.0c also needs its CCryptNew table rebuilt.  Calling
+		// only CCryptBase::Init leaves that table uninitialized and lets a
+		// failed key trial walk past its 256-byte coding window.
+		if ( m_ConnectType == CONNECT_GAME )
+			m_Crypt.InitCrypt();
+		else
+			m_Crypt.Init( m_Targ.m_tmSetup.m_dwCryptKey );
 
 		m_Crypt.Decrypt( pEvent->m_Raw, bincopy.m_Raw, iLen );
 
