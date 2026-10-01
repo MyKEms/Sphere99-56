@@ -3,16 +3,28 @@
 #include "CExpression.h"
 #include "CScriptConsole.h"
 
+#pragma push_macro("min")
+#pragma push_macro("max")
+#undef min
+#undef max
+#include <algorithm>
+#include <chrono>
+#include <vector>
+#pragma pop_macro("max")
+#pragma pop_macro("min")
+
 class CScript;
 class CResourceObj : public CScriptObj
 {
 private:
 	HASH_INDEX m_dwHashIndex;
+	DWORD m_dwUIDGeneration;
 
 public:
 	CResourceObj(HASH_INDEX dwHashIndex)
 	{
 		m_dwHashIndex = dwHashIndex;
+		m_dwUIDGeneration = 0;
 	}
 
 	virtual HRESULT s_Method(LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) { return HRES_UNKNOWN_PROPERTY; }
@@ -26,24 +38,94 @@ public:
 	HASH_INDEX GetUIDIndex() const { return m_dwHashIndex; }
 	HASH_INDEX GetHashCode() const { return m_dwHashIndex; }
 	void SetUIDIndex(HASH_INDEX uid) { m_dwHashIndex = uid; }
+	DWORD GetUIDGeneration() const override { return m_dwUIDGeneration; }
+	LPCTSTR GetUIDTypeName() const override { return "resource"; }
+	void SetUIDGeneration(DWORD generation) { m_dwUIDGeneration = generation; }
 	bool IsValidUID() const { return m_dwHashIndex != 0; }
 };
 typedef CRefPtr<CResourceObj> CResourceObjPtr;
 
 struct CUIDArray
 {
+	struct UID_QUARANTINE_ENTRY
+	{
+		DWORD m_dwIndex;
+		std::chrono::steady_clock::time_point m_timeFreed;
+		unsigned long long m_iReleaseSaveEpoch;
+	};
+
 	CGRefArray<CResourceObj> m_UIDs;	// all the UID's in the World. CChar and CItem.
+	std::vector<DWORD> m_UIDGenerations;
+	std::vector<UID_QUARANTINE_ENTRY> m_UIDQuarantine;
+	std::chrono::milliseconds m_timeUIDReuseDelay;
+	unsigned long long m_iUIDSaveEpoch;
+	bool m_fPreventUIDReuse;
+
+	void EnsureGenerationCount()
+	{
+		if ( m_UIDGenerations.size() < static_cast<size_t>(GetUIDCount()) )
+			m_UIDGenerations.resize( GetUIDCount(), 0 );
+	}
+
+	void PruneUIDQuarantine()
+	{
+		const std::chrono::steady_clock::time_point timeNow = std::chrono::steady_clock::now();
+		m_UIDQuarantine.erase( std::remove_if( m_UIDQuarantine.begin(), m_UIDQuarantine.end(),
+			[&]( const UID_QUARANTINE_ENTRY& entry )
+			{
+				const bool fAgeElapsed = timeNow - entry.m_timeFreed >= m_timeUIDReuseDelay;
+				const bool fSaveCompleted = m_iUIDSaveEpoch >= entry.m_iReleaseSaveEpoch;
+				return fAgeElapsed && fSaveCompleted;
+			}), m_UIDQuarantine.end());
+	}
+
+	bool IsUIDQuarantined( DWORD dwIndex ) const
+	{
+		const std::chrono::steady_clock::time_point timeNow = std::chrono::steady_clock::now();
+		for ( size_t i = 0; i < m_UIDQuarantine.size(); ++i )
+		{
+			const UID_QUARANTINE_ENTRY& entry = m_UIDQuarantine[i];
+			if ( entry.m_dwIndex != dwIndex )
+				continue;
+			if ( m_fPreventUIDReuse )
+				return true;
+			const bool fAgeElapsed = timeNow - entry.m_timeFreed >= m_timeUIDReuseDelay;
+			const bool fSaveCompleted = m_iUIDSaveEpoch >= entry.m_iReleaseSaveEpoch;
+			if ( !fAgeElapsed || !fSaveCompleted )
+				return true;
+		}
+		return false;
+	}
+
+	DWORD AssignUID( CResourceObj* pObj, DWORD dwIndex )
+	{
+		EnsureGenerationCount();
+		DWORD& dwGeneration = m_UIDGenerations[dwIndex];
+		if ( dwGeneration == 0 )
+			dwGeneration = 1;
+		else
+			dwGeneration++;
+		m_UIDs.SetAt( dwIndex, pObj );
+		pObj->SetUIDGeneration( dwGeneration );
+		return dwIndex;
+	}
 
 	CUIDArray()
+		: m_timeUIDReuseDelay( std::chrono::seconds( 60 )),
+		  m_iUIDSaveEpoch( 0 ), m_fPreventUIDReuse( false )
 	{
 		// UID 0 is reserved as the invalid/clear value.  Keep a real slot at
 		// index 0 so the first runtime object is allocated UID 1, not UID 0.
 		m_UIDs.SetAtGrow(0, NULL);
+		m_UIDGenerations.resize( 1, 0 );
 	}
 	CUIDArray(DWORD dwMaxSize)
+		: m_timeUIDReuseDelay( std::chrono::seconds( 60 )),
+		  m_iUIDSaveEpoch( 0 ), m_fPreventUIDReuse( false )
 	{
 		// Preserve the same invariant for callers that provide an initial size.
 		m_UIDs.SetCount(dwMaxSize > 0 ? dwMaxSize : 1);
+		m_UIDGenerations.resize( GetUIDCount(), 0 );
 	}
 
 	DWORD GetUIDCount() const
@@ -67,7 +149,29 @@ struct CUIDArray
 		// release the slot if it still belongs to this object.
 		DWORD dwIndex = pObj->GetUIDIndex() & 0x3FFFFFFF; // strip type flags
 		if (dwIndex > 0 && dwIndex < GetUIDCount() && m_UIDs[dwIndex] == pObj)
+		{
 			m_UIDs.SetAt(dwIndex, UID_PLACE_HOLDER);
+			m_UIDQuarantine.erase( std::remove_if( m_UIDQuarantine.begin(), m_UIDQuarantine.end(),
+				[dwIndex]( const UID_QUARANTINE_ENTRY& entry ) { return entry.m_dwIndex == dwIndex; }),
+				m_UIDQuarantine.end());
+			m_UIDQuarantine.push_back({ dwIndex, std::chrono::steady_clock::now(), m_iUIDSaveEpoch + 1 });
+		}
+	}
+	void SetPreventUIDReuse() { m_fPreventUIDReuse = true; }
+	void SetAllowUIDReuse()
+	{
+		m_fPreventUIDReuse = false;
+		++m_iUIDSaveEpoch;
+		PruneUIDQuarantine();
+	}
+	void SetUIDReuseDelaySeconds( DWORD dwSeconds )
+	{
+		m_timeUIDReuseDelay = std::chrono::seconds( dwSeconds );
+	}
+	DWORD GetUIDGeneration( DWORD dwIndex ) const
+	{
+		dwIndex &= 0x3FFFFFFF;
+		return dwIndex < m_UIDGenerations.size() ? m_UIDGenerations[dwIndex] : 0;
 	}
 	DWORD AllocUID(CResourceObj* pObj, DWORD dwIndex)
 	{
@@ -75,6 +179,8 @@ struct CUIDArray
 		// dwIndex = desired UID index (0 = allocate new), may include UID_F_ITEM flag
 		// RETURN: the UID index actually assigned.
 		ASSERT(pObj);
+		PruneUIDQuarantine();
+		EnsureGenerationCount();
 		// Strip type flags — only use the index portion for array storage.
 		// UID_INDEX_MASK = 0x3FFFFFFF (lose upper 2 bits: UID_F_ITEM and RID_F_RESOURCE)
 		dwIndex &= 0x3FFFFFFF;
@@ -84,7 +190,9 @@ struct CUIDArray
 			if ( dwIndex >= GetUIDCount())
 			{
 				// Grow the array to accommodate.
-				m_UIDs.SetAtGrow( dwIndex, pObj );
+				m_UIDs.SetAtGrow( dwIndex, NULL );
+				EnsureGenerationCount();
+				AssignUID( pObj, dwIndex );
 			}
 			else
 			{
@@ -94,9 +202,15 @@ struct CUIDArray
 					// UID collision - assign a new one instead.
 					dwIndex = 0;
 				}
+				else if ( m_UIDs[dwIndex] == UID_PLACE_HOLDER && IsUIDQuarantined( dwIndex ))
+				{
+					// An explicit request cannot bypass the same quarantine as an
+					// automatically allocated slot.
+					dwIndex = 0;
+				}
 				else
 				{
-					m_UIDs.SetAt( dwIndex, pObj );
+					AssignUID( pObj, dwIndex );
 				}
 			}
 		}
@@ -106,15 +220,19 @@ struct CUIDArray
 			DWORD dwCount = GetUIDCount();
 			for ( dwIndex = 1; dwIndex < dwCount; dwIndex++ )
 			{
-				if ( m_UIDs[dwIndex] == NULL || m_UIDs[dwIndex] == UID_PLACE_HOLDER )
+				if ( (m_UIDs[dwIndex] == NULL || m_UIDs[dwIndex] == UID_PLACE_HOLDER) &&
+					(m_UIDs[dwIndex] == NULL || !IsUIDQuarantined( dwIndex )) )
 				{
-					m_UIDs.SetAt( dwIndex, pObj );
-					return dwIndex;
+					return AssignUID( pObj, dwIndex );
 				}
 			}
 			// No free slot found - grow the array.
 			dwIndex = dwCount;
-			m_UIDs.SetAtGrow( dwIndex, pObj );
+			while ( IsUIDQuarantined( dwIndex ))
+				++dwIndex;
+			m_UIDs.SetAtGrow( dwIndex, NULL );
+			EnsureGenerationCount();
+			AssignUID( pObj, dwIndex );
 		}
 		return dwIndex;
 	}
@@ -123,6 +241,11 @@ struct CUIDArray
 		m_UIDs.RemoveAll();
 		// Keep UID 0 reserved after a reset just as the constructors do.
 		m_UIDs.SetAtGrow(0, NULL);
+		m_UIDGenerations.clear();
+		m_UIDGenerations.resize( 1, 0 );
+		m_UIDQuarantine.clear();
+		m_iUIDSaveEpoch = 0;
+		m_fPreventUIDReuse = false;
 	}
 };
 #endif // _INC_CRESOURCEOBJ_H

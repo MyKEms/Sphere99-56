@@ -56,6 +56,11 @@ class CGVariant
 {
 private:
 	CGVARIANT_TYPE m_type;
+	// When a live object reference is copied through script arguments, retain
+	// the UID-slot generation that was current when the reference was taken.
+	// Non-reference values remain generation-neutral.
+	DWORD m_dwUIDGeneration;
+	LPCTSTR m_pszUIDType;
 
 	// Data storage -- m_str is always available (CGString has ctor/dtor, can't be in union).
 	// For numeric types we use the union. For CGVT_STR, data is in m_str.
@@ -84,6 +89,8 @@ private:
 	void CopyFrom(const CGVariant& other)
 	{
 		m_type = other.m_type;
+		m_dwUIDGeneration = other.m_dwUIDGeneration;
+		m_pszUIDType = other.m_pszUIDType;
 		m_str = other.m_str;
 		switch ( m_type )
 		{
@@ -109,23 +116,23 @@ private:
 public:
 	// Constructors
 	CGVariant()
-		: m_type(CGVT_VOID), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 	}
 
 	CGVariant(const CGVariant& other)
-		: m_type(CGVT_VOID), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 		CopyFrom(other);
 	}
 
 	CGVariant(const UID_INDEX uid)
-		: m_type(CGVT_UID), m_dwVal(uid), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_UID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_dwVal(uid), m_pArray(NULL), m_iArrayCount(0)
 	{
 	}
 
 	CGVariant(LPCTSTR pszValue)
-		: m_type(CGVT_VOID), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 		if ( pszValue )
 		{
@@ -135,7 +142,7 @@ public:
 	}
 
 	CGVariant(VARTYPE type, void* pData)
-		: m_type(CGVT_VOID), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 		// VARTYPE constants from CScriptableInterface.h:
 		//   VARTYPE_BOOL=0, VARTYPE_CSTRING=1, VARTYPE_INT=2,
@@ -183,6 +190,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_UID;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_dwVal = uid;
 		m_str.Empty();
 	}
@@ -191,6 +200,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_REF;
+		m_dwUIDGeneration = val ? val->GetUIDGeneration() : 0;
+		m_pszUIDType = val ? val->GetUIDTypeName() : NULL;
 		m_pRef = val;
 		m_str.Empty();
 	}
@@ -199,6 +210,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_INT;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_iVal = val ? 1 : 0;
 		m_str.Empty();
 	}
@@ -207,6 +220,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_INT;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_iVal = val;
 		m_str.Empty();
 	}
@@ -215,6 +230,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_DWORD;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_dwVal = val;
 		m_str.Empty();
 	}
@@ -223,6 +240,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_str = pszStr ? pszStr : "";
 		m_iVal = 0;
 	}
@@ -231,6 +250,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		va_list vargs;
 		va_start(vargs, format);
 		m_str.FormatV(format, vargs);
@@ -241,6 +262,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_VOID;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_iVal = 0;
 		m_str.Empty();
 	}
@@ -428,6 +451,9 @@ public:
 		return (m_type == CGVT_REF) ? m_pRef : NULL;
 	}
 
+	DWORD GetUIDGeneration() const { return m_dwUIDGeneration; }
+	LPCTSTR GetUIDTypeName() const { return m_pszUIDType ? m_pszUIDType : "<none>"; }
+
 	// Comparison
 	int CompareData(CGVariant& other) const
 	{
@@ -560,6 +586,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		va_list vargs;
 		va_start(vargs, format);
 		m_str.FormatV(format, vargs);
@@ -623,6 +651,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_str = str;
 		return *this;
 	}
@@ -630,6 +660,8 @@ public:
 	CGVariant& operator=(LPCTSTR pszStr)
 	{
 		FreeArray();
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		if ( pszStr )
 		{
 			m_type = CGVT_STR;
@@ -647,6 +679,8 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_INT;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 		m_iVal = val;
 		m_str.Empty();
 		return *this;
@@ -682,6 +716,8 @@ private:
 			m_str += m_pArray[i].GetPSTR();
 		}
 		m_type = CGVT_STR;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
 	}
 };
 

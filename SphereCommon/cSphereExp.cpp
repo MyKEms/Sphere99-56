@@ -937,6 +937,24 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 	return ridFunc.IsValidRID();
 }
 
+bool CSphereExpContext::ValidateUIDReference(const CGVariant& value,
+	CResourceObj* pObj, LPCTSTR pszProperty)
+{
+	const DWORD dwStoredGeneration = value.GetUIDGeneration();
+	if ( dwStoredGeneration == 0 || pObj == NULL )
+		return true;
+	const DWORD dwCurrentGeneration = g_World.GetUIDGeneration( pObj->GetUIDIndex());
+	if ( dwStoredGeneration == dwCurrentGeneration )
+		return true;
+
+	g_Log.Event( LOG_GROUP_DEBUG, LOGL_CRIT,
+		"stale UID write uid=0x%lx property='%s' old_type='%s' new_type='%s' old_generation=%lu new_generation=%lu" LOG_CR,
+		(DWORD) pObj->GetUIDIndex(), pszProperty ? pszProperty : "<unknown>",
+		value.GetUIDTypeName(), pObj->GetUIDTypeName(),
+		(unsigned long) dwStoredGeneration, (unsigned long) dwCurrentGeneration );
+	return false;
+}
+
 void CSphereExpContext::InitFunctions()	// static
 {
 	if ( sm_FunctionsAll.GetSize())

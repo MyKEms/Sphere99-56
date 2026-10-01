@@ -20,6 +20,13 @@
 #include <iterator>
 #include <string>
 
+class CLoadSafetyExecContext : public CSphereExpContext
+{
+public:
+	CLoadSafetyExecContext() : CSphereExpContext( NULL, NULL ) {}
+	using CSphereExpContext::ValidateUIDReference;
+};
+
 static int CountDirectoryEntries( const char* pszDir )
 {
 	DIR* pDir = opendir( pszDir );
@@ -52,6 +59,57 @@ static bool TestUIDReset()
 		return false;
 
 	return uids.AllocUID( &second, 0 ) == 1;
+}
+
+static bool TestUIDReuseIsQuarantined()
+{
+	CUIDArray uids;
+	CResourceObj first( 1 );
+	CResourceObj second( 2 );
+	CResourceObj third( 3 );
+	const DWORD dwFirst = uids.AllocUID( &first, 0 );
+	const DWORD dwFirstGeneration = first.GetUIDGeneration();
+	if ( dwFirst == 0 || dwFirstGeneration == 0 )
+		return false;
+	CGVariant savedReference;
+	savedReference.SetRef( &first );
+	if ( savedReference.GetUIDGeneration() != dwFirstGeneration )
+		return false;
+	uids.FreeUID( &first );
+	// A zero delay still observes the completed-save barrier.
+	uids.SetUIDReuseDelaySeconds( 0 );
+	const DWORD dwSecond = uids.AllocUID( &second, 0 );
+	// A freed slot must not be reused before its quarantine expires.
+	if ( dwSecond == dwFirst )
+		return false;
+	// A completed save and an explicitly configured zero-second delay release
+	// the slot; its generation must advance before it can be reused.
+	uids.SetAllowUIDReuse();
+	const DWORD dwThird = uids.AllocUID( &third, 0 );
+	return dwThird == dwFirst && third.GetUIDGeneration() != dwFirstGeneration &&
+		savedReference.GetUIDGeneration() != third.GetUIDGeneration();
+}
+
+static bool TestStaleUIDReferenceIsRejected()
+{
+	CResourceObj oldObject( 1 );
+	CResourceObj newObject( 2 );
+	const DWORD dwOldUID = g_World.AllocUID( &oldObject, 0 );
+	if ( dwOldUID == 0 )
+		return false;
+	CGVariant savedReference;
+	savedReference.SetRef( &oldObject );
+	g_World.FreeUID( &oldObject );
+	g_World.SetUIDReuseDelaySeconds( 0 );
+	g_World.SetAllowUIDReuse();
+	if ( g_World.AllocUID( &newObject, dwOldUID ) != dwOldUID )
+		return false;
+	newObject.SetUIDIndex( dwOldUID );
+	CLoadSafetyExecContext context;
+	const bool fRejected = !context.ValidateUIDReference( savedReference, &newObject, "TAG.TEST" );
+	g_World.FreeUID( &newObject );
+	g_World.SetAllowUIDReuse();
+	return fRejected;
 }
 
 static bool TestLoadDetailBudgetScope()
@@ -464,6 +522,18 @@ int main()
 		return 1;
 	}
 	std::printf( "UID reset: reserved slot 0 preserved\n" );
+	if ( !TestUIDReuseIsQuarantined() )
+	{
+		std::fprintf( stderr, "freed UID was reused before quarantine expired\n" );
+		return 1;
+	}
+	std::printf( "UID reuse: freed slot stayed quarantined\n" );
+	if ( !TestStaleUIDReferenceIsRejected() )
+	{
+		std::fprintf( stderr, "stale UID reference was not rejected after slot reuse\n" );
+		return 1;
+	}
+	std::printf( "UID generations: stale property write was rejected\n" );
 	if ( !TestLoadDetailBudgetScope() )
 	{
 		std::fprintf( stderr, "load detail budget leaked into runtime diagnostics\n" );
