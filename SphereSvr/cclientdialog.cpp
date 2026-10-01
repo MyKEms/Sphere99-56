@@ -264,6 +264,10 @@ private:
 
 		if ( CScriptExecContext::IsGumpCommand(szGumpKey) )
 		{
+			if ( CScriptExecContext::AddInlineHtmlGump(
+				&m_asControls, &m_asText, szGumpKey, pGumpArgs ) )
+				return;
+
 			TCHAR szGump[SCRIPT_MAX_LINE_LEN];
 			if ( *pGumpArgs )
 			{

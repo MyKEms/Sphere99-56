@@ -61,6 +61,8 @@ FIRST_CONTROLS = (
     f"htmlgump 10 {PANEL_Y} 280 40 1 0 0",
     f"button 40 150 4005 4007 1 0 {FIRST_BUTTON}",
     "text 80 150 0 2",
+    "htmlgump 10 70 280 40 5 0 0",
+    "htmlgump 10 120 280 40 6 0 0",
     f"text 200 {PANEL_Y} 0 3",
 )
 FIRST_TEXTS = (
@@ -69,6 +71,8 @@ FIRST_TEXTS = (
     "label 80",
     "tag text",
     "note 300",
+    '<BASEFONT COLOR="white">Inline "quoted" HTML</BASEFONT>',
+    '<BASEFONT COLOR="silver">ARGO inline text</BASEFONT>',
 )
 NEXT_LABEL_TEXT_ID = BULK_LINE_COUNT
 NEXT_CONTROLS = (
@@ -101,6 +105,8 @@ gumppic 140 200 2200
 argo.f_dialog_root_panel(10,3,300,200)
 argo.f_dialog_root_button(40,150,{FIRST_BUTTON},2)
 argo.f_dialog_root_deep(0)
+HTMLGUMPa 10 70 280 40 "<BASEFONT COLOR=\\"white\\">Inline \\"quoted\\" HTML</BASEFONT>" 0 0
+argo.HTMLGumpa(10,120,280,40,"<BASEFONT COLOR=\\"silver\\">ARGO inline text</BASEFONT>",0,0)
 text 200 <tag(dialog_root_y[1])> 0 3
 
 [DIALOG {DIALOG_NAME} TEXT]
