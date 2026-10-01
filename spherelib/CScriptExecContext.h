@@ -56,6 +56,11 @@ class CScriptExecContext : public CExpression
 private:
 	CScriptObj* m_pBaseObj;		// the "this" object we are scripting
 	CScriptConsole* m_pSrc;	// who triggered this (the console/player source)
+	// 0.99 lets a script temporarily replace SRC with a live object reference.
+	// The override belongs to this execution context and is inherited only by
+	// nested function contexts, so returning from the function restores the
+	// caller's source automatically.
+	CScriptObj* m_pSourceObj;
 
 	static LPCTSTR const sm_szScriptKeys[];
 
@@ -587,6 +592,12 @@ protected:
 		return !_stricmp(pszProp, "CONT");
 	}
 
+	static bool IsObjectAssignmentKey(LPCTSTR pszKey)
+	{
+		return IsContainerAssignmentKey(pszKey) ||
+			(pszKey != NULL && !_stricmp(pszKey, "SRC"));
+	}
+
 	static bool HasFindObjectSegment(LPCTSTR pszKey)
 	{
 		for ( LPCTSTR p = pszKey; p && *p; p++ )
@@ -693,7 +704,8 @@ public:
 	bool m_fSpaceSeparatedFunctionArgs;
 
 	CScriptExecContext(CScriptObj* pObj, CScriptConsole* pConsole)
-		: m_pBaseObj(pObj), m_pSrc(pConsole), m_fSpaceSeparatedFunctionArgs(false)
+		: m_pBaseObj(pObj), m_pSrc(pConsole), m_pSourceObj(NULL),
+		  m_fSpaceSeparatedFunctionArgs(false)
 	{
 	}
 
@@ -911,6 +923,16 @@ public:
 	CScriptConsole* GetSrc() const
 	{
 		return m_pSrc;
+	}
+
+	void SetSourceObject(CScriptObj* pObj)
+	{
+		m_pSourceObj = pObj;
+	}
+
+	CScriptObj* GetSourceObject() const
+	{
+		return m_pSourceObj;
 	}
 
 	// Check the complete replacement size before shifting the suffix.  The
@@ -2045,7 +2067,7 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
-						DWORD dwArgFlags = (fKeyEquals && IsContainerAssignmentKey(szKey))
+						DWORD dwArgFlags = (fKeyEquals && IsObjectAssignmentKey(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
