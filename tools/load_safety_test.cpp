@@ -16,9 +16,11 @@
 
 #include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
 
 class CLoadSafetyExecContext : public CSphereExpContext
 {
@@ -88,6 +90,41 @@ static bool TestUIDReuseIsQuarantined()
 	const DWORD dwThird = uids.AllocUID( &third, 0 );
 	return dwThird == dwFirst && third.GetUIDGeneration() != dwFirstGeneration &&
 		savedReference.GetUIDGeneration() != third.GetUIDGeneration();
+}
+
+static bool TestUIDQuarantineReleaseScales()
+{
+	// A large deferred-destruction batch must not scan every prior quarantine
+	// entry.  Use explicit slots so this isolates release bookkeeping from the
+	// normal first-free UID search.
+	const size_t iObjectCount = 50000;
+	CUIDArray uids;
+	std::vector<CResourceObj*> objects;
+	objects.reserve( iObjectCount );
+	for ( size_t i = 0; i < iObjectCount; ++i )
+	{
+		CResourceObj* pObject = new CResourceObj( static_cast<HASH_INDEX>( i + 1 ));
+		if ( uids.AllocUID( pObject, static_cast<DWORD>( i + 1 )) != i + 1 )
+		{
+			delete pObject;
+			for ( size_t j = 0; j < objects.size(); ++j )
+				delete objects[j];
+			return false;
+		}
+		objects.push_back( pObject );
+	}
+
+	const std::chrono::steady_clock::time_point timeStart = std::chrono::steady_clock::now();
+	for ( size_t i = 0; i < objects.size(); ++i )
+		uids.FreeUID( objects[i] );
+	const std::chrono::steady_clock::duration timeElapsed =
+		std::chrono::steady_clock::now() - timeStart;
+	for ( size_t i = 0; i < objects.size(); ++i )
+		delete objects[i];
+
+	const long long iElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>( timeElapsed ).count();
+	std::printf( "UID quarantine release: %zu objects in %lld ms\n", iObjectCount, iElapsedMs );
+	return iElapsedMs < 5000;
 }
 
 static bool TestStaleUIDReferenceIsRejected()
@@ -528,6 +565,11 @@ int main()
 		return 1;
 	}
 	std::printf( "UID reuse: freed slot stayed quarantined\n" );
+	if ( !TestUIDQuarantineReleaseScales() )
+	{
+		std::fprintf( stderr, "UID quarantine release scanned too much state\n" );
+		return 1;
+	}
 	if ( !TestStaleUIDReferenceIsRejected() )
 	{
 		std::fprintf( stderr, "stale UID reference was not rejected after slot reuse\n" );

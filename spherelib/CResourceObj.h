@@ -9,6 +9,7 @@
 #undef max
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
 #include <vector>
 #pragma pop_macro("max")
 #pragma pop_macro("min")
@@ -56,7 +57,7 @@ struct CUIDArray
 
 	CGRefArray<CResourceObj> m_UIDs;	// all the UID's in the World. CChar and CItem.
 	std::vector<DWORD> m_UIDGenerations;
-	std::vector<UID_QUARANTINE_ENTRY> m_UIDQuarantine;
+	std::unordered_map<DWORD, UID_QUARANTINE_ENTRY> m_UIDQuarantine;
 	std::chrono::milliseconds m_timeUIDReuseDelay;
 	unsigned long long m_iUIDSaveEpoch;
 	bool m_fPreventUIDReuse;
@@ -70,31 +71,32 @@ struct CUIDArray
 	void PruneUIDQuarantine()
 	{
 		const std::chrono::steady_clock::time_point timeNow = std::chrono::steady_clock::now();
-		m_UIDQuarantine.erase( std::remove_if( m_UIDQuarantine.begin(), m_UIDQuarantine.end(),
-			[&]( const UID_QUARANTINE_ENTRY& entry )
+		for ( std::unordered_map<DWORD, UID_QUARANTINE_ENTRY>::iterator it = m_UIDQuarantine.begin();
+			it != m_UIDQuarantine.end(); )
+		{
+			const UID_QUARANTINE_ENTRY& entry = it->second;
+			const bool fAgeElapsed = timeNow - entry.m_timeFreed >= m_timeUIDReuseDelay;
+			const bool fSaveCompleted = m_iUIDSaveEpoch >= entry.m_iReleaseSaveEpoch;
+			if ( fAgeElapsed && fSaveCompleted )
 			{
-				const bool fAgeElapsed = timeNow - entry.m_timeFreed >= m_timeUIDReuseDelay;
-				const bool fSaveCompleted = m_iUIDSaveEpoch >= entry.m_iReleaseSaveEpoch;
-				return fAgeElapsed && fSaveCompleted;
-			}), m_UIDQuarantine.end());
+				it = m_UIDQuarantine.erase( it );
+			}
+			else
+				++it;
+		}
 	}
 
 	bool IsUIDQuarantined( DWORD dwIndex ) const
 	{
 		const std::chrono::steady_clock::time_point timeNow = std::chrono::steady_clock::now();
-		for ( size_t i = 0; i < m_UIDQuarantine.size(); ++i )
-		{
-			const UID_QUARANTINE_ENTRY& entry = m_UIDQuarantine[i];
-			if ( entry.m_dwIndex != dwIndex )
-				continue;
-			if ( m_fPreventUIDReuse )
-				return true;
-			const bool fAgeElapsed = timeNow - entry.m_timeFreed >= m_timeUIDReuseDelay;
-			const bool fSaveCompleted = m_iUIDSaveEpoch >= entry.m_iReleaseSaveEpoch;
-			if ( !fAgeElapsed || !fSaveCompleted )
-				return true;
-		}
-		return false;
+		std::unordered_map<DWORD, UID_QUARANTINE_ENTRY>::const_iterator it =
+			m_UIDQuarantine.find( dwIndex );
+		if ( it == m_UIDQuarantine.end() || m_fPreventUIDReuse )
+			return it != m_UIDQuarantine.end();
+		const UID_QUARANTINE_ENTRY& entry = it->second;
+		const bool fAgeElapsed = timeNow - entry.m_timeFreed >= m_timeUIDReuseDelay;
+		const bool fSaveCompleted = m_iUIDSaveEpoch >= entry.m_iReleaseSaveEpoch;
+		return !fAgeElapsed || !fSaveCompleted;
 	}
 
 	DWORD AssignUID( CResourceObj* pObj, DWORD dwIndex )
@@ -106,6 +108,7 @@ struct CUIDArray
 		else
 			dwGeneration++;
 		m_UIDs.SetAt( dwIndex, pObj );
+		m_UIDQuarantine.erase( dwIndex );
 		pObj->SetUIDGeneration( dwGeneration );
 		return dwIndex;
 	}
@@ -151,10 +154,7 @@ struct CUIDArray
 		if (dwIndex > 0 && dwIndex < GetUIDCount() && m_UIDs[dwIndex] == pObj)
 		{
 			m_UIDs.SetAt(dwIndex, UID_PLACE_HOLDER);
-			m_UIDQuarantine.erase( std::remove_if( m_UIDQuarantine.begin(), m_UIDQuarantine.end(),
-				[dwIndex]( const UID_QUARANTINE_ENTRY& entry ) { return entry.m_dwIndex == dwIndex; }),
-				m_UIDQuarantine.end());
-			m_UIDQuarantine.push_back({ dwIndex, std::chrono::steady_clock::now(), m_iUIDSaveEpoch + 1 });
+			m_UIDQuarantine[dwIndex] = { dwIndex, std::chrono::steady_clock::now(), m_iUIDSaveEpoch + 1 };
 		}
 	}
 	void SetPreventUIDReuse() { m_fPreventUIDReuse = true; }
@@ -179,7 +179,6 @@ struct CUIDArray
 		// dwIndex = desired UID index (0 = allocate new), may include UID_F_ITEM flag
 		// RETURN: the UID index actually assigned.
 		ASSERT(pObj);
-		PruneUIDQuarantine();
 		EnsureGenerationCount();
 		// Strip type flags — only use the index portion for array storage.
 		// UID_INDEX_MASK = 0x3FFFFFFF (lose upper 2 bits: UID_F_ITEM and RID_F_RESOURCE)
