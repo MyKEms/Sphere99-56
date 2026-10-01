@@ -915,6 +915,14 @@ CResourceObj* CSphereExpContext::ResolveUIDObject(UID_INDEX uid)
 	return dynamic_cast<CResourceObj*>((CObjBase*)pObj);
 }
 
+CResourceObj* CSphereExpContext::ResolveResourceObject(UID_INDEX uid)
+{
+	CSphereUID rid(uid);
+	if ( !rid.IsValidRID() )
+		return NULL;
+	return dynamic_cast<CResourceObj*>((CResourceDef*)g_Cfg.ResourceGetDef(rid));
+}
+
 int CSphereExpContext::GetScriptLoopLimit() const
 {
 	// A malformed or zero-valued setting must not disable the guard.
@@ -1203,6 +1211,21 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			{
 				vValRet.SetInt(strlen(pszStr));
 			}
+		}
+		break;
+
+	case F_StrFirstCap:
+		{
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			if ( pszStr == NULL )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			CGString sResult(pszStr);
+			if ( sResult.GetLength() > 0 )
+				sResult.SetAt(0, static_cast<TCHAR>(toupper(static_cast<unsigned char>(sResult.GetAt(0)))));
+			vValRet.SetStr(sResult.GetPtr());
 		}
 		break;
 
