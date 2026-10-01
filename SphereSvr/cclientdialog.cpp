@@ -151,11 +151,16 @@ protected:
 			AddArgoLine( szLine );
 			return true;
 		}
-		if ( FindTableHead( szLine, sm_pszDialogTags ) >= 0 )
+		TCHAR chAfterControl;
+		if ( IsControlLine( szLine, chAfterControl ))
 		{
-			// A gump control written directly (legacy format).
+			// A gump control written directly (legacy format), or in the
+			// call form text(x,y,hue,id), which is converted like argo.text().
 			s_ParseEscapes( szLine, 0 );
-			m_asControls.Add( szLine );
+			if ( chAfterControl == '(' )
+				AddArgoLine( szLine );
+			else
+				m_asControls.Add( szLine );
 			return true;
 		}
 		// Anything else is an ordinary command (property, method, function).
@@ -163,6 +168,24 @@ protected:
 	}
 
 private:
+	static bool IsControlLine( LPCTSTR pszLine, TCHAR& chAfter )
+	{
+		// The first word is a gump control name.  A longer name that merely
+		// starts with one (a TAG, a property or a function such as textline)
+		// is an ordinary command.
+		for ( int i = 0; sm_pszDialogTags[i] != NULL; i++ )
+		{
+			size_t iLen = strlen( sm_pszDialogTags[i] );
+			if ( _strnicmp( pszLine, sm_pszDialogTags[i], iLen ))
+				continue;
+			chAfter = pszLine[iLen];
+			if ( chAfter == '\0' || chAfter == '(' || ISWHITESPACE( chAfter ))
+				return true;
+		}
+		chAfter = '\0';
+		return false;
+	}
+
 	static bool IsSetLocation( LPCTSTR pszLine )
 	{
 		if ( _strnicmp( pszLine, "setlocation", 11 ))
@@ -273,10 +296,14 @@ private:
 				return;
 		}
 
-		// Try as script function call with argo as base (e.g., argo.f_layout_part)
+		// A script function called on the dialog object (argo.f_layout_part(...))
+		// is part of this layout.  It runs with the dialog object as its base
+		// and as ARGO, its arguments in ARGV, and each of its lines builds the
+		// dialog as the same line written in the layout does: gump controls,
+		// argo.<gump>(...), argo.settext, argo.setlocation, argo.tag(...),
+		// nested argo.<function>(...) calls and <ARGO...> escapes.  Its RETURN
+		// ends only the function.
 		{
-			CGVariant vFuncArgs(pGumpArgs);
-			CGVariant vFuncRet;
 			CSphereUID ridFunc = g_Cfg.ResourceCheckIDType( RES_Function, szGumpKey );
 			if ( ridFunc.IsValidRID())
 			{
@@ -285,14 +312,20 @@ private:
 				{
 					if (sFunction.GetLinkResource())
 						ScriptExecutionCoverageHit(sFunction.GetLinkResource()->GetScriptCoverageToken());
-					CSphereExpArgs funcExec( m_pDialogObj, m_pLayoutSrc, vFuncArgs );
+					CGVariant vFuncArgs(pGumpArgs);
+					CDialogLayoutExec funcExec( m_pDialogObj, m_pLayoutSrc,
+						m_asControls, m_asText, m_x, m_y, &vFuncArgs );
+					funcExec.SetSourceObject( GetSourceObject());
 					funcExec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
 					return;
 				}
 			}
 		}
 
-		// Unknown argo command: skip it.
+		// Unknown argo command: skip it, but report it like any other
+		// unresolved script keyword.
+		ScriptUnknownRecord( pParen ? SCRIPT_UNKNOWN_FUNCTION : SCRIPT_UNKNOWN_METHOD,
+			szGumpKey, m_pDialogObj );
 	}
 
 private:
@@ -384,19 +417,20 @@ bool CClient::Dialog_Setup( CLIMODE_TYPE mode, CSphereUID rid, CObjBase* pObj,
 		}
 	}
 
-	// Now pack it up to send,
-	m_Targ.m_tmGumpDialog.m_ResourceID = rid;
-
-	addGumpDialog( mode, asControls, asText, x, y, pObj );
+	// Now pack it up to send.  The BUTTON section is chosen by the dialog the
+	// client was actually sent.
+	if ( addGumpDialog( mode, asControls, asText, x, y, pObj ))
+		m_Targ.m_tmGumpDialog.m_ResourceID = rid;
 	return( true );
 }
 
-void CClient::addGumpDialog( CLIMODE_TYPE mode, CGStringArray& asControls, CGStringArray& asText, int x, int y, CObjBase* pObj )
+bool CClient::addGumpDialog( CLIMODE_TYPE mode, CGStringArray& asControls, CGStringArray& asText, int x, int y, CObjBase* pObj )
 {
 	// Add a generic GUMP menu.
 	// Should return a Event_GumpDialogRet
 	// NOTE: These packets can get rather LARGE.
 	// x,y = where on the screen ?
+	// RETURN: false = not sent, the dialog does not fit in one packet.
 
 	if ( pObj == NULL )
 		pObj = m_pChar;
@@ -411,10 +445,22 @@ void CClient::addGumpDialog( CLIMODE_TYPE mode, CGStringArray& asControls, CGStr
 	int lengthText = lengthControls + 20 + 3;
 	for ( i=0; i < asText.GetSize(); i++)
 	{
-		int lentext2 = asText[i].GetLength();
-		DEBUG_CHECK( lentext2 < MAX_TALK_BUFFER );
-		lengthText += (lentext2*2)+2;
+		lengthText += (asText[i].GetLength()*2)+2;
 	}
+
+	// The packet and its command section carry 16-bit lengths.  A larger
+	// dialog cannot be described to the client: a wrapped length would put
+	// the rest of the stream out of step.
+	if ( lengthText > 0xFFFF || asText.GetSize() > 0xFFFF )
+	{
+		DEBUG_ERR(( "%x:Gump dialog is too large to send (%d bytes, %d controls, %d text lines)" LOG_CR,
+			m_Socket.GetSocket(), lengthText, asControls.GetSize(), asText.GetSize()));
+		return false;
+	}
+
+	// A dialog can be larger than the output buffer.  Queue it through the
+	// flushing send path, as every other packet is, so its earlier part goes
+	// out while the rest is added.
 
 	// Send the fixed length stuff
 	CUOCommand cmd;
@@ -425,40 +471,54 @@ void CClient::addGumpDialog( CLIMODE_TYPE mode, CGStringArray& asControls, CGStr
 	cmd.GumpDialog.m_x = x;
 	cmd.GumpDialog.m_y = y;
 	cmd.GumpDialog.m_lenCmds = lengthControls;
-	xSend( &cmd, 21 );
+	xSendReady( &cmd, 21 );
 
 	for ( i=0; i<asControls.GetSize(); i++)
 	{
 		CGString sTmp;
 		sTmp.Format( "{%s}", (LPCTSTR) asControls[i] );
-		xSend( sTmp, sTmp.GetLength() );
+		xSendReady( sTmp, sTmp.GetLength() );
 	}
 
 	// Pack up the variable length stuff
 	BYTE Pkt_gump2[3];
 	Pkt_gump2[0] = '\0';
 	PACKWORD( &Pkt_gump2[1], asText.GetSize() );
-	xSend( Pkt_gump2, 3);
+	xSendReady( Pkt_gump2, 3);
 
-	// Pack text in UNICODE type format.
+	// Pack text in UNICODE type format: one network-order character per
+	// byte, exactly the declared count.  A line may be longer than one
+	// conversion buffer, so convert it in pieces.
 	for ( i=0; i < asText.GetSize(); i++)
 	{
 		int len1 = asText[i].GetLength();
 
 		NWORD len2;
 		len2 = len1;
-		xSend( &len2, sizeof(NWORD));
-		if ( len1 )
+		xSendReady( &len2, sizeof(NWORD));
+
+		LPCTSTR pszText = asText[i];
+		int iDone = 0;
+		while ( iDone < len1 )
 		{
 			NCHAR szTmp[MAX_TALK_BUFFER];
-			int len3 = CvtSystemToNUNICODE( szTmp, COUNTOF(szTmp), asText[i] );
-			xSend( szTmp, len2*sizeof(NCHAR));
+			int iChunk = len1 - iDone;
+			if ( iChunk > (int) COUNTOF(szTmp) - 1 )
+				iChunk = COUNTOF(szTmp) - 1;
+			int iOut = CvtSystemToNUNICODE( szTmp, iChunk + 1, pszText + iDone );
+			// Keep the declared length even if the text ends early.
+			if ( iOut < iChunk )
+				memset( reinterpret_cast<BYTE*>( szTmp ) + iOut * sizeof(NCHAR), 0,
+					( iChunk - iOut ) * sizeof(NCHAR));
+			xSendReady( szTmp, iChunk * sizeof(NCHAR));
+			iDone += iChunk;
 		}
 	}
 
 	m_Targ.m_tmGumpDialog.m_UID = pObj->GetUID();
 
 	SetTargMode( mode );
+	return true;
 }
 
 bool CClient::addGumpDialogProps( CSphereUID uid )
