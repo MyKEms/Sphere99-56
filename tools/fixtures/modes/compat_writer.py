@@ -107,6 +107,8 @@ GM_COMMAND_LOG_MARKER = "GM_COMMAND_LOG_MARKER"
 GM_COMMAND_LOG_ACCOUNT = "GmCommandLogProbe"
 GM_COMMAND_LOG_PASSWORD = "gm_cmd_log_pw"
 GM_COMMAND_LOG_CHAR_NAME = "GmCommandLogCharacter"
+GM_COMMAND_LOG_PLAYER_ACCOUNT = "GmCommandLogPlayer"
+GM_COMMAND_LOG_PLAYER_PASSWORD = "gm_cmd_player_pw"
 
 # Dedicated runaway-loop fixture.  The normal engine default remains
 # generous; this mode sets a small value so the bounded return and the
@@ -2723,6 +2725,9 @@ def write_gm_command_log_save(root: Path) -> None:
                 "PLEVEL=Admin",
                 "CHARUID=1",
                 "LASTCHARUID=1",
+                f"[{GM_COMMAND_LOG_PLAYER_ACCOUNT}]",
+                f"PASSWORD={GM_COMMAND_LOG_PLAYER_PASSWORD}",
+                "PLEVEL=Player",
                 "[EOF]",
             )
         ),

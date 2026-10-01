@@ -844,7 +844,7 @@ PLEVEL_TYPE CSphereResourceMgr::GetPrivCommandLevel( LPCTSTR pszCmd ) const
 
 	char szTmp[EXPRESSION_MAX_KEY_LEN+1];
 	int i;
-	for ( i=0; isalnum(pszCmd[i]); i++ )
+	for ( i=0; i < EXPRESSION_MAX_KEY_LEN && isalnum(pszCmd[i]); i++ )
 	{
 		szTmp[i] = pszCmd[i];
 	}
