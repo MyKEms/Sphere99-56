@@ -85,6 +85,12 @@ RETURN 0
 f_sysmessagecol(057,"<ARGV(2)>")
 RETURN 0
 
+[FUNCTION tutAddActionXP]
+// Keep the legacy helper's object-root call form in this fixture.  The
+// helper records XP and sends the same class-message argument.
+f_sysmessagecol(057,"<ARGV(2)>")
+RETURN 0
+
 [CHARDEF {NPC_DEFNAME}]
 DEFNAME={NPC_DEFNAME}
 ID=0x0190
@@ -96,9 +102,12 @@ STR=100
 DEX=100
 INT=100
 ON=@UserDClick
+IF (<SRC.ISGM>)
+  RETURN 0
+ENDIF
 SRC.SENDPACKET {first}
 SRC.SENDPACKET {second}
-SRC.f_tutorial_reward(20,helper_seen,\"{REAL_NOTICE}\")
+SRC.tutAddActionXP(20,greetedNPCdClick,\"{REAL_NOTICE}\")
 DORAND 3
 {real_speech}
 ENDDO
