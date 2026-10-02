@@ -15,6 +15,9 @@ from modes.gm_kill import ACCOUNT, PASSWORD, TARGET_SERIALS
 from run_suite import shutdown_failures, stop_server, tail, wait_for_port
 
 
+DEATH_BOUND_SECONDS = 0.15  # one bounded engine tick for this fixture
+
+
 def _decode(data: bytes):
     from uo_packets import split_packet_stream
     from uo_test_client import decode_game_response
@@ -97,6 +100,16 @@ def _has_death_or_corpse(raw_packets, serial: int) -> bool:
     return False
 
 
+def _read_daily_logs(fixture: Path) -> str:
+    chunks = []
+    for path in sorted((fixture / "logs").glob("sphere*.log")):
+        try:
+            chunks.append(path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+    return "\n".join(chunks)
+
+
 def _enter(port: int) -> socket.socket:
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
@@ -113,19 +126,30 @@ def _enter(port: int) -> socket.socket:
     return sock
 
 
-def _run_command(sock: socket.socket, command: str, serial: int) -> tuple[bool, bool]:
+def _run_command(
+    sock: socket.socket,
+    command: str,
+    serial: int,
+) -> tuple[bool, bool, float | None]:
     sock.sendall(_talk(f".{command}"))
     target_data = _recv_until(sock, lambda packets: _target_context(packets) is not None)
     context = _target_context(_decode(target_data))
     if context is None:
-        return False, False
+        return False, False, None
+    started = time.monotonic()
     sock.sendall(_make_target(context, serial))
-    result = _recv_until(
-        sock,
-        lambda packets: _has_death_or_corpse(packets, serial),
-        timeout=5.0,
-    )
-    return True, _has_death_or_corpse(_decode(result), serial)
+    death_at = [None]
+
+    def death_seen(packets) -> bool:
+        marker_seen = any(b"GM_KILL_DEATH" in packet.data for packet in packets if packet.command == 0x1C)
+        if marker_seen and _has_death_or_corpse(packets, serial):
+            death_at[0] = time.monotonic()
+            return True
+        return False
+
+    _recv_until(sock, death_seen, timeout=DEATH_BOUND_SECONDS)
+    delay = None if death_at[0] is None else death_at[0] - started
+    return True, delay is not None and delay <= DEATH_BOUND_SECONDS, delay
 
 
 def main() -> int:
@@ -139,6 +163,7 @@ def main() -> int:
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
     failures: list[str] = []
+    expected_logs: list[str] = []
     process = None
     returncode = None
     try:
@@ -153,12 +178,18 @@ def main() -> int:
             wait_for_port("127.0.0.1", args.port, args.startup_timeout)
             sock = _enter(args.port)
             try:
-                for command, serial in zip(("KILL", "X KILL"), TARGET_SERIALS):
-                    cursor, killed = _run_command(sock, command, serial)
+                for (command, serial), target_name in zip(
+                    (("KILL", TARGET_SERIALS[0]), ("X KILL", TARGET_SERIALS[1])),
+                    ("GM KillAnimalOne", "GM KillAnimalTwo"),
+                ):
+                    expected_logs.append(f"'{target_name}' was KILLed by 'GmKillProbe'")
+                    cursor, killed, delay = _run_command(sock, command, serial)
                     if not cursor:
                         failures.append(f".{command} did not open a target cursor")
                     elif not killed:
-                        failures.append(f".{command} produced no death, removal, or corpse packet")
+                        failures.append(
+                            f".{command} did not emit death and '{target_name}' was KILLed by 'GmKillProbe' within one engine tick"
+                        )
             finally:
                 sock.close()
     except (OSError, RuntimeError, ValueError, struct.error) as error:
@@ -172,10 +203,14 @@ def main() -> int:
 
     try:
         contents = (fixture / "server.log").read_text(encoding="utf-8", errors="replace")
+        contents += "\n" + _read_daily_logs(fixture)
     except OSError as error:
         contents = ""
         failures.append(f"unable to read server log: {error}")
     failures.extend(shutdown_failures(returncode, contents))
+    for marker in expected_logs:
+        if marker not in contents:
+            failures.append(f"daily log missing '{marker}'")
     for command in ("KILL", "X KILL"):
         if f"command '{command}.' error" in contents:
             failures.append(f"server retained the trailing-dot command for .{command}")

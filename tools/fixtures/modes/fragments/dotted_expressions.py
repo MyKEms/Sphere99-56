@@ -31,6 +31,15 @@ DOTTED_EXPRESSION_ROWS = (
     # in both space-separated and parenthesized function forms.
     ("hval_space", "<hval 0xBEEF>", "CI"),
     ("hval_paren", "<hval(-1)>", "C"),
+    # Sphere's character-class syntax is used by the stock input guards.  A
+    # class consumes exactly one character, so the two-digit form accepts
+    # digits and the malformed/incorrect-length forms stay rejected.
+    ("strmatch_class_digits", "<STRMATCH 50,[-0123456789][-0123456789]>", "C"),
+    ("strmatch_class_letters", "<STRMATCH qwd,[-0123456789][-0123456789]>", "C"),
+    ("strmatch_class_mixed", "<STRMATCH 5a,[-0123456789][-0123456789]>", "C"),
+    ("strmatch_class_short", "<STRMATCH 5,[-0123456789][-0123456789]>", "C"),
+    ("strmatch_class_long", "<STRMATCH 500,[-0123456789][-0123456789]>", "C"),
+    ("strmatch_class_negative", "<STRMATCH -50,[-0123456789][-0123456789][-0123456789]>", "C"),
     # FINDRES returns a typed resource reference so its properties can be
     # read through the same dotted-expression path as world objects.
     ("findres_spell_mana", "<findres(spell,s_fixture_heal).manause>", "C"),

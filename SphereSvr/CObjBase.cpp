@@ -1298,7 +1298,7 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 		// do this verb only if we can touch it.
 		if ( pClientSrc == NULL )
 			return( HRES_PRIVILEGE_NOT_HELD );
-		pClientSrc->OnTarg_Obj_Command( this, vArgs.GetPSTR());
+		pClientSrc->OnTarg_Obj_Command( this, vArgs.GetPSTR(), true );
 		break;
 
 	case M_UseItem:

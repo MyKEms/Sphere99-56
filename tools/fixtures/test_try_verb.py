@@ -21,7 +21,7 @@ from modes.compat_writer import (
 
 
 COMMAND_LOG = re.compile(
-    r"commands uid=0x?[0-9a-fA-F]+.* to 's\(([^']+)\)' (OK|NO PRIV)",
+    r"commands uid=0x?[0-9a-fA-F]+.* to '([^']+)' (OK|NO PRIV)",
     re.IGNORECASE,
 )
 
@@ -102,10 +102,10 @@ def main() -> int:
     ok = [value for value, status in records if status.upper() == "OK"]
     no_priv = [value for value, status in records if status.upper() == "NO PRIV"]
     for marker in GM_COMMAND_LOG_MARKERS:
-        if not any(marker in value for value in ok):
-            failures.append(f"missing successful TRY marker: {marker}")
-        if not any(marker in value for value in no_priv):
-            failures.append(f"missing privilege-check TRY marker: {marker}")
+        if sum(marker in value for value in ok) < 2:
+            failures.append(f"script-function TRY did not succeed for both callers: {marker}")
+    if not any(value.strip().upper() == "INFO" for value in no_priv):
+        failures.append("GM-only verb did not retain its NO PRIV result")
 
     report = fixture / "logs" / "unknown-keywords.json"
     if not report.exists():
