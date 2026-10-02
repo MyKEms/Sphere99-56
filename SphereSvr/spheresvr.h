@@ -552,6 +552,7 @@ private:
 	// encrypt/decrypt stuff.
 	CCrypt		m_Crypt;		// Client to server communications encryption scheme.
 	CCompressXOR m_CompressXOR;	// used only in Client 2.0.4 and above.
+	bool		m_fGameStreamPrimed;	// legacy 2.x/3.x clients receive a raw first game packet.
 	static CCompressTree sm_xComp;
 
 	// ??? Since we really only deal with one input at a time we can make this static ?

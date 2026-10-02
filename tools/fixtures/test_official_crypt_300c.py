@@ -1,66 +1,26 @@
 #!/usr/bin/env python3
-"""Replay a captured official-client game-login stream to the fixture server."""
+"""Replay the 3.0.0c login-crypt trial against the synthetic server."""
 
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 import subprocess
 import time
 from pathlib import Path
 
 from run_suite import shutdown_failures, stop_server, wait_for_port
+from test_official_crypt import GAME_LOGIN_CAPTURE, check_game_response
 
 
-# The first four bytes are the game-connection seed.  The remaining bytes are
-# the captured 3.0.6m login request.  Keeping this stream as hex makes the
-# regression reproducible without distributing a client or a private capture.
-GAME_LOGIN_CAPTURE = bytes.fromhex(
+LOGIN_300C_CAPTURE = bytes.fromhex(
     """
-    7f0000012262d95047b301fb09b7403b
-    8c3c0a8efca3cf8dcf23d65306a1d860
-    ddc0dc34b6a8ee7f6725df5f6bb38b0f
-    99557a853badb96b36974a7d5b2eed2e
-    23a312cd0d
+    ac1500042e5c8ef94ebdfe5402b77d81067c41df90b7246d49db12f684bda1af
+    28eb0a0e27ade41a946c8a70fe007fc01f70475c51d71475c51d71c79c31e70c
+    f983
     """
 )
-
-COMPRESS_XOR_STREAM = bytes(
-    (0x05, 0x92, 0x66, 0x23, 0x67, 0x14, 0xE3, 0x62,
-     0xDC, 0x60, 0x8C, 0xD6, 0xFE, 0x7C, 0x25, 0x69)
-)
-
-
-GAME_STREAM_PREFIX = bytes.fromhex("b6a0fef9")
-
-
-def decode_game_xor(data: bytes, *, stream_offset: int = 0) -> bytes:
-    """Undo the legacy 2.0.4+ game-server response stream for assertions."""
-
-    return bytes(
-        value ^ COMPRESS_XOR_STREAM[(stream_offset + index) & 0x0F]
-        for index, value in enumerate(data)
-    )
-
-
-def check_game_response(response: bytes) -> list[str]:
-    """Check the stock framing and the first compressed character-list byte."""
-
-    failures: list[str] = []
-    if len(response) < len(GAME_STREAM_PREFIX) + 1:
-        return [f"game response is too short ({len(response)} bytes)"]
-    if response[: len(GAME_STREAM_PREFIX)] != GAME_STREAM_PREFIX:
-        failures.append(
-            "game response is missing the stock four-byte un-XORed prefix "
-            f"(got={response[:4].hex()})"
-        )
-    decoded_tail = decode_game_xor(response[len(GAME_STREAM_PREFIX) :], stream_offset=4)
-    if not decoded_tail or decoded_tail[0] != 0x81:
-        failures.append(
-            "game response tail did not resume the XOR stream at offset four "
-            f"(decoded_first={decoded_tail[:1].hex() or 'none'})"
-        )
-    return failures
 
 
 def _read_response(sock: socket.socket, process: subprocess.Popen[bytes]) -> bytes:
@@ -79,8 +39,6 @@ def _read_response(sock: socket.socket, process: subprocess.Popen[bytes]) -> byt
         if not chunk:
             break
         data.extend(chunk)
-        if data and data[0] == 0x81:
-            break
     return bytes(data)
 
 
@@ -100,6 +58,12 @@ def main() -> int:
     response = b""
     returncode: int | None = None
 
+    ini_path = fixture / "sphere.ini"
+    ini_path.write_text(
+        ini_path.read_text(encoding="utf-8").replace("DEBUGLEVEL=0", "DEBUGLEVEL=3"),
+        encoding="utf-8",
+    )
+
     with log_path.open("wb") as log_file:
         process = subprocess.Popen(
             [str(binary), f"-P{args.port}"],
@@ -111,8 +75,18 @@ def main() -> int:
         try:
             wait_for_port(args.host, args.port, args.startup_timeout)
             with socket.create_connection((args.host, args.port), timeout=5.0) as sock:
-                sock.sendall(GAME_LOGIN_CAPTURE)
+                sock.sendall(LOGIN_300C_CAPTURE)
                 response = _read_response(sock, process)
+            if not response or response[0] != 0xA8:
+                failures.append(
+                    "3.0.0c login crypt trial did not return the server list "
+                    f"(wire_first={response[:1].hex() or 'none'})"
+                )
+            with socket.create_connection((args.host, args.port), timeout=5.0) as sock:
+                sock.sendall(GAME_LOGIN_CAPTURE)
+                game_response = _read_response(sock, process)
+            for failure in check_game_response(game_response):
+                failures.append(f"3.0.0c game trial: {failure}")
         except (OSError, RuntimeError) as error:
             failures.append(str(error))
         finally:
@@ -120,10 +94,11 @@ def main() -> int:
 
     log_contents = log_path.read_text(encoding="utf-8", errors="replace")
     failures.extend(shutdown_failures(returncode, log_contents))
-    failures.extend(check_game_response(response))
+    if not re.search(r"xProcessClientSetup result lErr=255 connType=3 cryptVer=0x300000", log_contents):
+        failures.append("3.0.0c login crypt trial did not select 0x300000")
 
     if failures:
-        print("official crypt negotiation fixture failed:")
+        print("3.0.0c crypt trial fixture failed:")
         for failure in failures:
             print(f"- {failure}")
         print("\n--- server log (tail) ---")
@@ -131,8 +106,8 @@ def main() -> int:
         return 1
 
     print(
-        "official crypt negotiation fixture passed: captured game login returned "
-        f"XOR-protected character list ({len(response)} bytes)"
+        "3.0.0c crypt trial fixture passed: login selected 0x300000 and "
+        f"returned the server list and stock game framing ({len(response)} bytes)"
     )
     return 0
 

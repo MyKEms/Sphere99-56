@@ -50,7 +50,10 @@ MODE = register_mode(
         case=FixtureCase(
             name="official-crypt",
             mode="official-crypt",
-            tests=(TestCase("test_official_crypt.py", (), True, True),),
+            tests=(
+                TestCase("test_official_crypt.py", (), True, True),
+                TestCase("test_official_crypt_300c.py", (), True, True),
+            ),
             ports={"native": 2941, "asan": 2942},
             output="official-crypt",
         ),

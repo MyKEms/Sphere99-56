@@ -845,26 +845,70 @@ void CClient::xFlush()
 	{
 		// Only the game server does this.
 		// This acts as a compression alg. tho it may expand the data some times.
+		BYTE legacyFrame[16];
+		int iLegacyLen = 0;
+		const bool fPrimeGameStream =
+			!m_fGameStreamPrimed && m_Crypt.GetCryptVer() >= 0x200040;
+		// Legacy 2.x/3.x clients expect one un-XORed five-byte player-view
+		// packet before the first compressed response.  The packet is the old
+		// draw-player form (0x20 + the character UID); the following stream
+		// resumes the XOR index after its compressed four-byte frame.
+		if ( fPrimeGameStream )
+		{
+			BYTE legacyView[5];
+			legacyView[0] = XCMD_View;
+			DWORD dwUID = (DWORD)m_Targ.m_tmSetupCharList[0];
+			dwUID = (dwUID & UID_INDEX_MASK) | 0x0e000000;
+			legacyView[1] = (BYTE)(dwUID >> 24);
+			legacyView[2] = (BYTE)(dwUID >> 16);
+			legacyView[3] = (BYTE)(dwUID >> 8);
+			legacyView[4] = (BYTE)dwUID;
+			iLegacyLen = xCompress( legacyFrame, legacyView, sizeof(legacyView) );
+			// The stock stream leaves the seven padding bits of this prefix
+			// occupied by its legacy 0x65 command marker.  The following
+			// compressed response starts at the next byte, so retain that marker
+			// in the prefix rather than emitting an all-zero padding byte.
+			if ( iLegacyLen == 4 )
+				legacyFrame[3] |= 0x79;
+		}
 
 		int iLenComp = xCompress( sm_xCompress_Buffer, m_bout.RemoveDataLock(), iLen );
 		ASSERT( iLenComp <= sizeof(sm_xCompress_Buffer));
+		const int iPrefixLen = fPrimeGameStream ? iLegacyLen : 0;
+		if ( iPrefixLen )
+		{
+			if ( iLenComp + iPrefixLen > (int)sizeof(sm_xCompress_Buffer) )
+			{
+				DEBUG_ERR(( "%x:Game response exceeds the compression buffer" LOG_CR, m_Socket.GetSocket() ));
+				return;
+			}
+			memmove( sm_xCompress_Buffer + iPrefixLen, sm_xCompress_Buffer, iLenComp );
+			memcpy( sm_xCompress_Buffer, legacyFrame, iPrefixLen );
+			// The prefix is sent in clear, but it still consumes the first four
+			// positions of the legacy game XOR stream.
+			BYTE legacySkip[16] = {};
+			m_CompressXOR.CompressXOR( legacySkip, iPrefixLen );
+		}
 
 		if ( m_Crypt.GetCryptVer() >= 0x200040 )
 		{
-			m_CompressXOR.CompressXOR( sm_xCompress_Buffer, iLenComp );
+			m_CompressXOR.CompressXOR( sm_xCompress_Buffer + iPrefixLen, iLenComp );
 		}
+		const int iLenWire = iLenComp + iPrefixLen;
+		if ( fPrimeGameStream )
+			m_fGameStreamPrimed = true;
 
 		// DEBUG_MSG(( "%x:Send %d bytes as %d" LOG_CR, m_Socket.GetSocket(), m_bout.GetDataQty(), iLen ));
 
-		iLenRet = m_Socket.Send( sm_xCompress_Buffer, iLenComp );
-		SPHERE_LOG_NET("xFlush GAME: sock=%d raw=%d huffman=%d sent=%d", m_Socket.GetSocket(), iLen, iLenComp, iLenRet);
+		iLenRet = m_Socket.Send( sm_xCompress_Buffer, iLenWire );
+		SPHERE_LOG_NET("xFlush GAME: sock=%d raw=%d huffman=%d sent=%d", m_Socket.GetSocket(), iLen, iLenWire, iLenRet);
 		if ( iLenRet != SOCKET_ERROR )
 		{
 			g_Serv.m_Profile.IncTaskCount( PROFILE_DataTx, iLen );
 			m_bout.RemoveDataAmount(iLen);	// must use all of it since we have no idea what was really sent.
 		}
 
-		if ( iLenRet != iLenComp )
+		if ( iLenRet != iLenWire )
 		{
 			// Tx overflow is not allowed here !
 			// no idea what effect this would have. assume nothing is sent.
