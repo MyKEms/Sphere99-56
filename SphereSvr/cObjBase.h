@@ -89,6 +89,7 @@ public:
 	{
 		return( CObjBaseTemplate::GetName());
 	}
+	LPCTSTR GetUIDTypeName() const override { return "world object"; }
 	virtual CGString GetResourceName() const
 	{
 		return Base_GetDef()->GetResourceName();

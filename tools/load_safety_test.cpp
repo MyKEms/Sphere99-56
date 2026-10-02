@@ -16,9 +16,18 @@
 
 #include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
+
+class CLoadSafetyExecContext : public CSphereExpContext
+{
+public:
+	CLoadSafetyExecContext() : CSphereExpContext( NULL, NULL ) {}
+	using CSphereExpContext::ValidateUIDReference;
+};
 
 static int CountDirectoryEntries( const char* pszDir )
 {
@@ -52,6 +61,92 @@ static bool TestUIDReset()
 		return false;
 
 	return uids.AllocUID( &second, 0 ) == 1;
+}
+
+static bool TestUIDReuseIsQuarantined()
+{
+	CUIDArray uids;
+	CResourceObj first( 1 );
+	CResourceObj second( 2 );
+	CResourceObj third( 3 );
+	const DWORD dwFirst = uids.AllocUID( &first, 0 );
+	const DWORD dwFirstGeneration = first.GetUIDGeneration();
+	if ( dwFirst == 0 || dwFirstGeneration == 0 )
+		return false;
+	CGVariant savedReference;
+	savedReference.SetRef( &first );
+	if ( savedReference.GetUIDGeneration() != dwFirstGeneration )
+		return false;
+	uids.FreeUID( &first );
+	// A zero delay still observes the completed-save barrier.
+	uids.SetUIDReuseDelaySeconds( 0 );
+	const DWORD dwSecond = uids.AllocUID( &second, 0 );
+	// A freed slot must not be reused before its quarantine expires.
+	if ( dwSecond == dwFirst )
+		return false;
+	// A completed save and an explicitly configured zero-second delay release
+	// the slot; its generation must advance before it can be reused.
+	uids.SetAllowUIDReuse();
+	const DWORD dwThird = uids.AllocUID( &third, 0 );
+	return dwThird == dwFirst && third.GetUIDGeneration() != dwFirstGeneration &&
+		savedReference.GetUIDGeneration() != third.GetUIDGeneration();
+}
+
+static bool TestUIDQuarantineReleaseScales()
+{
+	// A large deferred-destruction batch must not scan every prior quarantine
+	// entry.  Use explicit slots so this isolates release bookkeeping from the
+	// normal first-free UID search.
+	const size_t iObjectCount = 50000;
+	CUIDArray uids;
+	std::vector<CResourceObj*> objects;
+	objects.reserve( iObjectCount );
+	for ( size_t i = 0; i < iObjectCount; ++i )
+	{
+		CResourceObj* pObject = new CResourceObj( static_cast<HASH_INDEX>( i + 1 ));
+		if ( uids.AllocUID( pObject, static_cast<DWORD>( i + 1 )) != i + 1 )
+		{
+			delete pObject;
+			for ( size_t j = 0; j < objects.size(); ++j )
+				delete objects[j];
+			return false;
+		}
+		objects.push_back( pObject );
+	}
+
+	const std::chrono::steady_clock::time_point timeStart = std::chrono::steady_clock::now();
+	for ( size_t i = 0; i < objects.size(); ++i )
+		uids.FreeUID( objects[i] );
+	const std::chrono::steady_clock::duration timeElapsed =
+		std::chrono::steady_clock::now() - timeStart;
+	for ( size_t i = 0; i < objects.size(); ++i )
+		delete objects[i];
+
+	const long long iElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>( timeElapsed ).count();
+	std::printf( "UID quarantine release: %zu objects in %lld ms\n", iObjectCount, iElapsedMs );
+	return iElapsedMs < 5000;
+}
+
+static bool TestStaleUIDReferenceIsRejected()
+{
+	CResourceObj oldObject( 1 );
+	CResourceObj newObject( 2 );
+	const DWORD dwOldUID = g_World.AllocUID( &oldObject, 0 );
+	if ( dwOldUID == 0 )
+		return false;
+	CGVariant savedReference;
+	savedReference.SetRef( &oldObject );
+	g_World.FreeUID( &oldObject );
+	g_World.SetUIDReuseDelaySeconds( 0 );
+	g_World.SetAllowUIDReuse();
+	if ( g_World.AllocUID( &newObject, dwOldUID ) != dwOldUID )
+		return false;
+	newObject.SetUIDIndex( dwOldUID );
+	CLoadSafetyExecContext context;
+	const bool fRejected = !context.ValidateUIDReference( savedReference, &newObject, "TAG.TEST" );
+	g_World.FreeUID( &newObject );
+	g_World.SetAllowUIDReuse();
+	return fRejected;
 }
 
 static bool TestLoadDetailBudgetScope()
@@ -464,6 +559,23 @@ int main()
 		return 1;
 	}
 	std::printf( "UID reset: reserved slot 0 preserved\n" );
+	if ( !TestUIDReuseIsQuarantined() )
+	{
+		std::fprintf( stderr, "freed UID was reused before quarantine expired\n" );
+		return 1;
+	}
+	std::printf( "UID reuse: freed slot stayed quarantined\n" );
+	if ( !TestUIDQuarantineReleaseScales() )
+	{
+		std::fprintf( stderr, "UID quarantine release scanned too much state\n" );
+		return 1;
+	}
+	if ( !TestStaleUIDReferenceIsRejected() )
+	{
+		std::fprintf( stderr, "stale UID reference was not rejected after slot reuse\n" );
+		return 1;
+	}
+	std::printf( "UID generations: stale property write was rejected\n" );
 	if ( !TestLoadDetailBudgetScope() )
 	{
 		std::fprintf( stderr, "load detail budget leaked into runtime diagnostics\n" );

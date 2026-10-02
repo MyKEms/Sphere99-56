@@ -88,6 +88,12 @@ SPAWN_POINT_MARKER = "SPHERE_SPAWN_POINT_CREATED"
 ESCAPE_OVERFLOW_ACCOUNT = "EscapeProbe"
 ESCAPE_OVERFLOW_PASSWORD = "escape_pw"
 ESCAPE_OVERFLOW_MARKER = "ESCAPE_OVERFLOW_AFTER"
+ESCAPE_OVERFLOW_FORM_MARKERS = (
+    "ESCAPE_OVERFLOW_SETTER",
+    "ESCAPE_OVERFLOW_ARGUMENT",
+    "ESCAPE_OVERFLOW_PLAIN",
+    "ESCAPE_OVERFLOW_MACRO",
+)
 ESCAPE_OVERFLOW_NAME = "N" * 256
 
 # Daily-log parity uses a separate empty account so the probe covers the
@@ -1141,6 +1147,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
     login += [
+        # Keep the function-root lifetime check on a live object.  Before UID
+        # quarantine the removed disposable happened to become valid again
+        # when a later item reused its slot, which hid the intended check.
+        "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
+        "VAR dotted_disposable,<LASTNEW.SERIAL>",
         # Commands whose left side is a reference.
         "TAG.cmd_base_set=23",
         "SRC.TAG.cmd_src_set=21",
@@ -1930,6 +1941,7 @@ def write_scripts(
         else ""
     )
     escape_overflow_login = ""
+    escape_overflow_sections = ""
     if escape_overflow_probe:
         # Keep the source line within SCRIPT_MAX_LINE_LEN while making the
         # resolved name materially longer than its <NAME> escape tag.
@@ -1941,9 +1953,29 @@ def write_scripts(
         )
         assert len(escape_line) < 4096
         escape_overflow_login = (
-            escape_line
-            + "\n"
+            "F_ESCAPE_OVERFLOW_SETTER\n"
+            f"SYSMESSAGE {ESCAPE_OVERFLOW_FORM_MARKERS[0]}_RETURNED\n"
+            "F_ESCAPE_OVERFLOW_ARGUMENT\n"
+            f"SYSMESSAGE {ESCAPE_OVERFLOW_FORM_MARKERS[1]}_RETURNED\n"
+            "F_ESCAPE_OVERFLOW_PLAIN\n"
+            f"SYSMESSAGE {ESCAPE_OVERFLOW_FORM_MARKERS[2]}_RETURNED\n"
+            "F_ESCAPE_OVERFLOW_MACRO\n"
+            f"SYSMESSAGE {ESCAPE_OVERFLOW_FORM_MARKERS[3]}_RETURNED\n"
             + f"SYSMESSAGE {ESCAPE_OVERFLOW_MARKER}\n"
+        )
+        escape_overflow_sections = (
+            "\n[FUNCTION f_escape_overflow_setter]\n"
+            + escape_line
+            + "\nRETURN 1\n"
+            + "\n[FUNCTION f_escape_overflow_argument]\n"
+            + "SYSMESSAGE " + ("P" * 3000) + "<NAME>" + ("S" * 1050) + "\n"
+            + "RETURN 1\n"
+            + "\n[FUNCTION f_escape_overflow_plain]\n"
+            + "SAY " + ("P" * 3000) + "<NAME>" + ("S" * 1050) + "\n"
+            + "RETURN 1\n"
+            + "\n[FUNCTION f_escape_overflow_macro]\n"
+            + "SYSMESSAGE " + ("P" * 3000) + "<?NAME?>" + ("S" * 1050) + "\n"
+            + "RETURN 1\n"
         )
     gm_command_log_login = ""
     gm_command_log_sections = ""
@@ -2575,7 +2607,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + object_root_dispatch_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + events_method_sections + """
+""" + dotted_expression_sections + arg_locals_sections + object_root_dispatch_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + escape_overflow_sections + events_method_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]

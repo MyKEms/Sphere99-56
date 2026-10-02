@@ -48,6 +48,10 @@ public:
 		return TRIGRET_RET_DEFAULT;
 	}
 	virtual CGString GetName() const { return CGString(); }
+	// World objects override this with the generation of their UID slot.  The
+	// default keeps resource and non-world references generation-neutral.
+	virtual DWORD GetUIDGeneration() const { return 0; }
+	virtual LPCTSTR GetUIDTypeName() const { return "object"; }
 };
 
 enum SCRIPT_UNKNOWN_KIND

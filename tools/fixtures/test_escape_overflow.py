@@ -12,6 +12,7 @@ from pathlib import Path
 
 from make_fixture import (
     ESCAPE_OVERFLOW_ACCOUNT,
+    ESCAPE_OVERFLOW_FORM_MARKERS,
     ESCAPE_OVERFLOW_MARKER,
     ESCAPE_OVERFLOW_PASSWORD,
 )
@@ -131,10 +132,18 @@ def main() -> int:
     decoded = decode_game_response(response)
     if not response or find_start_packet(decoded) is None:
         failures.append("existing character did not enter the world")
-    if ESCAPE_OVERFLOW_MARKER not in system_messages(decoded):
+    messages = system_messages(decoded)
+    for marker in ESCAPE_OVERFLOW_FORM_MARKERS:
+        if f"{marker}_RETURNED" not in messages:
+            failures.append(f"{marker.lower()} did not return after its overflow")
+    if ESCAPE_OVERFLOW_MARKER not in messages:
         failures.append("login did not reach the post-expansion marker")
-    if "Script escape expansion exceeds line buffer" not in log_contents:
-        failures.append("bounded expansion diagnostic was not logged")
+    overflow_diagnostics = log_contents.count("Script escape expansion exceeds line buffer")
+    if overflow_diagnostics != len(ESCAPE_OVERFLOW_FORM_MARKERS):
+        failures.append(
+            f"expected {len(ESCAPE_OVERFLOW_FORM_MARKERS)} bounded expansion diagnostics, "
+            f"found {overflow_diagnostics}"
+        )
 
     if failures:
         print("login escape overflow probe failed:")
