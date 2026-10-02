@@ -612,7 +612,8 @@ private:
 
 	// GM stuff.
 public:
-	bool OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand );
+	bool OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand,
+		bool fAllowScriptFunction = false );
 private:
 	bool OnTarg_Obj_Info( CObjBase* pObj, const CPointMap& pt, ITEMID_TYPE id );
 

@@ -869,7 +869,8 @@ PLEVEL_TYPE CSphereResourceMgr::GetPrivCommandLevel( LPCTSTR pszCmd ) const
 	return( PLEVEL_GM );	// default level.
 }
 
-bool CSphereResourceMgr::CanUsePrivVerb( const CScriptObj* pObjTarg, LPCTSTR pszCmd, CScriptConsole* pSrc ) const
+bool CSphereResourceMgr::CanUsePrivVerb( const CScriptObj* pObjTarg, LPCTSTR pszCmd,
+	CScriptConsole* pSrc, bool fAllowScriptFunction ) const
 {
 	// RES_PLevel
 	// can i use this verb on this object ?
@@ -921,6 +922,24 @@ bool CSphereResourceMgr::CanUsePrivVerb( const CScriptObj* pObjTarg, LPCTSTR psz
 		{
 			// we might be the g_Serv or web page ?
 		}
+	}
+
+	// TRY uses the caller's privilege for ordinary verbs, but stock permits a
+	// player to invoke a recognized script function.  Keep this opt-in so
+	// direct client commands still use the normal privilege table.
+	if ( fAllowScriptFunction && pszCmd != NULL )
+	{
+		char szFunction[EXPRESSION_MAX_KEY_LEN + 1];
+		int i = 0;
+		while ( i < EXPRESSION_MAX_KEY_LEN && pszCmd[i] &&
+			!ISWHITESPACE(pszCmd[i]) && pszCmd[i] != '(' && pszCmd[i] != '=' )
+		{
+			szFunction[i] = pszCmd[i];
+			++i;
+		}
+		szFunction[i] = '\0';
+		if ( i > 0 && ResourceCheckIDType( RES_Function, szFunction ).IsValidRID())
+			return true;
 	}
 
 	// Is this command avail for your priv level (or lower) ?

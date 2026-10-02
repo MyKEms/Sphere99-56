@@ -56,6 +56,9 @@ class CScriptExecContext : public CExpression
 private:
 	CScriptObj* m_pBaseObj;		// the "this" object we are scripting
 	CScriptConsole* m_pSrc;	// who triggered this (the console/player source)
+	bool m_fLineExpansionOverflow;
+	bool m_fLineExpansionWarningReported;
+	const CScript* m_pCurrentScript;
 	// 0.99 lets a script temporarily replace SRC with a live object reference.
 	// The override belongs to this execution context and is inherited only by
 	// nested function contexts, so returning from the function restores the
@@ -128,6 +131,23 @@ protected:
 	{
 		(void)pszKey;
 		return false;
+	}
+
+	virtual const CScript* GetLineExpansionScript() const
+	{
+		return m_pCurrentScript;
+	}
+
+	// The engine can reject a property write when the reference was captured
+	// from an older generation of a reused UID slot. Generic contexts have no
+	// world table, so they retain the historical permissive behaviour.
+	virtual bool ValidateUIDReference(const CGVariant& value, CResourceObj* pObj,
+		LPCTSTR pszProperty)
+	{
+		(void)value;
+		(void)pObj;
+		(void)pszProperty;
+		return true;
 	}
 
 	// True when the reference is an object of the running world (an item or a
@@ -837,7 +857,10 @@ public:
 	bool m_fSpaceSeparatedFunctionArgs;
 
 	CScriptExecContext(CScriptObj* pObj, CScriptConsole* pConsole)
-		: m_pBaseObj(pObj), m_pSrc(pConsole), m_pSourceObj(NULL),
+		: m_pBaseObj(pObj), m_pSrc(pConsole),
+		  m_fLineExpansionOverflow(false), m_fLineExpansionWarningReported(false),
+		  m_pCurrentScript(NULL),
+		  m_pSourceObj(NULL),
 		  m_fSpaceSeparatedFunctionArgs(false)
 	{
 	}
@@ -978,6 +1001,37 @@ public:
 		return fDigit && fOperator;
 	}
 
+	static bool IsScriptByteTokenStream(LPCTSTR pszValue)
+	{
+		if ( pszValue == NULL || *pszValue == '\0' )
+			return false;
+		bool fToken = false;
+		bool fSeparator = false;
+		const char* p = pszValue;
+		while ( *p )
+		{
+			while ( ISWHITESPACE(*p) )
+			{
+				fSeparator = fToken || fSeparator;
+				p++;
+			}
+			if ( !*p )
+				break;
+			const char* pStart = p;
+			while ( *p && !ISWHITESPACE(*p) )
+			{
+				if ( !isxdigit(static_cast<unsigned char>(*p)) )
+					return false;
+				p++;
+			}
+			const size_t iTokenLen = static_cast<size_t>(p - pStart);
+			if ( iTokenLen < 2 || iTokenLen > 8 || pStart[0] != '0' )
+				return false;
+			fToken = true;
+		}
+		return fToken && fSeparator;
+	}
+
 	int GetScriptExpression(TCHAR* pszArg, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		if ( !pszArg || !*pszArg )
@@ -986,6 +1040,8 @@ public:
 		// Control-flow expressions and RETURN values need the same macro
 		// expansion as ordinary command arguments.
 		s_ParseEscapes(pszArg, 0, iBufCapacity);
+		if ( IsLineExpansionOverflow() )
+			return 0;
 
 		TCHAR* pszExpr = pszArg;
 		while ( ISWHITESPACE(*pszExpr) ) pszExpr++;
@@ -1095,15 +1151,50 @@ public:
 	// expression itself is temporarily NUL-terminated while it is evaluated,
 	// so strlen(pszBuf) cannot be used for this check; iBegin and iTrailLen
 	// describe the prefix and suffix explicitly.
-	static bool IsEscapeExpansionWithinCapacity(size_t iBegin, size_t iResultLen,
-		size_t iTrailLen, size_t iBufCapacity)
+	void ReportLineExpansionOverflow(size_t iRequired, size_t iCapacity,
+		LPCTSTR pszPreview = NULL)
+	{
+		m_fLineExpansionOverflow = true;
+		if ( m_fLineExpansionWarningReported )
+			return;
+		m_fLineExpansionWarningReported = true;
+		TCHAR szPreview[201];
+		if ( pszPreview )
+		{
+			strncpy( szPreview, pszPreview, sizeof(szPreview) - 1 );
+			szPreview[sizeof(szPreview) - 1] = '\0';
+		}
+		else
+			szPreview[0] = '\0';
+		const CScript* pScript = GetLineExpansionScript();
+		if ( pScript )
+			DEBUG_ERR(( "Script escape expansion exceeds line buffer (file=%s line=%d required=%lu capacity=%lu preview='%s')" LOG_CR,
+				(LPCTSTR) pScript->GetFileTitle(), pScript->GetContext().m_iLineNum,
+				(unsigned long) iRequired, (unsigned long) iCapacity, szPreview ));
+		else
+			DEBUG_ERR(( "Script escape expansion exceeds line buffer (required=%lu capacity=%lu preview='%s')" LOG_CR,
+				(unsigned long) iRequired, (unsigned long) iCapacity, szPreview ));
+	}
+
+	void ResetLineExpansionState()
+	{
+		m_fLineExpansionOverflow = false;
+		m_fLineExpansionWarningReported = false;
+	}
+
+	bool IsLineExpansionOverflow() const
+	{
+		return m_fLineExpansionOverflow;
+	}
+
+	bool IsEscapeExpansionWithinCapacity(size_t iBegin, size_t iResultLen,
+		size_t iTrailLen, size_t iBufCapacity, LPCTSTR pszPreview = NULL)
 	{
 		size_t iNewLen = iBegin + iResultLen + iTrailLen;
 		if ( iNewLen < iBufCapacity )
 			return true;
 
-		DEBUG_ERR(( "Script escape expansion exceeds line buffer (required=%lu capacity=%lu)" LOG_CR,
-			(unsigned long) (iNewLen + 1), (unsigned long) iBufCapacity ));
+		ReportLineExpansionOverflow( iNewLen + 1, iBufCapacity, pszPreview );
 		return false;
 	}
 
@@ -1236,7 +1327,8 @@ public:
 				int iResultLen = sResult.GetLength();
 				int iTrailLen = strlen(pszBuf + iEnd + 1);
 				if ( !IsEscapeExpansionWithinCapacity(
-					(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity) )
+					(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity,
+					pszBuf + iBegin) )
 				{
 					pszBuf[iEnd - 1] = '?';
 					i = iEnd;
@@ -1345,7 +1437,8 @@ public:
 			int iResultLen = sResult.GetLength();
 			int iTrailLen = strlen(pszBuf + iEnd + 1); // chars after '>'
 			if ( !IsEscapeExpansionWithinCapacity(
-				(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity) )
+				(size_t) iBegin, (size_t) iResultLen, (size_t) iTrailLen, iBufCapacity,
+				pszBuf + iBegin) )
 			{
 				// Restore the '>' and leave the original escape visible to the
 				// command handler.  It is safer than silently truncating a valid
@@ -1617,8 +1710,13 @@ public:
 			CGVariant vValRet;
 			hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, pszKey, m_pBaseObj);
-			if ( hRes == NO_ERROR )
-				return NO_ERROR;
+			// A recognized method can reject the caller or its arguments.  Only
+			// an unknown method may fall through to global/script dispatch.
+			if ( hRes != HRES_UNKNOWN_PROPERTY )
+			{
+				rejected.RecordIfPresent();
+				return hRes;
+			}
 		}
 
 		// A dotted FINDID/FINDLAYER command such as
@@ -1704,6 +1802,8 @@ public:
 					// path, and fall through when the object has no such property.
 					if ( fPropertySet || (!fCallForm && pszArg && *pszArg) )
 					{
+						if ( !ValidateUIDReference( vRoot, pRootObj, pszDot + 1 ))
+							return HRES_INVALID_HANDLE;
 						// ROOT.KEY=value is a property write on the referenced
 						// object (SRC.NAME=x, FINDUID(uid).TAG.KEY=x).  The same
 						// setter also handles the legacy space form above.
@@ -1717,8 +1817,13 @@ public:
 					CGVariant vValRet;
 					hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
-					if ( hRes == NO_ERROR )
-						return NO_ERROR;
+					// Preserve privilege and argument failures from a recognized
+					// method; do not reinterpret them as an unknown global method.
+					if ( hRes != HRES_UNKNOWN_PROPERTY )
+					{
+						rejected.RecordIfPresent();
+						return hRes;
+					}
 
 					// A referenced object can also be the base of a script
 					// function (for example CONT.F_SETUP). Native methods
@@ -1892,18 +1997,22 @@ public:
 	// The argument of the control-flow keyword that starts the current line.
 	// The line reader splits a line at its first space or '=', so in
 	// IF(<a>==<b>) the argument starts inside the key: rebuild it there.
-	static TCHAR* GetKeywordArg(CScript& script, size_t iKeywordLen, TCHAR* pszBuf, size_t iBufSize)
+	TCHAR* GetKeywordArg(CScript& script, size_t iKeywordLen, TCHAR* pszBuf, size_t iBufSize)
 	{
 		LPCTSTR pszKey = script.GetKey();
 		TCHAR* pszArg = script.GetArgMod();
 		if ( pszKey[iKeywordLen] == '\0' )
 			return pszArg ? pszArg : const_cast<TCHAR*>("");
 		LPCTSTR pszRest = pszKey + iKeywordLen;
+		int iWritten;
 		if ( pszArg && *pszArg )
-			snprintf(pszBuf, iBufSize, "%s%c%s", pszRest,
+			iWritten = snprintf(pszBuf, iBufSize, "%s%c%s", pszRest,
 				script.WasKeyValueAssignment() ? '=' : ' ', pszArg);
 		else
-			snprintf(pszBuf, iBufSize, "%s", pszRest);
+			iWritten = snprintf(pszBuf, iBufSize, "%s", pszRest);
+		if ( iWritten < 0 || static_cast<size_t>(iWritten) >= iBufSize )
+			ReportLineExpansionOverflow( iWritten < 0 ? iBufSize : static_cast<size_t>(iWritten) + 1,
+				iBufSize, pszBuf );
 		return pszBuf;
 	}
 
@@ -1937,6 +2046,7 @@ public:
 	{
 		if ( IsExecutionBlocked() )
 			return TRIGRET_RET_DEFAULT;
+		m_pCurrentScript = &script;
 
 		CScriptUnknownContextScope scriptContextScope(&script);
 		bool fSectionFalse = (type == TRIGRUN_SECTION_FALSE || type == TRIGRUN_SINGLE_FALSE);
@@ -1947,12 +2057,14 @@ public:
 		if ( type == TRIGRUN_SECTION_EXEC || type == TRIGRUN_SINGLE_EXEC )
 		{
 			// First line already read -- jump straight to dispatch.
+			ResetLineExpansionState();
 			pszKey = script.GetKey();
 			goto jump_in;
 		}
 
 		while ( script.ReadKeyParse() )
 		{
+			ResetLineExpansionState();
 			pszKey = script.GetKey();
 
 			// If we hit the start of the next ON trigger, stop.
@@ -2041,9 +2153,36 @@ public:
 					// RETURN [value]
 					OnScriptReturn();
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					if ( *pszArg )
 					{
+						// Legacy helper functions can return a generated string (for
+						// example the byte-token stream used by STRTOASCII).  The
+						// numeric return path used to collapse that text to its first
+						// token, producing an empty raw packet. Preserve quoted and
+						// whitespace-containing return values for script callers.
+						s_ParseEscapes(pszArg, 0, sizeof(szArg));
+						TCHAR* pszText = pszArg;
+						while ( ISWHITESPACE(*pszText) ) pszText++;
+						TCHAR* pszTextEnd = pszText + strlen(pszText);
+						while ( pszTextEnd > pszText && ISWHITESPACE(pszTextEnd[-1]) )
+							*--pszTextEnd = '\0';
+						const size_t iTextLen = strlen(pszText);
+						if ( (iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"') ||
+							IsScriptByteTokenStream(pszText) )
+						{
+							if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+							{
+								pszText[iTextLen - 1] = '\0';
+								pszText++;
+							}
+							m_vValRet.SetStr(pszText);
+							return TRIGRET_RET_DEFAULT;
+						}
 						int iVal = GetScriptExpression(script, pszArg);
+						if ( IsLineExpansionOverflow() )
+							return TRIGRET_RET_DEFAULT;
 						m_vValRet.SetInt(iVal);
 						return (TRIGRET_TYPE) iVal;
 					}
@@ -2054,9 +2193,13 @@ public:
 				{
 					// IF <condition>
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					int fCondition = 0;
 					if ( *pszArg )
 						fCondition = GetScriptExpression(script, pszArg);
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					bool fBeenTrue = false;
 
 					for (;;)
@@ -2076,7 +2219,11 @@ public:
 							size_t iElseLen;
 							FindScriptKeyword(script.GetKey(), iElseLen);
 							pszArg = GetKeywordArg(script, iElseLen, szArg, sizeof(szArg));
+							if ( IsLineExpansionOverflow() )
+								return TRIGRET_RET_DEFAULT;
 							fCondition = *pszArg ? GetScriptExpression(script, pszArg) : 0;
+							if ( IsLineExpansionOverflow() )
+								return TRIGRET_RET_DEFAULT;
 						}
 					}
 				}
@@ -2088,6 +2235,8 @@ public:
 					CScriptLineContext ctxStart = script.GetContext();
 					TCHAR szCondition[SCRIPT_MAX_LINE_LEN];
 					LPCTSTR pszCondition = GetKeywordArg(script, iKeywordLen, szCondition, sizeof(szCondition));
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					if ( pszCondition != szCondition )
 					{
 						strncpy(szCondition, pszCondition, sizeof(szCondition)-1);
@@ -2108,6 +2257,8 @@ public:
 						strncpy(szConditionEval, szCondition, sizeof(szConditionEval)-1);
 						szConditionEval[sizeof(szConditionEval)-1] = '\0';
 						int fCond = GetScriptExpression(szConditionEval);
+						if ( IsLineExpansionOverflow() )
+							return TRIGRET_RET_DEFAULT;
 						if ( !fCond )
 						{
 							iRet = TRIGRET_ENDIF;
@@ -2136,10 +2287,14 @@ public:
 					CScriptLineContext ctxStart = script.GetContext();
 					CScriptLineContext ctxEnd = ctxStart;
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					int iMin = 1, iMax = 0;
 					if ( *pszArg )
 					{
 						iMax = GetScriptExpression(script, pszArg);
+						if ( IsLineExpansionOverflow() )
+							return TRIGRET_RET_DEFAULT;
 					}
 					const int iLoopLimit = GetScriptLoopLimit();
 					int iLoops = 0;
@@ -2173,7 +2328,11 @@ public:
 				{
 					// DORAND <count> / DOSWITCH <index>
 					TCHAR* pszArg = GetKeywordArg(script, iKeywordLen, szArg, sizeof(szArg));
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					int iVal = *pszArg ? GetScriptExpression(script, pszArg) : 0;
+					if ( IsLineExpansionOverflow() )
+						return TRIGRET_RET_DEFAULT;
 					if ( index == SK_DORAND && iVal > 0 )
 						iVal = Calc_GetRandVal(iVal);
 					for (;;)
@@ -2231,6 +2390,8 @@ public:
 						DWORD dwKeyFlags = !_strnicmp(szKey, "ARG(", 4)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
+						if ( IsLineExpansionOverflow() )
+							return TRIGRET_RET_DEFAULT;
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
@@ -2238,6 +2399,8 @@ public:
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
+						if ( IsLineExpansionOverflow() )
+							return TRIGRET_RET_DEFAULT;
 					}
 
 					// Rebuild the statement: "KEY VALUE", or "KEY=VALUE" for an

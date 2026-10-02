@@ -541,39 +541,132 @@ inline int Str_ParseCmdsStr(LPCTSTR pStr, TCHAR** ppCmds, int iCmdCount, LPCTSTR
 {
 	return Str_ParseCmds(pStr, ppCmds, iCmdCount, lpcSeparators);
 }
-inline MATCH_TYPE Str_Match(LPCTSTR pStr, LPCTSTR pPattern)
+inline MATCH_TYPE Str_Match(LPCTSTR pPattern, LPCTSTR pText);
+
+inline MATCH_TYPE Str_Match_After_Star(LPCTSTR pPattern, LPCTSTR pText)
 {
-	// Simple wildcard match. * matches any sequence, ? matches single char.
-	if ( pPattern == NULL || pStr == NULL )
-		return MATCH_ABORT;
-	while ( *pPattern )
+	// Skip wildcards that have already consumed text before searching for the
+	// next literal or character class.
+	for ( ; *pPattern == '?' || *pPattern == '*'; ++pPattern )
 	{
-		if ( *pPattern == '*' )
+		if ( *pPattern == '?' && ! *pText++ )
+			return MATCH_ABORT;
+	}
+	if ( ! *pPattern )
+		return MATCH_VALID;
+
+	const TCHAR next = static_cast<TCHAR>(tolower(*pPattern));
+	MATCH_TYPE match = MATCH_INVALID;
+	do
+	{
+		if ( next == tolower(*pText) || next == '[' )
 		{
-			pPattern++;
-			if ( *pPattern == '\0' )
-				return MATCH_VALID; // trailing * matches everything
-			while ( *pStr )
+			match = Str_Match(pPattern, pText);
+			if ( match == MATCH_VALID )
+				break;
+		}
+		if ( ! *pText++ )
+			return MATCH_ABORT;
+	}
+	while ( match != MATCH_ABORT && match != MATCH_PATTERN );
+	return match;
+}
+
+inline MATCH_TYPE Str_Match(LPCTSTR pPattern, LPCTSTR pText)
+{
+	// Sphere patterns are case-insensitive and support '*', '?', and [..]
+	// single-character classes.  The public STRMATCH intrinsic supplies the
+	// text first and pattern second, so its existing call site passes these
+	// arguments in reverse order.
+	if ( pPattern == NULL || pText == NULL )
+		return MATCH_ABORT;
+	TCHAR rangeStart;
+	TCHAR rangeEnd;
+
+	for ( ; *pPattern; ++pPattern, ++pText )
+	{
+		if ( ! *pText )
+			return ( *pPattern == '*' && *++pPattern == '\0' ) ? MATCH_VALID : MATCH_ABORT;
+
+		switch ( *pPattern )
+		{
+		case '?':
+			break;
+		case '*':
+			return Str_Match_After_Star(pPattern, pText);
+		case '[':
 			{
-				if ( Str_Match(pStr, pPattern) == MATCH_VALID )
-					return MATCH_VALID;
-				pStr++;
+				++pPattern;
+				bool invert = false;
+				if ( *pPattern == '!' || *pPattern == '^' )
+				{
+					invert = true;
+					++pPattern;
+				}
+				if ( *pPattern == ']' )
+					return MATCH_PATTERN;
+
+				bool member = false;
+				for ( ; ; )
+				{
+					if ( *pPattern == ']' )
+						break;
+
+					if ( *pPattern == '\\' )
+						rangeStart = rangeEnd = static_cast<TCHAR>(tolower(*++pPattern));
+					else
+						rangeStart = rangeEnd = static_cast<TCHAR>(tolower(*pPattern));
+					if ( ! *pPattern )
+						return MATCH_PATTERN;
+
+					if ( *++pPattern == '-' )
+					{
+						rangeEnd = static_cast<TCHAR>(tolower(*++pPattern));
+						if ( rangeEnd == '\0' || rangeEnd == ']' )
+							return MATCH_PATTERN;
+						if ( rangeEnd == '\\' )
+						{
+							rangeEnd = static_cast<TCHAR>(tolower(*++pPattern));
+							if ( ! rangeEnd )
+								return MATCH_PATTERN;
+						}
+						++pPattern;
+					}
+
+					const TCHAR text = static_cast<TCHAR>(tolower(*pText));
+					if ( rangeStart < rangeEnd )
+						member = text >= rangeStart && text <= rangeEnd;
+					else
+						member = text >= rangeEnd && text <= rangeStart;
+					if ( member )
+						break;
+				}
+
+				if ( ( invert && member ) || ( ! invert && ! member ) )
+					return MATCH_RANGE;
+				if ( member )
+				{
+					while ( *pPattern != ']' )
+					{
+						if ( ! *pPattern )
+							return MATCH_PATTERN;
+						if ( *pPattern == '\\' )
+						{
+							++pPattern;
+							if ( ! *pPattern )
+								return MATCH_PATTERN;
+						}
+						++pPattern;
+					}
+				}
 			}
-			return MATCH_ABORT;
-		}
-		if ( *pStr == '\0' )
-			return MATCH_ABORT;
-		if ( *pPattern == '?' || toupper(*pPattern) == toupper(*pStr) )
-		{
-			pPattern++;
-			pStr++;
-		}
-		else
-		{
-			return MATCH_ABORT;
+			break;
+		default:
+			if ( tolower(*pPattern) != tolower(*pText) )
+				return MATCH_LITERAL;
 		}
 	}
-	return( *pStr == '\0' ? MATCH_VALID : MATCH_ABORT );
+	return *pText ? MATCH_END : MATCH_VALID;
 }
 inline int Str_FindWord(LPCTSTR pStr, LPCTSTR pWord)
 {

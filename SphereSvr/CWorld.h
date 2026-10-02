@@ -268,8 +268,8 @@ public:
 	}
 
 	// UID Managenent
-	void SetPreventUIDReuse() { /* STUB */ }
-	void SetAllowUIDReuse() { /* STUB */ }
+	void SetPreventUIDReuse() { CUIDArray::SetPreventUIDReuse(); }
+	void SetAllowUIDReuse() { CUIDArray::SetAllowUIDReuse(); }
 
 	int FixObjTry( CObjBase* pObj, int iUID = 0 );
 	int  FixObj( CObjBase* pObj, int iUID = 0 );

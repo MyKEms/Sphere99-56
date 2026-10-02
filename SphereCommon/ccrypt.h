@@ -73,20 +73,39 @@ public:
 
 class CCompressXOR
 {
+    static const BYTE sm_bData[16];
+    DWORD m_dwIndex;
+
 public:
-	bool InitTable(DWORD dwKey) { return true; }
-	int CompressXOR(BYTE* pOutput, const BYTE* pInput, int iLen)
-	{
-		// Passthrough - no XOR compression for now
-		if (pOutput != pInput)
-			memcpy(pOutput, pInput, iLen);
-		return iLen;
-	}
-	int CompressXOR(BYTE* pOutput, int iLen)
-	{
-		// In-place variant - nothing to do
-		return iLen;
-	}
+    CCompressXOR() : m_dwIndex(0) {}
+
+    bool InitTable(DWORD dwKey)
+    {
+        // The 2.0.4+ client uses this fixed stream for the 127.0.0.1 relay
+        // key used by the legacy game connection.  Keep the key argument in
+        // the API because callers supply it during relay negotiation, but
+        // reset the stream at every new game connection.
+        (void)dwKey;
+        m_dwIndex = 0;
+        return true;
+    }
+
+    int CompressXOR(BYTE* pOutput, const BYTE* pInput, int iLen)
+    {
+        if (pOutput != pInput)
+            memcpy(pOutput, pInput, iLen);
+        return CompressXOR(pOutput, iLen);
+    }
+
+    int CompressXOR(BYTE* pOutput, int iLen)
+    {
+        if (iLen <= 0)
+            return iLen;
+        for (int i = 0; i < iLen; ++i)
+            pOutput[i] ^= sm_bData[(m_dwIndex + static_cast<DWORD>(i)) & 0x0f];
+        m_dwIndex += static_cast<DWORD>(iLen);
+        return iLen;
+    }
 };
 
 class CCryptVersion
@@ -333,4 +352,3 @@ public:
 };
 
 #endif // _INC_CCRYPT_H
-

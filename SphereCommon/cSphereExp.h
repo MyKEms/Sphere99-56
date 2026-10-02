@@ -240,6 +240,8 @@ protected:
 	virtual CResourceObj* ResolveUIDObject(UID_INDEX uid);
 	virtual CResourceObj* ResolveResourceObject(UID_INDEX uid);
 	virtual bool IsScriptFunction(LPCTSTR pszKey);
+	virtual bool ValidateUIDReference(const CGVariant& value, CResourceObj* pObj,
+		LPCTSTR pszProperty);
 
 public:
 	CSphereExpContext( CResourceObj* pBaseObj, CScriptConsole* pSrc );

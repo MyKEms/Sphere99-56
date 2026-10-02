@@ -89,6 +89,7 @@ public:
 	{
 		return( CObjBaseTemplate::GetName());
 	}
+	LPCTSTR GetUIDTypeName() const override { return "world object"; }
 	virtual CGString GetResourceName() const
 	{
 		return Base_GetDef()->GetResourceName();
@@ -2220,7 +2221,10 @@ struct CCharActState
 		// SKILL_WRESTLING
 		struct
 		{
-			WAR_SWING_TYPE m_War_Swing_State;	// We are in the war mode swing.
+			// This storage overlays the action union. Other action payloads may
+			// leave an arbitrary integer here, so keep it out of the enum type
+			// until the combat state has been established.
+			int m_War_Swing_State;			// We are in the war mode swing.
 			// m_Act.m_Targ = who are we currently attacking?
 		} m_atFight;
 

@@ -10,6 +10,11 @@
 //#include "sphereproto.h"
 //#include "ccrypt.h"
 
+const BYTE CCompressXOR::sm_bData[16] = {
+    0x05, 0x92, 0x66, 0x23, 0x67, 0x14, 0xE3, 0x62,
+    0xDC, 0x60, 0x8C, 0xD6, 0xFE, 0x7C, 0x25, 0x69,
+};
+
 //******************************************
 // CCrypt
 
@@ -739,4 +744,3 @@ const WORD g_Packet_Lengths[XCMD_QTY] =
 };
 
 #endif
-

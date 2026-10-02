@@ -124,19 +124,32 @@ static bool TestDeferredUIDReuseKeepsNewOwner()
 	CItem* pOld = new CIntegrityItem( ITEMID_MULTI_MAX, &itemDef );
 	const DWORD dwIndex = pOld->GetUIDIndex() & UID_INDEX_MASK;
 	pOld->DeleteThis();
+	// This regression deliberately disables the default quarantine so it can
+	// exercise the deferred destructor against a replacement in the same slot.
+	g_World.SetUIDReuseDelaySeconds( 0 );
+	g_World.SetAllowUIDReuse();
 	CItemPtr pNew = new CIntegrityItem( ITEMID_MULTI_MAX, &itemDef );
 	if (( pNew->GetUIDIndex() & UID_INDEX_MASK ) != dwIndex )
 	{
-		pNew->DeleteThis();
-		pContainer->DeleteThis();
-		g_World.GarbageCollection_New();
-		return false;
+		// Earlier tests can leave lower free slots quarantined. Rebind this
+		// disposable object explicitly to the released slot for this regression.
+		g_World.FreeUID( pNew );
+		pNew->SetUIDIndex( dwIndex );
+		if ( g_World.AllocUID( pNew, dwIndex ) != dwIndex )
+		{
+			pNew->DeleteThis();
+			pContainer->DeleteThis();
+			g_World.GarbageCollection_New();
+			g_World.SetUIDReuseDelaySeconds( 60 );
+			return false;
+		}
 	}
 	if ( ! pContainerRaw->AttachRaw( pNew ))
 	{
 		pNew->DeleteThis();
 		pContainer->DeleteThis();
 		g_World.GarbageCollection_New();
+		g_World.SetUIDReuseDelaySeconds( 60 );
 		return false;
 	}
 
@@ -155,6 +168,7 @@ static bool TestDeferredUIDReuseKeepsNewOwner()
 	pNew->DeleteThis();
 	pContainer->DeleteThis();
 	g_World.GarbageCollection_New();
+	g_World.SetUIDReuseDelaySeconds( 60 );
 	return fPreserved;
 }
 

@@ -937,6 +937,24 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 	return ridFunc.IsValidRID();
 }
 
+bool CSphereExpContext::ValidateUIDReference(const CGVariant& value,
+	CResourceObj* pObj, LPCTSTR pszProperty)
+{
+	const DWORD dwStoredGeneration = value.GetUIDGeneration();
+	if ( dwStoredGeneration == 0 || pObj == NULL )
+		return true;
+	const DWORD dwCurrentGeneration = g_World.GetUIDGeneration( pObj->GetUIDIndex());
+	if ( dwStoredGeneration == dwCurrentGeneration )
+		return true;
+
+	g_Log.Event( LOG_GROUP_DEBUG, LOGL_CRIT,
+		"stale UID write uid=0x%lx property='%s' old_type='%s' new_type='%s' old_generation=%lu new_generation=%lu" LOG_CR,
+		(DWORD) pObj->GetUIDIndex(), pszProperty ? pszProperty : "<unknown>",
+		value.GetUIDTypeName(), pObj->GetUIDTypeName(),
+		(unsigned long) dwStoredGeneration, (unsigned long) dwCurrentGeneration );
+	return false;
+}
+
 void CSphereExpContext::InitFunctions()	// static
 {
 	if ( sm_FunctionsAll.GetSize())
@@ -1154,7 +1172,27 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			vValRet.SetUID(pBase->GetUIDIndex());
 			break;
 		}
-		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));
+		{
+			// Legacy scripts pass the current function arguments without an
+			// escape wrapper, for example FINDUID(args) and
+			// FINDUID(ARGV(index)).  The raw argument text is not itself a UID;
+			// resolve it once through the active expression context before doing
+			// the lookup.  Numeric and already-typed values keep their direct
+			// path, while reference-valued expressions retain their object root.
+			CGVariant vUID = vArgs;
+			LPCTSTR pszUID = vArgs.GetPSTR();
+			if ( vArgs.GetRef() == NULL && pszUID && *pszUID && !vArgs.IsNumeric())
+			{
+				CGVariant vResolved;
+				CScriptUnknownRejectTracker rejected;
+				if ( EvaluateEscapeValue(pszUID, vResolved, rejected) )
+					vUID = vResolved;
+			}
+			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vUID.GetRef()) )
+				vValRet.SetRef(pObj);
+			else
+				vValRet.SetRef( g_Cfg.FindUID( vUID.GetUID()));
+		}
 		break;
 	case F_IsUIDValid:
 		if ( vArgs.IsEmpty())
@@ -1248,6 +1286,27 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			{
 				vValRet.SetInt(strlen(pszStr));
 			}
+		}
+		break;
+
+	case F_StrGetAscii:
+		{
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp) - 1);
+			szTmp[sizeof(szTmp) - 1] = '\0';
+			TCHAR* ppArgs[2] = { NULL, NULL };
+			ParseStringFunctionArgs(szTmp, ppArgs, 2);
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetInt(0);
+				break;
+			}
+			const int iIndex = Exp_GetValue(ppArgs[1]);
+			const int iLength = strlen(ppArgs[0]);
+			if ( iIndex < 0 || iIndex >= iLength )
+				vValRet.SetInt(0);
+			else
+				vValRet.SetInt(static_cast<unsigned char>(ppArgs[0][iIndex]));
 		}
 		break;
 
@@ -1579,7 +1638,23 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 			// as zero and repeatedly returns the first argument.
 			LPCTSTR pszIndex = vArgs.GetPSTR();
 			const int iIndex = (pszIndex && *pszIndex) ? GetComplex(pszIndex) : 0;
-			vValRet = m_vVal.GetArrayElement(iIndex);
+			CGVariant& vElement = m_vVal.GetArrayElement(iIndex);
+			LPCTSTR pszElement = vElement.GetPSTR();
+			if ( pszElement && pszElement[0] == '"' )
+			{
+				TCHAR szElement[SCRIPT_MAX_LINE_LEN];
+				strncpy(szElement, pszElement, sizeof(szElement) - 1);
+				szElement[sizeof(szElement) - 1] = '\0';
+				size_t iLength = strlen(szElement);
+				while ( iLength >= 2 && szElement[0] == '"' && szElement[iLength - 1] == '"' )
+				{
+					szElement[--iLength] = '\0';
+					memmove(szElement, szElement + 1, iLength);
+				}
+				vValRet.SetStr(szElement);
+			}
+			else
+				vValRet = vElement;
 		}
 		break;
 	case F_ArgVCount:

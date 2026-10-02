@@ -483,7 +483,7 @@ public:
 	int ResourceGetIndex( RES_TYPE restype, LPCTSTR pszName );
 	int ResourceGetIndexType( RES_TYPE restype, LPCTSTR pszName );
 
-	CSphereUID ResourceCheckIDType( RES_TYPE restype, LPCTSTR pszName );
+	CSphereUID ResourceCheckIDType( RES_TYPE restype, LPCTSTR pszName ) const;
 	static CSphereUID ResourceGetID( RES_TYPE restype, HASH_INDEX index );
 	CSphereUID ResourceGetIDByName( RES_TYPE restype, LPCTSTR pszName );
 	CSphereUID ResourceGetIDType( RES_TYPE restype, LPCTSTR pszName )
@@ -522,7 +522,8 @@ public:
 
 	// Specialized resource accessors.
 
-	bool CanUsePrivVerb( const CScriptObj* pObjTarg, LPCTSTR pszCmd, CScriptConsole* pSrc ) const;
+	bool CanUsePrivVerb( const CScriptObj* pObjTarg, LPCTSTR pszCmd,
+		CScriptConsole* pSrc, bool fAllowScriptFunction = false ) const;
 	PLEVEL_TYPE GetPrivCommandLevel( LPCTSTR pszCmd ) const;
 
 	static STAT_TYPE FindStatKey( LPCTSTR pszKey, bool fAllowDigit );
