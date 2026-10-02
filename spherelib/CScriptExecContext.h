@@ -831,6 +831,94 @@ public:
 		return true;
 	}
 
+	// The packet has no TEXTA control.  Like HTMLGUMPa, TEXTA appends its
+	// inline value to the dialog text table and emits the ordinary control with
+	// the assigned text index.  Keep the parser shared between the legacy
+	// space-separated form and ARGO's comma-separated form.
+	static bool AddInlineTextGump(CGStringArray* pControls, CGStringArray* pTexts,
+		LPCTSTR pszKey, LPCTSTR pszArgs)
+	{
+		if ( pControls == NULL || pTexts == NULL || pszKey == NULL ||
+			_stricmp(pszKey, "texta") != 0 || pszArgs == NULL )
+			return false;
+
+		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
+		szArgs[sizeof(szArgs) - 1] = '\0';
+
+		TCHAR* ppArgs[4] = { NULL, NULL, NULL, NULL };
+		TCHAR* p = szArgs;
+		if ( strchr(szArgs, ',') != NULL )
+		{
+			// The first three fields are numeric.  The remainder is the inline
+			// text, so commas in that text must remain part of the value.
+			for ( int i = 0; i < 3; i++ )
+			{
+				ppArgs[i] = p;
+				TCHAR* pComma = strchr(p, ',');
+				if ( pComma == NULL )
+					return false;
+				*pComma = '\0';
+				p = pComma + 1;
+			}
+			ppArgs[3] = p;
+		}
+		else
+		{
+			for ( int i = 0; i < 3; i++ )
+			{
+				while ( ISWHITESPACE(*p) )
+					p++;
+				if ( *p == '\0' )
+					return false;
+				ppArgs[i] = p;
+				while ( *p && !ISWHITESPACE(*p) )
+					p++;
+				if ( *p )
+					*p++ = '\0';
+			}
+			while ( ISWHITESPACE(*p) )
+				p++;
+			if ( *p == '\0' )
+				return false;
+			ppArgs[3] = p;
+		}
+
+		for ( int i = 0; i < 4; i++ )
+		{
+			if ( ppArgs[i] == NULL )
+				return false;
+			while ( ISWHITESPACE(*ppArgs[i]) )
+				ppArgs[i]++;
+			TCHAR* pEnd = ppArgs[i] + strlen(ppArgs[i]);
+			while ( pEnd > ppArgs[i] && ISWHITESPACE(pEnd[-1]) )
+				*--pEnd = '\0';
+		}
+
+		TCHAR* pszText = ppArgs[3];
+		const size_t iTextLen = strlen(pszText);
+		if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+		{
+			pszText[iTextLen - 1] = '\0';
+			pszText++;
+		}
+		TCHAR* pRead = pszText;
+		TCHAR* pWrite = pszText;
+		while ( *pRead )
+		{
+			if ( pRead[0] == '\\' && pRead[1] == '"' )
+				pRead++;
+			*pWrite++ = *pRead++;
+		}
+		*pWrite = '\0';
+
+		const int iTextID = pTexts->GetSize();
+		pTexts->Add(pszText);
+		pControls->AddFormat("text %s %s %s %d",
+			ppArgs[0], ppArgs[1], ppArgs[2], iTextID);
+		return true;
+	}
+
 public:
 	static CScriptPropArray sm_FunctionsAll;
 
@@ -1934,7 +2022,8 @@ public:
 				pGumpArgs = s_szGA;
 			}
 
-			if ( AddInlineHtmlGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) )
+			if ( AddInlineTextGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) ||
+				AddInlineHtmlGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) )
 				return NO_ERROR;
 
 			if ( IsGumpCommand(szGumpKey) )
