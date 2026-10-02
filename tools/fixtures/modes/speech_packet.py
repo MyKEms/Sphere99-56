@@ -77,18 +77,25 @@ ARG(length,<STRLEN(<ARGV(1)>)>+45)
 IF (<ARG(length)> > <EVAL (83+45)>)
   ARG(length,<EVAL (83+45)>)
 ENDIF
-VAR(packet,01c <HVAL (<ARG(length)>&0ff00)/0100> <HVAL <ARG(length)>&0ff> 00 00 00 00 00 00 02 <HVAL (<ARGV(0)>&0ff00)/0100> <HVAL <ARGV(0)>&0ff> 00 03 053 079 073 074 065 06d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 <F_STRTOASCII((<ARG(length)>-45),\"<ARGV(1)>\")> 00)
-SRC.SENDPACKET(<VAR(packet)>)
+VAR(packet,01c <?HVAL (<ARG(length)>&0ff00)/0100?> <?HVAL <ARG(length)>&0ff?> 00 00 00 00 00 00 02 <?HVAL (<ARGV(0)>&0ff00)/0100?> <?HVAL <ARGV(0)>&0ff?> 00 03 053 079 073 074 065 06d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 <?F_STRTOASCII((<ARG(length)>-45),\"<ARGV(1)>\")?> 00)
+SENDPACKET(<VAR(packet)>)
 RETURN 0
 
 [FUNCTION f_tutorial_reward]
 f_sysmessagecol(057,"<ARGV(2)>")
 RETURN 0
 
+[FUNCTION f_classmessage]
+// Match the helper's second dispatch layer: the caller passes the expanded
+// quoted argument and the callee forwards its raw ARGS value to the packet
+// builder.
+f_sysmessagecol(057,"<ARGS>")
+RETURN 0
+
 [FUNCTION tutAddActionXP]
 // Keep the legacy helper's object-root call form in this fixture.  The
-// helper records XP and sends the same class-message argument.
-f_sysmessagecol(057,"<ARGV(2)>")
+// helper forwards its expanded argument through the class-message wrapper.
+f_classmessage(<ARGV(2)>)
 RETURN 0
 
 [CHARDEF {NPC_DEFNAME}]
