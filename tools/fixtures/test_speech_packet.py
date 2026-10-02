@@ -10,7 +10,12 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from modes.speech_packet import ACCOUNT, LONG_SPEECH, PASSWORD
+from modes.speech_packet import (
+    ACCOUNT,
+    PASSWORD,
+    REAL_NOTICE,
+    REAL_SPEECH_OPTIONS,
+)
 from run_suite import shutdown_failures
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -129,6 +134,12 @@ def _speech_text(packet: bytes) -> str:
     return packet[44:].split(b"\0", 1)[0].decode("ascii")
 
 
+def _walk(sequence: int) -> bytes:
+    """Send one ordinary walk request after the helper's packet burst."""
+
+    return bytes((0x02, 0, sequence & 0xFF, 0, 0, 0, 0))
+
+
 def exercise(args: argparse.Namespace, failures: list[str], log: list[str]) -> None:
     sock, raw = _enter_world(args)
     try:
@@ -171,21 +182,46 @@ def exercise(args: argparse.Namespace, failures: list[str], log: list[str]) -> N
         ]
         if len(speeches) != 1:
             failures.append(f"expected one NPC speech packet, got {len(speeches)}")
-        if _speech_text(speech) != LONG_SPEECH:
+        expected_speech = tuple(
+            text.replace("<SRC.NAME>", "SpeechPacketProbe")
+            for text in REAL_SPEECH_OPTIONS
+        )
+        if _speech_text(speech) not in expected_speech:
             failures.append(
-                f"speech text was not quote-normalized: {_speech_text(speech)!r}"
+                f"tutorial speech was not expanded: {_speech_text(speech)!r}"
             )
         notifications = [
             packet
             for packet in after
             if packet[0] == 0x1C and _speech_uid(packet) == 0
         ]
-        if len(notifications) != 2:
+        if len(notifications) != 3:
             failures.append(
-                f"expected two valid notification packets, got {len(notifications)}"
+                f"expected two raw and one generated notification packet, got {len(notifications)}"
             )
         else:
-            log.append("two notification packets and one NPC speech packet decoded")
+            if _speech_text(notifications[-1]) != REAL_NOTICE:
+                failures.append(
+                    f"generated notification text was wrong: {_speech_text(notifications[-1])!r}"
+                )
+            log.append("two raw notifications, one generated notification, and one NPC speech packet decoded")
+
+        for packet in after:
+            if packet[0] == 0x1C and int.from_bytes(packet[1:3], "big") != len(packet):
+                failures.append(
+                    f"speech packet length mismatch: declared {int.from_bytes(packet[1:3], 'big')} actual {len(packet)}"
+                )
+
+        walk_start = len(stream.packets)
+        sock.sendall(_walk(1))
+        walk_index = stream.wait_for(
+            lambda packet: packet[0] == 0x22 and len(packet) >= 2 and packet[1] == 1,
+            walk_start,
+        )
+        if walk_index is None:
+            failures.append("walk after the tutorial helper packet was not acknowledged")
+        else:
+            log.append("walk after tutorial speech acknowledged")
     except ValueError as error:
         failures.append(f"server stream is malformed: {error}")
     finally:

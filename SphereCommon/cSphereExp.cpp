@@ -1250,6 +1250,27 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		}
 		break;
 
+	case F_StrGetAscii:
+		{
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp) - 1);
+			szTmp[sizeof(szTmp) - 1] = '\0';
+			TCHAR* ppArgs[2] = { NULL, NULL };
+			ParseStringFunctionArgs(szTmp, ppArgs, 2);
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetInt(0);
+				break;
+			}
+			const int iIndex = Exp_GetValue(ppArgs[1]);
+			const int iLength = strlen(ppArgs[0]);
+			if ( iIndex < 0 || iIndex >= iLength )
+				vValRet.SetInt(0);
+			else
+				vValRet.SetInt(static_cast<unsigned char>(ppArgs[0][iIndex]));
+		}
+		break;
+
 	case F_StrFirstCap:
 		{
 			LPCTSTR pszStr = vArgs.GetPSTR();
@@ -1578,7 +1599,23 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 			// as zero and repeatedly returns the first argument.
 			LPCTSTR pszIndex = vArgs.GetPSTR();
 			const int iIndex = (pszIndex && *pszIndex) ? GetComplex(pszIndex) : 0;
-			vValRet = m_vVal.GetArrayElement(iIndex);
+			CGVariant& vElement = m_vVal.GetArrayElement(iIndex);
+			LPCTSTR pszElement = vElement.GetPSTR();
+			if ( pszElement && pszElement[0] == '"' )
+			{
+				TCHAR szElement[SCRIPT_MAX_LINE_LEN];
+				strncpy(szElement, pszElement, sizeof(szElement) - 1);
+				szElement[sizeof(szElement) - 1] = '\0';
+				size_t iLength = strlen(szElement);
+				while ( iLength >= 2 && szElement[0] == '"' && szElement[iLength - 1] == '"' )
+				{
+					szElement[--iLength] = '\0';
+					memmove(szElement, szElement + 1, iLength);
+				}
+				vValRet.SetStr(szElement);
+			}
+			else
+				vValRet = vElement;
 		}
 		break;
 	case F_ArgVCount:

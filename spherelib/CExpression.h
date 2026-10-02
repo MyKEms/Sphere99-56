@@ -458,11 +458,16 @@ public:
 		if ( !pszSrc || !*pszSrc )
 			return 0;
 
-		// Count commas to determine array size
+		// Count argument separators outside quoted strings.  Legacy script
+		// helpers pass speech text through ARGV, and commas in that text are
+		// data rather than argument boundaries.
 		int iCount = 1;
+		bool fQuoted = false;
 		for ( LPCTSTR p = pszSrc; *p; p++ )
 		{
-			if ( *p == ',' )
+			if ( *p == '"' && (p == pszSrc || p[-1] != '\\') )
+				fQuoted = !fQuoted;
+			else if ( *p == ',' && !fQuoted )
 				iCount++;
 		}
 
@@ -476,9 +481,12 @@ public:
 
 		int idx = 0;
 		TCHAR* pStart = pBuf;
+		fQuoted = false;
 		for ( TCHAR* p = pBuf; ; p++ )
 		{
-			if ( *p == ',' || *p == '\0' )
+			if ( *p == '"' && (p == pBuf || p[-1] != '\\') )
+				fQuoted = !fQuoted;
+			if ( (*p == ',' && !fQuoted) || *p == '\0' )
 			{
 				bool bEnd = (*p == '\0');
 				*p = '\0';
