@@ -133,8 +133,9 @@ MODE = register_mode(
     FixtureMode(
         name="sex-form",
         fixture_args=(),
-        order=90,
-        id_block=90,
+        # Blocks 91 and 92 are assigned to other fixture modes.
+        order=93,
+        id_block=93,
         case=FixtureCase(
             name="sex-form",
             mode="sex-form",
