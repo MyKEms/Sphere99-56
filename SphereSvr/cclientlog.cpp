@@ -282,8 +282,9 @@ REGRES_TYPE CClient::OnRxAutoServerRegister( const BYTE* pData, int iLen )
 	CServerPtr pServNew = new CServerDef( UID_INDEX_CLEAR, NULL, PeerName );
 	ASSERT( pServNew );
 	pServNew->ParseStatus( (LPCTSTR)(pData), true );
+	const CGString serverName = pServNew->GetName();
 
-	if ( pServNew->GetName()[0] == '\0' )
+	if ( serverName.IsEmpty() )
 	{
 		// There is no name here ?
 		// Might we try to match by IP address ?
@@ -308,7 +309,7 @@ REGRES_TYPE CClient::OnRxAutoServerRegister( const BYTE* pData, int iLen )
 
 	// Look up it's name.
 	CThreadLockPtr lock( &g_Cfg.m_Servers );
-	int index = g_Cfg.m_Servers.FindKey( pServNew->GetName());
+	int index = g_Cfg.m_Servers.FindKey( serverName );
 	if ( index < 0 )
 	{
 		// No server by this name
@@ -319,10 +320,10 @@ REGRES_TYPE CClient::OnRxAutoServerRegister( const BYTE* pData, int iLen )
 		}
 
 		g_Log.Event( LOG_GROUP_ACCOUNTS, LOGL_EVENT, "%x:Adding Server '%s' to list." LOG_CR,
-			m_Socket.GetSocket(), (LPCTSTR) pServNew->GetName());
+			m_Socket.GetSocket(), (LPCTSTR) serverName);
 
 		// only the main login server will add automatically.
-		g_Cfg.m_Servers.AddSortKey( pServNew, pServNew->GetName());
+		g_Cfg.m_Servers.AddSortKey( pServNew, serverName);
 		return REGRES_RET_OK;
 	}
 
