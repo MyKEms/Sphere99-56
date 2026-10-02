@@ -25,6 +25,20 @@ GAME_LOGIN_CAPTURE = bytes.fromhex(
     """
 )
 
+COMPRESS_XOR_STREAM = bytes(
+    (0x05, 0x92, 0x66, 0x23, 0x67, 0x14, 0xE3, 0x62,
+     0xDC, 0x60, 0x8C, 0xD6, 0xFE, 0x7C, 0x25, 0x69)
+)
+
+
+def decode_game_xor(data: bytes) -> bytes:
+    """Undo the legacy 2.0.4+ game-server response stream for assertions."""
+
+    return bytes(
+        value ^ COMPRESS_XOR_STREAM[index & 0x0F]
+        for index, value in enumerate(data)
+    )
+
 
 def _read_response(sock: socket.socket, process: subprocess.Popen[bytes]) -> bytes:
     data = bytearray()
@@ -83,9 +97,13 @@ def main() -> int:
 
     log_contents = log_path.read_text(encoding="utf-8", errors="replace")
     failures.extend(shutdown_failures(returncode, log_contents))
-    if not response or response[0] != 0x81:
+    decoded_response = decode_game_xor(response)
+    if not response or response[0] == 0x81 or decoded_response[0] != 0x81:
         first = response[:1].hex() or "none"
-        failures.append(f"captured game login produced no character-list packet (first={first})")
+        failures.append(
+            "captured game login did not return an XOR-protected character-list "
+            f"packet (wire_first={first}, decoded_first={decoded_response[:1].hex() or 'none'})"
+        )
 
     if failures:
         print("official crypt negotiation fixture failed:")
@@ -97,7 +115,7 @@ def main() -> int:
 
     print(
         "official crypt negotiation fixture passed: captured game login returned "
-        f"character list ({len(response)} bytes)"
+        f"XOR-protected character list ({len(response)} bytes)"
     )
     return 0
 

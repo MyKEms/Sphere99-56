@@ -38,8 +38,10 @@ void CUIDRefArray::DetachObj(size_t i)
 
 // CCryptBase
 
-// Known client encryption keys (MasterHi, MasterLo, version).
-// These are used for login decryption of the 0x80 packet.
+// Classic client encryption keys (MasterHi, MasterLo, version).
+// These are used for login decryption of the 0x80 packet.  The values follow
+// the 0.99 client schedule; different client versions must retain their own
+// master pair even when they share the same packet format.
 // Version 0 = NoCrypt (passthrough). Always tried first.
 struct CCryptClientKeyEntry
 {
@@ -53,39 +55,39 @@ static const CCryptClientKeyEntry sm_ClientKeys[] =
 	// NoCrypt - always first (passthrough)
 	{ 0,		0,			0 },
 	// 2.0.0
-	{ 0x200000,	0x2cc3ed9d,	0xa374227f },
+	{ 0x200000,	0x2d13a5fd,	0xa39d527f },
 	// 2.0.3
-	{ 0x200030,	0x2cc3ed9d,	0xa374227f },
+	{ 0x200030,	0x2dbbb7cd,	0xa3c95e7f },
 	// 2.0.4
-	{ 0x200040,	0x2c832ee9,	0xa2c1a2df },
-	// 3.0.0
-	{ 0x300000,	0x2c43eabd,	0xa25023bf },
+	{ 0x200040,	0x2df385bd,	0xa3ed127f },
+	// 3.0.0 (including the 3.0.0c client)
+	{ 0x300000,	0x2d93a5fd,	0xa3dd527f },
 	// 3.0.5
-	{ 0x300050,	0x2c43eabd,	0xa25023bf },
+	{ 0x300050,	0x2c8b97ad,	0xa350de7f },
 	// 3.0.6
-	{ 0x300060,	0x2c43eabd,	0xa25023bf },
+	{ 0x300060,	0x2cc3ed9d,	0xa374227f },
 	// 3.0.8
-	{ 0x300080,	0x2c43eabd,	0xa25023bf },
+	{ 0x300080,	0x2c53257d,	0xa33f527f },
 	// 4.0.0
-	{ 0x400000,	0x2c03a64d,	0xa12465ff },
+	{ 0x400000,	0x2e13a5fd,	0xa21d527f },
 	// 4.0.2
-	{ 0x400020,	0x2c03a64d,	0xa12465ff },
+	{ 0x400020,	0x2e63addd,	0xa225227f },
 	// 4.0.11
-	{ 0x4000b0,	0x2c03a64d,	0xa12465ff },
+	{ 0x4000b0,	0x2c7b574d,	0xa32d9e7f },
 	// 5.0.0
-	{ 0x500000,	0x2fc3618d,	0xa0f0a73f },
+	{ 0x500000,	0x2e93a5fd,	0xa25d527f },
 	// 5.0.6
-	{ 0x500060,	0x2fc3618d,	0xa0f0a73f },
+	{ 0x500060,	0x2fc3ed9d,	0xa2f4227f },
 	// 6.0.0
-	{ 0x600000,	0x2f03a06d,	0xa0640b3f },
+	{ 0x600000,	0x2f13a5fd,	0xa29d527f },
 	// 6.0.14
-	{ 0x6000e0,	0x2f03a06d,	0xa0640b3f },
+	{ 0x6000e0,	0x2c022d1d,	0xa31da27f },
 	// 7.0.0
-	{ 0x700000,	0x2ec3416d,	0xa3d0c97f },
+	{ 0x700000,	0x2f93a5fd,	0xa2dd527f },
 	// 7.0.15
-	{ 0x7000f0,	0x2ec3416d,	0xa3d0c97f },
+	{ 0x7000f0,	0x2cda670d,	0xa3723e7f },
 	// 7.0.33
-	{ 0x700210,	0x2ec3416d,	0xa3d0c97f },
+	{ 0x700210,	0x2c8a325e,	0xa1767e7f },
 };
 static const int sm_ClientKeysCount = sizeof(sm_ClientKeys) / sizeof(sm_ClientKeys[0]);
 
