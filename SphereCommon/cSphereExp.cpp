@@ -1520,6 +1520,19 @@ CSphereExpArgs::CSphereExpArgs( CResourceObj* pBase, CScriptConsole* pSrc, LPCTS
 	CSphereExpContext(pBase,pSrc),
 	m_s1(pszStr)
 {
+	// ARGS is the unquoted text of a function's first string argument.  The
+	// legacy call form commonly supplies that value as "text"; retaining the
+	// delimiters here leaks them into helpers such as RACEMESSAGE().  ARGV
+	// already removes one surrounding pair, so keep ARGS consistent with it.
+	if ( pszStr )
+	{
+		const size_t iLength = strlen(pszStr);
+		if ( iLength >= 2 && pszStr[0] == '"' && pszStr[iLength - 1] == '"' )
+		{
+			m_s1.Copy(pszStr + 1);
+			m_s1.SetAt(static_cast<int>(iLength - 2), '\0');
+		}
+	}
 	// attempt to parse this.
 	if ( Exp_IsSimpleNumberString(pszStr))
 	{
@@ -1598,7 +1611,16 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 	case F_ArgS1:
 		if ( m_s1.IsEmpty())
 		{
-			vValRet = m_vVal;
+			LPCTSTR pszValue = m_vVal.GetPSTR();
+			const size_t iLength = pszValue ? strlen(pszValue) : 0;
+			if ( iLength >= 2 && pszValue[0] == '"' && pszValue[iLength - 1] == '"' )
+			{
+				CGString sUnquoted(pszValue + 1);
+				sUnquoted.SetAt(static_cast<int>(iLength - 2), '\0');
+				vValRet = (LPCTSTR) sUnquoted;
+			}
+			else
+				vValRet = m_vVal;
 		}
 		else
 		{

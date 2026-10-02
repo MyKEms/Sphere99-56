@@ -1527,8 +1527,27 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			}
 			else
 			{
-				vArgs.MakeArraySize();
-				vValRet = vArgs.GetArrayPSTR( (fFemale) ? 1 : 0 );
+				// The stock parser accepts both the historical comma form and
+				// ``<SEX male female>``.  CGVariant's normal array parser only
+				// splits commas, so preserve comma/quoted arguments and split the
+				// two bare words here.
+				LPCTSTR pszArgs = vArgs.GetPSTR();
+				const TCHAR* pSpace = pszArgs;
+				while ( *pSpace && !isspace( static_cast<unsigned char>(*pSpace)))
+					pSpace++;
+				if ( *pSpace && strchr( pszArgs, ',') == NULL )
+				{
+					CGString sFirst( pszArgs );
+					sFirst.SetAt( static_cast<int>(pSpace - pszArgs), '\0' );
+					while ( *pSpace && isspace( static_cast<unsigned char>(*pSpace)))
+						pSpace++;
+					vValRet = fFemale ? pSpace : (LPCTSTR) sFirst;
+				}
+				else
+				{
+					vArgs.MakeArraySize();
+					vValRet = vArgs.GetArrayPSTR( (fFemale) ? 1 : 0 );
+				}
 			}
 		}
 		break;
