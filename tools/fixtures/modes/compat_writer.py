@@ -150,6 +150,12 @@ GUMP_FALLBACK_CHILD_ITEM_ID = 0x0EA5
 GUMP_FALLBACK_CONTAINER_SERIAL = 4
 GUMP_FALLBACK_CHILD_SERIAL = 5
 
+# A script alias for TYPEDEF 0 must retain the valid IT_NORMAL index while a
+# saved item is loaded.  The probe reuses the standard fixture item id so the
+# reference server sees the same valid tile definition.
+SCRIPT_ITEM_TYPE_SERIAL = 4
+SCRIPT_ITEM_TYPE_MARKER = "SPHERE_SCRIPT_ITEM_TYPE"
+
 
 # Named ARG locals and positional-object probe.  The generated login trigger
 # creates one synthetic item through a script-level NEWITEMSAFE wrapper, then
@@ -1692,6 +1698,7 @@ def write_scripts(
     unknown_keyword_admin_probe: bool = False,
     unknown_keyword_rejected_probe: bool = False,
     world_load_counts_probe: bool = False,
+    script_item_type_probe: bool = False,
     world_save_probe: bool = False,
     unresolved_worldchar_type: bool = False,
     typedef_container_probe: bool = False,
@@ -1918,6 +1925,11 @@ def write_scripts(
     world_load_counts_probe_script = (
         "SYSMESSAGE SPHERE_WORLD_COUNTS <SERV.WORLDCOUNTS>\n"
         if world_load_counts_probe
+        else ""
+    )
+    script_item_type_probe_script = (
+        f"SYSMESSAGE {SCRIPT_ITEM_TYPE_MARKER} <FINDUID({SCRIPT_ITEM_TYPE_SERIAL}).TYPE>\n"
+        if script_item_type_probe
         else ""
     )
     world_save_probe_script = (
@@ -2253,6 +2265,11 @@ def write_scripts(
         if typedef_container_probe
         else "DEFNAME=T_NORMAL\n"
     )
+    typedef_script_item_alias = (
+        "DEFNAME=SYNTHETIC_SCRIPT_TYPE_ZERO\n"
+        if script_item_type_probe
+        else ""
+    )
     typedef_container_itemdef = (
         "\n[ITEMDEF 0x0E74]\n"
         "DEFNAME=SYNTHETIC_TYPEDEF_CONTAINER\n"
@@ -2262,6 +2279,12 @@ def write_scripts(
         if typedef_container_probe
         else ""
     )
+    script_item_type_itemdef = (
+        "DEFNAME=SYNTHETIC_SCRIPT_ITEM_TYPE\n"
+        if script_item_type_probe
+        else ""
+    )
+    default_item_type = "00" if script_item_type_probe else "CONTAINER"
     multi_property_probe = (
         multi_property_probe or named_item_name_probe or format_compat_probe
     )
@@ -2429,7 +2452,7 @@ def write_scripts(
 
 """ + typedef_container_table + """
 [TYPEDEF 0]
-""" + typedef_normal_alias + """
+""" + typedef_normal_alias + typedef_script_item_alias + """
 [TYPEDEF 1]
 DEFNAME=CONTAINER
 
@@ -2447,8 +2470,8 @@ DEFNAME=class_fixture
 
 [ITEMDEF 0x0E75]
 DEFNAME=DEFAULTITEM
-NAME=synthetic container
-TYPE=CONTAINER
+""" + script_item_type_itemdef + """NAME=synthetic container
+TYPE=""" + default_item_type + """
 TDATA2=1
 
 [ITEMDEF 0x0E76]
@@ -2567,7 +2590,7 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
 """ + ("" if timer_lifetime_probe or memory_timer_probe or timer_default_remove_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
-""" + world_load_counts_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + object_root_dispatch_login + expression_chain_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
+""" + world_load_counts_probe_script + script_item_type_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + object_root_dispatch_login + expression_chain_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
@@ -2839,6 +2862,7 @@ def write_world_load_counts_save(
     metadata_roundtrip_probe: bool,
     character_content_probe: bool,
     gump_fallback_probe: bool,
+    script_item_type_reference: bool,
 ) -> None:
     """Write a synthetic save with one selected world-load scenario."""
 
@@ -2852,6 +2876,15 @@ def write_world_load_counts_save(
         # 0.99 preserves this direct character relation for non-equippable
         # items.
         world_sections.extend([])
+    elif script_item_type_reference:
+        world_sections.extend(
+            [
+                "[WORLDITEM DEFAULTITEM]",
+                f"SERIAL={SCRIPT_ITEM_TYPE_SERIAL}",
+                "P=128,128,0",
+                "TYPE=00",
+            ]
+        )
     elif gump_fallback_probe:
         # The child has no saved point, so loading must choose the reserved
         # container dimensions even though this container definition has no
@@ -4125,6 +4158,7 @@ def generate_fixture(
         args.metadata_roundtrip_probe,
         args.character_content_probe,
         args.gump_fallback_probe,
+        args.script_item_type_reference,
     )
     if any(world_load_modes) and not args.world_load_counts:
         parser.error("world-load options require --world-load-counts")
@@ -4471,6 +4505,7 @@ def generate_fixture(
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,
         gump_fallback_probe=args.gump_fallback_probe,
+        script_item_type_probe=args.script_item_type_reference,
         expression_chain_probe=args.expression_chain_probe,
     )
     if args.movement_stacking_probe:
@@ -4492,6 +4527,7 @@ def generate_fixture(
             metadata_roundtrip_probe=args.metadata_roundtrip_probe,
             character_content_probe=args.character_content_probe,
             gump_fallback_probe=args.gump_fallback_probe,
+            script_item_type_reference=args.script_item_type_reference,
         )
     if args.timer_lifetime_probe or args.timer_lifetime_item_first_probe:
         write_timer_lifetime_save(root)

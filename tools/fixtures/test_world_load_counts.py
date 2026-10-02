@@ -118,6 +118,11 @@ def main() -> int:
         action="store_true",
         help="expect a GUMP_NONE container to use the reserved fallback dimensions",
     )
+    parser.add_argument(
+        "--script-item-type-reference",
+        action="store_true",
+        help="expect a saved item using a script alias for TYPEDEF 0",
+    )
     args = parser.parse_args()
 
     if sum(
@@ -133,6 +138,7 @@ def main() -> int:
             args.child_before_parent,
             args.format_compat,
             args.gump_fallback,
+            args.script_item_type_reference,
         )
     ) > 1:
         parser.error("choose only one world-load fixture mode")
@@ -147,7 +153,12 @@ def main() -> int:
     if not (fixture / "sphere.ini").is_file():
         parser.error(f"fixture configuration does not exist: {fixture / 'sphere.ini'}")
 
-    if args.format_compat:
+    if args.script_item_type_reference:
+        expected_line = (
+            "world load: created_items=1 created_chars=1 read_items=1 read_chars=1 "
+            "allocated_items=1 allocated_chars=1"
+        )
+    elif args.format_compat:
         expected_line = (
             "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
             "allocated_items=2 allocated_chars=1"
@@ -198,7 +209,12 @@ def main() -> int:
             "allocated_items=2 allocated_chars=1"
         )
 
-    if args.format_compat:
+    if args.script_item_type_reference:
+        expected_diagnostics = (
+            "world load diagnostics: accepted=2 tolerated_legacy=0 rejected=0 "
+            "defaulted=0 deleted=0"
+        )
+    elif args.format_compat:
         expected_diagnostics = (
             "world load diagnostics: accepted=2 tolerated_legacy=1 rejected=0 "
             "defaulted=0 deleted=0"
@@ -302,6 +318,14 @@ def main() -> int:
                     )
                 elif args.noncontainer_reference:
                     allowed_startup_error_fragments = ("WORLDITEM CONT defaulted:",)
+                elif args.script_item_type_reference:
+                    # The parent head emits both invalid-type diagnostics;
+                    # the assertion below turns that evidence into a
+                    # failing-first regression.
+                    allowed_startup_error_fragments = (
+                        "Unknown item TYPE -1",
+                        "Ignoring invalid item type -1",
+                    )
                 elif args.gump_fallback:
                     # Baseline evidence intentionally permits the diagnostic so
                     # the dedicated assertion below reports the regression.
@@ -360,6 +384,18 @@ def main() -> int:
                         raise RuntimeError(
                             "rejected-property fixture logged unexpected load failure: "
                             f"{unexpected_errors!r}"
+                        )
+                if args.script_item_type_reference:
+                    invalid_type_errors = [
+                        line
+                        for line in startup_errors
+                        if "Unknown item TYPE -1" in line
+                        or "Ignoring invalid item type -1" in line
+                    ]
+                    if invalid_type_errors:
+                        raise RuntimeError(
+                            "script TYPEDEF alias did not resolve TYPE=0: "
+                            f"{invalid_type_errors!r}"
                         )
                 if args.weird_item:
                     deleted_items = [
@@ -585,6 +621,18 @@ def main() -> int:
             failures.append(
                 f"admin SERV.WORLDCOUNTS response was {admin_lines!r}; "
                 f"expected {[expected_admin_line]!r}"
+            )
+
+    if args.script_item_type_reference:
+        type_lines = [
+            message
+            for message in response_messages
+            if message.startswith("SPHERE_SCRIPT_ITEM_TYPE ")
+        ]
+        if type_lines != ["SPHERE_SCRIPT_ITEM_TYPE SYNTHETIC_SCRIPT_TYPE_ZERO"]:
+            failures.append(
+                "loaded script TYPEDEF alias did not retain IT_NORMAL: "
+                f"{type_lines!r}"
             )
 
     if failures:
