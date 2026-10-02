@@ -1001,6 +1001,37 @@ public:
 		return fDigit && fOperator;
 	}
 
+	static bool IsScriptByteTokenStream(LPCTSTR pszValue)
+	{
+		if ( pszValue == NULL || *pszValue == '\0' )
+			return false;
+		bool fToken = false;
+		bool fSeparator = false;
+		const char* p = pszValue;
+		while ( *p )
+		{
+			while ( ISWHITESPACE(*p) )
+			{
+				fSeparator = fToken || fSeparator;
+				p++;
+			}
+			if ( !*p )
+				break;
+			const char* pStart = p;
+			while ( *p && !ISWHITESPACE(*p) )
+			{
+				if ( !isxdigit(static_cast<unsigned char>(*p)) )
+					return false;
+				p++;
+			}
+			const size_t iTokenLen = static_cast<size_t>(p - pStart);
+			if ( iTokenLen < 2 || iTokenLen > 8 || pStart[0] != '0' )
+				return false;
+			fToken = true;
+		}
+		return fToken && fSeparator;
+	}
+
 	int GetScriptExpression(TCHAR* pszArg, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		if ( !pszArg || !*pszArg )
@@ -2116,6 +2147,29 @@ public:
 						return TRIGRET_RET_DEFAULT;
 					if ( *pszArg )
 					{
+						// Legacy helper functions can return a generated string (for
+						// example the byte-token stream used by STRTOASCII).  The
+						// numeric return path used to collapse that text to its first
+						// token, producing an empty raw packet. Preserve quoted and
+						// whitespace-containing return values for script callers.
+						s_ParseEscapes(pszArg, 0, sizeof(szArg));
+						TCHAR* pszText = pszArg;
+						while ( ISWHITESPACE(*pszText) ) pszText++;
+						TCHAR* pszTextEnd = pszText + strlen(pszText);
+						while ( pszTextEnd > pszText && ISWHITESPACE(pszTextEnd[-1]) )
+							*--pszTextEnd = '\0';
+						const size_t iTextLen = strlen(pszText);
+						if ( (iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"') ||
+							IsScriptByteTokenStream(pszText) )
+						{
+							if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+							{
+								pszText[iTextLen - 1] = '\0';
+								pszText++;
+							}
+							m_vValRet.SetStr(pszText);
+							return TRIGRET_RET_DEFAULT;
+						}
 						int iVal = GetScriptExpression(script, pszArg);
 						if ( IsLineExpansionOverflow() )
 							return TRIGRET_RET_DEFAULT;

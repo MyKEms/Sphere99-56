@@ -12,7 +12,12 @@ ACCOUNT = "SpeechPacketProbe"
 PASSWORD = "speech-pw"
 CHAR_SERIAL = 3
 NPC_DEFNAME = "c_SYNTHETIC_SPEAKER"
-LONG_SPEECH = "Long synthetic tutorial speech " + ("abcdefghij" * 18)
+REAL_NOTICE = "Tutorial progress recorded"
+REAL_SPEECH_OPTIONS = (
+    "Take the north path, <SRC.NAME>, and ask the town guides for work.",
+    "The town is safe today, <SRC.NAME>; walk east to meet the guides.",
+    "This island trains new adventurers like <SRC.NAME>; keep exploring.",
+)
 
 
 def _system_packet_tokens(text: str) -> str:
@@ -49,7 +54,36 @@ def _system_packet_tokens(text: str) -> str:
 def _scripts() -> str:
     first = _system_packet_tokens("progress one")
     second = _system_packet_tokens("progress two")
+    real_speech = "\n".join(
+        f'  SAY("{speech}")' for speech in REAL_SPEECH_OPTIONS
+    )
     return f"""
+
+[FUNCTION f_strtoascii]
+VAR(asciitext,"")
+ARG(u,0)
+ARG(asciilen,<EVAL <ARGV(0)>>)
+WHILE (<ARG(u)> < <ARG(asciilen)>)
+  VAR(asciitext,"<?SAFE asciitext?> <?HVAL STRGETASCII(\"<ARGV(1)>\",<ARG(u)>)?>")
+  ARG(u,<EVAL <ARG(u)>+1>)
+ENDWHILE
+RETURN <asciitext>
+
+[FUNCTION f_sysmessagecol]
+IF (<ARGVCOUNT> != 2)
+  RETURN 0
+ENDIF
+ARG(length,<STRLEN(<ARGV(1)>)>+45)
+IF (<ARG(length)> > <EVAL (83+45)>)
+  ARG(length,<EVAL (83+45)>)
+ENDIF
+VAR(packet,01c <HVAL (<ARG(length)>&0ff00)/0100> <HVAL <ARG(length)>&0ff> 00 00 00 00 00 00 02 <HVAL (<ARGV(0)>&0ff00)/0100> <HVAL <ARGV(0)>&0ff> 00 03 053 079 073 074 065 06d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 <F_STRTOASCII((<ARG(length)>-45),\"<ARGV(1)>\")> 00)
+SRC.SENDPACKET(<VAR(packet)>)
+RETURN 0
+
+[FUNCTION f_tutorial_reward]
+f_sysmessagecol(057,"<ARGV(2)>")
+RETURN 0
 
 [CHARDEF {NPC_DEFNAME}]
 DEFNAME={NPC_DEFNAME}
@@ -64,7 +98,10 @@ INT=100
 ON=@UserDClick
 SRC.SENDPACKET {first}
 SRC.SENDPACKET {second}
-SAY(\"{LONG_SPEECH}\")
+SRC.f_tutorial_reward(20,helper_seen,\"{REAL_NOTICE}\")
+DORAND 3
+{real_speech}
+ENDDO
 RETURN 1
 
 [EVENTS e_SpeechPacketProbe]
