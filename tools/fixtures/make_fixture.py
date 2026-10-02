@@ -340,6 +340,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="load a container with no TDATA2 gump and round-trip its child",
     )
     parser.add_argument(
+        "--script-item-type-probe",
+        action="store_true",
+        dest="script_item_type_reference",
+        help="load a saved item through a script alias for TYPEDEF 0",
+    )
+    parser.add_argument(
         "--expression-chain-probe",
         action="store_true",
         help="exercise the 0.99 right-to-left expression grammar",

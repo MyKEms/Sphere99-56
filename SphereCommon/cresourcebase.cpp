@@ -568,6 +568,56 @@ CSphereUID CSphereResourceMgr::ResourceGetID( RES_TYPE restype, HASH_INDEX index
 	return( rid );
 }
 
+static bool IsExplicitZeroResourceIndex( LPCTSTR pszName )
+{
+	if ( ! pszName )
+		return false;
+
+	while ( *pszName && isspace( (unsigned char)*pszName ))
+		++pszName;
+	if ( *pszName == '+' || *pszName == '-' )
+		++pszName;
+	if ( *pszName != '0' )
+		return false;
+
+	++pszName;
+	if ( *pszName == 'x' || *pszName == 'X' )
+	{
+		// Require at least one digit after a hexadecimal prefix.  Any nonzero
+		// digit makes the resource index nonzero, so only zeroes are accepted.
+		++pszName;
+		if ( *pszName != '0' )
+			return false;
+		while ( *pszName == '0' )
+			++pszName;
+	}
+	else
+	{
+		while ( *pszName == '0' )
+			++pszName;
+	}
+
+	while ( *pszName && isspace( (unsigned char)*pszName ))
+		++pszName;
+	return ( *pszName == '\0' );
+}
+
+static LPCTSTR SkipResourceAssignmentPrefix( LPCTSTR pszName )
+{
+	if ( ! pszName )
+		return pszName;
+
+	while ( *pszName && isspace( (unsigned char)*pszName ))
+		++pszName;
+	if ( *pszName == '=' )
+	{
+		++pszName;
+		while ( *pszName && isspace( (unsigned char)*pszName ))
+			++pszName;
+	}
+	return pszName;
+}
+
 CSphereUID CSphereResourceMgr::ResourceGetIDByName( RES_TYPE restype, LPCTSTR pszName )
 {
 	// Find the Resource ID given this name.
@@ -596,8 +646,20 @@ CSphereUID CSphereResourceMgr::ResourceGetIDByName( RES_TYPE restype, LPCTSTR ps
 	}
 #endif
 
-	// May be some complex expression (1+2)
-	return ResourceGetID( restype, Exp_GetValue(pszName));
+	// May be some complex expression (1+2).  ResourceGetID historically
+	// rejects the all-zero UID because it has no UID flags.  A literal zero is
+	// nevertheless a valid index for resource tables (notably TYPE=00), so
+	// preserve its requested resource type while keeping unresolved names
+	// unresolved.
+	LPCTSTR pszLookupName = SkipResourceAssignmentPrefix( pszName );
+	int iIndex = Exp_GetValue(pszLookupName);
+	CSphereUID rid = ResourceGetID( restype, iIndex );
+	if ( iIndex == 0 && rid.GetResType() == RES_UNKNOWN &&
+		IsExplicitZeroResourceIndex(pszLookupName))
+	{
+		return CSphereUID( restype, 0 );
+	}
+	return rid;
 }
 
 int CSphereResourceMgr::ResourceGetIndex( RES_TYPE restype, LPCTSTR pszName )
