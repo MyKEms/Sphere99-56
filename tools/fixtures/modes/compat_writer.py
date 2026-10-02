@@ -2000,6 +2000,7 @@ def write_scripts(
             "  ENDIF\n"
             "ELSEIF (safe SRC.isPlayer)\n"
             "  SRC.TRY S(<ARGS>)\n"
+            "  SRC.TRY INFO\n"
             "ENDIF\n"
             "RETURN 0\n"
         )

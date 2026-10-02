@@ -539,7 +539,7 @@ LPCTSTR const CSphereResourceMgr::sm_szResourceBlocks[RES_QTY+1] =	// static
 	NULL,
 };
 
-CSphereUID CSphereResourceMgr::ResourceCheckIDType( RES_TYPE restype, LPCTSTR pszName )
+CSphereUID CSphereResourceMgr::ResourceCheckIDType( RES_TYPE restype, LPCTSTR pszName ) const
 {
 	// Passively check for the id. no error if not here.
 	CSphereUID rid( m_Const.FindKeyInt(pszName));	// May be some complex expression {}
