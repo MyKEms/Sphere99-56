@@ -2284,7 +2284,9 @@ def write_scripts(
         if script_item_type_probe
         else ""
     )
-    default_item_type = "00" if script_item_type_probe else "CONTAINER"
+    default_item_type_line = (
+        "TYPE = 00" if script_item_type_probe else "TYPE=CONTAINER"
+    )
     multi_property_probe = (
         multi_property_probe or named_item_name_probe or format_compat_probe
     )
@@ -2471,7 +2473,7 @@ DEFNAME=class_fixture
 [ITEMDEF 0x0E75]
 DEFNAME=DEFAULTITEM
 """ + script_item_type_itemdef + """NAME=synthetic container
-TYPE=""" + default_item_type + """
+""" + default_item_type_line + """
 TDATA2=1
 
 [ITEMDEF 0x0E76]
