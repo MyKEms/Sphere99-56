@@ -111,6 +111,7 @@ def main() -> int:
     if [entry.get("keyword") for entry in allowlist["entries"]] != [
         "@ENVIRONCHANGE",
         "@ITEMUNEQUIP",
+        "@STEP",
         "@NPCSEENEWPLAYER",
         "@TIMER",
         "@UNEQUIP",

@@ -103,8 +103,9 @@ MODE = register_mode(
     FixtureMode(
         name="gm-toggle",
         fixture_args=None,
-        order=87,
-        id_block=87,
+        # Blocks 87, 92, and 93 are assigned to other fixture modes.
+        order=94,
+        id_block=94,
         case=FixtureCase(
             name="gm-toggle",
             mode=None,
