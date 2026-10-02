@@ -1808,6 +1808,10 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			OnTakeDamage( SHRT_MAX, pCharSrc, DAMAGE_GOD );
 			Stat_Set( STAT_Health, 0 );
 			g_Log.Event( LOG_GROUP_KILLS|LOG_GROUP_GM_CMDS, LOGL_EVENT, "'%s' was KILLed by '%s'" LOG_CR, (LPCTSTR) GetName(), (LPCTSTR) pSrc->GetName());
+			// KILL is an immediate command.  Waiting for the target's sector tick
+			// loses the attacker attribution and leaves sleeping sectors alive.
+			if ( ! Death())
+				DeleteThis();
 		}
 		break;
 

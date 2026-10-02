@@ -54,6 +54,7 @@ LAYER=30
 DEFNAME={NPC_DEFNAME}
 NAME=synthetic GM kill animal
 ID=0x0190
+TEVENTS=e_synthetic_gm_kill
 STR=20
 DEX=20
 INT=10
@@ -61,6 +62,10 @@ HITS=20
 MAXHITS=20
 MANA=10
 STAM=10
+
+[EVENTS e_synthetic_gm_kill]
+ON=@Death
+SAY GM_KILL_DEATH
 """,
         encoding="ascii",
     )
