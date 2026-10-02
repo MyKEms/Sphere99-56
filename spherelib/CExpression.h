@@ -1020,7 +1020,19 @@ public:
 		if ( *pszVal )
 		{
 			if ( ! SetKeyCurrentValue( szTemp, pszVal ))
+			{
+				// Call-form VAR(name,"text") uses quotes as delimiters.  Keep
+				// the stored value text-only so a later <safe VAR(name)> read
+				// cannot feed the delimiters back into a byte-token stream.
+				if ( pszVal[0] == '"' )
+				{
+					pszVal++;
+					int iLen = strlen(pszVal);
+					if ( iLen > 0 && pszVal[iLen - 1] == '"' )
+						pszVal[iLen - 1] = '\0';
+				}
 				SetKeyStr(szTemp, pszVal);
+			}
 		}
 		else
 		{

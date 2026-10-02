@@ -1172,7 +1172,27 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			vValRet.SetUID(pBase->GetUIDIndex());
 			break;
 		}
-		vValRet.SetRef( g_Cfg.FindUID( vArgs.GetUID()));
+		{
+			// Legacy scripts pass the current function arguments without an
+			// escape wrapper, for example FINDUID(args) and
+			// FINDUID(ARGV(index)).  The raw argument text is not itself a UID;
+			// resolve it once through the active expression context before doing
+			// the lookup.  Numeric and already-typed values keep their direct
+			// path, while reference-valued expressions retain their object root.
+			CGVariant vUID = vArgs;
+			LPCTSTR pszUID = vArgs.GetPSTR();
+			if ( vArgs.GetRef() == NULL && pszUID && *pszUID && !vArgs.IsNumeric())
+			{
+				CGVariant vResolved;
+				CScriptUnknownRejectTracker rejected;
+				if ( EvaluateEscapeValue(pszUID, vResolved, rejected) )
+					vUID = vResolved;
+			}
+			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vUID.GetRef()) )
+				vValRet.SetRef(pObj);
+			else
+				vValRet.SetRef( g_Cfg.FindUID( vUID.GetUID()));
+		}
 		break;
 	case F_IsUIDValid:
 		if ( vArgs.IsEmpty())
