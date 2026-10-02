@@ -9,7 +9,12 @@
 #endif
 
 static void s_CombineKeys(TCHAR* pszOut, LPCTSTR pszKey, LPCTSTR pszArg) {
-	sprintf(pszOut, "%s.%s", pszKey, pszArg ? pszArg : "");
+	if ( pszArg == NULL || pszArg[0] == '\0' )
+	{
+		strcpy( pszOut, pszKey );
+		return;
+	}
+	sprintf(pszOut, "%s.%s", pszKey, pszArg);
 }
 static void s_DumpHelp(CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc) {
 	// STUB
