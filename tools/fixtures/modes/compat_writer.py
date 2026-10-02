@@ -1809,6 +1809,8 @@ def write_scripts(
         f"SYSMESSAGE {EVENTS_METHOD_MARKER}_ADD <EVENTS>\n"
         f"EVENTS(-{EVENTS_METHOD_EVENT})\n"
         f"SYSMESSAGE {EVENTS_METHOD_MARKER}_REMOVE <EVENTS>\n"
+        f"EVENTS=-{EVENTS_METHOD_EVENT}\n"
+        f"SYSMESSAGE {EVENTS_METHOD_MARKER}_PROPERTY_REMOVE <EVENTS>\n"
         f"SYSMESSAGE {EVENTS_METHOD_MARKER}_END\n"
         if events_method_probe
         else ""
