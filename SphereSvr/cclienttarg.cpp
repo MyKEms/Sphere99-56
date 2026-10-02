@@ -9,7 +9,8 @@
 ////////////////////////////////////////////////////////
 // Targetted GM functions.
 
-bool CClient::OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand )
+bool CClient::OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand,
+	bool fAllowScriptFunction )
 {
 	// CLIMODE_TARG_OBJ_SET
 	// Targettted a command at an CObjBase object
@@ -27,7 +28,7 @@ bool CClient::OnTarg_Obj_Command( CObjBase* pObj, const TCHAR* pszCommand )
 	sLogMsg.Format( "'%s' commands uid=0%lx (%s) to '%s'", (LPCTSTR) GetName(), pObj->GetUID(), (LPCTSTR) pObj->GetName(), (LPCTSTR) pszCommand );
 
 	// Check priv level for the new verb.
-	if ( ! g_Cfg.CanUsePrivVerb( pObj, pszCommand, this ))
+	if ( ! g_Cfg.CanUsePrivVerb( pObj, pszCommand, this, fAllowScriptFunction ))
 	{
 		WriteString( "You lack privilege to do this." );
 		g_Log.Event( LOG_GROUP_GM_CMDS, LOGL_EVENT, "%s NO PRIV" LOG_CR, (LPCTSTR) sLogMsg );
