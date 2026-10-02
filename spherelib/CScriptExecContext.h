@@ -1710,8 +1710,13 @@ public:
 			CGVariant vValRet;
 			hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, pszKey, m_pBaseObj);
-			if ( hRes == NO_ERROR )
-				return NO_ERROR;
+			// A recognized method can reject the caller or its arguments.  Only
+			// an unknown method may fall through to global/script dispatch.
+			if ( hRes != HRES_UNKNOWN_PROPERTY )
+			{
+				rejected.RecordIfPresent();
+				return hRes;
+			}
 		}
 
 		// A dotted FINDID/FINDLAYER command such as
@@ -1812,8 +1817,13 @@ public:
 					CGVariant vValRet;
 					hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
-					if ( hRes == NO_ERROR )
-						return NO_ERROR;
+					// Preserve privilege and argument failures from a recognized
+					// method; do not reinterpret them as an unknown global method.
+					if ( hRes != HRES_UNKNOWN_PROPERTY )
+					{
+						rejected.RecordIfPresent();
+						return hRes;
+					}
 
 					// A referenced object can also be the base of a script
 					// function (for example CONT.F_SETUP). Native methods
