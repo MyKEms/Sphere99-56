@@ -29,6 +29,44 @@ public:
 	using CSphereExpContext::ValidateUIDReference;
 };
 
+class CPlantTickProbe : public CItem
+{
+public:
+	CPlantTickProbe( ITEMID_TYPE id, CItemDef* pItemDef ) : CItem( id, pItemDef ) {}
+};
+
+static bool TestPlantGrowSentinel()
+{
+	CItemDef itemDef( ITEMID_MULTI_MAX );
+	// TDATA2=-1 is the stock plant sentinel for a plant that produces fruit.
+	// The field is represented as an ITEMID_TYPE enum, so UBSan must not see
+	// the all-bits-one sentinel as an enum value when the timer fires.
+	CGVariant grow;
+	grow.SetInt( -1 );
+	if ( itemDef.s_PropSet( "TDATA2", grow ) != NO_ERROR )
+		return false;
+	const ITEMID_TYPE fruitID = ITEMID_GOLD_C1;
+	if ( !g_Cfg.FindItemDef( fruitID ))
+	{
+		CItemDef* pFruitDef = new CItemDef( fruitID );
+		if ( g_Cfg.m_ResHash.AddSortKey( pFruitDef,
+			CSphereUID( RES_ItemDef, fruitID )) < 0 )
+			return false;
+	}
+
+	CPlantTickProbe plant( ITEMID_MULTI_MAX, &itemDef );
+	plant.SetType( IT_CROPS );
+	plant.m_itCrop.m_ReapFruitID = fruitID;
+	if ( !plant.MoveTo( CPointMap( 128, 128, 0 )))
+		return false;
+	const bool fTicked = plant.Plant_OnTick();
+	plant.RemoveSelf();
+	CItemPtr pFruit = g_World.ItemFind( CSphereThread::GetCurrentThread()->m_uidLastNewItem );
+	if ( pFruit != NULL )
+		pFruit->DeleteThis();
+	return fTicked;
+}
+
 static int CountDirectoryEntries( const char* pszDir )
 {
 	DIR* pDir = opendir( pszDir );
@@ -553,6 +591,12 @@ static bool TestPendingSameCountPair()
 
 int main()
 {
+	if ( !TestPlantGrowSentinel() )
+	{
+		std::fprintf( stderr, "plant timer did not handle the TDATA2=-1 sentinel\n" );
+		return 1;
+	}
+	std::printf( "plant timer: TDATA2=-1 sentinel handled without invalid enum access\n" );
 	if ( !TestUIDReset() )
 	{
 		std::fprintf( stderr, "UID reset did not preserve the reserved slot 0\n" );
