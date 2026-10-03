@@ -975,6 +975,13 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	// ARGS:
 	//  vValRet = return the value here.
 
+	// P_Z (and its P_X/P_Y siblings) are inherited object properties.  The
+	// prefix lookup used by the character table would otherwise treat P_Z as
+	// the shorter P point property and return the complete point string.
+	if ( pszKey && ( !_stricmp(pszKey, "P_X") || !_stricmp(pszKey, "P_Y") ||
+		!_stricmp(pszKey, "P_Z") || !_stricmp(pszKey, "Z") ) )
+		return CObjBase::s_PropGet( pszKey, vValRet, pSrc );
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
