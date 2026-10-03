@@ -20,6 +20,33 @@ public:
 	}
 };
 
+static bool TestRegionRectStorage()
+{
+	CGRegion region;
+	CGRect first;
+	first.m_left = 10;
+	first.m_top = 20;
+	first.m_right = 30;
+	first.m_bottom = 40;
+	CGRect second;
+	second.m_left = 50;
+	second.m_top = 60;
+	second.m_right = 70;
+	second.m_bottom = 80;
+
+	if ( !region.AddRegionRect( first ) || !region.AddRegionRect( second ))
+		return false;
+	// The first rectangle is kept as the union, while the following rectangles
+	// are the explicit entries exposed by GetRegionRect().
+	return region.GetRegionRectCount() == 1 &&
+		region.GetRegionRect( 0 ).m_left == second.m_left &&
+		region.GetRegionRect( 0 ).m_top == second.m_top &&
+		region.m_rectUnion.m_left == first.m_left &&
+		region.m_rectUnion.m_top == first.m_top &&
+		region.m_rectUnion.m_right == second.m_right &&
+		region.m_rectUnion.m_bottom == second.m_bottom;
+}
+
 static bool TestMissingContainerIsReported()
 {
 	g_Serv.SetServerMode( SERVMODE_Run );
@@ -262,6 +289,11 @@ static bool TestResourceTableDropIsReported()
 
 int main()
 {
+	if ( !TestRegionRectStorage())
+	{
+		std::fprintf( stderr, "region rectangle storage lost a rectangle\n" );
+		return 1;
+	}
 	if ( !TestResourceTableDropIsReported())
 	{
 		std::fprintf( stderr, "resource-table loss was not reported\n" );
