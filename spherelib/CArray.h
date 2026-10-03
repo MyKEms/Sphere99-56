@@ -736,7 +736,7 @@ struct CStringSortArray : public CGStringArray
 {
 public:
 	void AddSortString(LPCTSTR pszStr);
-	int FindKey(LPCTSTR pszKey) const { return -1; } // STUB
+	int FindKey(LPCTSTR pszKey) const;
 };
 
 template<class TYPE, class KEY_TYPE>

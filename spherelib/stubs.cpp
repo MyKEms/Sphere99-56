@@ -183,7 +183,41 @@ void CStringSortArray::AddSortString(LPCTSTR pszStr)
 {
 	if (!pszStr)
 		return;
-	Add(CGString(pszStr));
+
+	// CGTypedArray stores CGString values in a byte array.  InsertAt() moves
+	// those values with memmove(), which would duplicate their owned buffers.
+	// Append first, then copy-assign each value into its sorted position so
+	// every CGString keeps its own storage.
+	const int iCount = (int)GetCount();
+	int iInsert = 0;
+	while (iInsert < iCount && GetAt(iInsert).CompareNoCase(pszStr) < 0)
+		++iInsert;
+
+	Add(pszStr);
+	for (int i = iCount; i > iInsert; --i)
+		SetAt(i, GetAt(i - 1));
+	SetAt(iInsert, pszStr);
+}
+
+int CStringSortArray::FindKey(LPCTSTR pszKey) const
+{
+	if (!pszKey)
+		return -1;
+
+	int iLow = 0;
+	int iHigh = (int)GetCount();
+	while (iLow < iHigh)
+	{
+		const int iMiddle = iLow + (iHigh - iLow) / 2;
+		if (GetAt(iMiddle).CompareNoCase(pszKey) < 0)
+			iLow = iMiddle + 1;
+		else
+			iHigh = iMiddle;
+	}
+
+	if (iLow >= (int)GetCount() || GetAt(iLow).CompareNoCase(pszKey) != 0)
+		return -1;
+	return iLow;
 }
 
 // CSocketAddressIP
