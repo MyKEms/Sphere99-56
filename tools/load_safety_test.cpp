@@ -61,9 +61,13 @@ static bool TestPlantGrowSentinel()
 		return false;
 	const bool fTicked = plant.Plant_OnTick();
 	plant.RemoveSelf();
-	CItemPtr pFruit = g_World.ItemFind( CSphereThread::GetCurrentThread()->m_uidLastNewItem );
+	const CSphereUID uidFruit = CSphereThread::GetCurrentThread()->m_uidLastNewItem;
+	CItem* pFruit = g_World.ItemFind( uidFruit );
 	if ( pFruit != NULL )
-		pFruit->DeleteThis();
+	{
+		pFruit->RemoveSelf();
+		delete pFruit;
+	}
 	return fTicked;
 }
 
@@ -591,6 +595,11 @@ static bool TestPendingSameCountPair()
 
 int main()
 {
+#ifdef SPHERE_PLANT_SENTINEL_ONLY
+	const bool fPlant = TestPlantGrowSentinel();
+	g_World.Close( false );
+	return fPlant ? 0 : 1;
+#endif
 	if ( !TestPlantGrowSentinel() )
 	{
 		std::fprintf( stderr, "plant timer did not handle the TDATA2=-1 sentinel\n" );
