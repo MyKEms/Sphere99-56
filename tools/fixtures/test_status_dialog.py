@@ -201,7 +201,7 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("status-dialog probe passed: stat update was emitted in the dialog response")
+    print("status-dialog probe passed: self status refreshed after the dialog response")
     return 0
 
 
