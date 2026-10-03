@@ -35,6 +35,11 @@ jobs:
           make container-list-test
           build/container-list/container_list_test
 
+      - name: Run localhost-only HTTP access regression
+        run: |
+          make http-access-test
+          build/http-access/http_access_test
+
       - name: Reject non-trivial objects through C varargs
         run: |
           if grep -Eq 'passing objects of non-trivially-copyable type .* through' build.log; then
@@ -93,6 +98,14 @@ jobs:
         run: |
           make container-list-asan-test
           build/asan-container-list/container_list_test
+
+      - name: Run localhost-only HTTP access regression under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make http-access-asan-test
+          build/asan-http-access/http_access_test
 
       - name: Verify crash recovery is opt-in
         run: |

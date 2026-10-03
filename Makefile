@@ -225,10 +225,23 @@ container-list-asan-test:
 		-o build/asan-container-list/container_list_test \
 		-fsanitize=address,undefined
 
+http-access-test:
+	@mkdir -p build/http-access
+	$(CXX) $(DEFAULT_CXXFLAGS) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereSvr \
+		tools/http_access_test.cpp -o build/http-access/http_access_test
+
+http-access-asan-test:
+	@mkdir -p build/asan-http-access
+	$(CXX) $(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		-I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereSvr \
+		tools/http_access_test.cpp -o build/asan-http-access/http_access_test \
+		-fsanitize=address,undefined
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test container-list-test container-list-asan-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test container-list-test container-list-asan-test http-access-test http-access-asan-test clean
