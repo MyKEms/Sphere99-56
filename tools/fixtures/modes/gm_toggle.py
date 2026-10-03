@@ -78,9 +78,9 @@ MODE = register_mode(
     FixtureMode(
         name="gm-toggle",
         fixture_args=None,
-        # Blocks 87, 92, and 93 are assigned to other fixture modes.
-        order=94,
-        id_block=94,
+        # Block 95 follows the current fixture manifest's highest allocation.
+        order=95,
+        id_block=95,
         case=FixtureCase(
             name="gm-toggle",
             mode=None,
