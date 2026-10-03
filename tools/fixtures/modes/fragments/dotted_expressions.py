@@ -40,6 +40,19 @@ DOTTED_EXPRESSION_ROWS = (
     ("strmatch_class_short", "<STRMATCH 5,[-0123456789][-0123456789]>", "C"),
     ("strmatch_class_long", "<STRMATCH 500,[-0123456789][-0123456789]>", "C"),
     ("strmatch_class_negative", "<STRMATCH -50,[-0123456789][-0123456789][-0123456789]>", "C"),
+    # This is the shard's exact fixNumber body, including the dynamic pattern
+    # assembled by ARG in its WHILE loop.  Keep the function call in the
+    # fixture so the real nested escape path is covered, rather than testing
+    # STRMATCH in isolation.
+    ("fixnumber_exact_valid", "<fixNumber(50)>", "C"),
+    ("fixnumber_exact_valid_100", "<fixNumber(100)>", "C"),
+    ("fixnumber_exact_valid_75", "<fixNumber(75)>", "C"),
+    ("fixnumber_exact_valid_25", "<fixNumber(25)>", "C"),
+    ("fixnumber_exact_qwd", "<fixNumber(qwd)>", "C"),
+    ("fixnumber_exact_mixed", "<fixNumber(5a)>", "C"),
+    ("fixnumber_exact_negative", "<fixNumber(-50)>", "C"),
+    ("fixnumber_exact_empty", "<fixNumber()>", "C"),
+    ("fixnumber_exact_positive_negative", "<fixNumberPositive(-50)>", "C"),
     # FINDRES returns a typed resource reference so its properties can be
     # read through the same dotted-expression path as world objects.
     ("findres_spell_mana", "<findres(spell,s_fixture_heal).manause>", "C"),

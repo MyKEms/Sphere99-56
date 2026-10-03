@@ -301,6 +301,10 @@ enum IT_TYPE		// double click type action.
 	IT_QTY,
 
 	IT_TRIGGER		= 1000,	// Create custom new script trigger types
+	// TYPEDEF values are resource indices and are not limited to a fixed
+	// enumerator list.  Keep the enum's declared range wide enough for any
+	// valid index so UBSan does not reject a saved script-defined item type.
+	IT_TYPE_CUSTOM_MAX	= 0x7fffffff,
 };
 
 // Script input is converted to IT_TYPE in several places.  Keep the enum
