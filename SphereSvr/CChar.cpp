@@ -1274,7 +1274,20 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		}
 		break;
 	case P_NPC:
-		return NPC_SetBrain( (NPCBRAIN_TYPE) vVal.GetInt());
+		{
+			// NPC brain values are commonly written as BRAIN_* defnames in
+			// character creation triggers.  Script property setters receive the
+			// raw variant, so resolve that name before treating it as an integer;
+			// otherwise the defname becomes zero and NPC_SetBrain rejects it.
+			int iBrain = vVal.GetInt();
+			if ( iBrain == NPCBRAIN_NONE && !vVal.IsEmpty() && !vVal.IsNumeric())
+			{
+				CVarDefPtr pBrain = g_Cfg.m_Const.FindKeyPtr( vVal.GetPSTR());
+				if ( pBrain )
+					iBrain = pBrain->GetValNum();
+			}
+			return NPC_SetBrain( (NPCBRAIN_TYPE) iBrain);
+		}
 	case P_OBody:
 		{
 			CREID_TYPE id = (CREID_TYPE) g_Cfg.ResourceGetIndexType( RES_CharDef, vVal.GetStr());
