@@ -11,6 +11,8 @@ from .registry import FixtureCase, FixtureMode, TestCase, register_mode
 ACCOUNT = "GmToggleProbe"
 PASSWORD = "gm-pw"
 CHAR_NAME = "GmToggleCharacter"
+PLAYER_ACCOUNT = "GmTogglePlayer"
+PLAYER_PASSWORD = "gm-player-pw"
 DAMAGE_ITEM_ID = 0x0EB2
 DAMAGE_ITEM_SERIAL = 2
 DAMAGE_ITEM_UID = 0x40000000 | DAMAGE_ITEM_SERIAL
@@ -29,6 +31,8 @@ def generate(output: Path) -> int:
     account_text = (
         account_text.replace("GmCommandLogProbe", ACCOUNT)
         .replace("gm_cmd_log_pw", PASSWORD)
+        .replace("GmCommandLogPlayer", PLAYER_ACCOUNT)
+        .replace("gm_cmd_player_pw", PLAYER_PASSWORD)
     )
     account_file.write_text(account_text, encoding="ascii")
 
