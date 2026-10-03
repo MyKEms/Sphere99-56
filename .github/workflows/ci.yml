@@ -35,6 +35,11 @@ jobs:
           make container-list-test
           build/container-list/container_list_test
 
+      - name: Run string-sort-array regression
+        run: |
+          make string-sort-array-test
+          build/string-sort-array/string_sort_array_test
+
       - name: Reject non-trivial objects through C varargs
         run: |
           if grep -Eq 'passing objects of non-trivially-copyable type .* through' build.log; then
@@ -93,6 +98,14 @@ jobs:
         run: |
           make container-list-asan-test
           build/asan-container-list/container_list_test
+
+      - name: Run string-sort-array regression under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make string-sort-array-asan-test
+          build/asan-string-sort-array/string_sort_array_test
 
       - name: Verify crash recovery is opt-in
         run: |
