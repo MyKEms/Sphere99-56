@@ -455,6 +455,117 @@ static bool TestSaveCountHeaderOnly()
 	return true;
 }
 
+// A TYPEDEF is a resource index, not a closed member of IT_TYPE.  Saved items
+// may therefore carry a script-defined value such as 10861.  Keep that value
+// usable while still routing malformed (negative/unknown) TYPE= values
+// through the normal-item fallback.
+static bool TestCustomTypeSavedItem()
+{
+	ITEMID_TYPE testItemID = ITEMID_NOTHING;
+	for ( int i = static_cast<int>( ITEMID_MULTI_MAX ); i > 0; --i )
+	{
+		if ( !g_Cfg.FindItemDef( static_cast<ITEMID_TYPE>( i )))
+		{
+			testItemID = static_cast<ITEMID_TYPE>( i );
+			break;
+		}
+	}
+	if ( testItemID == ITEMID_NOTHING )
+	{
+		std::fprintf( stderr, "could not find a synthetic ITEMDEF id\n" );
+		return false;
+	}
+
+	const int customType = 10861;
+	const char* pszTypeName = "LOAD_SAFETY_CUSTOM_TYPE";
+	CSphereUID typeRID( RES_TypeDef, customType );
+	CResourceDefPtr pTypeDef = g_Cfg.ResourceGetDef( typeRID );
+	if ( !pTypeDef )
+	{
+		pTypeDef = new CItemTypeDef( typeRID );
+		if ( g_Cfg.m_ResHash.AddSortKey( pTypeDef, typeRID ) < 0 )
+		{
+			std::fprintf( stderr, "could not register the synthetic TYPEDEF\n" );
+			return false;
+		}
+	}
+	g_Cfg.m_Const.SetKeyVar( pszTypeName, CGVariant( VARTYPE_UID, &typeRID ));
+
+	CItemDefPtr pItemDef = new CItemDef( testItemID );
+	if ( g_Cfg.m_ResHash.AddSortKey( pItemDef, CSphereUID( RES_ItemDef, testItemID )) < 0 )
+	{
+		std::fprintf( stderr, "could not register the synthetic ITEMDEF\n" );
+		return false;
+	}
+	CGVariant typeName;
+	typeName.SetStr( pszTypeName );
+	if ( pItemDef->s_PropSet( "TYPE", typeName ) != NO_ERROR ||
+		static_cast<int>( pItemDef->GetType()) != customType )
+	{
+		std::fprintf( stderr, "TYPEDEF did not retain its script-defined index\n" );
+		return false;
+	}
+
+	CItemDef invalidDef( ITEMID_MULTI_MAX );
+	CGVariant invalidType;
+	invalidType.SetInt( -1 );
+	if ( invalidDef.s_PropSet( "TYPE", invalidType ) != NO_ERROR ||
+		invalidDef.GetType() != IT_NORMAL )
+	{
+		std::fprintf( stderr, "invalid TYPE= did not fall back to IT_NORMAL\n" );
+		return false;
+	}
+
+	char szTempDir[] = "/tmp/sphere-custom-type-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sWorldPath = std::string( szTempDir ) + "/custom-type-world.scp";
+	const std::string sOldWorldBaseDir = (LPCTSTR) g_Cfg.m_sWorldBaseDir;
+	{
+		std::ofstream world( sWorldPath.c_str());
+		world << "TITLE=Sphere custom TYPEDEF fixture\n"
+			"VERSION=0.99\n"
+			"SAVECOUNT=0\n"
+			"[WORLDITEM " << testItemID << "]\n"
+			"SERIAL=45123\n"
+			"P=128,128,0\n"
+			"[EOF]\n";
+		if ( !world )
+		{
+			unlink( sWorldPath.c_str());
+			rmdir( szTempDir );
+			return false;
+		}
+	}
+
+	g_Cfg.m_sWorldBaseDir = (std::string( szTempDir ) + "/").c_str();
+	const SERVMODE_TYPE iModePrev = g_Serv.SetServerMode( SERVMODE_Loading );
+	const bool fLoaded = g_World.LoadFileForTest( sWorldPath.c_str());
+	g_Serv.SetServerMode( iModePrev );
+	CItem* pLoaded = g_World.ItemFind( CSphereUID( UID_F_ITEM | 45123 ));
+	const bool fCustomTypeLoaded = fLoaded && pLoaded != NULL &&
+		static_cast<int>( pLoaded->GetType()) == customType;
+	if ( pLoaded )
+	{
+		// This fixture owns the only loaded object.  Detach and destroy it
+		// synchronously so the test does not leave a sector item for static
+		// destruction after g_Serv.
+		pLoaded->RemoveSelf();
+		delete pLoaded;
+	}
+	g_World.GarbageCollection_New();
+	g_Cfg.m_sWorldBaseDir = sOldWorldBaseDir.c_str();
+	unlink( sWorldPath.c_str());
+	rmdir( szTempDir );
+	if ( !fCustomTypeLoaded )
+	{
+		std::fprintf( stderr, "saved item did not retain its custom TYPEDEF: loaded=%d\n",
+			fLoaded ? 1 : 0 );
+		return false;
+	}
+	return true;
+}
+
 static bool TestMismatchedPairRecovery()
 {
 	char szTempDir[] = "/tmp/sphere-save-pair-XXXXXX";
@@ -633,6 +744,12 @@ int main()
 		return 1;
 	}
 	std::printf( "forward resource alias retained its TYPEDEF target\n" );
+	if ( !TestCustomTypeSavedItem() )
+	{
+		std::fprintf( stderr, "saved custom TYPEDEF item was not loaded safely\n" );
+		return 1;
+	}
+	std::printf( "saved custom TYPEDEF item retained its resource index\n" );
 	if ( !TestUIDReset() )
 	{
 		std::fprintf( stderr, "UID reset did not preserve the reserved slot 0\n" );
@@ -826,6 +943,16 @@ int main()
 			"NULL-source SAVE was not safely refused: hresult=%ld savecount=%d entries=%d\n",
 			(long) hSave, g_World.m_iSaveCountID, iRemainingEntries );
 		return 1;
+	}
+
+	// The accepted item is intentionally kept alive for the load-count checks;
+	// remove it before process teardown so sanitizer shutdown does not call a
+	// CItem destructor after the singleton server has entered base destruction.
+	CItem* pAccepted = g_World.ItemFind( CSphereUID( UID_F_ITEM | 44 ));
+	if ( pAccepted )
+	{
+		pAccepted->RemoveSelf();
+		delete pAccepted;
 	}
 
 	std::printf( "load safety: failed and orphaned objects cleaned, counts separated, and NULL-source SAVE refused\n" );

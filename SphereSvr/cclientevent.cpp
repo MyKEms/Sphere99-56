@@ -2591,7 +2591,12 @@ bool CClient::Event_DoubleClick( CSphereUID uid, bool fMacro, bool fTestTouch )
 	{
 		if ( pChar == m_pChar )
 		{
-			if ( m_pChar->Horse_UnMount())
+			// A self double-click is also the classic status refresh request.
+			// Send the response after any dismount so stat changes made by a
+			// preceding dialog are visible to the client.
+			const bool fUnmounted = m_pChar->Horse_UnMount();
+			addCharStatWindow( m_pChar->GetUID(), false );
+			if ( fUnmounted )
 				return true;
 		}
 		if ( pChar->m_pNPC &&
