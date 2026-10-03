@@ -295,12 +295,64 @@ static bool TestIndexedVariableTable()
 		"cleared indexed table is empty");
 }
 
+static bool TestStringSortArray()
+{
+	// Command privilege tables are CStringSortArray instances: a lookup that
+	// never matches turns every listed command into a default-level command.
+	CStringSortArray table;
+	bool fOk = Expect(table.FindKey("anything") == -1, "empty sorted table misses");
+
+	static const char* const sm_Inserted[] =
+	{
+		"walknorth", "Reload", "stats", "CHECK", "level", "abort",
+		"zone", "bandage", "class_info", "regs", "STATS", "",
+	};
+	for ( const char* pszKey : sm_Inserted )
+		table.AddSortString(pszKey);
+	table.AddSortString(NULL);
+	fOk = fOk && Expect(table.GetCount() == 10, "duplicate (ignoring case) and empty keys are not stored");
+	for ( size_t i = 1; fOk && i < table.GetCount(); i++ )
+		fOk = Expect(_stricmp(table.ElementAt(i - 1), table.ElementAt(i)) < 0,
+			"sorted table stays in case-insensitive order");
+
+	for ( const char* pszKey : sm_Inserted )
+	{
+		if ( !fOk || pszKey[0] == '\0' )
+			continue;
+		int index = table.FindKey(pszKey);
+		fOk = Expect(index >= 0 && !_stricmp(table.ElementAt(index), pszKey), "inserted key is found");
+	}
+	fOk = fOk && Expect(table.FindKey("Stats") >= 0 && table.FindKey("check") >= 0,
+		"lookup ignores case");
+	fOk = fOk && Expect(table.FindKey("stat") == -1 && table.FindKey("statss") == -1,
+		"prefix and longer keys miss");
+	fOk = fOk && Expect(table.FindKey("aaa") == -1 && table.FindKey("zzz") == -1 &&
+		table.FindKey("") == -1 && table.FindKey(NULL) == -1, "out-of-range and empty keys miss");
+
+	CStringSortArray bulk;
+	for ( int i = 999; i >= 0; i-- )
+	{
+		TCHAR szKey[32];
+		snprintf(szKey, sizeof(szKey), "Cmd_%03d", (i * 37) % 1000);
+		bulk.AddSortString(szKey);
+	}
+	fOk = fOk && Expect(bulk.GetCount() == 1000, "bulk keys are all stored");
+	for ( int i = 0; fOk && i < 1000; i += 7 )
+	{
+		TCHAR szKey[32];
+		snprintf(szKey, sizeof(szKey), "cmd_%03d", i);
+		fOk = Expect(bulk.FindKey(szKey) == i, "bulk key is found at its sorted index");
+	}
+	table.RemoveAll();
+	return fOk && Expect(table.FindKey("stats") == -1, "cleared table misses");
+}
+
 int main()
 {
 	if ( !TestIntegerRanges() || !TestByteRanges() ||
 		!TestPropertyAndLookupDispatch() || !TestBoundaryArithmetic() ||
-		!TestIndexedVariableTable() )
+		!TestIndexedVariableTable() || !TestStringSortArray() )
 		return 1;
-	std::printf("value ranges, property lookups, and boundary arithmetic: all checks passed\n");
+	std::printf("value ranges, property lookups, sorted string tables, and boundary arithmetic: all checks passed\n");
 	return 0;
 }

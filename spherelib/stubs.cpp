@@ -179,11 +179,49 @@ DWORD CVarDef::GetDWORD()
 }
 
 // CStringSortArray
+int CStringSortArray::FindKeyNear(LPCTSTR pszKey, int& iCompareRes) const
+{
+	// Return the matching index, or the insertion point when there is none.
+	int iLow = 0;
+	int iHigh = (int) GetCount() - 1;
+	iCompareRes = -1;
+	while ( iLow <= iHigh )
+	{
+		int i = iLow + (iHigh - iLow) / 2;
+		iCompareRes = _stricmp(pszKey, ElementAt(i));
+		if ( iCompareRes == 0 )
+			return i;
+		if ( iCompareRes > 0 )
+			iLow = i + 1;
+		else
+			iHigh = i - 1;
+	}
+	return iLow;
+}
+
+int CStringSortArray::FindKey(LPCTSTR pszKey) const
+{
+	if ( pszKey == NULL )
+		return -1;
+	int iCompareRes;
+	int index = FindKeyNear(pszKey, iCompareRes);
+	return ( iCompareRes == 0 ) ? index : -1;
+}
+
 void CStringSortArray::AddSortString(LPCTSTR pszStr)
 {
-	if (!pszStr)
+	if ( pszStr == NULL || pszStr[0] == '\0' )
 		return;
+	int iCompareRes;
+	int index = FindKeyNear(pszStr, iCompareRes);
+	if ( iCompareRes == 0 )
+		return;
+	// Shift with CGString assignment: InsertAt moves the raw bytes, which
+	// would leave two elements sharing one string buffer.
 	Add(CGString(pszStr));
+	for ( int i = (int) GetCount() - 1; i > index; i-- )
+		ElementAt(i) = ElementAt(i - 1);
+	ElementAt(index) = pszStr;
 }
 
 // CSocketAddressIP

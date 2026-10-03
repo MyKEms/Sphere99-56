@@ -734,9 +734,13 @@ public:
 
 struct CStringSortArray : public CGStringArray
 {
+	// Strings kept in case-insensitive order so FindKey can binary search.
+	// A string already present (ignoring case) is stored once.
 public:
 	void AddSortString(LPCTSTR pszStr);
-	int FindKey(LPCTSTR pszKey) const { return -1; } // STUB
+	int FindKey(LPCTSTR pszKey) const;
+private:
+	int FindKeyNear(LPCTSTR pszKey, int& iCompareRes) const;
 };
 
 template<class TYPE, class KEY_TYPE>
