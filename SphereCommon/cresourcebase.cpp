@@ -175,8 +175,12 @@ bool CResourceRefArray::v_Set( CGVariant& vVal, RES_TYPE restype )
 		CResourceLinkPtr pResLink = REF_CAST(CResourceLink,pResDef);
 		if ( pResLink == NULL )
 		{
-			fRet = false;
-			DEBUG_ERR(( "Unknown '%s' Resource '%s'" LOG_CR, CSphereResourceMgr::GetResourceBlockName(restype), pszCmd ));
+			// Removing an event that is not attached is a harmless no-op in
+			// stock.  Keep reporting failed additions, but do not turn a
+			// missing removal into a rejected script command.
+			fRet = fRemove;
+			if ( ! fRemove )
+				DEBUG_ERR(( "Unknown '%s' Resource '%s'" LOG_CR, CSphereResourceMgr::GetResourceBlockName(restype), pszCmd ));
 			continue;
 		}
 
@@ -191,10 +195,9 @@ bool CResourceRefArray::v_Set( CGVariant& vVal, RES_TYPE restype )
 
 		if ( fRemove )
 		{
-			fRet = ( iIndex >= 0 );
-			if ( ! fRet )
-				continue;
-			RemoveAt(iIndex);
+			fRet = true;
+			if ( iIndex >= 0 )
+				RemoveAt(iIndex);
 		}
 		else
 		{
