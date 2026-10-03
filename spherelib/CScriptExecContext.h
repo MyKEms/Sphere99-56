@@ -332,6 +332,14 @@ protected:
 		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
+			// A failed NEWITEM leaves LASTNEW empty.  Stock still recognizes
+			// dotted reads from that root and returns an empty value instead of
+			// reporting an unknown property.
+			if ( fRootFromFunction && IsLastNewRoot(szRoot) )
+			{
+				vValRet.SetStr("");
+				return true;
+			}
 			// A script function that returned no object (empty or a UID that
 			// does not resolve) reads as an empty value.  Other roots that
 			// yield no object are left to the caller, which keeps the
@@ -640,6 +648,14 @@ protected:
 				return true;
 		}
 		return false;
+	}
+
+	static bool IsLastNewRoot(LPCTSTR pszRoot)
+	{
+		return pszRoot != NULL &&
+			(!_stricmp(pszRoot, "LASTNEW") ||
+			 !_stricmp(pszRoot, "LASTNEWITEM") ||
+			 !_stricmp(pszRoot, "LASTNEWCHAR"));
 	}
 
 public:
@@ -1881,6 +1897,14 @@ public:
 				}
 
 				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
+				if ( hRoot == NO_ERROR && pRootObj == NULL &&
+					fRootFromFunction && IsLastNewRoot(szRootName) )
+				{
+					// A failed NEWITEM leaves LASTNEW empty.  Its dotted
+					// assignments are recognized by stock and intentionally do
+					// nothing, rather than becoming unknown script keys.
+					return NO_ERROR;
+				}
 				if ( hRoot == NO_ERROR && pRootObj )
 				{
 					HRESULT hRes;
@@ -2476,7 +2500,8 @@ public:
 						// key with the serial-preserving flag before ExecuteCommand
 						// splits the statement; the ordinary key path intentionally
 						// renders object references as display text.
-						DWORD dwKeyFlags = !_strnicmp(szKey, "ARG(", 4)
+						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
+							!_strnicmp(szKey, "TAG(", 4))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )
@@ -2484,7 +2509,9 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
-						DWORD dwArgFlags = (fKeyEquals && IsObjectAssignmentKey(szKey))
+						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
+							!_stricmp(szKey, "TAG") ||
+							(fKeyEquals && IsObjectAssignmentKey(szKey)))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
