@@ -27,6 +27,9 @@ EXPECTED = {
     "find2": "",
     "safe0": "0",
     "trigger": "1",
+    "profession_ref": "FIXTURE_PROFESSION",
+    "profession_name": "Fixture Profession",
+    "profession_cmp": "1",
 }
 
 

@@ -48,6 +48,10 @@ public:
 		return TRIGRET_RET_DEFAULT;
 	}
 	virtual CGString GetName() const { return CGString(); }
+	// Scalar spelling used when a reference is expanded without a dotted
+	// property. Resource definitions override this with their DEFNAME while
+	// GetName() remains the display name exposed by .NAME.
+	virtual CGString GetScriptRefName() const { return CGString(); }
 	// World objects override this with the generation of their UID slot.  The
 	// default keeps resource and non-world references generation-neutral.
 	virtual DWORD GetUIDGeneration() const { return 0; }
