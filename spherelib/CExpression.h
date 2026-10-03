@@ -410,10 +410,9 @@ public:
 			return (LPCTSTR) m_str;
 		case CGVT_REF:
 			// Reference-valued properties keep their live object for dotted
-			// chaining, but their scalar spelling is the object's script name.
-			// Resource definitions use DEFNAME here while .NAME remains the
-			// display property. This lets <profession> feed DEFNAME lookups
-			// while <profession.name> still walks the reference.
+			// chaining, but selected reference types may provide a scalar spelling.
+			// CProfessionDef uses DEFNAME here while .NAME remains the display
+			// property; ordinary object references keep their historical empty value.
 			if ( m_pRef == NULL )
 				return "";
 			const_cast<CGVariant*>(this)->m_str = m_pRef->GetScriptRefName();
