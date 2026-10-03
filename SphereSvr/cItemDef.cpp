@@ -944,16 +944,20 @@ HRESULT CItemDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		m_SkillMake.s_LoadKeys( vVal.GetPSTR());
 		break;
 	case P_TData1:
-		m_ttNormal.m_tData1 = vVal.GetInt();
-		break;
 	case P_TData2:
-		m_ttNormal.m_tData2 = vVal.GetInt();
-		break;
 	case P_TData3:
-		m_ttNormal.m_tData3 = vVal.GetInt();
-		break;
 	case P_TData4:
-		m_ttNormal.m_tData4 = vVal.GetInt();
+		{
+			// TDATA commonly names a resource (TDATA1=i_bottle_empty for a
+			// potion, TDATA3=c_horse for a figurine).  Evaluate it like any
+			// script value so the name becomes its resource UID; the raw
+			// integer conversion turned every name into zero.
+			LPCTSTR pszValue = vVal.GetPSTR();
+			DWORD dwValue = ( pszValue && *pszValue ) ? (DWORD) Exp_GetValue( pszValue ) : 0;
+			DWORD* pData[] = { &m_ttNormal.m_tData1, &m_ttNormal.m_tData2,
+				&m_ttNormal.m_tData3, &m_ttNormal.m_tData4 };
+			*pData[iProp - P_TData1] = dwValue;
+		}
 		break;
 
 	case P_TwoHands:
