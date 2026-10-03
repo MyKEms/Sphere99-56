@@ -188,11 +188,14 @@ protected:
 				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
 				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
 			// A DEFNAME written with the #<hex-serial> spelling is already an
-			// object UID alias.  Unlike an ordinary numeric DEFNAME, it must
-			// resolve through the world table before dotted properties run.
+			// object UID alias.  Unlike an ordinary numeric/resource DEFNAME, it
+			// must resolve through the world table before dotted properties run.
 			if ( fHashUID || fUIDRoot )
 				pObj = ResolveUIDObject(uidValue);
-			if ( pObj == NULL && fUIDRoot )
+			// Numeric definition names still resolve through the resource table.
+			// Keep that legacy path for ordinary DEFNAME roots while leaving a
+			// missing hash UID as its original scalar/literal token.
+			if ( pObj == NULL && !fHashUID )
 				pObj = ResolveResourceObject(uidValue);
 		}
 		return pObj;
