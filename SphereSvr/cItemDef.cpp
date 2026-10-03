@@ -384,6 +384,9 @@ bool CItemDef::GetItemData( ITEMID_TYPE id, CUOItemTypeRec* pData ) // static
 	// Invalid object id ?
 	// NOTE: This data should already be read into the m_ItemBase table ???
 
+	if ( pData == NULL )
+		return( false );
+	memset( pData, 0, sizeof(*pData));
 	if ( ! IsValidDispID(id))
 		return( false );
 
@@ -392,7 +395,16 @@ bool CItemDef::GetItemData( ITEMID_TYPE id, CUOItemTypeRec* pData ) // static
 		CMulItemInfo info( id );
 		*pData = *( STATIC_CAST(CUOItemTypeRec,&info ));
 	}
-	SPHERE_LOG_TRY_CATCH1( "GetItemData %d", id )
+	catch ( CGException &e )
+	{
+		g_Log.CatchEvent( &e, "GetItemData %d", id );
+		return( false );
+	}
+	catch (...)
+	{
+		g_Log.CatchEvent( NULL, "GetItemData %d", id );
+		return( false );
+	}
 
 #if 1
 	// Unused tiledata I guess. Don't create it.

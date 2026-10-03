@@ -105,6 +105,48 @@ static bool TestUIDReset()
 	return uids.AllocUID( &second, 0 ) == 1;
 }
 
+static bool TestGetItemDataReadFailureIsInvalid()
+{
+	char szTileData[] = "/tmp/sphere-tiledata-truncated-XXXXXX";
+	const int iTempFD = mkstemp( szTileData );
+	if ( iTempFD < 0 )
+		return false;
+	const ITEMID_TYPE testItemID = static_cast<ITEMID_TYPE>( 0x3FFF );
+	const off_t iReadOffset = static_cast<off_t>( UOTILE_TERRAIN_SIZE ) + 4 +
+		static_cast<off_t>( testItemID / UOTILE_BLOCK_QTY ) * 4 +
+		static_cast<off_t>( testItemID ) * sizeof(CUOItemTypeRec);
+	const unsigned char marker = 0x7F;
+	const bool fSized = ftruncate( iTempFD, iReadOffset + 1 ) == 0 &&
+		lseek( iTempFD, iReadOffset, SEEK_SET ) == iReadOffset &&
+		write( iTempFD, &marker, sizeof(marker)) == sizeof(marker);
+	close( iTempFD );
+	if ( !fSized )
+	{
+		unlink( szTileData );
+		return false;
+	}
+
+	g_MulInstall.m_File[VERFILE_TILEDATA].Close();
+	const bool fOpened = g_MulInstall.m_File[VERFILE_TILEDATA].Open(
+		szTileData, OF_READ | OF_SHARE_DENY_NONE );
+	CUOItemTypeRec data;
+	memset( &data, 0xA5, sizeof(data));
+	const bool fValid = fOpened && CItemDef::GetItemData( testItemID, &data );
+	const unsigned char* pBytes = reinterpret_cast<const unsigned char*>( &data );
+	bool fZeroed = true;
+	for ( size_t i = 0; i < sizeof(data); ++i )
+	{
+		if ( pBytes[i] != 0 )
+		{
+			fZeroed = false;
+			break;
+		}
+	}
+	g_MulInstall.m_File[VERFILE_TILEDATA].Close();
+	unlink( szTileData );
+	return fOpened && !fValid && fZeroed;
+}
+
 static bool TestUIDReuseIsQuarantined()
 {
 	CUIDArray uids;
@@ -600,6 +642,12 @@ int main()
 	g_World.Close( false );
 	return fPlant ? 0 : 1;
 #endif
+	if ( !TestGetItemDataReadFailureIsInvalid() )
+	{
+		std::fprintf( stderr, "truncated tiledata was not reported as invalid\n" );
+		return 1;
+	}
+	std::printf( "tiledata reads: truncated records are invalid and zeroed\n" );
 	if ( !TestPlantGrowSentinel() )
 	{
 		std::fprintf( stderr, "plant timer did not handle the TDATA2=-1 sentinel\n" );
