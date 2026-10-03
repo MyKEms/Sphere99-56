@@ -25,6 +25,7 @@ LOAD_COUNTS_RE = re.compile(
     r"world load: created_items=(\d+) created_chars=(\d+) "
     r"read_items=(\d+) read_chars=(\d+) allocated_items=(\d+) allocated_chars=(\d+)"
 )
+VITAL_FIELDS = ("HITS", "MANA", "STAM", "FOOD")
 
 
 def normalized_save(text: str) -> str:
@@ -71,6 +72,27 @@ def normalized_metadata_char_save(text: str) -> str:
             continue
         normalized.append(line)
     return "\n".join(normalized)
+
+
+def metadata_vitals(text: str) -> dict[str, int]:
+    """Read the live vitals that are valid but allowed to change between saves."""
+
+    values: dict[str, int] = {}
+    for field in VITAL_FIELDS:
+        matches = re.findall(rf"(?m)^{field}=(-?\d+)$", text)
+        if len(matches) != 1:
+            raise ValueError(f"expected exactly one {field}= value, found {matches!r}")
+        values[field] = int(matches[0])
+    max_hits = re.findall(r"(?m)^MAXHITS=(-?\d+)$", text)
+    if len(max_hits) != 1:
+        raise ValueError(f"expected exactly one MAXHITS= value, found {max_hits!r}")
+    values["MAXHITS"] = int(max_hits[0])
+    if values["HITS"] < 0 or values["HITS"] > values["MAXHITS"]:
+        raise ValueError(f"HITS is outside 0..MAXHITS: {values!r}")
+    for field in VITAL_FIELDS[1:]:
+        if values[field] < 0:
+            raise ValueError(f"{field} is negative: {values!r}")
+    return values
 
 
 def bounded_unified_diff(before: str, after: str, *, label: str) -> str:
@@ -137,6 +159,7 @@ def main() -> int:
     failures: list[str] = []
     saved_worlds: list[str] = []
     saved_chars: list[str] = []
+    saved_vitals: list[dict[str, int]] = []
     startup_logs: list[str] = []
     temporary_copies: list[Path] = []
 
@@ -303,6 +326,11 @@ def main() -> int:
             )
         except OSError as error:
             failures.append(f"generation {generation + 1} save could not be read: {error}")
+        if args.metadata_roundtrip and saved_chars:
+            try:
+                saved_vitals.append(metadata_vitals(saved_chars[-1]))
+            except ValueError as error:
+                failures.append(f"generation {generation + 1} has invalid live vitals: {error}")
 
     load_counts: list[tuple[str, ...]] = []
     rejected_counts: list[int] = []
@@ -453,7 +481,8 @@ def main() -> int:
     print(
         "world round-trip integrity probe passed: "
         + (
-            "three bounded saves across two reloads retained TAG bytes and DISPID"
+            "three bounded saves across two reloads retained TAG bytes and DISPID; "
+            f"live vitals were valid in {len(saved_vitals)} generations"
             if args.metadata_roundtrip
             else "three bounded saves across two reloads retained GUMP_NONE container fallback"
             if args.gump_fallback
