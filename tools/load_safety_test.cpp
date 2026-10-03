@@ -213,6 +213,32 @@ static bool TestLoadDetailBudgetScope()
 	return fRuntimeVisible;
 }
 
+static bool TestForwardResourceAlias()
+{
+	// DEFNAME blocks are allowed to refer to a TYPEDEF declared later in the
+	// script tree.  The parser stores that forward reference as a string until
+	// the target exists; resource-list lookup must resolve it at use time.
+	const char* pszAlias = "LOAD_SAFETY_FORWARD_RESOURCE";
+	const char* pszTarget = "LOAD_SAFETY_RESOURCE_TARGET";
+	const CSphereUID targetRID( RES_TypeDef, 10862 );
+	UID_INDEX targetValue = targetRID;
+	g_Cfg.m_Const.SetKeyVar( pszAlias, CGVariant( pszTarget ));
+	g_Cfg.m_Const.SetKeyVar( pszTarget, CGVariant( VARTYPE_UID, &targetValue ));
+	LPCTSTR pszExpr = pszAlias;
+	CResourceQty resource;
+	const bool fLoaded = resource.LoadResQty( pszExpr );
+	const CSphereUID resolved = resource.GetResourceID();
+	g_Cfg.m_Const.RemoveKey( pszAlias );
+	g_Cfg.m_Const.RemoveKey( pszTarget );
+	if ( !fLoaded || resolved != targetRID || resource.GetResQty() != 1 )
+	{
+		std::fprintf( stderr, "forward resource alias did not resolve to its target\n" );
+		return false;
+	}
+	return true;
+}
+
+
 // Concatenate the daily log files written into pszDir, then remove them.
 static std::string TakeDailyLogs( const std::string& sDir )
 {
@@ -712,6 +738,12 @@ int main()
 		return 1;
 	}
 	std::printf( "tiledata reads: truncated records are invalid and zeroed\n" );
+	if ( !TestForwardResourceAlias() )
+	{
+		std::fprintf( stderr, "forward resource alias was not resolved\n" );
+		return 1;
+	}
+	std::printf( "forward resource alias retained its TYPEDEF target\n" );
 	if ( !TestCustomTypeSavedItem() )
 	{
 		std::fprintf( stderr, "saved custom TYPEDEF item was not loaded safely\n" );

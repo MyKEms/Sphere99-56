@@ -31,13 +31,35 @@
 
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
-// DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values
+// DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values.
+// Some legacy scripts define an alias before the target DEFNAME (for example
+// t_magic -> t_junk).  The loader stores that forward reference as a string;
+// follow a short identifier-only chain when it is evaluated later.
+static int ResolveDefName(LPCTSTR pszName, int iDepth)
+{
+	if ( pszName == NULL || pszName[0] == '\0' || iDepth >= 16 )
+		return 0;
+	CVarDef* pVar = g_Cfg.m_Const.FindKeyPtr(pszName);
+	if ( pVar == NULL )
+		return 0;
+	const int iValue = pVar->GetValNum();
+	if ( iValue != 0 )
+		return iValue;
+	LPCTSTR pszAlias = pVar->GetValStr();
+	if ( pszAlias == NULL || pszAlias[0] == '\0' || !_stricmp( pszAlias, pszName ))
+		return iValue;
+	for ( const unsigned char* p = reinterpret_cast<const unsigned char*>( pszAlias );
+		*p; ++p )
+	{
+		if ( !isalnum( *p ) && *p != '_' )
+			return iValue;
+	}
+	return ResolveDefName( pszAlias, iDepth + 1 );
+}
+
 static int ResolveDefName(LPCTSTR pszName)
 {
-	CVarDef* pVar = g_Cfg.m_Const.FindKeyPtr(pszName);
-	if (pVar)
-		return pVar->GetValNum();
-	return 0;
+	return ResolveDefName( pszName, 0 );
 }
 
 // Initialize the static member
