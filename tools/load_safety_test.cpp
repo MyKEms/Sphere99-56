@@ -29,6 +29,48 @@ public:
 	using CSphereExpContext::ValidateUIDReference;
 };
 
+class CPlantTickProbe : public CItem
+{
+public:
+	CPlantTickProbe( ITEMID_TYPE id, CItemDef* pItemDef ) : CItem( id, pItemDef ) {}
+};
+
+static bool TestPlantGrowSentinel()
+{
+	CItemDef itemDef( ITEMID_MULTI_MAX );
+	// TDATA2=-1 is the stock plant sentinel for a plant that produces fruit.
+	// The field is represented as an ITEMID_TYPE enum, so UBSan must not see
+	// the all-bits-one sentinel as an enum value when the timer fires.
+	CGVariant grow;
+	grow.SetInt( -1 );
+	if ( itemDef.s_PropSet( "TDATA2", grow ) != NO_ERROR )
+		return false;
+	const ITEMID_TYPE fruitID = ITEMID_GOLD_C1;
+	if ( !g_Cfg.FindItemDef( fruitID ))
+	{
+		CItemDef* pFruitDef = new CItemDef( fruitID );
+		if ( g_Cfg.m_ResHash.AddSortKey( pFruitDef,
+			CSphereUID( RES_ItemDef, fruitID )) < 0 )
+			return false;
+	}
+
+	CPlantTickProbe plant( ITEMID_MULTI_MAX, &itemDef );
+	plant.SetType( IT_CROPS );
+	plant.m_itCrop.m_ReapFruitID = fruitID;
+	if ( !plant.MoveTo( CPointMap( 128, 128, 0 )))
+		return false;
+	const bool fTicked = plant.Plant_OnTick();
+	plant.RemoveSelf();
+	const CSphereUID uidFruit = CSphereThread::GetCurrentThread()->m_uidLastNewItem;
+	CItem* pFruit = g_World.ItemFind( uidFruit );
+	if ( pFruit != NULL )
+	{
+		pFruit->RemoveSelf();
+		delete pFruit;
+	}
+	return fTicked;
+}
+
 static int CountDirectoryEntries( const char* pszDir )
 {
 	DIR* pDir = opendir( pszDir );
@@ -732,12 +774,23 @@ static bool TestPendingSameCountPair()
 
 int main()
 {
+#ifdef SPHERE_PLANT_SENTINEL_ONLY
+	const bool fPlant = TestPlantGrowSentinel();
+	g_World.Close( false );
+	return fPlant ? 0 : 1;
+#endif
 	if ( !TestGetItemDataReadFailureIsInvalid() )
 	{
 		std::fprintf( stderr, "truncated tiledata was not reported as invalid\n" );
 		return 1;
 	}
 	std::printf( "tiledata reads: truncated records are invalid and zeroed\n" );
+	if ( !TestPlantGrowSentinel() )
+	{
+		std::fprintf( stderr, "plant timer did not handle the TDATA2=-1 sentinel\n" );
+		return 1;
+	}
+	std::printf( "plant timer: TDATA2=-1 sentinel handled without invalid enum access\n" );
 	if ( !TestForwardResourceAlias() )
 	{
 		std::fprintf( stderr, "forward resource alias was not resolved\n" );

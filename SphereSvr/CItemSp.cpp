@@ -1099,12 +1099,16 @@ bool CItem::Plant_OnTick()
 	}
 
 	CItemDefPtr pItemDef = Item_GetDef();
-	ITEMID_TYPE iGrowID = pItemDef->m_ttCrops.m_idGrow;
+	// TDATA2 is a resource UID stored in a raw script field.  Keep the
+	// all-bits-one "pop out a fruit" sentinel in its integer representation;
+	// loading it as ITEMID_TYPE is undefined under UBSan because -1 is not an
+	// enumerator value.
+	UID_INDEX iGrowID = pItemDef->m_ttCrops.m_idGrow;
 
-	if ( iGrowID == -1 )
+	if ( iGrowID == static_cast<UID_INDEX>( -1 ))
 	{
 		// Some plants geenrate a fruit on the ground when ripe.
-		ITEMID_TYPE iFruitID = (ITEMID_TYPE) RES_GET_INDEX( pItemDef->m_ttCrops.m_idGrow );
+		ITEMID_TYPE iFruitID = (ITEMID_TYPE) RES_GET_INDEX( iGrowID );
 		if ( m_itCrop.m_ReapFruitID )
 		{
 			iFruitID = (ITEMID_TYPE) RES_GET_INDEX( m_itCrop.m_ReapFruitID );
