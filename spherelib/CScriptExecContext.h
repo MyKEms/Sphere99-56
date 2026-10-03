@@ -161,7 +161,20 @@ protected:
 	CResourceObj* ResolveObjectResult(const CGVariant& value, LPCTSTR pszFunctionRoot)
 	{
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(value.GetRef());
-		if ( pObj == NULL && pszFunctionRoot && value.IsNumeric() )
+		LPCTSTR pszValue = value.GetPSTR();
+		UID_INDEX uidValue = value.GetUID();
+		bool fHashUID = false;
+		if ( pszValue && pszValue[0] == '#' && pszValue[1] )
+		{
+			char* pszEnd = NULL;
+			const unsigned long ulUID = strtoul(pszValue + 1, &pszEnd, 16);
+			if ( pszEnd != pszValue + 1 && *pszEnd == '\0' )
+			{
+				uidValue = static_cast<UID_INDEX>(ulUID);
+				fHashUID = true;
+			}
+		}
+		if ( pObj == NULL && pszFunctionRoot && (value.IsNumeric() || fHashUID) )
 		{
 			// Script functions and the reference-valued argument helpers return
 			// object UIDs as strings. Named ARG locals can hold the same UID after
@@ -174,10 +187,16 @@ protected:
 				!_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
 				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
 				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
-			if ( fUIDRoot )
-				pObj = ResolveUIDObject(value.GetUID());
-			if ( pObj == NULL )
-				pObj = ResolveResourceObject(value.GetUID());
+			// A DEFNAME written with the #<hex-serial> spelling is already an
+			// object UID alias.  Unlike an ordinary numeric/resource DEFNAME, it
+			// must resolve through the world table before dotted properties run.
+			if ( fHashUID || fUIDRoot )
+				pObj = ResolveUIDObject(uidValue);
+			// Numeric definition names still resolve through the resource table.
+			// Keep that legacy path for ordinary DEFNAME roots while leaving a
+			// missing hash UID as its original scalar/literal token.
+			if ( pObj == NULL && !fHashUID )
+				pObj = ResolveResourceObject(uidValue);
 		}
 		return pObj;
 	}
@@ -347,6 +366,14 @@ protected:
 			if ( fEffect && (vCurrent.IsEmpty() || vCurrent.IsNumeric()) )
 			{
 				vValRet.SetStr("");
+				return true;
+			}
+			// A numeric DEFNAME is also a scalar expression in stock.  If no
+			// object is behind it, a dotted suffix preserves that scalar token
+			// rather than leaving the whole escape literal.
+			if ( fRootFromFunction && vCurrent.IsNumeric() )
+			{
+				vValRet = vCurrent;
 				return true;
 			}
 			return false;
@@ -1815,9 +1842,16 @@ public:
 			}
 		}
 
-		// Try dispatching to the base object.
+		// Try dispatching to the base object.  A dotted assignment belongs to
+		// the referenced object (ACT.P, LASTNEW.P, SRC.TAG.foo, ...); passing the
+		// whole key to the base setter first makes CChar interpret ACT.P as its
+		// scalar ACT property and stores the point as a bogus UID.  TAG.* is the
+		// one legacy dotted form whose owning object intentionally handles the
+		// complete key itself.
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-		if ( pObj && ( !strchr(pszKey, '.') || fPropertySet ))
+		const bool fDirectDottedProperty =
+			!_strnicmp(pszKey, "TAG.", 4) || !_strnicmp(pszKey, "TAG0.", 5);
+		if ( pObj && ( !strchr(pszKey, '.') || fDirectDottedProperty ))
 		{
 			HRESULT hRes;
 			if ( !fCallForm )
