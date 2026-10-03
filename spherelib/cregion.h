@@ -1,6 +1,8 @@
 #ifndef _INC_CREGION_H
 #define _INC_CREGION_H
 
+#include <vector>
+
 struct CGRect			// Basic rectangle. (May not be on the map)
 {
 public:
@@ -139,12 +141,14 @@ public:
 	}
 
 	CGRect m_rectUnion;	// The union rectangle.
-	CGTypedArray<CGRect, const CGRect&> m_Rects;
+	// CGRect has virtual normalization; use real value storage instead of the
+	// byte-backed CGTypedArray, which cannot construct its vptr.
+	std::vector<CGRect> m_Rects;
 
 	void EmptyRegion()
 	{
 		m_rectUnion.SetRectEmpty();
-		m_Rects.Empty();
+		m_Rects.clear();
 	}
 
 	bool IsRegionEmpty() const
@@ -153,7 +157,7 @@ public:
 	}
 	int GetRegionRectCount() const
 	{
-		int iQty = m_Rects.GetSize();
+		const int iQty = static_cast<int>(m_Rects.size());
 		if ( iQty <= 0 )
 		{
 			if ( ! m_rectUnion.IsRectEmpty())
@@ -163,19 +167,19 @@ public:
 	}
 	CGRect& GetRegionRect(int i)
 	{
-		if ( m_Rects.GetSize() <= 0 )
+		if ( m_Rects.empty() )
 			return m_rectUnion;
 		return m_Rects[i];
 	}
 	virtual bool AddRegionRect(const CGRect& rect)
 	{
-		if ( m_Rects.GetSize() <= 0 && m_rectUnion.IsRectEmpty())
+		if ( m_Rects.empty() && m_rectUnion.IsRectEmpty())
 		{
 			m_rectUnion = rect;
 		}
 		else
 		{
-			m_Rects.Add( rect );
+			m_Rects.push_back( rect );
 			m_rectUnion.UnionPoint( rect.m_left, rect.m_top );
 			m_rectUnion.UnionPoint( rect.m_right - 1, rect.m_bottom - 1 );
 		}
@@ -245,7 +249,7 @@ public:
 		if ( ! ( pt.m_x >= m_rectUnion.m_left && pt.m_x < m_rectUnion.m_right &&
 				 pt.m_y >= m_rectUnion.m_top && pt.m_y < m_rectUnion.m_bottom ))
 			return false;
-		int iQty = m_Rects.GetSize();
+		const int iQty = static_cast<int>(m_Rects.size());
 		if ( iQty <= 0 )
 			return true;	// single rect already checked.
 		for ( int i = 0; i < iQty; i++ )
