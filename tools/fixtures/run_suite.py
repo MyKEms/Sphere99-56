@@ -78,6 +78,16 @@ def shutdown_failures(returncode: Optional[int], log_contents: str) -> list[str]
     return failures
 
 
+def receive_exception_failures(log_contents: str) -> list[str]:
+    """Reject receive-loop exceptions after the protocol input has drained."""
+
+    return [
+        f"server log contains unexpected receive exception: {line}"
+        for line in log_contents.splitlines()
+        if "OnTick: SocketsReceive threw" in line
+    ]
+
+
 def newbie_load_failures(
     log_contents: str, expected_sections: tuple[str, ...] = ()
 ) -> list[str]:
@@ -373,6 +383,7 @@ def main() -> int:
     if shutdown_error:
         failures.append(f"server shutdown check failed: {shutdown_error}")
     failures.extend(shutdown_failures(server_returncode, log_contents))
+    failures.extend(receive_exception_failures(log_contents))
     failures.extend(newbie_load_failures(log_contents, tuple(args.expect_invalid_newbie)))
 
     if args.unknown_keyword_allowlist:

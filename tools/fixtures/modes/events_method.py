@@ -13,7 +13,7 @@ def generate(output):
 MODE = register_mode(
     FixtureMode(
         name="events-method",
-        fixture_args=("--events-method-probe",),
+        fixture_args=("--events-method-probe", "--unknown-keyword-report"),
         # Keep this pair above the newest registered synthetic ID blocks;
         # recheck it whenever the manifest gains another mode.
         order=61,

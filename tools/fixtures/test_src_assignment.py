@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import socket
 import sys
@@ -31,7 +32,12 @@ EXPECTED = {
     "var_inside": "synthetic SRC target",
     "missing_before": "SrcProbe",
     "missing_inside": "SrcProbe",
+    "dynamic_before": "100",
+    "dynamic_after": "111",
     "tag_probe": "tag-probe",
+    "tag_hit": "040000005",
+    "lastnew_before": "before",
+    "lastnew_missing": "reached",
     "caller_after": "SrcProbe",
     "timer_source": "SrcProbe",
     "timer_after": "SrcProbe",
@@ -136,12 +142,18 @@ def main() -> int:
         value = rows.get(key)
         if value != expected:
             failures.append(f"{key}: got {value!r}; expected {expected!r}")
-    # This row is a direct probe for the production ``TAG(combatTarget,<ACT>)``
-    # form.  It is intentionally reported but not value-asserted here: the
-    # same empty result is present on master and on this SRC-only change, so
-    # that separate stock-parity gap must not be folded into this fix.
-    if "tag_hit" not in rows:
-        failures.append("TAG hit probe did not execute")
+    report_path = fixture / "logs" / "unknown-keywords.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as error:
+        failures.append(f"unknown-keyword report is unreadable: {error}")
+    else:
+        for entry in report.get("entries", []):
+            if not isinstance(entry, dict):
+                continue
+            keyword = str(entry.get("keyword", "")).upper()
+            if keyword.startswith("LASTNEW"):
+                failures.append(f"missing LASTNEW root was reported as unknown: {entry!r}")
     if failures:
         print("SRC assignment probe failed", file=sys.stderr)
         for failure in failures:
@@ -154,7 +166,6 @@ def main() -> int:
     print("SRC assignment rows:")
     for key in EXPECTED:
         print(f"- {key}={rows.get(key)}")
-    print(f"- tag_hit_probe={rows['tag_hit']}")
     return 0
 
 

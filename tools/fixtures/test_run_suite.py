@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 from run_suite import (
     newbie_load_failures,
+    receive_exception_failures,
     shutdown_failures,
     stop_server,
     unknown_keyword_failures,
@@ -37,6 +38,17 @@ class ShutdownFailuresTests(unittest.TestCase):
     def test_missing_exit_status_fails_closed(self) -> None:
         failures = shutdown_failures(None, "")
         self.assertTrue(any("status was not captured" in failure for failure in failures))
+
+
+class ReceiveExceptionTests(unittest.TestCase):
+    def test_receive_exception_fails_the_fixture(self) -> None:
+        line = "[ERROR] OnTick: SocketsReceive threw"
+        failures = receive_exception_failures(line)
+        self.assertEqual(len(failures), 1)
+        self.assertIn(line, failures[0])
+
+    def test_clean_receive_log_passes(self) -> None:
+        self.assertEqual(receive_exception_failures("packet rejected\n"), [])
 
 
 class NewbieLoadFailuresTests(unittest.TestCase):

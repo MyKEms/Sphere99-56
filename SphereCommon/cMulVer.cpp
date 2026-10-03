@@ -125,7 +125,7 @@ CMulItemInfo::CMulItemInfo( ITEMID_TYPE id )
 		throw CGException(LOGL_CRIT, CGFile::GetLastError(), "CTileItemType.ReadInfo: TileData Seek");
 	}
 
-	if ( g_MulInstall.m_File[filedata].Read( STATIC_CAST(CUOItemTypeRec,this), sizeof(CUOItemTypeRec)) <= 0 )
+	if ( g_MulInstall.m_File[filedata].Read( STATIC_CAST(CUOItemTypeRec,this), sizeof(CUOItemTypeRec)) != sizeof(CUOItemTypeRec) )
 	{
 		throw CGException(LOGL_CRIT, CGFile::GetLastError(), "CTileItemType.ReadInfo: TileData Read");
 	}
