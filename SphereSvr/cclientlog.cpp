@@ -7,6 +7,7 @@
 
 #include "stdafx.h"	// predef header.
 #include "spherelog.h"
+#include "httpaccess.h"
 
 BYTE CClient::sm_xCompress_Buffer[UO_MAX_EVENT_BUFFER];	// static
 CCompressTree CClient::sm_xComp;
@@ -999,6 +1000,11 @@ bool CClient::OnRxUnk( BYTE* pData, int iLen ) // Receive message from client
 		if ( ! memcmp( pData, "POST /", 6 ) ||
 			! memcmp( pData, "GET /", 5 ))
 		{
+			// HTTP is a local administrative surface.  Reject remote peers
+			// before selecting the HTTP connection type or evaluating a page.
+			if ( !IsHTTPPeerLocal( m_Socket.GetPeerName() ))
+				return( false );
+
 			m_ConnectType = CONNECT_HTTP;	// we are serving web pages to this client.
 
 			if ( ! CheckLogIP())
