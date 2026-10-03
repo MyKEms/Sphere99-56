@@ -1028,6 +1028,31 @@ public:
 				LPCTSTR pszValue = pszComma + 1;
 				while ( *pszValue == ' ' || *pszValue == '\t' )
 					pszValue++;
+				// ARG values use the same quoted-string form as the stock
+				// function syntax.  Keep the contents as the local value rather
+				// than carrying the delimiters into the next expansion.  This is
+				// observable when a function grows a value in a loop, such as
+				// fixNumber's character-class pattern.
+				TCHAR szValue[SCRIPT_MAX_LINE_LEN];
+				strncpy(szValue, pszValue, sizeof(szValue) - 1);
+				szValue[sizeof(szValue) - 1] = '\0';
+				size_t iValueLen = strlen(szValue);
+				if ( iValueLen >= 2 && szValue[0] == '"' &&
+					szValue[iValueLen - 1] == '"' )
+				{
+					szValue[iValueLen - 1] = '\0';
+					memmove(szValue, szValue + 1, iValueLen - 1);
+					TCHAR* pRead = szValue;
+					TCHAR* pWrite = szValue;
+					while ( *pRead )
+					{
+						if ( pRead[0] == '\\' && pRead[1] == '"' )
+							pRead++;
+						*pWrite++ = *pRead++;
+					}
+					*pWrite = '\0';
+					pszValue = szValue;
+				}
 				if ( *pszValue == '#' )
 				{
 					// Sphere's # prefix means "the current value". Evaluate the
