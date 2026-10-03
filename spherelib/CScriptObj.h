@@ -49,8 +49,8 @@ public:
 	}
 	virtual CGString GetName() const { return CGString(); }
 	// Scalar spelling used when a reference is expanded without a dotted
-	// property. Resource definitions override this with their DEFNAME while
-	// GetName() remains the display name exposed by .NAME.
+	// property. Only reference types with a script-defined scalar spelling
+	// override this; ordinary world objects retain the historical empty value.
 	virtual CGString GetScriptRefName() const { return CGString(); }
 	// World objects override this with the generation of their UID slot.  The
 	// default keeps resource and non-world references generation-neutral.
