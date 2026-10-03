@@ -29,6 +29,39 @@
 #pragma pop_macro("max")
 #pragma pop_macro("min")
 
+static bool IsSafeAssignment(LPCTSTR pszText)
+{
+	if ( pszText == NULL || *pszText == '\0' )
+		return false;
+	int iDepth = 0;
+	bool fQuoted = false;
+	for ( const TCHAR* p = pszText; *p; ++p )
+	{
+		if ( *p == '"' && (p == pszText || p[-1] != '\\') )
+		{
+			fQuoted = !fQuoted;
+			continue;
+		}
+		if ( fQuoted )
+			continue;
+		if ( *p == '(' )
+		{
+			++iDepth;
+			continue;
+		}
+		if ( *p == ')' )
+		{
+			if ( iDepth > 0 )
+				--iDepth;
+			continue;
+		}
+		if ( *p == '=' && iDepth == 0 && p[1] != '=' &&
+			(p == pszText || p[-1] != '=') )
+			return true;
+	}
+	return false;
+}
+
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
 // DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values.
@@ -1359,6 +1392,16 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
 			try
 			{
+				// 0.99 also uses SAFE as a statement wrapper around a
+				// property assignment (for example safe(profession=class_mag)).
+				// EvaluateEscapeValue only reads expressions, so this form was
+				// silently discarded.  Execute the narrow assignment form through
+				// the normal setter path while retaining SAFE's error suppression.
+				if ( IsSafeAssignment(pszStr) )
+				{
+					vValRet.SetInt( ExecuteCommand(pszStr) == NO_ERROR ? 1 : 0 );
+					break;
+				}
 				// Use the normal expression resolver so function roots with a
 				// dotted suffix (for example FINDUID(uid).ISCHAR) keep their
 				// balanced arguments and object chain.  Splitting at the first

@@ -95,6 +95,7 @@ public:
 	CResourceDef(CSphereUID rid);
 	CResourceDef(CSphereUID rid, LPCTSTR pszName) : CResourceObj(rid.GetHashCode()), m_rid(rid) { SetResourceName(pszName); }
 	LPCTSTR GetResourceName() const { return m_sName; }
+	CGString GetScriptRefName() const override { return GetResourceName(); }
 	void SetResourceName(LPCTSTR pszName) { if (pszName) m_sName = pszName; }
 	void SetResourceVar(const void* pVarNum) { /* STUB */ }
 
