@@ -221,7 +221,13 @@ def run_probe(port: int) -> list[str]:
 
         # Repeat the ordinary-player check while the other character is in
         # GM1 mode.  GM state must remain attached to the GM character.
-        player_walk = _walk(player_sock, 0, 7) + _walk(player_sock, 0, 8)
+        player_free_walk = _walk(player_sock, 6, 7)
+        if 0x22 not in [packet.command for packet in player_free_walk]:
+            failures.append(
+                "plain player ordinary walk changed while another character was in GM1: "
+                f"expected acknowledgement, packets={[hex(packet.command) for packet in player_free_walk]!r}"
+            )
+        player_walk = _walk(player_sock, 0, 8) + _walk(player_sock, 0, 9)
         player_commands = [packet.command for packet in player_walk]
         if 0x21 not in player_commands:
             failures.append(
