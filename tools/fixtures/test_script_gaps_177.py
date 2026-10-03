@@ -22,6 +22,7 @@ EXPECTED = {
     "act_after": ("131", "131", "0"),
     "uid_name": ("synthetic container",),
     "uid_tag": ("177",),
+    "uid_tag_method": ("177",),
     "flags": ("0", "1"),
 }
 
