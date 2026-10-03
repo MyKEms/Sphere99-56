@@ -2478,6 +2478,13 @@ LPCTSTR const CItem::sm_szAttrNames[] =	// static desc ATTR_TYPE bits.
 
 HRESULT CItem::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc )
 {
+	// P_Z (and its P_X/P_Y siblings) are inherited object properties.  The
+	// prefix lookup used by the item table would otherwise treat P_Z as the
+	// shorter P point property and return the complete point string.
+	if ( pszKey && ( !_stricmp(pszKey, "P_X") || !_stricmp(pszKey, "P_Y") ||
+		!_stricmp(pszKey, "P_Z") || !_stricmp(pszKey, "Z") ) )
+		return CObjBase::s_PropGet( pszKey, vValRet, pSrc );
+
 	// A bare FOOD read inside an item trigger uses the source character's
 	// hunger stat in the 0.99 script language.  The item remains the default
 	// object, so resolve this compatibility alias before item properties.

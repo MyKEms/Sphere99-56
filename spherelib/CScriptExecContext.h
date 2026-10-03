@@ -606,7 +606,13 @@ protected:
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
-		if ( dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL )
+		// A bare ACT reference is text-serialised by 0.99 when an item trigger
+		// is reflected to the character.  Keep the assignment-specific flag for
+		// other object roots, but preserve this trigger value in ordinary text
+		// and function arguments as well.
+		bool fSerializeRef = (dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL) != 0 ||
+			(pszExpr != NULL && !_stricmp(pszExpr, "ACT"));
+		if ( fSerializeRef )
 		{
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
 			{
