@@ -965,6 +965,97 @@ void CSphereExpContext::InitFunctions()	// static
 	sm_FunctionsAll.AddProps( sm_Functions );
 }
 
+static bool IsFunctionArgArithmetic( LPCTSTR pszArg )
+{
+	// Numbers, + - * / %, parentheses and spaces, with at least one operator.
+	// A leading zero starts a hex literal, as in every 0.99 expression.
+	bool fDigit = false;
+	bool fOperator = false;
+	const unsigned char* p = reinterpret_cast<const unsigned char*>(pszArg);
+	while ( *p )
+	{
+		if ( isdigit(*p) )
+		{
+			const bool fHex = ( *p == '0' );
+			fDigit = true;
+			p++;
+			while ( isdigit(*p) || ( fHex && ( isxdigit(*p) || *p == 'x' || *p == 'X' )))
+				p++;
+			continue;
+		}
+		if ( strchr( "+-*/%", *p ))
+			fOperator = true;
+		else if ( ! ISWHITESPACE(*p) && *p != '(' && *p != ')' )
+			return false;
+		p++;
+	}
+	return fDigit && fOperator;
+}
+
+void CSphereExpContext::EvaluateFunctionArgs( CGVariant& vArgs )
+{
+	// Stock 0.99 hands a script function each comma-separated argument that
+	// is pure arithmetic as its decimal value: F((100/10)-1) sees ARGS "9"
+	// and F(1,2+3) sees "1,5".  Literals ("010", "-7"), quoted text,
+	// comparisons and anything naming a value reach the function as written.
+	LPCTSTR pszArgs = vArgs.GetPSTR();
+	if ( pszArgs == NULL || strpbrk( pszArgs, "+-*/%" ) == NULL )
+		return;
+
+	TCHAR szOut[SCRIPT_MAX_LINE_LEN];
+	size_t iOut = 0;
+	bool fChanged = false;
+	bool fQuote = false;
+	int iDepth = 0;
+	LPCTSTR pszStart = pszArgs;
+	for ( LPCTSTR p = pszArgs; ; p++ )
+	{
+		if ( *p == '"' )
+			fQuote = ! fQuote;
+		else if ( ! fQuote && *p == '(' )
+			iDepth++;
+		else if ( ! fQuote && *p == ')' && iDepth > 0 )
+			iDepth--;
+		if ( *p != '\0' && ( *p != ',' || fQuote || iDepth > 0 ))
+			continue;
+
+		TCHAR szArg[SCRIPT_MAX_LINE_LEN];
+		const size_t iLen = p - pszStart;
+		if ( iLen + 3 >= sizeof(szArg))
+			return;
+		memcpy( szArg, pszStart, iLen );
+		szArg[iLen] = '\0';
+
+		TCHAR szValue[SCRIPT_MAX_LINE_LEN];
+		LPCTSTR pszValue = szArg;
+		if ( IsFunctionArgArithmetic( szArg ))
+		{
+			// Parenthesize so that spaces between the terms stay part of
+			// the expression, as they do inside a stock argument list.
+			TCHAR szExpr[SCRIPT_MAX_LINE_LEN];
+			snprintf( szExpr, sizeof(szExpr), "(%s)", szArg );
+			snprintf( szValue, sizeof(szValue), "%d", GetComplex( szExpr ));
+			pszValue = szValue;
+			fChanged = true;
+		}
+
+		const size_t iValueLen = strlen( pszValue );
+		if ( iOut + iValueLen + 2 >= sizeof(szOut))
+			return;
+		if ( pszStart != pszArgs )
+			szOut[iOut++] = ',';
+		memcpy( szOut + iOut, pszValue, iValueLen );
+		iOut += iValueLen;
+		szOut[iOut] = '\0';
+
+		if ( *p == '\0' )
+			break;
+		pszStart = p + 1;
+	}
+	if ( fChanged )
+		vArgs.SetStr( szOut );
+}
+
 HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet )
 {
 	// LASTNEW is exposed by CWorld rather than the generated function table.
@@ -1110,7 +1201,9 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if (pFunctionLink)
 				ScriptExecutionCoverageHit(pFunctionLink->GetScriptCoverageToken());
 			// create a new sub-context with new args.
-			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs,
+			CGVariant vCallArgs( vArgs );
+			EvaluateFunctionArgs( vCallArgs );
+			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vCallArgs,
 				!m_fSpaceSeparatedFunctionArgs );
 			exec.SetSourceObject(GetSourceObject());
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );

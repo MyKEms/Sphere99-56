@@ -242,6 +242,7 @@ protected:
 	virtual bool IsScriptFunction(LPCTSTR pszKey);
 	virtual bool ValidateUIDReference(const CGVariant& value, CResourceObj* pObj,
 		LPCTSTR pszProperty);
+	void EvaluateFunctionArgs( CGVariant& vArgs );
 
 public:
 	CSphereExpContext( CResourceObj* pBaseObj, CScriptConsole* pSrc );
