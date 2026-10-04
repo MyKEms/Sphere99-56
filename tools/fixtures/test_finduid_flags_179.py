@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check hash-serial FINDUID lookup and the character freeze/stone flags."""
+"""Check hash-serial FINDUID, reference-valued function arguments, and flags."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ ROW_RE = re.compile(
 EXPECTED = {
     "hash_name": ("synthetic hash target",),
     "hex_name": ("synthetic hash target",),
+    "arg_value": ("040000004", "synthetic hash target"),
+    "cont_name": ("synthetic hash target",),
     "flags_before": ("0", "0", "0"),
     "flags_after": ("1", "1", "1"),
     "flags_reset": ("0", "0", "0"),
