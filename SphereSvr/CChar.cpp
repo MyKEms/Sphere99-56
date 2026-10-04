@@ -1128,6 +1128,12 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	case P_Flag_Invul:
 		vValRet.SetBool( IsStatFlag( STATF_INVUL ));
 		break;
+	case P_Flag_Freeze:
+		vValRet.SetBool( IsStatFlag( STATF_Freeze ));
+		break;
+	case P_Flag_Stone:
+		vValRet.SetBool( IsStatFlag( STATF_Stone ));
+		break;
 	case P_Font:
 		vValRet.SetInt( m_fonttype );
 		break;
@@ -1265,6 +1271,31 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_Flag_Invul:
 		StatFlag_Mod( STATF_INVUL, vVal.GetBool());
+		break;
+	case P_Flag_Freeze:
+		StatFlag_Mod( STATF_Freeze, vVal.GetBool());
+		break;
+	case P_Flag_Stone:
+		{
+			bool fSet;
+			bool fChange = IsStatFlag(STATF_Stone);
+			if ( vVal.IsEmpty())
+			{
+				fSet = ! fChange;
+				fChange = true;
+			}
+			else
+			{
+				fSet = vVal.GetBool();
+				fChange = ( fSet != fChange );
+			}
+			StatFlag_Mod(STATF_Stone, fSet);
+			if ( fChange )
+			{
+				RemoveFromView();
+				Update();
+			}
+		}
 		break;
 	case P_Font:
 		m_fonttype = (FONT_TYPE) vVal.GetInt();
