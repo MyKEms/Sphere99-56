@@ -714,16 +714,6 @@ public:
 		iValue = 0;
 		if ( m_pBaseObj == NULL )
 			return false;
-		// Bare script functions stay on the legacy numeric path: resolving one
-		// here would execute a zero-argument function merely because it appears
-		// in a condition. Object getters and methods such as ISPLAYER still
-		// need the reference evaluator, however; level-up scripts use those
-		// bare object predicates inside their guards.
-		if ( strchr(pszOperand, '.') == NULL && strchr(pszOperand, '(') == NULL &&
-			m_LocalArgs.FindKeyPtr(pszOperand) == NULL &&
-			IsScriptFunction(pszOperand) )
-			return false;
-
 		CGVariant vValue;
 		CScriptUnknownRejectTracker rejected;
 		bool fChainResolved = false;
