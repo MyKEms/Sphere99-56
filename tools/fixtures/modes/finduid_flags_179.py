@@ -100,8 +100,8 @@ MODE = register_mode(
     FixtureMode(
         name="finduid-flags-179",
         fixture_args=(),
-        order=156,
-        id_block=101,
+        order=157,
+        id_block=102,
         case=FixtureCase(
             name="finduid-flags-179",
             mode="finduid-flags-179",
