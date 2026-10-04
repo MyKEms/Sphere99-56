@@ -660,6 +660,13 @@ protected:
 					sResult = vSerial.GetPSTR();
 					return true;
 				}
+				// Some live object classes expose UID/SERIAL only through the
+				// reference chain, while still being valid assignment targets.
+				// Preserve the same 0.99 serial spelling directly from the live
+				// object instead of falling back to its display name (which is
+				// often empty for CItem).
+				sResult.Format("0%x", (DWORD)pObj->GetUIDIndex());
+				return true;
 			}
 		}
 		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
@@ -679,6 +686,36 @@ protected:
 	{
 		return IsContainerAssignmentKey(pszKey) ||
 			(pszKey != NULL && !_stricmp(pszKey, "SRC"));
+	}
+
+	// A method call can carry an object assignment inside its argument list,
+	// for example FINDUID(pack).CONTENTS(CONT=<FINDUID(dest)>).  Preserve the
+	// live reference's serial while expanding that call; ordinary text
+	// expansion would use the object's display spelling, which cannot be
+	// resolved by the CONT setter.
+	static bool HasContainerAssignmentArgument(LPCTSTR pszKey)
+	{
+		for ( LPCTSTR p = pszKey; p && *p; p++ )
+		{
+			if ( _strnicmp(p, "CONT", 4) )
+				continue;
+			LPCTSTR q = p + 4;
+			while ( ISWHITESPACE(*q) ) q++;
+			if ( *q == '=' )
+				return true;
+		}
+		return false;
+	}
+
+	static bool HasContentsCall(LPCTSTR pszKey)
+	{
+		for ( LPCTSTR p = pszKey; p && *p; p++ )
+		{
+			if ( !_strnicmp(p, "CONTENTS", 8) &&
+				(p[8] == '\0' || p[8] == '(') )
+				return true;
+		}
+		return false;
 	}
 
 	static bool HasFindObjectSegment(LPCTSTR pszKey)
@@ -2573,7 +2610,9 @@ public:
 						// splits the statement; the ordinary key path intentionally
 						// renders object references as display text.
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
-							!_strnicmp(szKey, "TAG(", 4))
+							!_strnicmp(szKey, "TAG(", 4) ||
+							HasContainerAssignmentArgument(szKey) ||
+							HasContentsCall(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )
@@ -2583,7 +2622,8 @@ public:
 					{
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
-							(fKeyEquals && IsObjectAssignmentKey(szKey)))
+						(fKeyEquals && (IsObjectAssignmentKey(szKey) ||
+							HasContainerAssignmentArgument(szKey) || HasContentsCall(szKey))))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
