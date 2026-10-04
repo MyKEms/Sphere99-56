@@ -2567,13 +2567,25 @@ public:
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
 					{
-						// A function-style ARG statement may receive a live object
-						// reference (for example ARG(gata,<LASTNEW>)).  Expand its
+						// A dotted script-function call may receive a live object
+						// reference (for example LASTNEW.LOGCONT(<SRC>)).  Expand its
 						// key with the serial-preserving flag before ExecuteCommand
-						// splits the statement; the ordinary key path intentionally
-						// renders object references as display text.
+						// splits the statement; ordinary command and property paths
+						// intentionally render object references as display text.
+						bool fScriptCall = false;
+						TCHAR szCallKey[SCRIPT_MAX_LINE_LEN];
+						strncpy(szCallKey, szKey, sizeof(szCallKey) - 1);
+						szCallKey[sizeof(szCallKey) - 1] = '\0';
+						TCHAR* pszCallArgs = NULL;
+						if ( SplitCallStatement(szCallKey, pszCallArgs) )
+						{
+							LPCTSTR pszCallFunction = strrchr(szCallKey, '.');
+							pszCallFunction = pszCallFunction ? pszCallFunction + 1 : szCallKey;
+							fScriptCall = strchr(szCallKey, '.') != NULL &&
+								IsScriptFunction(pszCallFunction);
+						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
-							!_strnicmp(szKey, "TAG(", 4))
+							!_strnicmp(szKey, "TAG(", 4) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )

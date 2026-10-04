@@ -35,7 +35,9 @@ TYPE=T_CONTAINER
 ON=@LogIn
 SYSMESSAGE {MARKER} hash_name|[<FINDUID(#00000004).NAME>]
 SYSMESSAGE {MARKER} hex_name|[<FINDUID(0x00000004).NAME>]
-f_cont_fixture <FINDUID(#00000004)>
+NEWITEM 0x{ITEM_ROOT_ID:04X}
+LASTNEW.NAME=synthetic hash call root
+LASTNEW.f_cont_fixture(<FINDUID(#00000004)>)
 SYSMESSAGE {MARKER} flags_before|[<FLAG_FREEZE>]|[<FLAG_STONE>]|[<STONE>]
 FLAG_FREEZE=1
 FLAG_STONE=1
@@ -50,11 +52,11 @@ RETURN 0
 
 [FUNCTION f_cont_fixture]
 ARG(moveto,<FINDUID(args)>)
-SYSMESSAGE {MARKER} arg_value|[<ARG(moveto)>]|[<ARG(moveto).NAME>]
+SRC.SYSMESSAGE {MARKER} arg_value|[<ARG(moveto)>]|[<ARG(moveto).NAME>]
 NEWITEM 0x{ITEM_ROOT_ID:04X}
 LASTNEW.NAME=synthetic hash child
 LASTNEW.CONT=<ARG(moveto)>
-SYSMESSAGE {MARKER} cont_name|[<LASTNEW.CONT.NAME>]
+SRC.SYSMESSAGE {MARKER} cont_name|[<LASTNEW.CONT.NAME>]
 RETURN 0
 """
     tables.write_text(table_text, encoding="ascii")
