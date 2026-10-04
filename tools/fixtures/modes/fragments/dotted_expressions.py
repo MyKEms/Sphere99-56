@@ -181,8 +181,8 @@ DOTTED_CONDITION_ROWS = (
     # STR is both a real property and a fixture DEFNAME.  The historical
     # DEFNAME lookup wins, as it did before the bare-reference change.
     ("cond_property_defname", "(str)"),
-    # A bare declared function stays on the legacy numeric path: its body is
-    # not executed while reading a condition.  An unknown name remains zero.
+    # A bare declared function is evaluated as a zero-argument predicate; an
+    # unknown name remains zero.
     ("cond_bare_function", "(f_dotted_bare_probe)"),
     ("cond_unknown_bare", "(dotted_missing_name)"),
     ("cond_findlayer", "(src.findlayer(30))"),
