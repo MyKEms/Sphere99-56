@@ -1532,7 +1532,12 @@ public:
 
 		for ( int i = 0; pszBuf[i]; i++ )
 		{
-			if ( pszBuf[i] != chBegin )
+			// ``<?...?>`` is Sphere's deferred expression form.  Dialog TEXT
+			// uses the HTML escape mode so literal tags such as <BASEFONT>
+			// remain untouched, but deferred expressions must still be
+			// evaluated in that mode at send time.
+			bool fDeferredMacro = pszBuf[i] == '<' && pszBuf[i+1] == '?';
+			if ( pszBuf[i] != chBegin && !fDeferredMacro )
 				continue;
 
 			// Handle <?...?> expression macros — alternative delimiters for nesting.
