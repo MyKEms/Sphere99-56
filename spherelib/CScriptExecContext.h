@@ -2591,9 +2591,13 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
+						// Script functions receive reference-valued arguments as UID text,
+						// so ARG()/CONT chains keep the referenced object instead of an
+						// empty scalar.
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
-							(fKeyEquals && IsObjectAssignmentKey(szKey)))
+							(fKeyEquals && IsObjectAssignmentKey(szKey)) ||
+							IsScriptFunction(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );
