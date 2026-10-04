@@ -33,7 +33,8 @@ text 60 20 0 0
 ON={BUTTON_ID}
 SRC.STR=123
 SRC.DEX=77
-SRC.INT=88
+# INTEL is the legacy spelling used by shipped script handlers.
+SRC.INTEL=88
 SRC.SYSMESSAGE {MARKER}|{BUTTON_ID}|<SRC.STR>|<SRC.DEX>|<SRC.INT>
 """
 
