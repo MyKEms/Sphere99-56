@@ -133,6 +133,15 @@ protected:
 		return false;
 	}
 
+	// Concrete contexts can preserve the reference spelling of a resource
+	// returned by a SAFE expression macro. Generic contexts keep the scalar.
+	virtual bool FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
+	{
+		(void)pszExpr;
+		(void)sResult;
+		return false;
+	}
+
 	virtual const CScript* GetLineExpansionScript() const
 	{
 		return m_pCurrentScript;
@@ -192,16 +201,14 @@ protected:
 			// must resolve through the world table before dotted properties run.
 			if ( fHashUID || fUIDRoot )
 				pObj = ResolveUIDObject(uidValue);
-			// Numeric definition names still resolve through the resource table.
-			// Keep that legacy path for ordinary DEFNAME roots while leaving a
-			// missing hash UID as its original scalar/literal token.
 			if ( pObj == NULL && !fHashUID )
 				pObj = ResolveResourceObject(uidValue);
 		}
 		return pObj;
 	}
 
-	bool ResolveDottedFunctionResult(LPCTSTR pszKey, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected)
+	bool ResolveDottedFunctionResult(LPCTSTR pszKey, CGVariant& vValRet,
+		CScriptUnknownRejectTracker& rejected)
 	{
 		LPCTSTR pszDot = strchr(pszKey, '.');
 		if ( pszDot == NULL || pszDot == pszKey || pszDot[1] == '\0' )
@@ -266,7 +273,8 @@ protected:
 	// not evaluate the same expression a second time through another path.
 	// Expressions with top-level whitespace ("EVAL 1.5", "STRLEN a.b") are
 	// function calls with arguments, not chains, and are left to the caller.
-	bool ResolveDottedChain(LPCTSTR pszExpr, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected, bool& fEffect)
+	bool ResolveDottedChain(LPCTSTR pszExpr, CGVariant& vValRet,
+		CScriptUnknownRejectTracker& rejected, bool& fEffect)
 	{
 		fEffect = false;
 
@@ -348,7 +356,8 @@ protected:
 				return false;
 		}
 
-		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
+		CResourceObj* pCurrent = ResolveObjectResult(vCurrent,
+			fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
 			// A failed NEWITEM leaves LASTNEW empty.  Stock still recognizes
@@ -455,7 +464,8 @@ protected:
 				return true;
 			}
 
-			pCurrent = ResolveObjectResult(vNext, fFromFunction ? szName : NULL);
+			pCurrent = ResolveObjectResult(vNext,
+				fFromFunction ? szName : NULL);
 			if ( pCurrent == NULL )
 			{
 				// An intermediate lookup that found nothing (for example
@@ -475,7 +485,8 @@ protected:
 	// and without a SAFE prefix).  Returns true and sets vResult when the
 	// expression resolved; pfChainResolved reports whether the reference
 	// chain walker produced the value.
-	bool EvaluateEscapeValue(LPCTSTR pszExpr, CGVariant& vResult, CScriptUnknownRejectTracker& rejected, bool* pfChainResolved = NULL)
+	bool EvaluateEscapeValue(LPCTSTR pszExpr, CGVariant& vResult,
+		CScriptUnknownRejectTracker& rejected, bool* pfChainResolved = NULL)
 	{
 		if ( pfChainResolved )
 			*pfChainResolved = false;
@@ -1484,6 +1495,9 @@ public:
 					}
 				}
 
+				if ( fSafe )
+					FormatSafeReference(pszExpr, sResult);
+
 				// Replace <?...?> with result, shifting buffer.
 				int iExprLen = iEnd - iBegin + 1;
 				int iResultLen = sResult.GetLength();
@@ -1593,6 +1607,9 @@ public:
 					continue;
 				}
 			}
+
+			if ( fSafe )
+				FormatSafeReference(pszExpr, sResult);
 
 			// Replace <expr> with the resolved value, shifting the buffer.
 			int iExprLen = iEnd - iBegin + 1; // includes < and >

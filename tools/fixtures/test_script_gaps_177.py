@@ -23,6 +23,12 @@ EXPECTED = {
     "uid_name": ("synthetic container",),
     "uid_tag": ("177",),
     "uid_tag_method": ("177",),
+    "safe_missing": ("",),
+    "safe_item": (),
+    "safe_hash": ("#40000004",),
+    "safe_hash_name": ("synthetic container",),
+    "safe_dynamic_item": (),
+    "safe_dynamic_missing": ("",),
     "flags": ("0", "1"),
 }
 
@@ -110,6 +116,14 @@ def main() -> int:
             rows[match.group(1)] = values
     for key, expected in EXPECTED.items():
         value = rows.get(key)
+        if key == "safe_item":
+            if value is None or len(value) != 1 or not re.fullmatch(r"#[0-9a-fA-F]+", value[0]):
+                failures.append(f"{key}: got {value!r}; expected a hash resource reference")
+            continue
+        if key == "safe_dynamic_item":
+            if value is None or len(value) != 1 or not re.fullmatch(r"#[0-9a-fA-F]+", value[0]):
+                failures.append(f"{key}: got {value!r}; expected a hash resource reference")
+            continue
         if value != expected:
             failures.append(f"{key}: got {value!r}; expected {expected!r}")
     if f"{MARKER}_END" not in messages:
