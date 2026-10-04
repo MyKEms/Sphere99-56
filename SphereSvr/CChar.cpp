@@ -975,6 +975,13 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	// ARGS:
 	//  vValRet = return the value here.
 
+	// P_Z (and its P_X/P_Y siblings) are inherited object properties.  The
+	// prefix lookup used by the character table would otherwise treat P_Z as
+	// the shorter P point property and return the complete point string.
+	if ( pszKey && ( !_stricmp(pszKey, "P_X") || !_stricmp(pszKey, "P_Y") ||
+		!_stricmp(pszKey, "P_Z") || !_stricmp(pszKey, "Z") ) )
+		return CObjBase::s_PropGet( pszKey, vValRet, pSrc );
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
@@ -1274,7 +1281,20 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		}
 		break;
 	case P_NPC:
-		return NPC_SetBrain( (NPCBRAIN_TYPE) vVal.GetInt());
+		{
+			// NPC brain values are commonly written as BRAIN_* defnames in
+			// character creation triggers.  Script property setters receive the
+			// raw variant, so resolve that name before treating it as an integer;
+			// otherwise the defname becomes zero and NPC_SetBrain rejects it.
+			int iBrain = vVal.GetInt();
+			if ( iBrain == NPCBRAIN_NONE && !vVal.IsEmpty() && !vVal.IsNumeric())
+			{
+				CVarDefPtr pBrain = g_Cfg.m_Const.FindKeyPtr( vVal.GetPSTR());
+				if ( pBrain )
+					iBrain = pBrain->GetValNum();
+			}
+			return NPC_SetBrain( (NPCBRAIN_TYPE) iBrain);
+		}
 	case P_OBody:
 		{
 			CREID_TYPE id = (CREID_TYPE) g_Cfg.ResourceGetIndexType( RES_CharDef, vVal.GetStr());
@@ -1527,8 +1547,27 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			}
 			else
 			{
-				vArgs.MakeArraySize();
-				vValRet = vArgs.GetArrayPSTR( (fFemale) ? 1 : 0 );
+				// The stock parser accepts both the historical comma form and
+				// ``<SEX male female>``.  CGVariant's normal array parser only
+				// splits commas, so preserve comma/quoted arguments and split the
+				// two bare words here.
+				LPCTSTR pszArgs = vArgs.GetPSTR();
+				const TCHAR* pSpace = pszArgs;
+				while ( *pSpace && !isspace( static_cast<unsigned char>(*pSpace)))
+					pSpace++;
+				if ( *pSpace && strchr( pszArgs, ',') == NULL )
+				{
+					CGString sFirst( pszArgs );
+					sFirst.SetAt( static_cast<int>(pSpace - pszArgs), '\0' );
+					while ( *pSpace && isspace( static_cast<unsigned char>(*pSpace)))
+						pSpace++;
+					vValRet = fFemale ? pSpace : (LPCTSTR) sFirst;
+				}
+				else
+				{
+					vArgs.MakeArraySize();
+					vValRet = vArgs.GetArrayPSTR( (fFemale) ? 1 : 0 );
+				}
 			}
 		}
 		break;

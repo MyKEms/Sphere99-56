@@ -90,6 +90,7 @@ CClient::CClient( SOCKET client ) :
 
 	m_Socket.Attach( client );
 	m_fDeleteQueued = false;
+	m_fGameStreamPrimed = false;
 	m_ConnectType = CONNECT_UNK;	// don't know what sort of connect this is yet.
 	m_Crypt.SetCryptVerEnum( g_Serv.m_ClientVersion.GetCryptVer() );
 	m_ProtoVer = m_Crypt;

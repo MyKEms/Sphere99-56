@@ -301,6 +301,10 @@ enum IT_TYPE		// double click type action.
 	IT_QTY,
 
 	IT_TRIGGER		= 1000,	// Create custom new script trigger types
+	// TYPEDEF values are resource indices and are not limited to a fixed
+	// enumerator list.  Keep the enum's declared range wide enough for any
+	// valid index so UBSan does not reject a saved script-defined item type.
+	IT_TYPE_CUSTOM_MAX	= 0x7fffffff,
 };
 
 // Script input is converted to IT_TYPE in several places.  Keep the enum
@@ -591,9 +595,9 @@ public:
 		// IT_CROPS	- is consumed and will regrow invis.
 		struct
 		{
-			ITEMID_TYPE m_idReset;	// tdata1= what will it be reset to regrow from ? 0=nothing
-			ITEMID_TYPE m_idGrow;	// tdata2= what will it grow further into ? 0=fully mature.
-			ITEMID_TYPE m_idFruit;	// tdata3= what can it be reaped for ? 0=immature can't be reaped
+			UID_INDEX m_idReset;		// tdata1= what will it be reset to regrow from ? 0=nothing
+			UID_INDEX m_idGrow;		// tdata2= what will it grow further into ? 0=fully mature.
+			UID_INDEX m_idFruit;		// tdata3= what can it be reaped for ? 0=immature can't be reaped
 		} m_ttCrops;
 
 		// IT_SEED

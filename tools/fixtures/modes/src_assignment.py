@@ -67,6 +67,14 @@ SRC=<ARGV(1)>
 SYSMESSAGE {MARKER} <ARGV(0)>_inside|[<SRC.NAME>]
 RETURN 1
 
+[FUNCTION F_SRC_ASSIGNMENT_DYNAMIC]
+ARG(skillname,STR)
+SYSMESSAGE {MARKER} dynamic_before|[<SRC.<ARG(skillname)>>]
+SRC.<ARG(skillname)>=111
+SYSMESSAGE {MARKER} dynamic_after|[<SRC.<ARG(skillname)>>]
+SRC.<ARG(skillname)>=100
+RETURN 1
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 VAR(src_target_uid,{TARGET_UID_LITERAL})
@@ -78,9 +86,14 @@ F_SRC_ASSIGNMENT(numeric,{UID_F_ITEM | TARGET_SERIAL})
 F_SRC_ASSIGNMENT(literal,{TARGET_UID_LITERAL})
 F_SRC_ASSIGNMENT(var,<VAR(src_target_uid)>)
 F_SRC_ASSIGNMENT(missing,<VAR(src_missing_uid)>)
+F_SRC_ASSIGNMENT_DYNAMIC()
 TAG(src_assignment_probe,tag-probe)
 SYSMESSAGE {MARKER} tag_probe|[<TAG.src_assignment_probe>]
+ACT={UID_F_ITEM | TARGET_SERIAL}
 TRIGGER @GetHit,1,tag-probe,{UID_F_ITEM | TARGET_SERIAL}
+SYSMESSAGE {MARKER} lastnew_before|[before]
+LASTNEW.COLOR=123
+SYSMESSAGE {MARKER} lastnew_missing|[reached]
 SYSMESSAGE {MARKER} caller_after|[<SRC.NAME>]
 SYSMESSAGE {MARKER}_END
 RETURN 0
@@ -100,6 +113,13 @@ LASTCHARUID={CHAR_SERIAL}
 CHARUID={CHAR_SERIAL}
 [EOF]
 """,
+        encoding="ascii",
+    )
+    sphere_ini = output / "sphere.ini"
+    sphere_ini.write_text(
+        sphere_ini.read_text(encoding="ascii").replace(
+            "[STARTS]\n", "UNKNOWNKEYWORDREPORT=logs/unknown-keywords.json\n\n[STARTS]\n", 1
+        ),
         encoding="ascii",
     )
     (output / "save" / "sphereworld.scp").write_text(
@@ -147,7 +167,7 @@ CONT={CHAR_SERIAL}
 MODE = register_mode(
     FixtureMode(
         name="src-assignment",
-        fixture_args=(),
+        fixture_args=("--unknown-keyword-report",),
         order=76,
         id_block=76,
         case=FixtureCase(

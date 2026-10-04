@@ -332,6 +332,14 @@ protected:
 		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
+			// A failed NEWITEM leaves LASTNEW empty.  Stock still recognizes
+			// dotted reads from that root and returns an empty value instead of
+			// reporting an unknown property.
+			if ( fRootFromFunction && IsLastNewRoot(szRoot) )
+			{
+				vValRet.SetStr("");
+				return true;
+			}
 			// A script function that returned no object (empty or a UID that
 			// does not resolve) reads as an empty value.  Other roots that
 			// yield no object are left to the caller, which keeps the
@@ -598,7 +606,13 @@ protected:
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
-		if ( dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL )
+		// A bare ACT reference is text-serialised by 0.99 when an item trigger
+		// is reflected to the character.  Keep the assignment-specific flag for
+		// other object roots, but preserve this trigger value in ordinary text
+		// and function arguments as well.
+		bool fSerializeRef = (dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL) != 0 ||
+			(pszExpr != NULL && !_stricmp(pszExpr, "ACT"));
+		if ( fSerializeRef )
 		{
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
 			{
@@ -640,6 +654,14 @@ protected:
 				return true;
 		}
 		return false;
+	}
+
+	static bool IsLastNewRoot(LPCTSTR pszRoot)
+	{
+		return pszRoot != NULL &&
+			(!_stricmp(pszRoot, "LASTNEW") ||
+			 !_stricmp(pszRoot, "LASTNEWITEM") ||
+			 !_stricmp(pszRoot, "LASTNEWCHAR"));
 	}
 
 public:
@@ -831,6 +853,94 @@ public:
 		return true;
 	}
 
+	// The packet has no TEXTA control.  Like HTMLGUMPa, TEXTA appends its
+	// inline value to the dialog text table and emits the ordinary control with
+	// the assigned text index.  Keep the parser shared between the legacy
+	// space-separated form and ARGO's comma-separated form.
+	static bool AddInlineTextGump(CGStringArray* pControls, CGStringArray* pTexts,
+		LPCTSTR pszKey, LPCTSTR pszArgs)
+	{
+		if ( pControls == NULL || pTexts == NULL || pszKey == NULL ||
+			_stricmp(pszKey, "texta") != 0 || pszArgs == NULL )
+			return false;
+
+		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
+		szArgs[sizeof(szArgs) - 1] = '\0';
+
+		TCHAR* ppArgs[4] = { NULL, NULL, NULL, NULL };
+		TCHAR* p = szArgs;
+		if ( strchr(szArgs, ',') != NULL )
+		{
+			// The first three fields are numeric.  The remainder is the inline
+			// text, so commas in that text must remain part of the value.
+			for ( int i = 0; i < 3; i++ )
+			{
+				ppArgs[i] = p;
+				TCHAR* pComma = strchr(p, ',');
+				if ( pComma == NULL )
+					return false;
+				*pComma = '\0';
+				p = pComma + 1;
+			}
+			ppArgs[3] = p;
+		}
+		else
+		{
+			for ( int i = 0; i < 3; i++ )
+			{
+				while ( ISWHITESPACE(*p) )
+					p++;
+				if ( *p == '\0' )
+					return false;
+				ppArgs[i] = p;
+				while ( *p && !ISWHITESPACE(*p) )
+					p++;
+				if ( *p )
+					*p++ = '\0';
+			}
+			while ( ISWHITESPACE(*p) )
+				p++;
+			if ( *p == '\0' )
+				return false;
+			ppArgs[3] = p;
+		}
+
+		for ( int i = 0; i < 4; i++ )
+		{
+			if ( ppArgs[i] == NULL )
+				return false;
+			while ( ISWHITESPACE(*ppArgs[i]) )
+				ppArgs[i]++;
+			TCHAR* pEnd = ppArgs[i] + strlen(ppArgs[i]);
+			while ( pEnd > ppArgs[i] && ISWHITESPACE(pEnd[-1]) )
+				*--pEnd = '\0';
+		}
+
+		TCHAR* pszText = ppArgs[3];
+		const size_t iTextLen = strlen(pszText);
+		if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+		{
+			pszText[iTextLen - 1] = '\0';
+			pszText++;
+		}
+		TCHAR* pRead = pszText;
+		TCHAR* pWrite = pszText;
+		while ( *pRead )
+		{
+			if ( pRead[0] == '\\' && pRead[1] == '"' )
+				pRead++;
+			*pWrite++ = *pRead++;
+		}
+		*pWrite = '\0';
+
+		const int iTextID = pTexts->GetSize();
+		pTexts->Add(pszText);
+		pControls->AddFormat("text %s %s %s %d",
+			ppArgs[0], ppArgs[1], ppArgs[2], iTextID);
+		return true;
+	}
+
 public:
 	static CScriptPropArray sm_FunctionsAll;
 
@@ -924,6 +1034,31 @@ public:
 				LPCTSTR pszValue = pszComma + 1;
 				while ( *pszValue == ' ' || *pszValue == '\t' )
 					pszValue++;
+				// ARG values use the same quoted-string form as the stock
+				// function syntax.  Keep the contents as the local value rather
+				// than carrying the delimiters into the next expansion.  This is
+				// observable when a function grows a value in a loop, such as
+				// fixNumber's character-class pattern.
+				TCHAR szValue[SCRIPT_MAX_LINE_LEN];
+				strncpy(szValue, pszValue, sizeof(szValue) - 1);
+				szValue[sizeof(szValue) - 1] = '\0';
+				size_t iValueLen = strlen(szValue);
+				if ( iValueLen >= 2 && szValue[0] == '"' &&
+					szValue[iValueLen - 1] == '"' )
+				{
+					szValue[iValueLen - 1] = '\0';
+					memmove(szValue, szValue + 1, iValueLen - 1);
+					TCHAR* pRead = szValue;
+					TCHAR* pWrite = szValue;
+					while ( *pRead )
+					{
+						if ( pRead[0] == '\\' && pRead[1] == '"' )
+							pRead++;
+						*pWrite++ = *pRead++;
+					}
+					*pWrite = '\0';
+					pszValue = szValue;
+				}
 				if ( *pszValue == '#' )
 				{
 					// Sphere's # prefix means "the current value". Evaluate the
@@ -1793,6 +1928,14 @@ public:
 				}
 
 				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
+				if ( hRoot == NO_ERROR && pRootObj == NULL &&
+					fRootFromFunction && IsLastNewRoot(szRootName) )
+				{
+					// A failed NEWITEM leaves LASTNEW empty.  Its dotted
+					// assignments are recognized by stock and intentionally do
+					// nothing, rather than becoming unknown script keys.
+					return NO_ERROR;
+				}
 				if ( hRoot == NO_ERROR && pRootObj )
 				{
 					HRESULT hRes;
@@ -1934,7 +2077,8 @@ public:
 				pGumpArgs = s_szGA;
 			}
 
-			if ( AddInlineHtmlGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) )
+			if ( AddInlineTextGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) ||
+				AddInlineHtmlGump(sm_pGumpControls, sm_pGumpTexts, szGumpKey, pGumpArgs) )
 				return NO_ERROR;
 
 			if ( IsGumpCommand(szGumpKey) )
@@ -2387,7 +2531,8 @@ public:
 						// key with the serial-preserving flag before ExecuteCommand
 						// splits the statement; the ordinary key path intentionally
 						// renders object references as display text.
-						DWORD dwKeyFlags = !_strnicmp(szKey, "ARG(", 4)
+						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
+							!_strnicmp(szKey, "TAG(", 4))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )
@@ -2395,7 +2540,9 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
-						DWORD dwArgFlags = (fKeyEquals && IsObjectAssignmentKey(szKey))
+						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
+							!_stricmp(szKey, "TAG") ||
+							(fKeyEquals && IsObjectAssignmentKey(szKey)))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );

@@ -264,7 +264,9 @@ private:
 
 		if ( CScriptExecContext::IsGumpCommand(szGumpKey) )
 		{
-			if ( CScriptExecContext::AddInlineHtmlGump(
+			if ( CScriptExecContext::AddInlineTextGump(
+				&m_asControls, &m_asText, szGumpKey, pGumpArgs ) ||
+				CScriptExecContext::AddInlineHtmlGump(
 				&m_asControls, &m_asText, szGumpKey, pGumpArgs ) )
 				return;
 

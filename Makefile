@@ -212,6 +212,12 @@ integrity-asan-test:
 		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_INTEGRITY_TEST" \
 		LDFLAGS="-fsanitize=address,undefined -lpthread" all
 
+plant-timer-asan-test:
+	$(MAKE) BUILD_DIR=build/asan-plant-timer TARGET=build/asan-plant-timer/plant_timer_test \
+		TEST_SRC=tools/load_safety_test.cpp \
+		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_LOAD_SAFETY_TEST -DSPHERE_PLANT_SENTINEL_ONLY" \
+		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+
 container-list-test:
 	@mkdir -p build/container-list
 	$(CXX) $(DEFAULT_CXXFLAGS) -I$(BASEDIR)/spherelib \
@@ -225,10 +231,22 @@ container-list-asan-test:
 		-o build/asan-container-list/container_list_test \
 		-fsanitize=address,undefined
 
+string-sort-array-test:
+	$(MAKE) BUILD_DIR=build/string-sort-array TARGET=build/string-sort-array/string_sort_array_test \
+		TEST_SRC=tools/string_sort_array_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_STRING_SORT_ARRAY_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
+string-sort-array-asan-test:
+	$(MAKE) BUILD_DIR=build/asan-string-sort-array TARGET=build/asan-string-sort-array/string_sort_array_test \
+		TEST_SRC=tools/string_sort_array_test.cpp \
+		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_STRING_SORT_ARRAY_TEST" \
+		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test container-list-test container-list-asan-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test plant-timer-asan-test container-list-test container-list-asan-test string-sort-array-test string-sort-array-asan-test clean

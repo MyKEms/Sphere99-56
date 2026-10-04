@@ -31,13 +31,35 @@
 
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
-// DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values
+// DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values.
+// Some legacy scripts define an alias before the target DEFNAME (for example
+// t_magic -> t_junk).  The loader stores that forward reference as a string;
+// follow a short identifier-only chain when it is evaluated later.
+static int ResolveDefName(LPCTSTR pszName, int iDepth)
+{
+	if ( pszName == NULL || pszName[0] == '\0' || iDepth >= 16 )
+		return 0;
+	CVarDef* pVar = g_Cfg.m_Const.FindKeyPtr(pszName);
+	if ( pVar == NULL )
+		return 0;
+	const int iValue = pVar->GetValNum();
+	if ( iValue != 0 )
+		return iValue;
+	LPCTSTR pszAlias = pVar->GetValStr();
+	if ( pszAlias == NULL || pszAlias[0] == '\0' || !_stricmp( pszAlias, pszName ))
+		return iValue;
+	for ( const unsigned char* p = reinterpret_cast<const unsigned char*>( pszAlias );
+		*p; ++p )
+	{
+		if ( !isalnum( *p ) && *p != '_' )
+			return iValue;
+	}
+	return ResolveDefName( pszAlias, iDepth + 1 );
+}
+
 static int ResolveDefName(LPCTSTR pszName)
 {
-	CVarDef* pVar = g_Cfg.m_Const.FindKeyPtr(pszName);
-	if (pVar)
-		return pVar->GetValNum();
-	return 0;
+	return ResolveDefName( pszName, 0 );
 }
 
 // Initialize the static member
@@ -965,6 +987,97 @@ void CSphereExpContext::InitFunctions()	// static
 	sm_FunctionsAll.AddProps( sm_Functions );
 }
 
+static bool IsFunctionArgArithmetic( LPCTSTR pszArg )
+{
+	// Numbers, + - * / %, parentheses and spaces, with at least one operator.
+	// A leading zero starts a hex literal, as in every 0.99 expression.
+	bool fDigit = false;
+	bool fOperator = false;
+	const unsigned char* p = reinterpret_cast<const unsigned char*>(pszArg);
+	while ( *p )
+	{
+		if ( isdigit(*p) )
+		{
+			const bool fHex = ( *p == '0' );
+			fDigit = true;
+			p++;
+			while ( isdigit(*p) || ( fHex && ( isxdigit(*p) || *p == 'x' || *p == 'X' )))
+				p++;
+			continue;
+		}
+		if ( strchr( "+-*/%", *p ))
+			fOperator = true;
+		else if ( ! ISWHITESPACE(*p) && *p != '(' && *p != ')' )
+			return false;
+		p++;
+	}
+	return fDigit && fOperator;
+}
+
+void CSphereExpContext::EvaluateFunctionArgs( CGVariant& vArgs )
+{
+	// Stock 0.99 hands a script function each comma-separated argument that
+	// is pure arithmetic as its decimal value: F((100/10)-1) sees ARGS "9"
+	// and F(1,2+3) sees "1,5".  Literals ("010", "-7"), quoted text,
+	// comparisons and anything naming a value reach the function as written.
+	LPCTSTR pszArgs = vArgs.GetPSTR();
+	if ( pszArgs == NULL || strpbrk( pszArgs, "+-*/%" ) == NULL )
+		return;
+
+	TCHAR szOut[SCRIPT_MAX_LINE_LEN];
+	size_t iOut = 0;
+	bool fChanged = false;
+	bool fQuote = false;
+	int iDepth = 0;
+	LPCTSTR pszStart = pszArgs;
+	for ( LPCTSTR p = pszArgs; ; p++ )
+	{
+		if ( *p == '"' )
+			fQuote = ! fQuote;
+		else if ( ! fQuote && *p == '(' )
+			iDepth++;
+		else if ( ! fQuote && *p == ')' && iDepth > 0 )
+			iDepth--;
+		if ( *p != '\0' && ( *p != ',' || fQuote || iDepth > 0 ))
+			continue;
+
+		TCHAR szArg[SCRIPT_MAX_LINE_LEN];
+		const size_t iLen = p - pszStart;
+		if ( iLen + 3 >= sizeof(szArg))
+			return;
+		memcpy( szArg, pszStart, iLen );
+		szArg[iLen] = '\0';
+
+		TCHAR szValue[SCRIPT_MAX_LINE_LEN];
+		LPCTSTR pszValue = szArg;
+		if ( IsFunctionArgArithmetic( szArg ))
+		{
+			// Parenthesize so that spaces between the terms stay part of
+			// the expression, as they do inside a stock argument list.
+			TCHAR szExpr[SCRIPT_MAX_LINE_LEN];
+			snprintf( szExpr, sizeof(szExpr), "(%s)", szArg );
+			snprintf( szValue, sizeof(szValue), "%d", GetComplex( szExpr ));
+			pszValue = szValue;
+			fChanged = true;
+		}
+
+		const size_t iValueLen = strlen( pszValue );
+		if ( iOut + iValueLen + 2 >= sizeof(szOut))
+			return;
+		if ( pszStart != pszArgs )
+			szOut[iOut++] = ',';
+		memcpy( szOut + iOut, pszValue, iValueLen );
+		iOut += iValueLen;
+		szOut[iOut] = '\0';
+
+		if ( *p == '\0' )
+			break;
+		pszStart = p + 1;
+	}
+	if ( fChanged )
+		vArgs.SetStr( szOut );
+}
+
 HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet )
 {
 	// LASTNEW is exposed by CWorld rather than the generated function table.
@@ -1110,7 +1223,9 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if (pFunctionLink)
 				ScriptExecutionCoverageHit(pFunctionLink->GetScriptCoverageToken());
 			// create a new sub-context with new args.
-			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vArgs,
+			CGVariant vCallArgs( vArgs );
+			EvaluateFunctionArgs( vCallArgs );
+			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vCallArgs,
 				!m_fSpaceSeparatedFunctionArgs );
 			exec.SetSourceObject(GetSourceObject());
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
@@ -1540,6 +1655,19 @@ CSphereExpArgs::CSphereExpArgs( CResourceObj* pBase, CScriptConsole* pSrc, LPCTS
 	CSphereExpContext(pBase,pSrc),
 	m_s1(pszStr)
 {
+	// ARGS is the unquoted text of a function's first string argument.  The
+	// legacy call form commonly supplies that value as "text"; retaining the
+	// delimiters here leaks them into helpers such as RACEMESSAGE().  ARGV
+	// already removes one surrounding pair, so keep ARGS consistent with it.
+	if ( pszStr )
+	{
+		const size_t iLength = strlen(pszStr);
+		if ( iLength >= 2 && pszStr[0] == '"' && pszStr[iLength - 1] == '"' )
+		{
+			m_s1.Copy(pszStr + 1);
+			m_s1.SetAt(static_cast<int>(iLength - 2), '\0');
+		}
+	}
 	// attempt to parse this.
 	if ( Exp_IsSimpleNumberString(pszStr))
 	{
@@ -1618,7 +1746,16 @@ HRESULT CSphereExpArgs::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, CGV
 	case F_ArgS1:
 		if ( m_s1.IsEmpty())
 		{
-			vValRet = m_vVal;
+			LPCTSTR pszValue = m_vVal.GetPSTR();
+			const size_t iLength = pszValue ? strlen(pszValue) : 0;
+			if ( iLength >= 2 && pszValue[0] == '"' && pszValue[iLength - 1] == '"' )
+			{
+				CGString sUnquoted(pszValue + 1);
+				sUnquoted.SetAt(static_cast<int>(iLength - 2), '\0');
+				vValRet = (LPCTSTR) sUnquoted;
+			}
+			else
+				vValRet = m_vVal;
 		}
 		else
 		{

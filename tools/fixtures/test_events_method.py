@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import socket
 import sys
@@ -149,13 +150,46 @@ def main() -> int:
         failures.append(f"EVENTS remove marker count: {len(remove_markers)}")
     elif EVENTS_METHOD_EVENT in remove_markers[0]:
         failures.append(f"EVENTS remove list still contained {EVENTS_METHOD_EVENT}")
+    property_remove_markers = [
+        message
+        for message in messages
+        if message.startswith(f"{EVENTS_METHOD_MARKER}_PROPERTY_REMOVE ")
+    ]
+    if len(property_remove_markers) != 1:
+        failures.append(
+            f"EVENTS property-remove marker count: {len(property_remove_markers)}"
+        )
+    elif EVENTS_METHOD_EVENT in property_remove_markers[0]:
+        failures.append(
+            f"EVENTS property-remove list still contained {EVENTS_METHOD_EVENT}"
+        )
+    rejected_events = [
+        line for line in log_contents.splitlines() if "rejected EVENTS" in line
+    ]
+    if rejected_events:
+        failures.append(f"EVENTS missing-remove was rejected: {rejected_events[0]}")
+    report_path = fixture / "logs" / "unknown-keywords.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        failures.append(f"unknown-keyword report unavailable: {error}")
+    else:
+        rejected = [
+            entry
+            for entry in report.get("entries", [])
+            if isinstance(entry, dict)
+            and entry.get("kind") == "rejected"
+            and entry.get("keyword") == "EVENTS"
+        ]
+        if rejected:
+            failures.append(f"unknown-keyword report rejected EVENTS: {rejected[0]}")
     end_marker = f"{EVENTS_METHOD_MARKER}_END"
     if messages.count(end_marker) != 1:
         failures.append(
             f"end marker count: {messages.count(end_marker)}"
         )
 
-    total = 5
+    total = 6
     if failures:
         print(
             f"EVENTS method probe failed: {max(0, total - len(failures))}/{total} checks passed",

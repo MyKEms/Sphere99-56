@@ -35,6 +35,11 @@ jobs:
           make container-list-test
           build/container-list/container_list_test
 
+      - name: Run string-sort-array regression
+        run: |
+          make string-sort-array-test
+          build/string-sort-array/string_sort_array_test
+
       - name: Reject non-trivial objects through C varargs
         run: |
           if grep -Eq 'passing objects of non-trivially-copyable type .* through' build.log; then
@@ -94,6 +99,14 @@ jobs:
           make container-list-asan-test
           build/asan-container-list/container_list_test
 
+      - name: Run string-sort-array regression under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make string-sort-array-asan-test
+          build/asan-string-sort-array/string_sort_array_test
+
       - name: Verify crash recovery is opt-in
         run: |
           if nm -a build/asan/sphere99svr | grep -Eq 'sig(long)?jmp|CrashHandler'; then
@@ -114,6 +127,14 @@ jobs:
           make integrity-asan-test
           build/asan-integrity/integrity_test 2>&1 | tee integrity-asan-test.log
           grep -q 'CRITICAL.*rule=parent_missing' integrity-asan-test.log
+
+      - name: Run plant timer sentinel under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make plant-timer-asan-test
+          build/asan-plant-timer/plant_timer_test
 
       - name: Upload ASan fixture server logs on failure
         if: failure()
