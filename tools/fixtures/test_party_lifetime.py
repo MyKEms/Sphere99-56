@@ -14,7 +14,6 @@ import argparse
 import socket
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -40,28 +39,6 @@ FLOOD_REFILL_WAIT = 2.5
 
 def make_ping() -> bytes:
     return b"\x73\x00"
-
-
-def send_pair(packets: tuple[tuple[socket.socket, bytes], tuple[socket.socket, bytes]]) -> None:
-    """Write both client queues before the next server poll can split them."""
-
-    barrier = threading.Barrier(len(packets))
-    errors: list[Exception] = []
-
-    def send_one(sock: socket.socket, packet: bytes) -> None:
-        try:
-            barrier.wait()
-            sock.sendall(packet)
-        except Exception as error:  # propagate socket and barrier failures
-            errors.append(error)
-
-    threads = [threading.Thread(target=send_one, args=packet) for packet in packets]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    if errors:
-        raise OSError(f"party packet pair send failed: {errors[0]}")
 
 
 def make_extdata(code: int, payload: bytes = b"") -> bytes:
@@ -266,17 +243,18 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                         # release the two packets in the same tick.
                         time.sleep(FLOOD_REFILL_WAIT)
                         padding = make_ping() * FLOOD_PADDING
-                        send_pair(
-                            (
-                                (master, padding + make_extdata(PARTYMSG_Disband)),
-                                (
-                                    member,
-                                    padding
-                                    + make_extdata(
-                                        PARTYMSG_Msg,
-                                        "party object survived".encode("utf-16-be") + b"\0\0",
-                                    ),
-                                ),
+                        # Send the disband first.  Concurrent writes made the
+                        # packet order scheduler-dependent on 32-bit CI: when
+                        # the member message won the race, it was handled while
+                        # the party still existed and the no-party callback
+                        # marker was never emitted.  Both queues remain padded
+                        # so the two packets stay in the same deferred window.
+                        master.sendall(padding + make_extdata(PARTYMSG_Disband))
+                        member.sendall(
+                            padding
+                            + make_extdata(
+                                PARTYMSG_Msg,
+                                "party object survived".encode("utf-16-be") + b"\0\0",
                             )
                         )
                         response = recv_until_party_code(member, PARTYMSG_Msg, timeout=10.0)

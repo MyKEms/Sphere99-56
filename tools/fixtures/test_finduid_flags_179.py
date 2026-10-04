@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Check FINDCONT enumeration and the FLAG_IMMOBILE character flag."""
+"""Check hash-serial FINDUID, reference-valued function arguments, and flags."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import socket
 import sys
@@ -12,24 +11,21 @@ import time
 from pathlib import Path
 
 from run_suite import shutdown_failures
+from modes.finduid_flags_179 import ACCOUNT, MARKER, PASSWORD
 
 
-ACCOUNT = "ScriptGapsProbe"
-PW = "script-gaps-pw"
-MARKER = "SPHERE_SCRIPT_GAPS"
-ROW_RE = re.compile(re.escape(MARKER) + r" ([a-z0-9_]+)(?:\|\[(.*)\]|)$")
+ROW_RE = re.compile(
+    re.escape(MARKER)
+    + r" ([a-z0-9_]+)\|\[(.*?)\](?:\|\[(.*?)\])?(?:\|\[(.*?)\])?$"
+)
 EXPECTED = {
-    "flag_initial": "0",
-    "flag_property": "1",
-    "flag_method": "0",
-    "find0": "synthetic gap child one",
-    "find1": "synthetic gap child two",
-    "find2": "",
-    "safe0": "0",
-    "trigger": "1",
-    "profession_ref": "FIXTURE_PROFESSION",
-    "profession_name": "Fixture Profession",
-    "profession_cmp": "1",
+    "hash_name": ("synthetic hash target",),
+    "hex_name": ("synthetic hash target",),
+    "arg_value": ("040000004", "synthetic hash target"),
+    "cont_name": ("synthetic hash target",),
+    "flags_before": ("0", "0", "0"),
+    "flags_after": ("1", "1", "1"),
+    "flags_reset": ("0", "0", "0"),
 }
 
 
@@ -50,7 +46,7 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=2880)
+    parser.add_argument("--port", type=int, default=2900)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
@@ -66,25 +62,21 @@ def main() -> int:
 
     def exercise() -> None:
         sock, _ = game_connect(
-            args.host,
-            args.port,
-            ACCOUNT,
-            PW,
-            game_port=args.port + 1000,
+            args.host, args.port, ACCOUNT, PASSWORD, game_port=args.port + 1000
         )
         if sock is None:
-            raise RuntimeError("script-gaps probe did not reach its character list")
+            raise RuntimeError("FINDUID flags account did not reach its character list")
         try:
             sock.sendall(make_char_play(0))
             data = recv_until_game_start(sock, timeout=30.0)
             if not data:
-                raise RuntimeError("script-gaps probe character did not enter the world")
+                raise RuntimeError("FINDUID flags character did not enter the world")
             buffer = bytearray(data)
             deadline = time.monotonic() + 12.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(buffer))
-                if f"{MARKER} find2|[]" in messages:
+                if f"{MARKER}_END" in messages:
                     return
                 try:
                     chunk = sock.recv(65536)
@@ -112,39 +104,29 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
 
-    rows: dict[str, str] = {}
+    rows: dict[str, tuple[str, ...]] = {}
     for message in messages:
         match = ROW_RE.fullmatch(message)
         if match:
-            rows[match.group(1)] = match.group(2) or ""
+            values = tuple(value or "" for value in match.groups()[1:] if value is not None)
+            rows[match.group(1)] = values
     for key, expected in EXPECTED.items():
-        if rows.get(key) != expected:
-            failures.append(f"{key}: expected {expected!r}, got {rows.get(key)!r}")
-    if f"{MARKER} setup" not in messages:
-        failures.append("setup marker missing")
+        value = rows.get(key)
+        if value != expected:
+            failures.append(f"{key}: got {value!r}; expected {expected!r}")
+    if f"{MARKER}_END" not in messages:
+        failures.append("FINDUID flags probe did not reach its end marker")
 
-    report_path = fixture / "logs" / "unknown-keywords.json"
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        failures.append(f"unknown-keyword report unavailable: {error}")
-    else:
-        unexpected = [
-            entry
-            for entry in report.get("entries", [])
-            if str(entry.get("keyword", "")).upper() in {"FINDCONT", "FLAG_IMMOBILE"}
-        ]
-        if unexpected:
-            failures.append(f"target keywords still reported unknown: {unexpected!r}")
-
-    total = len(EXPECTED) + 2
     if failures:
-        print(f"script-gaps probe failed: {max(0, total - len(failures))}/{total} checks passed", file=sys.stderr)
-        print(f"messages: {messages!r}", file=sys.stderr)
+        print("observed messages:", messages, file=sys.stderr)
+        print(
+            f"FINDUID flags probe failed: {max(0, len(EXPECTED) - len(failures))}/{len(EXPECTED)} rows passed",
+            file=sys.stderr,
+        )
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print(f"script-gaps probe passed: {total}/{total} checks")
+    print(f"FINDUID flags probe passed: {len(EXPECTED)}/{len(EXPECTED)} rows")
     return 0
 
 

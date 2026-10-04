@@ -176,6 +176,25 @@ static bool TestBoundaryArithmetic()
 	return Expect(fClamped, "large stack weight saturates instead of overflowing");
 }
 
+static bool TestPointValueParsing()
+{
+	// Script DEFNAMES commonly store destinations as a quoted,
+	// space-separated triplet (for example: "5678 3871 -80").  Keep the
+	// comma form used by saved HOME values covered as well.
+	CPointMap point( 1, 2, 3, 4 );
+	CGVariant input;
+	input.SetStr( "\"5678 3871 -80\"" );
+	point.v_Set( input );
+	if ( !Expect(point.m_x == 5678 && point.m_y == 3871 && point.m_z == -80 &&
+		point.m_mapplane == 4, "quoted space-separated point assignment"))
+		return false;
+
+	input.SetStr( "2344,2542,0,2" );
+	point.v_Set( input );
+	return Expect(point.m_x == 2344 && point.m_y == 2542 && point.m_z == 0 &&
+		point.m_mapplane == 2, "comma-separated point assignment");
+}
+
 // The indexed table must answer every lookup exactly as the plain table
 // does, and keep its elements in the same order.
 static bool SameTables(const CVarDefArray& plain, const CVarDefIndexedArray& indexed,
@@ -299,6 +318,7 @@ int main()
 {
 	if ( !TestIntegerRanges() || !TestByteRanges() ||
 		!TestPropertyAndLookupDispatch() || !TestBoundaryArithmetic() ||
+		!TestPointValueParsing() ||
 		!TestIndexedVariableTable() )
 		return 1;
 	std::printf("value ranges, property lookups, and boundary arithmetic: all checks passed\n");

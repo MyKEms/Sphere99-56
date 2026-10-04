@@ -133,6 +133,15 @@ protected:
 		return false;
 	}
 
+	// Concrete contexts can preserve the reference spelling of a resource
+	// returned by a SAFE expression macro. Generic contexts keep the scalar.
+	virtual bool FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
+	{
+		(void)pszExpr;
+		(void)sResult;
+		return false;
+	}
+
 	virtual const CScript* GetLineExpansionScript() const
 	{
 		return m_pCurrentScript;
@@ -161,7 +170,20 @@ protected:
 	CResourceObj* ResolveObjectResult(const CGVariant& value, LPCTSTR pszFunctionRoot)
 	{
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(value.GetRef());
-		if ( pObj == NULL && pszFunctionRoot && value.IsNumeric() )
+		LPCTSTR pszValue = value.GetPSTR();
+		UID_INDEX uidValue = value.GetUID();
+		bool fHashUID = false;
+		if ( pszValue && pszValue[0] == '#' && pszValue[1] )
+		{
+			char* pszEnd = NULL;
+			const unsigned long ulUID = strtoul(pszValue + 1, &pszEnd, 16);
+			if ( pszEnd != pszValue + 1 && *pszEnd == '\0' )
+			{
+				uidValue = static_cast<UID_INDEX>(ulUID);
+				fHashUID = true;
+			}
+		}
+		if ( pObj == NULL && pszFunctionRoot && (value.IsNumeric() || fHashUID) )
 		{
 			// Script functions and the reference-valued argument helpers return
 			// object UIDs as strings. Named ARG locals can hold the same UID after
@@ -174,15 +196,19 @@ protected:
 				!_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
 				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
 				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
-			if ( fUIDRoot )
-				pObj = ResolveUIDObject(value.GetUID());
-			if ( pObj == NULL )
-				pObj = ResolveResourceObject(value.GetUID());
+			// A DEFNAME written with the #<hex-serial> spelling is already an
+			// object UID alias.  Unlike an ordinary numeric/resource DEFNAME, it
+			// must resolve through the world table before dotted properties run.
+			if ( fHashUID || fUIDRoot )
+				pObj = ResolveUIDObject(uidValue);
+			if ( pObj == NULL && !fHashUID )
+				pObj = ResolveResourceObject(uidValue);
 		}
 		return pObj;
 	}
 
-	bool ResolveDottedFunctionResult(LPCTSTR pszKey, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected)
+	bool ResolveDottedFunctionResult(LPCTSTR pszKey, CGVariant& vValRet,
+		CScriptUnknownRejectTracker& rejected)
 	{
 		LPCTSTR pszDot = strchr(pszKey, '.');
 		if ( pszDot == NULL || pszDot == pszKey || pszDot[1] == '\0' )
@@ -247,7 +273,8 @@ protected:
 	// not evaluate the same expression a second time through another path.
 	// Expressions with top-level whitespace ("EVAL 1.5", "STRLEN a.b") are
 	// function calls with arguments, not chains, and are left to the caller.
-	bool ResolveDottedChain(LPCTSTR pszExpr, CGVariant& vValRet, CScriptUnknownRejectTracker& rejected, bool& fEffect)
+	bool ResolveDottedChain(LPCTSTR pszExpr, CGVariant& vValRet,
+		CScriptUnknownRejectTracker& rejected, bool& fEffect)
 	{
 		fEffect = false;
 
@@ -329,7 +356,8 @@ protected:
 				return false;
 		}
 
-		CResourceObj* pCurrent = ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
+		CResourceObj* pCurrent = ResolveObjectResult(vCurrent,
+			fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
 			// A failed NEWITEM leaves LASTNEW empty.  Stock still recognizes
@@ -347,6 +375,14 @@ protected:
 			if ( fEffect && (vCurrent.IsEmpty() || vCurrent.IsNumeric()) )
 			{
 				vValRet.SetStr("");
+				return true;
+			}
+			// A numeric DEFNAME is also a scalar expression in stock.  If no
+			// object is behind it, a dotted suffix preserves that scalar token
+			// rather than leaving the whole escape literal.
+			if ( fRootFromFunction && vCurrent.IsNumeric() )
+			{
+				vValRet = vCurrent;
 				return true;
 			}
 			return false;
@@ -428,7 +464,8 @@ protected:
 				return true;
 			}
 
-			pCurrent = ResolveObjectResult(vNext, fFromFunction ? szName : NULL);
+			pCurrent = ResolveObjectResult(vNext,
+				fFromFunction ? szName : NULL);
 			if ( pCurrent == NULL )
 			{
 				// An intermediate lookup that found nothing (for example
@@ -448,7 +485,8 @@ protected:
 	// and without a SAFE prefix).  Returns true and sets vResult when the
 	// expression resolved; pfChainResolved reports whether the reference
 	// chain walker produced the value.
-	bool EvaluateEscapeValue(LPCTSTR pszExpr, CGVariant& vResult, CScriptUnknownRejectTracker& rejected, bool* pfChainResolved = NULL)
+	bool EvaluateEscapeValue(LPCTSTR pszExpr, CGVariant& vResult,
+		CScriptUnknownRejectTracker& rejected, bool* pfChainResolved = NULL)
 	{
 		if ( pfChainResolved )
 			*pfChainResolved = false;
@@ -676,16 +714,6 @@ public:
 		iValue = 0;
 		if ( m_pBaseObj == NULL )
 			return false;
-		// Bare script functions stay on the legacy numeric path: resolving one
-		// here would execute a zero-argument function merely because it appears
-		// in a condition. Object getters and methods such as ISPLAYER still
-		// need the reference evaluator, however; level-up scripts use those
-		// bare object predicates inside their guards.
-		if ( strchr(pszOperand, '.') == NULL && strchr(pszOperand, '(') == NULL &&
-			m_LocalArgs.FindKeyPtr(pszOperand) == NULL &&
-			IsScriptFunction(pszOperand) )
-			return false;
-
 		CGVariant vValue;
 		CScriptUnknownRejectTracker rejected;
 		bool fChainResolved = false;
@@ -715,6 +743,133 @@ protected:
 public:
 	// Gump command table for dialog construction.
 	static LPCTSTR const sm_szGumpCmds[];
+
+	// Sphere's dialog grammar accepts numeric fields in its normal expression
+	// syntax (including zero-prefixed hexadecimal).  The client layout, however,
+	// is a decimal wire format.  Keep that conversion at the last point before
+	// a control enters the packet accumulator so the legacy space form, ARGO's
+	// comma form, and controls emitted by nested layout functions agree.
+	static bool FormatDialogNumber(LPCTSTR pszValue, TCHAR* pszOut, size_t iOutSize)
+	{
+		if ( pszValue == NULL || pszOut == NULL || iOutSize == 0 )
+			return false;
+		int iValue = Exp_GetValue( pszValue );
+		int iWritten = snprintf( pszOut, iOutSize, "%d", iValue );
+		return iWritten >= 0 && static_cast<size_t>(iWritten) < iOutSize;
+	}
+
+	static unsigned DialogNumericMask(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL )
+			return 0;
+		struct GumpSpec
+		{
+			LPCTSTR m_pszKey;
+			unsigned m_mask;
+		};
+		static const GumpSpec sm_specs[] =
+		{
+			{ "resizepic", 0x1f },
+			{ "gumppic", 0x07 },
+			{ "tilepic", 0x07 },
+			{ "text", 0x0f },
+			{ "croppedtext", 0x3f },
+			{ "htmlgump", 0x7f },
+			{ "xmfhtmlgump", 0x7f },
+			{ "button", 0x7f },
+			{ "radio", 0x3f },
+			{ "checkbox", 0x3f },
+			{ "textentry", 0x7f },
+			{ "textentrya", 0x3f },
+			{ "page", 0x01 },
+			{ "group", 0x01 },
+			{ "gumppictiled", 0x0f },
+			{ "checkertrans", 0x0f },
+			{ "xmfhtmlgumpcolor", 0xff },
+			{ "tilepichue", 0x0f },
+		};
+		for ( size_t i = 0; i < COUNTOF(sm_specs); i++ )
+		{
+			if ( !_stricmp(pszKey, sm_specs[i].m_pszKey) )
+				return sm_specs[i].m_mask;
+		}
+		return 0;
+	}
+
+	static void NormalizeGumpControl(TCHAR* pszControl)
+	{
+		if ( pszControl == NULL || !*pszControl )
+			return;
+
+		TCHAR szKey[64];
+		TCHAR* p = pszControl;
+		while ( ISWHITESPACE(*p) ) p++;
+		TCHAR* pKey = p;
+		while ( *p && !ISWHITESPACE(*p) && *p != ',' ) p++;
+		const size_t iKeyLen = static_cast<size_t>(p - pKey);
+		if ( iKeyLen == 0 || iKeyLen >= sizeof(szKey) )
+			return;
+		memcpy( szKey, pKey, iKeyLen );
+		szKey[iKeyLen] = '\0';
+		const unsigned iMask = DialogNumericMask(szKey);
+		if ( iMask == 0 )
+			return;
+
+		TCHAR szFields[16][SCRIPT_MAX_LINE_LEN];
+		int iFields = 0;
+		while ( *p && iFields < static_cast<int>(COUNTOF(szFields)) )
+		{
+			while ( ISWHITESPACE(*p) || *p == ',' ) p++;
+			if ( !*p ) break;
+			TCHAR* pField = szFields[iFields];
+			size_t iLen = 0;
+			if ( *p == '"' )
+			{
+				// Text-bearing controls can carry spaces. Keep the quotes as part
+				// of the field and leave them untouched by the numeric mask.
+				pField[iLen++] = *p++;
+				while ( *p && iLen + 1 < SCRIPT_MAX_LINE_LEN )
+				{
+					TCHAR ch = *p++;
+					pField[iLen++] = ch;
+					if ( ch == '"' ) break;
+				}
+			}
+			else
+			{
+				while ( *p && !ISWHITESPACE(*p) && *p != ',' &&
+					iLen + 1 < SCRIPT_MAX_LINE_LEN )
+					pField[iLen++] = *p++;
+			}
+			pField[iLen] = '\0';
+			if ( iLen == 0 ) break;
+			iFields++;
+		}
+		if ( iFields == 0 )
+			return;
+
+		TCHAR szNormalized[SCRIPT_MAX_LINE_LEN];
+		int iWritten = snprintf(szNormalized, sizeof(szNormalized), "%s", szKey);
+		if ( iWritten < 0 || static_cast<size_t>(iWritten) >= sizeof(szNormalized) )
+			return;
+		for ( int i = 0; i < iFields; i++ )
+		{
+			TCHAR szField[SCRIPT_MAX_LINE_LEN];
+			LPCTSTR pszField = szFields[i];
+			if ( i < 32 && (iMask & (1u << i)) &&
+				FormatDialogNumber(pszField, szField, sizeof(szField)) )
+				pszField = szField;
+			int iLen = snprintf(szNormalized + iWritten,
+				sizeof(szNormalized) - static_cast<size_t>(iWritten),
+				" %s", pszField);
+			if ( iLen < 0 || static_cast<size_t>(iLen) >=
+				sizeof(szNormalized) - static_cast<size_t>(iWritten) )
+				return;
+			iWritten += iLen;
+		}
+		strncpy(pszControl, szNormalized, SCRIPT_MAX_LINE_LEN - 1);
+		pszControl[SCRIPT_MAX_LINE_LEN - 1] = '\0';
+	}
 
 	static bool IsGumpCommand(LPCTSTR pszKey)
 	{
@@ -848,8 +1003,18 @@ public:
 
 		const int iTextID = pTexts->GetSize();
 		pTexts->Add(pszText);
+		TCHAR szNum[7][SCRIPT_MAX_LINE_LEN];
+		LPCTSTR ppOut[7] = { ppArgs[0], ppArgs[1], ppArgs[2], ppArgs[3],
+			ppArgs[4], ppArgs[5], ppArgs[6] };
+		for ( int i = 0; i < 7; i++ )
+		{
+			if ( i == 4 )
+				continue; // inline HTML text, not a numeric field.
+			if ( FormatDialogNumber(ppArgs[i], szNum[i], sizeof(szNum[i])) )
+				ppOut[i] = szNum[i];
+		}
 		pControls->AddFormat("htmlgump %s %s %s %s %d %s %s",
-			ppArgs[0], ppArgs[1], ppArgs[2], ppArgs[3], iTextID, ppArgs[5], ppArgs[6]);
+			ppOut[0], ppOut[1], ppOut[2], ppOut[3], iTextID, ppOut[5], ppOut[6]);
 		return true;
 	}
 
@@ -936,8 +1101,15 @@ public:
 
 		const int iTextID = pTexts->GetSize();
 		pTexts->Add(pszText);
+		TCHAR szNum[3][SCRIPT_MAX_LINE_LEN];
+		LPCTSTR ppOut[3] = { ppArgs[0], ppArgs[1], ppArgs[2] };
+		for ( int i = 0; i < 3; i++ )
+		{
+			if ( FormatDialogNumber(ppArgs[i], szNum[i], sizeof(szNum[i])) )
+				ppOut[i] = szNum[i];
+		}
 		pControls->AddFormat("text %s %s %s %d",
-			ppArgs[0], ppArgs[1], ppArgs[2], iTextID);
+			ppOut[0], ppOut[1], ppOut[2], iTextID);
 		return true;
 	}
 
@@ -1457,6 +1629,9 @@ public:
 					}
 				}
 
+				if ( fSafe )
+					FormatSafeReference(pszExpr, sResult);
+
 				// Replace <?...?> with result, shifting buffer.
 				int iExprLen = iEnd - iBegin + 1;
 				int iResultLen = sResult.GetLength();
@@ -1566,6 +1741,9 @@ public:
 					continue;
 				}
 			}
+
+			if ( fSafe )
+				FormatSafeReference(pszExpr, sResult);
 
 			// Replace <expr> with the resolved value, shifting the buffer.
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
@@ -1815,9 +1993,16 @@ public:
 			}
 		}
 
-		// Try dispatching to the base object.
+		// Try dispatching to the base object.  A dotted assignment belongs to
+		// the referenced object (ACT.P, LASTNEW.P, SRC.TAG.foo, ...); passing the
+		// whole key to the base setter first makes CChar interpret ACT.P as its
+		// scalar ACT property and stores the point as a bogus UID.  TAG.* is the
+		// one legacy dotted form whose owning object intentionally handles the
+		// complete key itself.
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
-		if ( pObj && ( !strchr(pszKey, '.') || fPropertySet ))
+		const bool fDirectDottedProperty =
+			!_strnicmp(pszKey, "TAG.", 4) || !_strnicmp(pszKey, "TAG0.", 5);
+		if ( pObj && ( !strchr(pszKey, '.') || fDirectDottedProperty ))
 		{
 			HRESULT hRes;
 			if ( !fCallForm )
@@ -2100,6 +2285,7 @@ public:
 				{
 					strncpy(szGump, szGumpKey, sizeof(szGump)-1);
 				}
+				NormalizeGumpControl( szGump );
 				sm_pGumpControls->Add(szGump);
 				return NO_ERROR;
 			}
@@ -2526,13 +2712,25 @@ public:
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
 					{
-						// A function-style ARG statement may receive a live object
-						// reference (for example ARG(gata,<LASTNEW>)).  Expand its
+						// A dotted script-function call may receive a live object
+						// reference (for example LASTNEW.LOGCONT(<SRC>)).  Expand its
 						// key with the serial-preserving flag before ExecuteCommand
-						// splits the statement; the ordinary key path intentionally
-						// renders object references as display text.
+						// splits the statement; ordinary command and property paths
+						// intentionally render object references as display text.
+						bool fScriptCall = false;
+						TCHAR szCallKey[SCRIPT_MAX_LINE_LEN];
+						strncpy(szCallKey, szKey, sizeof(szCallKey) - 1);
+						szCallKey[sizeof(szCallKey) - 1] = '\0';
+						TCHAR* pszCallArgs = NULL;
+						if ( SplitCallStatement(szCallKey, pszCallArgs) )
+						{
+							LPCTSTR pszCallFunction = strrchr(szCallKey, '.');
+							pszCallFunction = pszCallFunction ? pszCallFunction + 1 : szCallKey;
+							fScriptCall = strchr(szCallKey, '.') != NULL &&
+								IsScriptFunction(pszCallFunction);
+						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
-							!_strnicmp(szKey, "TAG(", 4))
+							!_strnicmp(szKey, "TAG(", 4) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )
@@ -2540,9 +2738,13 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
+						// Script functions receive reference-valued arguments as UID text,
+						// so ARG()/CONT chains keep the referenced object instead of an
+						// empty scalar.
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
-							(fKeyEquals && IsObjectAssignmentKey(szKey)))
+							(fKeyEquals && IsObjectAssignmentKey(szKey)) ||
+							IsScriptFunction(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );

@@ -160,7 +160,10 @@ protected:
 			if ( chAfterControl == '(' )
 				AddArgoLine( szLine );
 			else
+			{
+				NormalizeGumpControl( szLine );
 				m_asControls.Add( szLine );
+			}
 			return true;
 		}
 		// Anything else is an ordinary command (property, method, function).
@@ -279,6 +282,7 @@ private:
 			}
 			else
 				strncpy(szGump, szGumpKey, sizeof(szGump)-1);
+			NormalizeGumpControl( szGump );
 			m_asControls.Add(szGump);
 			return;
 		}

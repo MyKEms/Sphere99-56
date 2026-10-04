@@ -1,36 +1,17 @@
 #!/usr/bin/env python3
-"""Check FINDCONT enumeration and the FLAG_IMMOBILE character flag."""
+"""Check that a bare zero-argument function predicate executes once."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import socket
 import sys
 import time
 from pathlib import Path
 
+from modes.bare_function_predicate import ACCOUNT, LOGIN_TOKEN, MARKER
 from run_suite import shutdown_failures
-
-
-ACCOUNT = "ScriptGapsProbe"
-PW = "script-gaps-pw"
-MARKER = "SPHERE_SCRIPT_GAPS"
-ROW_RE = re.compile(re.escape(MARKER) + r" ([a-z0-9_]+)(?:\|\[(.*)\]|)$")
-EXPECTED = {
-    "flag_initial": "0",
-    "flag_property": "1",
-    "flag_method": "0",
-    "find0": "synthetic gap child one",
-    "find1": "synthetic gap child two",
-    "find2": "",
-    "safe0": "0",
-    "trigger": "1",
-    "profession_ref": "FIXTURE_PROFESSION",
-    "profession_name": "Fixture Profession",
-    "profession_cmp": "1",
-}
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -50,14 +31,13 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=2880)
+    parser.add_argument("--port", type=int, default=3128)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
-    tools_path = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(tools_path))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from test_world_save_roundtrip import run_server
     from uo_test_client import game_connect, make_char_play, recv_until_game_start
 
@@ -66,25 +46,21 @@ def main() -> int:
 
     def exercise() -> None:
         sock, _ = game_connect(
-            args.host,
-            args.port,
-            ACCOUNT,
-            PW,
-            game_port=args.port + 1000,
+            args.host, args.port, ACCOUNT, LOGIN_TOKEN, game_port=args.port + 1000
         )
         if sock is None:
-            raise RuntimeError("script-gaps probe did not reach its character list")
+            raise RuntimeError("bare-function predicate probe did not reach its character list")
         try:
             sock.sendall(make_char_play(0))
             data = recv_until_game_start(sock, timeout=30.0)
             if not data:
-                raise RuntimeError("script-gaps probe character did not enter the world")
+                raise RuntimeError("bare-function predicate character did not enter the world")
             buffer = bytearray(data)
             deadline = time.monotonic() + 12.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(buffer))
-                if f"{MARKER} find2|[]" in messages:
+                if f"{MARKER} calls=[1]" in messages:
                     return
                 try:
                     chunk = sock.recv(65536)
@@ -112,39 +88,20 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
 
-    rows: dict[str, str] = {}
-    for message in messages:
-        match = ROW_RE.fullmatch(message)
-        if match:
-            rows[match.group(1)] = match.group(2) or ""
-    for key, expected in EXPECTED.items():
-        if rows.get(key) != expected:
-            failures.append(f"{key}: expected {expected!r}, got {rows.get(key)!r}")
-    if f"{MARKER} setup" not in messages:
-        failures.append("setup marker missing")
+    if f"{MARKER} result=true" not in messages:
+        failures.append("bare predicate did not evaluate to true")
+    if f"{MARKER} calls=[1]" not in messages:
+        failures.append("bare predicate function did not execute exactly once")
+    if any(message == f"{MARKER} calls=[2]" for message in messages):
+        failures.append("bare predicate function executed more than once")
 
-    report_path = fixture / "logs" / "unknown-keywords.json"
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        failures.append(f"unknown-keyword report unavailable: {error}")
-    else:
-        unexpected = [
-            entry
-            for entry in report.get("entries", [])
-            if str(entry.get("keyword", "")).upper() in {"FINDCONT", "FLAG_IMMOBILE"}
-        ]
-        if unexpected:
-            failures.append(f"target keywords still reported unknown: {unexpected!r}")
-
-    total = len(EXPECTED) + 2
     if failures:
-        print(f"script-gaps probe failed: {max(0, total - len(failures))}/{total} checks passed", file=sys.stderr)
-        print(f"messages: {messages!r}", file=sys.stderr)
+        print("bare-function predicate probe failed", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
+        print(f"messages: {messages!r}", file=sys.stderr)
         return 1
-    print(f"script-gaps probe passed: {total}/{total} checks")
+    print("bare-function predicate probe passed: result=true, calls=1")
     return 0
 
 

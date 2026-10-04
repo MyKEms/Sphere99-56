@@ -1122,6 +1122,18 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	case P_Flag_Immobile:
 		vValRet.SetBool( IsStatFlag( STATF_Immobile ));
 		break;
+	case P_Flag_Insubstantial:
+		vValRet.SetBool( IsStatFlag( STATF_Insubstantial ));
+		break;
+	case P_Flag_Invul:
+		vValRet.SetBool( IsStatFlag( STATF_INVUL ));
+		break;
+	case P_Flag_Freeze:
+		vValRet.SetBool( IsStatFlag( STATF_Freeze ));
+		break;
+	case P_Flag_Stone:
+		vValRet.SetBool( IsStatFlag( STATF_Stone ));
+		break;
 	case P_Font:
 		vValRet.SetInt( m_fonttype );
 		break;
@@ -1253,6 +1265,37 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_Flag_Immobile:
 		StatFlag_Mod( STATF_Immobile, vVal.GetBool());
+		break;
+	case P_Flag_Insubstantial:
+		StatFlag_Mod( STATF_Insubstantial, vVal.GetBool());
+		break;
+	case P_Flag_Invul:
+		StatFlag_Mod( STATF_INVUL, vVal.GetBool());
+		break;
+	case P_Flag_Freeze:
+		StatFlag_Mod( STATF_Freeze, vVal.GetBool());
+		break;
+	case P_Flag_Stone:
+		{
+			bool fSet;
+			bool fChange = IsStatFlag(STATF_Stone);
+			if ( vVal.IsEmpty())
+			{
+				fSet = ! fChange;
+				fChange = true;
+			}
+			else
+			{
+				fSet = vVal.GetBool();
+				fChange = ( fSet != fChange );
+			}
+			StatFlag_Mod(STATF_Stone, fSet);
+			if ( fChange )
+			{
+				RemoveFromView();
+				Update();
+			}
+		}
 		break;
 	case P_Font:
 		m_fonttype = (FONT_TYPE) vVal.GetInt();
@@ -1925,6 +1968,20 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			m_Act.m_Targ = pItem->GetUID();	// preserve LASTNEW/LASTNEWITEM and EQUIPLAST semantics.
 			return ItemEquip( pItem );
 		}
+
+	case M_NewLoot:
+		{
+			// NEWLOOT creates each entry in a template on the character.  Passing
+			// the character as the container lets ContentAdd equip layerable items
+			// and bounce the remaining loot into the backpack, matching the legacy
+			// template path used by character creation scripts.
+			CItemPtr pItem = CItem::CreateHeader( vArgs, this, pCharSrc, false );
+			if ( pItem == NULL )
+				return HRES_BAD_ARGUMENTS;
+			vValRet.SetRef( pItem );
+			m_Act.m_Targ = pItem->GetUID();
+		}
+		break;
 
 	case M_Dupe:	// = dupe a creature !
 		{

@@ -29,6 +29,39 @@
 #pragma pop_macro("max")
 #pragma pop_macro("min")
 
+static bool IsSafeAssignment(LPCTSTR pszText)
+{
+	if ( pszText == NULL || *pszText == '\0' )
+		return false;
+	int iDepth = 0;
+	bool fQuoted = false;
+	for ( const TCHAR* p = pszText; *p; ++p )
+	{
+		if ( *p == '"' && (p == pszText || p[-1] != '\\') )
+		{
+			fQuoted = !fQuoted;
+			continue;
+		}
+		if ( fQuoted )
+			continue;
+		if ( *p == '(' )
+		{
+			++iDepth;
+			continue;
+		}
+		if ( *p == ')' )
+		{
+			if ( iDepth > 0 )
+				--iDepth;
+			continue;
+		}
+		if ( *p == '=' && iDepth == 0 && p[1] != '=' &&
+			(p == pszText || p[-1] != '=') )
+			return true;
+	}
+	return false;
+}
+
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
 // DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values.
@@ -942,7 +975,14 @@ CResourceObj* CSphereExpContext::ResolveResourceObject(UID_INDEX uid)
 	CSphereUID rid(uid);
 	if ( !rid.IsValidRID() )
 		return NULL;
-	return dynamic_cast<CResourceObj*>((CResourceDef*)g_Cfg.ResourceGetDef(rid));
+	CResourceDefPtr pDef = g_Cfg.ResourceGetDef(rid);
+	// A named resource is initially represented by a lazy CResourceLink.  It
+	// has no definition properties and must not become an object-chain root:
+	// SAFE existence probes would otherwise enter scripts for names that stock
+	// treats as absent.  Typed object definitions are materialized by NEWITEM,
+	// FINDRES, or the corresponding loader path and retain the dotted property
+	// behaviour needed by definition roots.
+	return dynamic_cast<CObjBaseDef*>((CResourceDef*)pDef);
 }
 
 int CSphereExpContext::GetScriptLoopLimit() const
@@ -957,6 +997,18 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 {
 	CSphereUID ridFunc = g_Cfg.ResourceCheckIDType(RES_Function, pszKey);
 	return ridFunc.IsValidRID();
+}
+
+bool CSphereExpContext::FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
+{
+	if ( pszExpr == NULL || *pszExpr == '\0' || strchr(pszExpr, '.') ||
+		strchr(pszExpr, '(') )
+		return false;
+	CSphereUID rid = g_Cfg.ResourceGetIDByName(RES_UNKNOWN, pszExpr);
+	if ( !rid.IsValidRID() )
+		return false;
+	sResult.Format( "#0%x", (DWORD) rid );
+	return true;
 }
 
 bool CSphereExpContext::ValidateUIDReference(const CGVariant& value,
@@ -1306,7 +1358,21 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vUID.GetRef()) )
 				vValRet.SetRef(pObj);
 			else
-				vValRet.SetRef( g_Cfg.FindUID( vUID.GetUID()));
+			{
+				// HVAL and stock diagnostics spell a serial as #<hex>.  The
+				// ordinary variant parser deliberately leaves that marker as text,
+				// so decode it at the UID lookup boundary.
+				UID_INDEX uid = vUID.GetUID();
+				LPCTSTR pszHash = vUID.GetPSTR();
+				if ( pszHash && pszHash[0] == '#' && pszHash[1] )
+				{
+					char* pszEnd = NULL;
+					const unsigned long ulUID = strtoul(pszHash + 1, &pszEnd, 16);
+					if ( pszEnd != pszHash + 1 && *pszEnd == '\0' )
+						uid = static_cast<UID_INDEX>(ulUID);
+				}
+				vValRet.SetRef( g_Cfg.FindUID(uid));
+			}
 		}
 		break;
 	case F_IsUIDValid:
@@ -1359,6 +1425,16 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
 			try
 			{
+				// 0.99 also uses SAFE as a statement wrapper around a
+				// property assignment (for example safe(profession=class_mag)).
+				// EvaluateEscapeValue only reads expressions, so this form was
+				// silently discarded.  Execute the narrow assignment form through
+				// the normal setter path while retaining SAFE's error suppression.
+				if ( IsSafeAssignment(pszStr) )
+				{
+					vValRet.SetInt( ExecuteCommand(pszStr) == NO_ERROR ? 1 : 0 );
+					break;
+				}
 				// Use the normal expression resolver so function roots with a
 				// dotted suffix (for example FINDUID(uid).ISCHAR) keep their
 				// balanced arguments and object chain.  Splitting at the first
@@ -1368,6 +1444,20 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				CScriptUnknownRejectTracker rejected;
 				if ( EvaluateEscapeValue(pszStr, vInnerRet, rejected) )
 				{
+					// A SAFE read of a resource DEFNAME is a presence probe in
+					// 0.99.  Stock serializes that resource as a hash token; keeping
+					// the signed numeric resource UID here makes a missing-name check
+					// truthy and enters scripts that stock skips.  World-object hash
+					// aliases already arrive as strings and are left unchanged.
+					if ( vInnerRet.IsNumeric() )
+					{
+						CSphereUID rid( vInnerRet.GetUID() );
+						if ( rid.IsValidRID() )
+						{
+							vValRet.SetStrFormat( "#0%x", (DWORD) rid );
+							break;
+						}
+					}
 					vValRet = vInnerRet;
 					break;
 				}

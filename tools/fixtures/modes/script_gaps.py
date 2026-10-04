@@ -79,6 +79,10 @@ DEFNAME={CHILD_TWO}
 NAME=synthetic gap child two
 TYPE=T_NORMAL
 
+[PROFESSION 2]
+DEFNAME=FIXTURE_PROFESSION
+NAME=Fixture Profession
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 SYSMESSAGE {MARKER} flag_initial|[<FLAG_IMMOBILE>]
@@ -87,6 +91,10 @@ SYSMESSAGE {MARKER} flag_property|[<FLAG_IMMOBILE>]
 FLAG_IMMOBILE(0)
 SYSMESSAGE {MARKER} flag_method|[<FLAG_IMMOBILE>]
 SYSMESSAGE {MARKER} trigger|[<FINDUID(0x40000004).TRIGGER(@FixtureFindCont)>]
+safe(profession=FIXTURE_PROFESSION)
+SYSMESSAGE {MARKER} profession_ref|[<profession>]
+SYSMESSAGE {MARKER} profession_name|[<profession.name>]
+SYSMESSAGE {MARKER} profession_cmp|[<eval profession==FIXTURE_PROFESSION>]
 SYSMESSAGE {MARKER} setup
 RETURN 0
 ON=@Logout

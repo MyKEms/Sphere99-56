@@ -413,10 +413,11 @@ public:
 	STAT_LEVEL m_StatMax[STAT_BASE_QTY];	// STAT_QTY
 	STAT_LEVEL m_SkillLevelMax[SKILL_QTY];	// SKILL_LEVEL
 
-private:
+	private:
 	void Init();
 public:
 	virtual CGString GetName() const { return( m_sName ); }
+	virtual CGString GetScriptRefName() const { return GetResourceName(); }
 
 	virtual HRESULT s_PropGet( LPCTSTR pszKey, CGVariant& vVal, CScriptConsole* pSrc );
 	virtual HRESULT s_PropSet( LPCTSTR pszKey, CGVariant& vVal );

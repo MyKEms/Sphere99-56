@@ -737,6 +737,8 @@ STAT_TYPE CSphereResourceMgr::FindStatKey( LPCTSTR pszKey, bool fAllowDigit ) //
 	}
 	if ( ! _stricmp( pszKey, "STAMINA" ))	// alternate name.
 		return STAT_Stam;
+	if ( ! _stricmp( pszKey, "INTEL" ))	// legacy script spelling.
+		return STAT_Int;
 	if ( ! _stricmp( pszKey, "HITPOINTS" ))	// alternate name.
 		return STAT_Health;
 	return (STAT_TYPE) FindTable( pszKey, g_Stat_Name );
