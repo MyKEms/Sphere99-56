@@ -94,8 +94,8 @@ MODE = register_mode(
     FixtureMode(
         name="bare-function-predicate",
         fixture_args=(),
-        order=155,
-        id_block=100,
+        order=156,
+        id_block=101,
         case=FixtureCase(
             name="bare-function-predicate",
             mode="bare-function-predicate",
