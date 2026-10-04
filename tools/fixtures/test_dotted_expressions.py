@@ -255,7 +255,7 @@ EXPECTED: dict[str, Expectation] = {
     "C|cond_item_id": "1",
     "C|cond_type_id": "1",
     "C|cond_property_defname": "0",
-    "C|cond_bare_function": "1",
+    "C|cond_bare_function": "0",
     "C|cond_bare_function_count": "0",
     "C|cond_unknown_bare": "0",
     "C|cond_findlayer": "1",

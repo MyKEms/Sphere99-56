@@ -44,7 +44,17 @@ static int ResolveDefName(LPCTSTR pszName, int iDepth)
 		return 0;
 	const int iValue = pVar->GetValNum();
 	if ( iValue != 0 )
+	{
+		// Function names are registered in the same constant table as DEFNAMEs
+		// so the dispatcher can find them.  A bare function in a numeric
+		// condition is a legacy name lookup, not a call; exposing its resource
+		// id as a nonzero integer makes `if (function_name)` spuriously true.
+		// Keep the function body unexecuted and preserve stock's zero value.
+		const CSphereUID rid( static_cast<UID_INDEX>( iValue ));
+		if ( rid.IsValidRID() && rid.GetResType() == RES_Function )
+			return 0;
 		return iValue;
+	}
 	LPCTSTR pszAlias = pVar->GetValStr();
 	if ( pszAlias == NULL || pszAlias[0] == '\0' || !_stricmp( pszAlias, pszName ))
 		return iValue;
