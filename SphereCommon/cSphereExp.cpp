@@ -1358,7 +1358,21 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vUID.GetRef()) )
 				vValRet.SetRef(pObj);
 			else
-				vValRet.SetRef( g_Cfg.FindUID( vUID.GetUID()));
+			{
+				// HVAL and stock diagnostics spell a serial as #<hex>.  The
+				// ordinary variant parser deliberately leaves that marker as text,
+				// so decode it at the UID lookup boundary.
+				UID_INDEX uid = vUID.GetUID();
+				LPCTSTR pszHash = vUID.GetPSTR();
+				if ( pszHash && pszHash[0] == '#' && pszHash[1] )
+				{
+					char* pszEnd = NULL;
+					const unsigned long ulUID = strtoul(pszHash + 1, &pszEnd, 16);
+					if ( pszEnd != pszHash + 1 && *pszEnd == '\0' )
+						uid = static_cast<UID_INDEX>(ulUID);
+				}
+				vValRet.SetRef( g_Cfg.FindUID(uid));
+			}
 		}
 		break;
 	case F_IsUIDValid:
