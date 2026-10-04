@@ -13,6 +13,9 @@ PASSWORD = "gaps177-pw"
 EVENT_NAME = "e_ScriptGaps177Probe"
 MARKER = "SPHERE_SCRIPT_GAPS_177"
 ROOT_NAME = "SCRIPT_GAPS_177_ROOT_UID"
+ITEM_ROOT_NAME = "SCRIPT_GAPS_177_ITEM_ROOT"
+ITEM_ROOT_ID = 0x0EAB
+MISSING_ROOT_NAME = "SCRIPT_GAPS_177_MISSING_ROOT"
 CHARDEF_NAME = "c_ScriptGaps177Dummy"
 
 
@@ -47,6 +50,12 @@ def generate(output: Path) -> int:
 [DEFNAMES SCRIPT_GAPS_177]
 {ROOT_NAME} #40000004
 
+[ITEMDEF 0x{ITEM_ROOT_ID:04X}]
+DEFNAME={ITEM_ROOT_NAME}
+NAME=synthetic safe definition
+TYPE=T_EQ_SCRIPT
+LAYER=30
+
 [CHARDEF {CHARDEF_NAME}]
 DEFNAME={CHARDEF_NAME}
 ID=c_man
@@ -65,6 +74,14 @@ SYSMESSAGE {MARKER} act_after|[<ACT.P_X>]|[<ACT.P_Y>]|[<ACT.P_Z>]
 SYSMESSAGE {MARKER} uid_name|[<{ROOT_NAME}.NAME>]
 SYSMESSAGE {MARKER} uid_tag|[<{ROOT_NAME}.TAG.script_gaps_177>]
 SYSMESSAGE {MARKER} uid_tag_method|[<{ROOT_NAME}.TAG(script_gaps_177)>]
+SYSMESSAGE {MARKER} safe_missing|[<?safe.{MISSING_ROOT_NAME}?>]
+SYSMESSAGE {MARKER} safe_item|[<?safe.{ITEM_ROOT_NAME}?>]
+SYSMESSAGE {MARKER} safe_hash|[<?safe.{ROOT_NAME}?>]
+SYSMESSAGE {MARKER} safe_hash_name|[<?safe.{ROOT_NAME}.NAME?>]
+ARG(defname,{ITEM_ROOT_NAME})
+SYSMESSAGE {MARKER} safe_dynamic_item|[<?safe.<arg(defname)>?>]
+ARG(defname,{MISSING_ROOT_NAME})
+SYSMESSAGE {MARKER} safe_dynamic_missing|[<?safe.<arg(defname)>?>]
 NEWNPC {CHARDEF_NAME}
 ACT.P=132,132,0
 SYSMESSAGE {MARKER} flags|[<ACT.FLAG_INSUBSTANTIAL>]|[<ACT.FLAG_INVUL>]

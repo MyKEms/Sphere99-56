@@ -975,7 +975,14 @@ CResourceObj* CSphereExpContext::ResolveResourceObject(UID_INDEX uid)
 	CSphereUID rid(uid);
 	if ( !rid.IsValidRID() )
 		return NULL;
-	return dynamic_cast<CResourceObj*>((CResourceDef*)g_Cfg.ResourceGetDef(rid));
+	CResourceDefPtr pDef = g_Cfg.ResourceGetDef(rid);
+	// A named resource is initially represented by a lazy CResourceLink.  It
+	// has no definition properties and must not become an object-chain root:
+	// SAFE existence probes would otherwise enter scripts for names that stock
+	// treats as absent.  Typed object definitions are materialized by NEWITEM,
+	// FINDRES, or the corresponding loader path and retain the dotted property
+	// behaviour needed by definition roots.
+	return dynamic_cast<CObjBaseDef*>((CResourceDef*)pDef);
 }
 
 int CSphereExpContext::GetScriptLoopLimit() const
@@ -990,6 +997,18 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 {
 	CSphereUID ridFunc = g_Cfg.ResourceCheckIDType(RES_Function, pszKey);
 	return ridFunc.IsValidRID();
+}
+
+bool CSphereExpContext::FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
+{
+	if ( pszExpr == NULL || *pszExpr == '\0' || strchr(pszExpr, '.') ||
+		strchr(pszExpr, '(') )
+		return false;
+	CSphereUID rid = g_Cfg.ResourceGetIDByName(RES_UNKNOWN, pszExpr);
+	if ( !rid.IsValidRID() )
+		return false;
+	sResult.Format( "#0%x", (DWORD) rid );
+	return true;
 }
 
 bool CSphereExpContext::ValidateUIDReference(const CGVariant& value,
@@ -1411,6 +1430,20 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				CScriptUnknownRejectTracker rejected;
 				if ( EvaluateEscapeValue(pszStr, vInnerRet, rejected) )
 				{
+					// A SAFE read of a resource DEFNAME is a presence probe in
+					// 0.99.  Stock serializes that resource as a hash token; keeping
+					// the signed numeric resource UID here makes a missing-name check
+					// truthy and enters scripts that stock skips.  World-object hash
+					// aliases already arrive as strings and are left unchanged.
+					if ( vInnerRet.IsNumeric() )
+					{
+						CSphereUID rid( vInnerRet.GetUID() );
+						if ( rid.IsValidRID() )
+						{
+							vValRet.SetStrFormat( "#0%x", (DWORD) rid );
+							break;
+						}
+					}
 					vValRet = vInnerRet;
 					break;
 				}
