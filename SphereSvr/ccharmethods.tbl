@@ -65,6 +65,7 @@ CCHARMETHOD(NewbieSkill,	CSCRIPTPROP_NARG1,	"(iSkill)",		"Reload the newbie stuf
 CCHARMETHOD(NewDupe,		CSCRIPTPROP_RETREF, "(uid)",		"dupe an item")
 CCHARMETHOD(NewItem,		CSCRIPTPROP_RETREF, "",				"i create a new item")
 CCHARMETHOD(NewEquip,		CSCRIPTPROP_RETREF, "",				"create and equip an item")
+CCHARMETHOD(NewLoot,		CSCRIPTPROP_RETREF, "",				"create a template of loot on this character")
 CCHARMETHOD(NewNPC,			CSCRIPTPROP_RETREF, "",				"i create a new npc")
 CCHARMETHOD(OpenBank,		0,					"",				"open bank to SRC")
 CCHARMETHOD(OpenPack,		0,					"",				"open pack to SRC")

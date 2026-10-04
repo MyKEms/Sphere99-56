@@ -335,23 +335,31 @@ CItemPtr CItem::CreateTemplate( ITEMID_TYPE id, CObjBase* pCont, CChar* pCharSrc
 	CItemPtr pItem;
 	CSphereExpContext exec( pCharSrc, &g_Serv );
 
-	while ( s.ReadLine(true))
+	while ( s.ReadKeyParse())
 	{
 		if ( s.IsLineTrigger())
 			break;
 
-		int iProp = s_FindKeyInTable( s.GetLineBuffer(), sm_szTemplateTable );
+		int iProp = s_FindKeyInTable( s.GetKey(), sm_szTemplateTable );
 		if ( iProp < 0 )
 		{
 			if ( pItem != NULL && fItemAttrib )
 			{
 				exec.SetBaseObject( REF_CAST(CItem,pItem));
-				exec.ExecuteCommand( s.GetLineBuffer());
+				CGString sCommand;
+				if ( s.GetArgRaw()[0] )
+				{
+					sCommand.Format( "%s%c%s", s.GetKey(),
+						s.WasKeyValueAssignment() ? '=' : ' ', s.GetArgRaw());
+				}
+				else
+				{
+					sCommand.Copy( s.GetKey());
+				}
+				exec.ExecuteCommand( sCommand.GetPtr());
 			}
 			continue;
 		}
-
-		s.ParseKeyLate();
 
 		switch (iProp)
 		{
@@ -475,6 +483,10 @@ CItemPtr CItem::CreateHeader( CGVariant& vArgs, CObjBase* pCont, CChar* pSrc, bo
 	CItemPtr pItem = CItem::CreateTemplate( id, pCont, pSrc );
 	if ( pItem != NULL )
 	{
+		// Creating a template may allocate a backpack while bouncing an
+		// unlayered entry.  Keep LASTNEW on the template's final item instead of
+		// exposing that helper container to the script caller.
+		CSphereThread::GetCurrentThread()->m_uidLastNewItem = pItem->GetUID();
 		// Is the item movable ?
 		if ( ! pItem->IsMovableType() && pCont && pCont->IsItem())
 		{

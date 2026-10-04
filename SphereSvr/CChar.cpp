@@ -1938,6 +1938,20 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 			return ItemEquip( pItem );
 		}
 
+	case M_NewLoot:
+		{
+			// NEWLOOT creates each entry in a template on the character.  Passing
+			// the character as the container lets ContentAdd equip layerable items
+			// and bounce the remaining loot into the backpack, matching the legacy
+			// template path used by character creation scripts.
+			CItemPtr pItem = CItem::CreateHeader( vArgs, this, pCharSrc, false );
+			if ( pItem == NULL )
+				return HRES_BAD_ARGUMENTS;
+			vValRet.SetRef( pItem );
+			m_Act.m_Targ = pItem->GetUID();
+		}
+		break;
+
 	case M_Dupe:	// = dupe a creature !
 		{
 			CCharPtr pChar = CChar::CreateNPC( GetID());
