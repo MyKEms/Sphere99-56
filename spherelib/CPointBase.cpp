@@ -129,26 +129,73 @@ void CGPointBase::Set(const POINTS pt)
 
 void CGPointBase::v_Set(CGVariant& vVal)
 {
-	// Parse "x,y,z,map" from variant
+	// Accept both the comma-separated form used by saved points and the
+	// quoted, space-separated form used by script DEFNAMES (for example
+	// "5678 3871 -80").
 	LPCTSTR pszVal = vVal.GetPSTR();
 	if ( pszVal == NULL || *pszVal == '\0' )
 		return;
-	m_x = atoi( pszVal );
-	while ( *pszVal && *pszVal != ',' ) pszVal++;
-	if ( *pszVal == ',' ) pszVal++;
-	m_y = atoi( pszVal );
-	while ( *pszVal && *pszVal != ',' ) pszVal++;
-	if ( *pszVal == ',' ) pszVal++;
-	if ( *pszVal )
+
+	while ( isspace( static_cast<unsigned char>(*pszVal) ))
+		pszVal++;
+	char chQuote = '\0';
+	if ( *pszVal == '"' || *pszVal == '\'' )
 	{
-		m_z = atoi( pszVal );
-		while ( *pszVal && *pszVal != ',' ) pszVal++;
-		if ( *pszVal == ',' ) pszVal++;
-		if ( *pszVal )
-		{
-			m_mapplane = atoi( pszVal );
-		}
+		chQuote = *pszVal++;
 	}
+
+	auto SkipSpace = [&pszVal]()
+	{
+		while ( isspace( static_cast<unsigned char>(*pszVal) ))
+			pszVal++;
+	};
+	auto HasValue = [&]()
+	{
+		SkipSpace();
+		return *pszVal != '\0' && ( chQuote == '\0' || *pszVal != chQuote );
+	};
+	auto ParseValue = [&]() -> int
+	{
+		SkipSpace();
+		char* pszEnd = NULL;
+		const long iValue = strtol( pszVal, &pszEnd, 10 );
+		if ( pszEnd == pszVal )
+			return INT_MIN;
+		pszVal = pszEnd;
+		return static_cast<int>( iValue );
+	};
+	auto NextValue = [&]()
+	{
+		SkipSpace();
+		if ( *pszVal == ',' )
+		{
+			pszVal++;
+			return true;
+		}
+		return HasValue();
+	};
+
+	int iValue = ParseValue();
+	if ( iValue == INT_MIN )
+		return;
+	m_x = static_cast<signed short>( iValue );
+	if ( !NextValue() )
+		return;
+	iValue = ParseValue();
+	if ( iValue == INT_MIN )
+		return;
+	m_y = static_cast<signed short>( iValue );
+	if ( !NextValue() )
+		return;
+	iValue = ParseValue();
+	if ( iValue == INT_MIN )
+		return;
+	m_z = static_cast<signed char>( iValue );
+	if ( !NextValue() )
+		return;
+	iValue = ParseValue();
+	if ( iValue != INT_MIN )
+		m_mapplane = static_cast<BYTE>( iValue );
 }
 
 LPCTSTR CGPointBase::v_Get() const
