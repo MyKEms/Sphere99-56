@@ -1119,6 +1119,9 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		// Extended for STATF_Stone etc.
 		vValRet.SetDWORD( m_StatFlag );
 		break;
+	case P_Flag_Freeze:
+		vValRet.SetBool( IsStatFlag( STATF_Freeze ));
+		break;
 	case P_Flag_Immobile:
 		vValRet.SetBool( IsStatFlag( STATF_Immobile ));
 		break;
@@ -1127,6 +1130,9 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		break;
 	case P_Flag_Invul:
 		vValRet.SetBool( IsStatFlag( STATF_INVUL ));
+		break;
+	case P_Flag_Stone:
+		vValRet.SetBool( IsStatFlag( STATF_Stone ));
 		break;
 	case P_Font:
 		vValRet.SetInt( m_fonttype );
@@ -1257,6 +1263,9 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		// DO NOT MODIFY STATF_SaveParity, STATF_Spawned, STATF_Pet
 		m_StatFlag = ( vVal.GetInt() &~ (STATF_SaveParity|STATF_Pet|STATF_Spawned)) | ( m_StatFlag& (STATF_SaveParity|STATF_Pet|STATF_Spawned) );
 		break;
+	case P_Flag_Freeze:
+		StatFlag_Mod( STATF_Freeze, vVal.GetBool());
+		break;
 	case P_Flag_Immobile:
 		StatFlag_Mod( STATF_Immobile, vVal.GetBool());
 		break;
@@ -1335,6 +1344,7 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_SpeechColor:
 		m_SpeechHue = vVal.GetDWORD();
 		break;
+	case P_Flag_Stone:
 	case P_Stone:
 		{
 			bool fSet;

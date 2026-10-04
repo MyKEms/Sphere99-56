@@ -30,6 +30,7 @@ EXPECTED = {
     "safe_dynamic_item": (),
     "safe_dynamic_missing": ("",),
     "flags": ("0", "1"),
+    "frozen_flags": ("1", "1"),
 }
 
 
