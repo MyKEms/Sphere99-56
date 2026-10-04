@@ -15,6 +15,8 @@ from modes.gm_toggle import (
     ACCOUNT,
     DAMAGE_ITEM_UID,
     PASSWORD,
+    PLAYER_ACCOUNT,
+    PLAYER_PASSWORD,
 )
 from run_suite import shutdown_failures, stop_server, tail, wait_for_port
 
@@ -114,6 +116,32 @@ def _enter(port: int) -> socket.socket:
     return sock
 
 
+def _enter_plain_player(port: int) -> socket.socket:
+    """Enter the unprivileged fixture account for the movement regression row."""
+    tools_path = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(tools_path))
+    from uo_test_client import game_connect, make_char_play, recv_until_game_start
+
+    sock, _ = game_connect(
+        "127.0.0.1",
+        port,
+        PLAYER_ACCOUNT,
+        PLAYER_PASSWORD,
+        game_port=port + 1000,
+    )
+    if sock is None:
+        raise RuntimeError("plain player did not reach the character list")
+    sock.sendall(make_char_play(0))
+    initial = recv_until_game_start(sock, timeout=10.0)
+    if not initial:
+        sock.close()
+        raise RuntimeError("plain player did not enter the world")
+    _drain(sock, 0.5)
+    _first_step(sock)
+    _drain(sock, 0.5)
+    return sock
+
+
 def _command(sock: socket.socket, value: str) -> tuple[list[str], list[int]]:
     sock.sendall(_talk(f".GM {value}"))
     packets = _decode(_drain(sock, 2.0))
@@ -142,6 +170,7 @@ def _walk(sock: socket.socket, direction: int, sequence: int):
 def run_probe(port: int) -> list[str]:
     failures: list[str] = []
     sock = None
+    player_sock = None
     try:
         sock = _enter(port)
         texts, commands = _command(sock, "0")
@@ -151,6 +180,17 @@ def run_probe(port: int) -> list[str]:
                 f"packets={[hex(c) for c in commands]!r}"
             )
 
+        # The GM state is per character. A normal player must retain ordinary
+        # movement while the privileged character toggles its own mode. This
+        # guards the run/door/plane movement paths against privilege leakage.
+        player_sock = _enter_plain_player(port)
+        player_walk = _walk(player_sock, 2, 3)
+        player_commands = [packet.command for packet in player_walk]
+        if 0x22 not in player_commands:
+            failures.append(
+                "plain player movement changed under GM mode logic: "
+                f"expected ordinary movement acknowledgement, packets={[hex(c) for c in player_commands]!r}"
+            )
         texts, _ = _click(sock)
         if EXPECTED_HITS["0"] not in texts:
             failures.append(f"GM 0 did not allow damage: texts={texts!r}")
@@ -167,6 +207,22 @@ def run_probe(port: int) -> list[str]:
         if EXPECTED_HITS["1"] not in texts:
             failures.append(f"GM 1 was not invulnerable: texts={texts!r}")
 
+        # Repeat the ordinary-player check while the other character is in
+        # GM1 mode.  GM state must remain attached to the GM character.
+        player_free_walk = _walk(player_sock, 2, 4)
+        if 0x22 not in [packet.command for packet in player_free_walk]:
+            failures.append(
+                "plain player ordinary walk changed while another character was in GM1: "
+                f"expected acknowledgement, packets={[hex(packet.command) for packet in player_free_walk]!r}"
+            )
+        player_walk = _walk(player_sock, 2, 5)
+        player_commands = [packet.command for packet in player_walk]
+        if 0x22 not in player_commands:
+            failures.append(
+                "plain player movement changed while another character was in GM1: "
+                f"expected ordinary movement acknowledgement, packets={[hex(c) for c in player_commands]!r}"
+            )
+
         texts, commands = _command(sock, "0")
         if EXPECTED_TEXT["0"] not in texts:
             failures.append(
@@ -178,6 +234,8 @@ def run_probe(port: int) -> list[str]:
     finally:
         if sock is not None:
             sock.close()
+        if player_sock is not None:
+            player_sock.close()
     return failures
 
 
@@ -233,7 +291,8 @@ def main() -> int:
         print(tail(log_path), file=sys.stderr)
         return 1
     print(
-        "GM toggle probe passed: responses, mode update, and damage immunity"
+        "GM toggle probe passed: responses, mode update, damage immunity, "
+        "and plain-player movement isolation"
     )
     return 0
 
