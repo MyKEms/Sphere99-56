@@ -664,13 +664,15 @@ protected:
 					sResult = vSerial.GetPSTR();
 					return true;
 				}
-				// Some live object classes expose UID/SERIAL only through the
-				// reference chain, while still being valid assignment targets.
-				// Preserve the same 0.99 serial spelling directly from the live
-				// object instead of falling back to its display name (which is
-				// often empty for CItem).
-				sResult.Format("0%x", (DWORD)pObj->GetUIDIndex());
-				return true;
+				// A live object without a scalar SERIAL property still needs its
+				// object reference preserved for assignment arguments.  Unresolved
+				// resource lookups have a zero hash index; keep those empty rather
+				// than turning them into a false serial such as 0x0.
+				if ( !_stricmp(pObj->GetUIDTypeName(), "world object") )
+				{
+					sResult.Format("0%x", (DWORD)pObj->GetUIDIndex());
+					return true;
+				}
 			}
 		}
 		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
