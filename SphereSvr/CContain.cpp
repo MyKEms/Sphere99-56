@@ -424,7 +424,14 @@ HRESULT CContainer::s_MethodContainer( LPCTSTR pszKey, CGVariant& vArgs, CGVaria
 		else
 		{
 			// How much of this?
-			vValRet.SetInt( ContentCount( g_Cfg.ResourceGetID( RES_ItemDef, vArgs )));
+			// Resource-count scripts conventionally pass an item DEFNAME
+			// (for example RESCOUNT(i_dovedbod)); converting that string through
+			// CGVariant::GetInt() silently produced item id zero.  Preserve numeric
+			// ids while resolving names through the item resource table.
+			CSphereUID rid = vArgs.IsNumeric()
+				? g_Cfg.ResourceGetID( RES_ItemDef, vArgs.GetDWORD())
+				: g_Cfg.ResourceGetIDByName( RES_ItemDef, vArgs.GetPSTR());
+			vValRet.SetInt( ContentCount( rid ));
 		}
 		break;
 	case M_ResTest:
