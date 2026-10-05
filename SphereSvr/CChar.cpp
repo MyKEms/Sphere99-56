@@ -975,6 +975,16 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	// ARGS:
 	//  vValRet = return the value here.
 
+	// Sphere's VIT script property is the shared vitality ceiling used by the
+	// tutorial stat stone.  It is not a fourth persisted base stat: stock reads
+	// it from the stamina ceiling while applying it to both hit points and
+	// stamina.
+	if ( pszKey && !_stricmp( pszKey, "VIT" ))
+	{
+		vValRet.SetInt( m_StatMaxStam );
+		return NO_ERROR;
+	}
+
 	// P_Z (and its P_X/P_Y siblings) are inherited object properties.  The
 	// prefix lookup used by the character table would otherwise treat P_Z as
 	// the shorter P point property and return the complete point string.
@@ -1171,6 +1181,19 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	// VIT is a stock compatibility property.  Raising it raises both derived
+	// maxima; lowering the value does not discard an already established cap.
+	if ( pszKey && !_stricmp( pszKey, "VIT" ))
+	{
+		const STAT_LEVEL iVal = vVal.GetInt();
+		if ( iVal > m_StatMaxHealth )
+			m_StatMaxHealth = iVal;
+		if ( iVal > m_StatMaxStam )
+			m_StatMaxStam = iVal;
+		UpdateStatsFlag();
+		return NO_ERROR;
+	}
+
 	// Handle P= property for position
 	if ( ! _stricmp(pszKey, "P") )
 	{
