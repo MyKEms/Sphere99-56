@@ -393,6 +393,8 @@ protected:
 			TCHAR szName[SCRIPT_MAX_LINE_LEN];
 			if ( !SplitDottedSegment(pszExpr + aStart[iSegment], aLen[iSegment], szName, sizeof(szName), vArgs) )
 				return false;
+			if ( !_stricmp(szName, "TAG") )
+				ExpandTagArgumentIndices(vArgs);
 
 			CGVariant vNext;
 			bool fFromFunction = false;
@@ -627,6 +629,8 @@ protected:
 		// Try method call on object.
 		if ( szKey[0] )
 		{
+			if ( !_stricmp(szKey, "TAG") )
+				ExpandTagArgumentIndices(vArgs);
 			hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, szKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
@@ -1454,6 +1458,139 @@ public:
 		return m_pSourceObj;
 	}
 
+	// TAG keys are expressions in Sphere's script grammar.  In particular,
+	// indexed local names such as obj_y[tag(icount)] and
+	// sloupec_x[index] must be resolved before the tag array sees the key;
+	// CVarDefArray deliberately stores only the resulting key text.
+	static bool IsTagMethodName(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL || *pszKey == '\0' )
+			return false;
+		LPCTSTR pszName = strrchr(pszKey, '.');
+		pszName = pszName ? pszName + 1 : pszKey;
+		return !_stricmp(pszName, "TAG");
+	}
+
+	bool ExpandTagArgumentIndices(TCHAR* pszArgs, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
+	{
+		if ( pszArgs == NULL || *pszArgs == '\0' || iBufCapacity == 0 )
+			return false;
+
+		// Only the first TAG argument is a key.  Find its comma without
+		// mistaking commas inside an indexed function call for the separator.
+		size_t iKeyLen = 0;
+		int iParenDepth = 0;
+		int iBracketDepth = 0;
+		for ( ; pszArgs[iKeyLen]; ++iKeyLen )
+		{
+			const TCHAR ch = pszArgs[iKeyLen];
+			if ( ch == '(' )
+				++iParenDepth;
+			else if ( ch == ')' && iParenDepth > 0 )
+				--iParenDepth;
+			else if ( ch == '[' )
+				++iBracketDepth;
+			else if ( ch == ']' && iBracketDepth > 0 )
+				--iBracketDepth;
+			else if ( ch == ',' && iParenDepth == 0 && iBracketDepth == 0 )
+				break;
+		}
+
+		TCHAR szExpanded[SCRIPT_MAX_LINE_LEN];
+		size_t iOut = 0;
+		bool fChanged = false;
+		for ( size_t i = 0; i < iKeyLen; )
+		{
+			if ( pszArgs[i] != '[' )
+			{
+				if ( iOut + 1 >= sizeof(szExpanded) )
+					return false;
+				szExpanded[iOut++] = pszArgs[i++];
+				continue;
+			}
+
+			size_t iClose = i + 1;
+			int iNested = 1;
+			for ( ; iClose < iKeyLen; ++iClose )
+			{
+				if ( pszArgs[iClose] == '[' )
+					++iNested;
+				else if ( pszArgs[iClose] == ']' && --iNested == 0 )
+					break;
+			}
+			if ( iClose >= iKeyLen )
+			{
+				if ( iOut + 1 >= sizeof(szExpanded) )
+					return false;
+				szExpanded[iOut++] = pszArgs[i++];
+				continue;
+			}
+
+			TCHAR szIndex[SCRIPT_MAX_LINE_LEN];
+			size_t iIndexLen = iClose - i - 1;
+			if ( iIndexLen >= sizeof(szIndex) )
+				return false;
+			memcpy(szIndex, pszArgs + i + 1, iIndexLen);
+			szIndex[iIndexLen] = '\0';
+			TCHAR* pszIndex = szIndex;
+			while ( ISWHITESPACE(*pszIndex) )
+				++pszIndex;
+			TCHAR* pszIndexEnd = pszIndex + strlen(pszIndex);
+			while ( pszIndexEnd > pszIndex && ISWHITESPACE(pszIndexEnd[-1]) )
+				*--pszIndexEnd = '\0';
+			if ( *pszIndex == '\0' )
+			{
+				if ( iOut + (iClose - i + 1) >= sizeof(szExpanded) )
+					return false;
+				memcpy(szExpanded + iOut, pszArgs + i, iClose - i + 1);
+				iOut += iClose - i + 1;
+				i = iClose + 1;
+				continue;
+			}
+
+			const int iIndex = GetScriptExpression(szIndex, sizeof(szIndex));
+			char szNumeric[32];
+			const int iNumericLen = snprintf(szNumeric, sizeof(szNumeric), "%d", iIndex);
+			if ( iNumericLen < 0 ||
+				iOut + static_cast<size_t>(iNumericLen) + 2 >= sizeof(szExpanded) )
+				return false;
+			szExpanded[iOut++] = '[';
+			memcpy(szExpanded + iOut, szNumeric, static_cast<size_t>(iNumericLen));
+			iOut += static_cast<size_t>(iNumericLen);
+			szExpanded[iOut++] = ']';
+			if ( iClose != i + static_cast<size_t>(iNumericLen) + 1 ||
+				strncmp(pszArgs + i + 1, szNumeric, static_cast<size_t>(iNumericLen)) != 0 )
+				fChanged = true;
+			i = iClose + 1;
+		}
+		if ( pszArgs[iKeyLen] )
+		{
+			const size_t iTailLen = strlen(pszArgs + iKeyLen);
+			if ( iOut + iTailLen >= sizeof(szExpanded) )
+				return false;
+			memcpy(szExpanded + iOut, pszArgs + iKeyLen, iTailLen);
+			iOut += iTailLen;
+		}
+		szExpanded[iOut] = '\0';
+		if ( iOut + 1 > iBufCapacity )
+			return false;
+		if ( fChanged )
+			memcpy(pszArgs, szExpanded, iOut + 1);
+		return fChanged;
+	}
+
+	void ExpandTagArgumentIndices(CGVariant& vArgs)
+	{
+		LPCTSTR pszArgs = vArgs.GetPSTR();
+		if ( pszArgs == NULL || *pszArgs == '\0' )
+			return;
+		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
+		szArgs[sizeof(szArgs) - 1] = '\0';
+		if ( ExpandTagArgumentIndices(szArgs, sizeof(szArgs)) )
+			vArgs.SetStr(szArgs);
+	}
+
 	// Check the complete replacement size before shifting the suffix.  The
 	// expression itself is temporarily NUL-terminated while it is evaluated,
 	// so strlen(pszBuf) cannot be used for this check; iBegin and iTrailLen
@@ -1992,6 +2129,8 @@ public:
 				pszArg = szCallArgs;
 			}
 		}
+		if ( IsTagMethodName(pszKey) && pszArg && *pszArg )
+			ExpandTagArgumentIndices(pszArg, SCRIPT_MAX_LINE_LEN);
 
 		// Try dispatching to the base object.  A dotted assignment belongs to
 		// the referenced object (ACT.P, LASTNEW.P, SRC.TAG.foo, ...); passing the
