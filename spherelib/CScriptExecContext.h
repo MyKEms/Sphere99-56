@@ -648,11 +648,13 @@ protected:
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
-		// 0.99 writes an object reference as its UID in ordinary text too
-		// (<FINDID(x)>, <TOPOBJ>, <LASTNEW>), so a script can test it in IF or
-		// keep it for a later lookup.  An empty expansion would read as
-		// "not found" even though the object exists.
-		(void) dwFlags;
+		// A bare ACT reference is text-serialised by 0.99 when an item trigger
+		// is reflected to the character.  Keep the assignment-specific flag for
+		// other object roots, but preserve this trigger value in ordinary text
+		// and function arguments as well.
+		bool fSerializeRef = (dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL) != 0 ||
+			(pszExpr != NULL && !_stricmp(pszExpr, "ACT"));
+		if ( fSerializeRef )
 		{
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
 			{
@@ -1347,8 +1349,10 @@ public:
 			return 0;
 
 		// Control-flow expressions and RETURN values need the same macro
-		// expansion as ordinary command arguments.
-		s_ParseEscapes(pszArg, 0, iBufCapacity);
+		// expansion as ordinary command arguments.  They are numeric, so an
+		// object reference (IF (<FINDID(x)>)) reads as its UID, not as empty
+		// text that would make an existing object look absent.
+		s_ParseEscapes(pszArg, CSCRIPT_PARSE_OBJECT_SERIAL, iBufCapacity);
 		if ( IsLineExpansionOverflow() )
 			return 0;
 
