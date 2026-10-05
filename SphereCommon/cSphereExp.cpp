@@ -1001,8 +1001,10 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 
 bool CSphereExpContext::FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
 {
+	// An indexed DEFNAME (NAME[n]) is a plain value, not a resource name: the
+	// reference server returns its text, or nothing past the last index.
 	if ( pszExpr == NULL || *pszExpr == '\0' || strchr(pszExpr, '.') ||
-		strchr(pszExpr, '(') )
+		strchr(pszExpr, '(') || strchr(pszExpr, '[') )
 		return false;
 	CSphereUID rid = g_Cfg.ResourceGetIDByName(RES_UNKNOWN, pszExpr);
 	if ( !rid.IsValidRID() )
