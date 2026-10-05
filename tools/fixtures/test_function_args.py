@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the ARGS a script function receives for arithmetic arguments."""
+"""Check script-function arguments and resource references."""
 
 from __future__ import annotations
 
@@ -101,6 +101,28 @@ def main() -> int:
                 f"{label} ({form} {argument!r}): expected ARGS={expected_args!r} "
                 f"ARGVCOUNT={expected_count}, got {got!r}"
             )
+    findres_message = next(
+        (message for message in messages if message.startswith("SPHERE_FUNCTION_ARGS_FINDRES ")),
+        None,
+    )
+    if findres_message != "SPHERE_FUNCTION_ARGS_FINDRES [SYNTH_SKILL_0]":
+        failures.append(
+            "findres() did not resolve a bare script argument to the skill key: "
+            f"got {findres_message!r}"
+        )
+    direct_findres_message = next(
+        (
+            message
+            for message in messages
+            if message.startswith("SPHERE_FUNCTION_ARGS_FINDRES_DIRECT ")
+        ),
+        None,
+    )
+    if direct_findres_message != "SPHERE_FUNCTION_ARGS_FINDRES_DIRECT [SYNTH_SKILL_0]":
+        failures.append(
+            "findres() did not expose a skill definition name: "
+            f"got {direct_findres_message!r}"
+        )
     if f"{MARKER} done" not in messages:
         failures.append("function-argument probe did not finish")
 
@@ -110,7 +132,7 @@ def main() -> int:
             print(f"- {failure}", file=sys.stderr)
         print(f"messages: {messages!r}", file=sys.stderr)
         return 1
-    print(f"function-argument probe passed: {len(ROWS)}/{len(ROWS)} rows")
+    print(f"function-argument probe passed: {len(ROWS) + 2}/{len(ROWS) + 2} rows")
     return 0
 
 
