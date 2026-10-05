@@ -648,13 +648,11 @@ protected:
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
-		// A bare ACT reference is text-serialised by 0.99 when an item trigger
-		// is reflected to the character.  Keep the assignment-specific flag for
-		// other object roots, but preserve this trigger value in ordinary text
-		// and function arguments as well.
-		bool fSerializeRef = (dwFlags & CSCRIPT_PARSE_OBJECT_SERIAL) != 0 ||
-			(pszExpr != NULL && !_stricmp(pszExpr, "ACT"));
-		if ( fSerializeRef )
+		// 0.99 writes an object reference as its UID in ordinary text too
+		// (<FINDID(x)>, <TOPOBJ>, <LASTNEW>), so a script can test it in IF or
+		// keep it for a later lookup.  An empty expansion would read as
+		// "not found" even though the object exists.
+		(void) dwFlags;
 		{
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResult.GetRef()) )
 			{
