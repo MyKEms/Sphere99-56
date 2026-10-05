@@ -2637,8 +2637,10 @@ public:
 						// example the byte-token stream used by STRTOASCII).  The
 						// numeric return path used to collapse that text to its first
 						// token, producing an empty raw packet. Preserve quoted and
-						// whitespace-containing return values for script callers.
-						s_ParseEscapes(pszArg, 0, sizeof(szArg));
+						// whitespace-containing return values for script callers.  The
+						// value is also a numeric expression: expand object references as
+						// their UID here, before GetScriptExpression sees the text.
+						s_ParseEscapes(pszArg, CSCRIPT_PARSE_OBJECT_SERIAL, sizeof(szArg));
 						TCHAR* pszText = pszArg;
 						while ( ISWHITESPACE(*pszText) ) pszText++;
 						TCHAR* pszTextEnd = pszText + strlen(pszText);
