@@ -341,16 +341,36 @@ protected:
 		}
 		else if ( !fUIDRoot )
 		{
-			if ( pBase == NULL )
-				return false;
-			hRes = pBase->s_PropGet(szRoot, vCurrent, m_pSrc);
-			rejected.Observe(hRes, szRoot, m_pBaseObj);
+			if ( pBase != NULL )
+			{
+				hRes = pBase->s_PropGet(szRoot, vCurrent, m_pSrc);
+				rejected.Observe(hRes, szRoot, m_pBaseObj);
+				if ( hRes != NO_ERROR )
+				{
+					hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
+					rejected.Observe(hRes, szRoot, m_pBaseObj);
+					if ( hRes == NO_ERROR )
+						fEffect = true;
+				}
+			}
+			// A numeric resource reference can be produced by an inner escape in a
+			// deferred expression.  For example, the level-up scripts use
+			// <?<profession>.<arg(skillname)>?>; the object-valued <profession>
+			// escape is serialized while preparing ARG(), leaving its resource UID as
+			// the chain root.  Resolve that UID back to the resource before walking
+			// the suffix instead of treating the signed number as a DEFNAME.
 			if ( hRes != NO_ERROR )
 			{
-				hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
-				rejected.Observe(hRes, szRoot, m_pBaseObj);
-				if ( hRes == NO_ERROR )
-					fEffect = true;
+				CGVariant vNumeric(szRoot);
+				if ( vNumeric.IsNumeric() )
+				{
+					CResourceObj* pResource = ResolveResourceObject(vNumeric.GetUID());
+					if ( pResource != NULL )
+					{
+						vCurrent.SetRef(pResource);
+						hRes = NO_ERROR;
+					}
+				}
 			}
 			if ( hRes != NO_ERROR )
 				return false;
