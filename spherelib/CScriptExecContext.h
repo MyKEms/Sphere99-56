@@ -393,6 +393,8 @@ protected:
 			TCHAR szName[SCRIPT_MAX_LINE_LEN];
 			if ( !SplitDottedSegment(pszExpr + aStart[iSegment], aLen[iSegment], szName, sizeof(szName), vArgs) )
 				return false;
+			if ( !_stricmp(szName, "TAG") )
+				ExpandTagArgumentIndices(vArgs);
 
 			CGVariant vNext;
 			bool fFromFunction = false;
@@ -627,6 +629,8 @@ protected:
 		// Try method call on object.
 		if ( szKey[0] )
 		{
+			if ( !_stricmp(szKey, "TAG") )
+				ExpandTagArgumentIndices(vArgs);
 			hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, szKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
@@ -781,6 +785,133 @@ public:
 	// Gump command table for dialog construction.
 	static LPCTSTR const sm_szGumpCmds[];
 
+	// Sphere's dialog grammar accepts numeric fields in its normal expression
+	// syntax (including zero-prefixed hexadecimal).  The client layout, however,
+	// is a decimal wire format.  Keep that conversion at the last point before
+	// a control enters the packet accumulator so the legacy space form, ARGO's
+	// comma form, and controls emitted by nested layout functions agree.
+	static bool FormatDialogNumber(LPCTSTR pszValue, TCHAR* pszOut, size_t iOutSize)
+	{
+		if ( pszValue == NULL || pszOut == NULL || iOutSize == 0 )
+			return false;
+		int iValue = Exp_GetValue( pszValue );
+		int iWritten = snprintf( pszOut, iOutSize, "%d", iValue );
+		return iWritten >= 0 && static_cast<size_t>(iWritten) < iOutSize;
+	}
+
+	static unsigned DialogNumericMask(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL )
+			return 0;
+		struct GumpSpec
+		{
+			LPCTSTR m_pszKey;
+			unsigned m_mask;
+		};
+		static const GumpSpec sm_specs[] =
+		{
+			{ "resizepic", 0x1f },
+			{ "gumppic", 0x07 },
+			{ "tilepic", 0x07 },
+			{ "text", 0x0f },
+			{ "croppedtext", 0x3f },
+			{ "htmlgump", 0x7f },
+			{ "xmfhtmlgump", 0x7f },
+			{ "button", 0x7f },
+			{ "radio", 0x3f },
+			{ "checkbox", 0x3f },
+			{ "textentry", 0x7f },
+			{ "textentrya", 0x3f },
+			{ "page", 0x01 },
+			{ "group", 0x01 },
+			{ "gumppictiled", 0x0f },
+			{ "checkertrans", 0x0f },
+			{ "xmfhtmlgumpcolor", 0xff },
+			{ "tilepichue", 0x0f },
+		};
+		for ( size_t i = 0; i < COUNTOF(sm_specs); i++ )
+		{
+			if ( !_stricmp(pszKey, sm_specs[i].m_pszKey) )
+				return sm_specs[i].m_mask;
+		}
+		return 0;
+	}
+
+	static void NormalizeGumpControl(TCHAR* pszControl)
+	{
+		if ( pszControl == NULL || !*pszControl )
+			return;
+
+		TCHAR szKey[64];
+		TCHAR* p = pszControl;
+		while ( ISWHITESPACE(*p) ) p++;
+		TCHAR* pKey = p;
+		while ( *p && !ISWHITESPACE(*p) && *p != ',' ) p++;
+		const size_t iKeyLen = static_cast<size_t>(p - pKey);
+		if ( iKeyLen == 0 || iKeyLen >= sizeof(szKey) )
+			return;
+		memcpy( szKey, pKey, iKeyLen );
+		szKey[iKeyLen] = '\0';
+		const unsigned iMask = DialogNumericMask(szKey);
+		if ( iMask == 0 )
+			return;
+
+		TCHAR szFields[16][SCRIPT_MAX_LINE_LEN];
+		int iFields = 0;
+		while ( *p && iFields < static_cast<int>(COUNTOF(szFields)) )
+		{
+			while ( ISWHITESPACE(*p) || *p == ',' ) p++;
+			if ( !*p ) break;
+			TCHAR* pField = szFields[iFields];
+			size_t iLen = 0;
+			if ( *p == '"' )
+			{
+				// Text-bearing controls can carry spaces. Keep the quotes as part
+				// of the field and leave them untouched by the numeric mask.
+				pField[iLen++] = *p++;
+				while ( *p && iLen + 1 < SCRIPT_MAX_LINE_LEN )
+				{
+					TCHAR ch = *p++;
+					pField[iLen++] = ch;
+					if ( ch == '"' ) break;
+				}
+			}
+			else
+			{
+				while ( *p && !ISWHITESPACE(*p) && *p != ',' &&
+					iLen + 1 < SCRIPT_MAX_LINE_LEN )
+					pField[iLen++] = *p++;
+			}
+			pField[iLen] = '\0';
+			if ( iLen == 0 ) break;
+			iFields++;
+		}
+		if ( iFields == 0 )
+			return;
+
+		TCHAR szNormalized[SCRIPT_MAX_LINE_LEN];
+		int iWritten = snprintf(szNormalized, sizeof(szNormalized), "%s", szKey);
+		if ( iWritten < 0 || static_cast<size_t>(iWritten) >= sizeof(szNormalized) )
+			return;
+		for ( int i = 0; i < iFields; i++ )
+		{
+			TCHAR szField[SCRIPT_MAX_LINE_LEN];
+			LPCTSTR pszField = szFields[i];
+			if ( i < 32 && (iMask & (1u << i)) &&
+				FormatDialogNumber(pszField, szField, sizeof(szField)) )
+				pszField = szField;
+			int iLen = snprintf(szNormalized + iWritten,
+				sizeof(szNormalized) - static_cast<size_t>(iWritten),
+				" %s", pszField);
+			if ( iLen < 0 || static_cast<size_t>(iLen) >=
+				sizeof(szNormalized) - static_cast<size_t>(iWritten) )
+				return;
+			iWritten += iLen;
+		}
+		strncpy(pszControl, szNormalized, SCRIPT_MAX_LINE_LEN - 1);
+		pszControl[SCRIPT_MAX_LINE_LEN - 1] = '\0';
+	}
+
 	static bool IsGumpCommand(LPCTSTR pszKey)
 	{
 		for ( int i = 0; sm_szGumpCmds[i]; i++ )
@@ -913,8 +1044,18 @@ public:
 
 		const int iTextID = pTexts->GetSize();
 		pTexts->Add(pszText);
+		TCHAR szNum[7][SCRIPT_MAX_LINE_LEN];
+		LPCTSTR ppOut[7] = { ppArgs[0], ppArgs[1], ppArgs[2], ppArgs[3],
+			ppArgs[4], ppArgs[5], ppArgs[6] };
+		for ( int i = 0; i < 7; i++ )
+		{
+			if ( i == 4 )
+				continue; // inline HTML text, not a numeric field.
+			if ( FormatDialogNumber(ppArgs[i], szNum[i], sizeof(szNum[i])) )
+				ppOut[i] = szNum[i];
+		}
 		pControls->AddFormat("htmlgump %s %s %s %s %d %s %s",
-			ppArgs[0], ppArgs[1], ppArgs[2], ppArgs[3], iTextID, ppArgs[5], ppArgs[6]);
+			ppOut[0], ppOut[1], ppOut[2], ppOut[3], iTextID, ppOut[5], ppOut[6]);
 		return true;
 	}
 
@@ -1001,8 +1142,15 @@ public:
 
 		const int iTextID = pTexts->GetSize();
 		pTexts->Add(pszText);
+		TCHAR szNum[3][SCRIPT_MAX_LINE_LEN];
+		LPCTSTR ppOut[3] = { ppArgs[0], ppArgs[1], ppArgs[2] };
+		for ( int i = 0; i < 3; i++ )
+		{
+			if ( FormatDialogNumber(ppArgs[i], szNum[i], sizeof(szNum[i])) )
+				ppOut[i] = szNum[i];
+		}
 		pControls->AddFormat("text %s %s %s %d",
-			ppArgs[0], ppArgs[1], ppArgs[2], iTextID);
+			ppOut[0], ppOut[1], ppOut[2], iTextID);
 		return true;
 	}
 
@@ -1347,6 +1495,139 @@ public:
 		return m_pSourceObj;
 	}
 
+	// TAG keys are expressions in Sphere's script grammar.  In particular,
+	// indexed local names such as obj_y[tag(icount)] and
+	// sloupec_x[index] must be resolved before the tag array sees the key;
+	// CVarDefArray deliberately stores only the resulting key text.
+	static bool IsTagMethodName(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL || *pszKey == '\0' )
+			return false;
+		LPCTSTR pszName = strrchr(pszKey, '.');
+		pszName = pszName ? pszName + 1 : pszKey;
+		return !_stricmp(pszName, "TAG");
+	}
+
+	bool ExpandTagArgumentIndices(TCHAR* pszArgs, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
+	{
+		if ( pszArgs == NULL || *pszArgs == '\0' || iBufCapacity == 0 )
+			return false;
+
+		// Only the first TAG argument is a key.  Find its comma without
+		// mistaking commas inside an indexed function call for the separator.
+		size_t iKeyLen = 0;
+		int iParenDepth = 0;
+		int iBracketDepth = 0;
+		for ( ; pszArgs[iKeyLen]; ++iKeyLen )
+		{
+			const TCHAR ch = pszArgs[iKeyLen];
+			if ( ch == '(' )
+				++iParenDepth;
+			else if ( ch == ')' && iParenDepth > 0 )
+				--iParenDepth;
+			else if ( ch == '[' )
+				++iBracketDepth;
+			else if ( ch == ']' && iBracketDepth > 0 )
+				--iBracketDepth;
+			else if ( ch == ',' && iParenDepth == 0 && iBracketDepth == 0 )
+				break;
+		}
+
+		TCHAR szExpanded[SCRIPT_MAX_LINE_LEN];
+		size_t iOut = 0;
+		bool fChanged = false;
+		for ( size_t i = 0; i < iKeyLen; )
+		{
+			if ( pszArgs[i] != '[' )
+			{
+				if ( iOut + 1 >= sizeof(szExpanded) )
+					return false;
+				szExpanded[iOut++] = pszArgs[i++];
+				continue;
+			}
+
+			size_t iClose = i + 1;
+			int iNested = 1;
+			for ( ; iClose < iKeyLen; ++iClose )
+			{
+				if ( pszArgs[iClose] == '[' )
+					++iNested;
+				else if ( pszArgs[iClose] == ']' && --iNested == 0 )
+					break;
+			}
+			if ( iClose >= iKeyLen )
+			{
+				if ( iOut + 1 >= sizeof(szExpanded) )
+					return false;
+				szExpanded[iOut++] = pszArgs[i++];
+				continue;
+			}
+
+			TCHAR szIndex[SCRIPT_MAX_LINE_LEN];
+			size_t iIndexLen = iClose - i - 1;
+			if ( iIndexLen >= sizeof(szIndex) )
+				return false;
+			memcpy(szIndex, pszArgs + i + 1, iIndexLen);
+			szIndex[iIndexLen] = '\0';
+			TCHAR* pszIndex = szIndex;
+			while ( ISWHITESPACE(*pszIndex) )
+				++pszIndex;
+			TCHAR* pszIndexEnd = pszIndex + strlen(pszIndex);
+			while ( pszIndexEnd > pszIndex && ISWHITESPACE(pszIndexEnd[-1]) )
+				*--pszIndexEnd = '\0';
+			if ( *pszIndex == '\0' )
+			{
+				if ( iOut + (iClose - i + 1) >= sizeof(szExpanded) )
+					return false;
+				memcpy(szExpanded + iOut, pszArgs + i, iClose - i + 1);
+				iOut += iClose - i + 1;
+				i = iClose + 1;
+				continue;
+			}
+
+			const int iIndex = GetScriptExpression(szIndex, sizeof(szIndex));
+			char szNumeric[32];
+			const int iNumericLen = snprintf(szNumeric, sizeof(szNumeric), "%d", iIndex);
+			if ( iNumericLen < 0 ||
+				iOut + static_cast<size_t>(iNumericLen) + 2 >= sizeof(szExpanded) )
+				return false;
+			szExpanded[iOut++] = '[';
+			memcpy(szExpanded + iOut, szNumeric, static_cast<size_t>(iNumericLen));
+			iOut += static_cast<size_t>(iNumericLen);
+			szExpanded[iOut++] = ']';
+			if ( iClose != i + static_cast<size_t>(iNumericLen) + 1 ||
+				strncmp(pszArgs + i + 1, szNumeric, static_cast<size_t>(iNumericLen)) != 0 )
+				fChanged = true;
+			i = iClose + 1;
+		}
+		if ( pszArgs[iKeyLen] )
+		{
+			const size_t iTailLen = strlen(pszArgs + iKeyLen);
+			if ( iOut + iTailLen >= sizeof(szExpanded) )
+				return false;
+			memcpy(szExpanded + iOut, pszArgs + iKeyLen, iTailLen);
+			iOut += iTailLen;
+		}
+		szExpanded[iOut] = '\0';
+		if ( iOut + 1 > iBufCapacity )
+			return false;
+		if ( fChanged )
+			memcpy(pszArgs, szExpanded, iOut + 1);
+		return fChanged;
+	}
+
+	void ExpandTagArgumentIndices(CGVariant& vArgs)
+	{
+		LPCTSTR pszArgs = vArgs.GetPSTR();
+		if ( pszArgs == NULL || *pszArgs == '\0' )
+			return;
+		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
+		szArgs[sizeof(szArgs) - 1] = '\0';
+		if ( ExpandTagArgumentIndices(szArgs, sizeof(szArgs)) )
+			vArgs.SetStr(szArgs);
+	}
+
 	// Check the complete replacement size before shifting the suffix.  The
 	// expression itself is temporarily NUL-terminated while it is evaluated,
 	// so strlen(pszBuf) cannot be used for this check; iBegin and iTrailLen
@@ -1425,7 +1706,12 @@ public:
 
 		for ( int i = 0; pszBuf[i]; i++ )
 		{
-			if ( pszBuf[i] != chBegin )
+			// ``<?...?>`` is Sphere's deferred expression form.  Dialog TEXT
+			// uses the HTML escape mode so literal tags such as <BASEFONT>
+			// remain untouched, but deferred expressions must still be
+			// evaluated in that mode at send time.
+			bool fDeferredMacro = pszBuf[i] == '<' && pszBuf[i+1] == '?';
+			if ( pszBuf[i] != chBegin && !fDeferredMacro )
 				continue;
 
 			// Handle <?...?> expression macros — alternative delimiters for nesting.
@@ -1885,6 +2171,8 @@ public:
 				pszArg = szCallArgs;
 			}
 		}
+		if ( IsTagMethodName(pszKey) && pszArg && *pszArg )
+			ExpandTagArgumentIndices(pszArg, SCRIPT_MAX_LINE_LEN);
 
 		// Try dispatching to the base object.  A dotted assignment belongs to
 		// the referenced object (ACT.P, LASTNEW.P, SRC.TAG.foo, ...); passing the
@@ -2178,6 +2466,7 @@ public:
 				{
 					strncpy(szGump, szGumpKey, sizeof(szGump)-1);
 				}
+				NormalizeGumpControl( szGump );
 				sm_pGumpControls->Add(szGump);
 				return NO_ERROR;
 			}
@@ -2604,15 +2893,27 @@ public:
 					szKey[sizeof(szKey) - 1] = '\0';
 					if ( strchr(szKey, '<') )
 					{
-						// A function-style ARG statement may receive a live object
-						// reference (for example ARG(gata,<LASTNEW>)).  Expand its
+						// A dotted script-function call may receive a live object
+						// reference (for example LASTNEW.LOGCONT(<SRC>)).  Expand its
 						// key with the serial-preserving flag before ExecuteCommand
-						// splits the statement; the ordinary key path intentionally
-						// renders object references as display text.
+						// splits the statement; ordinary command and property paths
+						// intentionally render object references as display text.
+						bool fScriptCall = false;
+						TCHAR szCallKey[SCRIPT_MAX_LINE_LEN];
+						strncpy(szCallKey, szKey, sizeof(szCallKey) - 1);
+						szCallKey[sizeof(szCallKey) - 1] = '\0';
+						TCHAR* pszCallArgs = NULL;
+						if ( SplitCallStatement(szCallKey, pszCallArgs) )
+						{
+							LPCTSTR pszCallFunction = strrchr(szCallKey, '.');
+							pszCallFunction = pszCallFunction ? pszCallFunction + 1 : szCallKey;
+							fScriptCall = strchr(szCallKey, '.') != NULL &&
+								IsScriptFunction(pszCallFunction);
+						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
 							!_strnicmp(szKey, "TAG(", 4) ||
 							HasContainerAssignmentArgument(szKey) ||
-							HasContentsCall(szKey))
+							HasContentsCall(szKey) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )
@@ -2620,10 +2921,14 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
+						// Script functions receive reference-valued arguments as UID text,
+						// so ARG()/CONT chains keep the referenced object instead of an
+						// empty scalar.
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
-						(fKeyEquals && (IsObjectAssignmentKey(szKey) ||
-							HasContainerAssignmentArgument(szKey) || HasContentsCall(szKey))))
+							(fKeyEquals && (IsObjectAssignmentKey(szKey) ||
+								HasContainerAssignmentArgument(szKey) || HasContentsCall(szKey))) ||
+							IsScriptFunction(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
 							SCRIPT_MAX_LINE_LEN - (script.GetArgMod() - script.GetLineBuffer()) );

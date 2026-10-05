@@ -1001,8 +1001,10 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 
 bool CSphereExpContext::FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
 {
+	// An indexed DEFNAME (NAME[n]) is a plain value, not a resource name: the
+	// reference server returns its text, or nothing past the last index.
 	if ( pszExpr == NULL || *pszExpr == '\0' || strchr(pszExpr, '.') ||
-		strchr(pszExpr, '(') )
+		strchr(pszExpr, '(') || strchr(pszExpr, '[') )
 		return false;
 	CSphereUID rid = g_Cfg.ResourceGetIDByName(RES_UNKNOWN, pszExpr);
 	if ( !rid.IsValidRID() )
@@ -1316,7 +1318,22 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				vArgs.GetArrayPSTR(0), CSphereResourceMgr::sm_szResourceBlocks );
 			if ( restype <= RES_UNKNOWN || restype >= RES_QTY )
 				return HRES_BAD_ARGUMENTS;
-			CSphereUID rid = g_Cfg.ResourceGetIDByName( restype, vArgs.GetArrayPSTR(1) );
+			LPCTSTR pszName = vArgs.GetArrayPSTR(1);
+			CSphereUID rid = g_Cfg.ResourceGetIDByName( restype, pszName );
+			if ( !rid.IsValidRID() )
+			{
+				// Script functions may pass the local ARGS/ARGV token through
+				// unchanged. Evaluate it only after the literal resource lookup
+				// fails, preserving the normal FINDRES(SPELL,S_HEAL) path.
+				CGVariant vResolvedName;
+				CScriptUnknownRejectTracker ignored;
+				if ( pszName && EvaluateEscapeValue(pszName, vResolvedName, ignored) )
+				{
+					LPCTSTR pszResolved = vResolvedName.GetPSTR();
+					if ( pszResolved && *pszResolved )
+						rid = g_Cfg.ResourceGetIDByName( restype, pszResolved );
+				}
+			}
 			vValRet.SetRef( g_Cfg.ResourceGetDef( rid ));
 		}
 		break;
@@ -1358,7 +1375,21 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vUID.GetRef()) )
 				vValRet.SetRef(pObj);
 			else
-				vValRet.SetRef( g_Cfg.FindUID( vUID.GetUID()));
+			{
+				// HVAL and stock diagnostics spell a serial as #<hex>.  The
+				// ordinary variant parser deliberately leaves that marker as text,
+				// so decode it at the UID lookup boundary.
+				UID_INDEX uid = vUID.GetUID();
+				LPCTSTR pszHash = vUID.GetPSTR();
+				if ( pszHash && pszHash[0] == '#' && pszHash[1] )
+				{
+					char* pszEnd = NULL;
+					const unsigned long ulUID = strtoul(pszHash + 1, &pszEnd, 16);
+					if ( pszEnd != pszHash + 1 && *pszEnd == '\0' )
+						uid = static_cast<UID_INDEX>(ulUID);
+				}
+				vValRet.SetRef( g_Cfg.FindUID(uid));
+			}
 		}
 		break;
 	case F_IsUIDValid:

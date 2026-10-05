@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check script-function arguments and resource references."""
+"""Check ARG locals in EVAL and loops over indexed DEFNAMEs."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ import sys
 import time
 from pathlib import Path
 
-from modes.function_args import ACCOUNT, LOGIN_TOKEN, MARKER, ROWS
+from modes.local_arg_index import ACCOUNT, LOGIN_TOKEN, MARKER, ROWS
 from run_suite import shutdown_failures
 
 
-ROW_RE = re.compile(re.escape(MARKER) + r" (\w+) args=\[(.*)\] count=\[(.*)\]$")
+ROW_RE = re.compile(re.escape(MARKER) + r" (\w+)=\[(.*)\]$")
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -34,7 +34,7 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=2996)
+    parser.add_argument("--port", type=int, default=2976)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
@@ -50,12 +50,12 @@ def main() -> int:
     def exercise() -> None:
         sock, _ = game_connect(args.host, args.port, ACCOUNT, LOGIN_TOKEN, game_port=args.port + 1000)
         if sock is None:
-            raise RuntimeError("function-argument probe did not reach its character list")
+            raise RuntimeError("ARG-local index probe did not reach its character list")
         try:
             sock.sendall(make_char_play(0))
             data = recv_until_game_start(sock, timeout=30.0)
             if not data:
-                raise RuntimeError("function-argument probe character did not enter the world")
+                raise RuntimeError("ARG-local index probe character did not enter the world")
             buffer = bytearray(data)
             deadline = time.monotonic() + 12.0
             sock.settimeout(0.2)
@@ -89,50 +89,25 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
 
-    seen: dict[str, tuple[str, str]] = {}
+    seen: dict[str, str] = {}
     for message in messages:
         match = ROW_RE.search(message)
         if match:
-            seen[match.group(1)] = (match.group(2), match.group(3))
-    for label, form, argument, expected_args, expected_count in ROWS:
+            seen[match.group(1)] = match.group(2)
+    for label, expected in ROWS:
         got = seen.get(label)
-        if got != (expected_args, expected_count):
-            failures.append(
-                f"{label} ({form} {argument!r}): expected ARGS={expected_args!r} "
-                f"ARGVCOUNT={expected_count}, got {got!r}"
-            )
-    findres_message = next(
-        (message for message in messages if message.startswith("SPHERE_FUNCTION_ARGS_FINDRES ")),
-        None,
-    )
-    if findres_message != "SPHERE_FUNCTION_ARGS_FINDRES [SYNTH_SKILL_0]":
-        failures.append(
-            "findres() did not resolve a bare script argument to the skill key: "
-            f"got {findres_message!r}"
-        )
-    direct_findres_message = next(
-        (
-            message
-            for message in messages
-            if message.startswith("SPHERE_FUNCTION_ARGS_FINDRES_DIRECT ")
-        ),
-        None,
-    )
-    if direct_findres_message != "SPHERE_FUNCTION_ARGS_FINDRES_DIRECT [SYNTH_SKILL_0]":
-        failures.append(
-            "findres() did not expose a skill definition name: "
-            f"got {direct_findres_message!r}"
-        )
+        if got != expected:
+            failures.append(f"{label}: expected {expected!r}, got {got!r}")
     if f"{MARKER} done" not in messages:
-        failures.append("function-argument probe did not finish")
+        failures.append("ARG-local index probe did not finish")
 
     if failures:
-        print("function-argument probe failed", file=sys.stderr)
+        print("ARG-local index probe failed", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         print(f"messages: {messages!r}", file=sys.stderr)
         return 1
-    print(f"function-argument probe passed: {len(ROWS) + 2}/{len(ROWS) + 2} rows")
+    print(f"ARG-local index probe passed: {len(ROWS)}/{len(ROWS)} rows")
     return 0
 
 

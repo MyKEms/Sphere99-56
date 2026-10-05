@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check script-function arguments and resource references."""
+"""Check hash-serial FINDUID, reference-valued function arguments, and flags."""
 
 from __future__ import annotations
 
@@ -10,11 +10,23 @@ import sys
 import time
 from pathlib import Path
 
-from modes.function_args import ACCOUNT, LOGIN_TOKEN, MARKER, ROWS
 from run_suite import shutdown_failures
+from modes.finduid_flags_179 import ACCOUNT, MARKER, PASSWORD
 
 
-ROW_RE = re.compile(re.escape(MARKER) + r" (\w+) args=\[(.*)\] count=\[(.*)\]$")
+ROW_RE = re.compile(
+    re.escape(MARKER)
+    + r" ([a-z0-9_]+)\|\[(.*?)\](?:\|\[(.*?)\])?(?:\|\[(.*?)\])?$"
+)
+EXPECTED = {
+    "hash_name": ("synthetic hash target",),
+    "hex_name": ("synthetic hash target",),
+    "arg_value": ("040000004", "synthetic hash target"),
+    "cont_name": ("synthetic hash target",),
+    "flags_before": ("0", "0", "0"),
+    "flags_after": ("1", "1", "1"),
+    "flags_reset": ("0", "0", "0"),
+}
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -34,13 +46,14 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=2996)
+    parser.add_argument("--port", type=int, default=2900)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    tools_path = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(tools_path))
     from test_world_save_roundtrip import run_server
     from uo_test_client import game_connect, make_char_play, recv_until_game_start
 
@@ -48,20 +61,22 @@ def main() -> int:
     failures: list[str] = []
 
     def exercise() -> None:
-        sock, _ = game_connect(args.host, args.port, ACCOUNT, LOGIN_TOKEN, game_port=args.port + 1000)
+        sock, _ = game_connect(
+            args.host, args.port, ACCOUNT, PASSWORD, game_port=args.port + 1000
+        )
         if sock is None:
-            raise RuntimeError("function-argument probe did not reach its character list")
+            raise RuntimeError("FINDUID flags account did not reach its character list")
         try:
             sock.sendall(make_char_play(0))
             data = recv_until_game_start(sock, timeout=30.0)
             if not data:
-                raise RuntimeError("function-argument probe character did not enter the world")
+                raise RuntimeError("FINDUID flags character did not enter the world")
             buffer = bytearray(data)
             deadline = time.monotonic() + 12.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(buffer))
-                if f"{MARKER} done" in messages:
+                if f"{MARKER}_END" in messages:
                     return
                 try:
                     chunk = sock.recv(65536)
@@ -89,50 +104,29 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
 
-    seen: dict[str, tuple[str, str]] = {}
+    rows: dict[str, tuple[str, ...]] = {}
     for message in messages:
-        match = ROW_RE.search(message)
+        match = ROW_RE.fullmatch(message)
         if match:
-            seen[match.group(1)] = (match.group(2), match.group(3))
-    for label, form, argument, expected_args, expected_count in ROWS:
-        got = seen.get(label)
-        if got != (expected_args, expected_count):
-            failures.append(
-                f"{label} ({form} {argument!r}): expected ARGS={expected_args!r} "
-                f"ARGVCOUNT={expected_count}, got {got!r}"
-            )
-    findres_message = next(
-        (message for message in messages if message.startswith("SPHERE_FUNCTION_ARGS_FINDRES ")),
-        None,
-    )
-    if findres_message != "SPHERE_FUNCTION_ARGS_FINDRES [SYNTH_SKILL_0]":
-        failures.append(
-            "findres() did not resolve a bare script argument to the skill key: "
-            f"got {findres_message!r}"
-        )
-    direct_findres_message = next(
-        (
-            message
-            for message in messages
-            if message.startswith("SPHERE_FUNCTION_ARGS_FINDRES_DIRECT ")
-        ),
-        None,
-    )
-    if direct_findres_message != "SPHERE_FUNCTION_ARGS_FINDRES_DIRECT [SYNTH_SKILL_0]":
-        failures.append(
-            "findres() did not expose a skill definition name: "
-            f"got {direct_findres_message!r}"
-        )
-    if f"{MARKER} done" not in messages:
-        failures.append("function-argument probe did not finish")
+            values = tuple(value or "" for value in match.groups()[1:] if value is not None)
+            rows[match.group(1)] = values
+    for key, expected in EXPECTED.items():
+        value = rows.get(key)
+        if value != expected:
+            failures.append(f"{key}: got {value!r}; expected {expected!r}")
+    if f"{MARKER}_END" not in messages:
+        failures.append("FINDUID flags probe did not reach its end marker")
 
     if failures:
-        print("function-argument probe failed", file=sys.stderr)
+        print("observed messages:", messages, file=sys.stderr)
+        print(
+            f"FINDUID flags probe failed: {max(0, len(EXPECTED) - len(failures))}/{len(EXPECTED)} rows passed",
+            file=sys.stderr,
+        )
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
-        print(f"messages: {messages!r}", file=sys.stderr)
         return 1
-    print(f"function-argument probe passed: {len(ROWS) + 2}/{len(ROWS) + 2} rows")
+    print(f"FINDUID flags probe passed: {len(EXPECTED)}/{len(EXPECTED)} rows")
     return 0
 
 
