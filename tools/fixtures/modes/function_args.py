@@ -1,4 +1,4 @@
-"""Registered synthetic fixture for arithmetic script-function arguments."""
+"""Registered synthetic fixture for script-function arguments and references."""
 
 from pathlib import Path
 
@@ -41,6 +41,8 @@ def _probe_lines() -> str:
         else:
             lines.append(f"f_FunctionArgsEcho({argument})")
     lines.append(f"SYSMESSAGE {MARKER} done")
+    lines.append("SYSMESSAGE SPHERE_FUNCTION_ARGS_FINDRES_DIRECT [<findres(skill,0).name>]")
+    lines.append("SYSMESSAGE SPHERE_FUNCTION_ARGS_FINDRES [<f_FunctionArgsFindRes(0)>]")
     return "\n".join(lines)
 
 
@@ -57,6 +59,13 @@ def generate(output: Path) -> int:
 [FUNCTION f_FunctionArgsEcho]
 SYSMESSAGE {MARKER} <TAG.FNARGS_LABEL> args=[<ARGS>] count=[<ARGVCOUNT>]
 RETURN 1
+
+[FUNCTION f_FunctionArgsFindRes]
+RETURN "<findres(skill,args).name>"
+
+[SKILL 0]
+KEY=SYNTH_SKILL_0
+TITLE=synthetic skill
 
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
