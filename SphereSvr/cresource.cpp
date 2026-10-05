@@ -273,6 +273,9 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			m_iClientsMax = FD_SETSIZE-1;
 		}
 		break;
+	case P_CharTags:
+		m_fCharTags = vVal.GetBool();
+		break;
 	case P_CorpseNPCDecay:
 		m_iDecay_CorpseNPC = vVal.GetInt()*60*TICKS_PER_SEC;
 		break;
@@ -471,6 +474,9 @@ HRESULT CSphereResourceMgr::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScri
 		break;
 	case P_ClientLinger:
 		vValRet.SetInt( m_iClientLingerTime / TICKS_PER_SEC );
+		break;
+	case P_CharTags:
+		vValRet.SetBool( m_fCharTags );
 		break;
 	case P_CorpseNPCDecay:
 		vValRet.SetInt( m_iDecay_CorpseNPC / (60*TICKS_PER_SEC));
