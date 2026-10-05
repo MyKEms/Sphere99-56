@@ -22,6 +22,7 @@ ROWS = (
     ("direct", "1"),
     ("read", "1"),
     ("award2", "skip"),
+    ("returned", "yes"),
 )
 
 
@@ -65,6 +66,9 @@ ELIF (<ARGVCOUNT> == 1)
 ENDIF
 RETURN ""
 
+[FUNCTION f_RuneTagFound]
+RETURN <FINDID(i_RuneTagProbe)>
+
 [FUNCTION f_RuneTagAward]
 IF (0<f_RuneTag(<ARGV(0)>)>)
  SYSMESSAGE {MARKER} <ARGV(1)>=[skip]
@@ -84,6 +88,11 @@ ENDIF
 SYSMESSAGE {MARKER} direct=[<FINDID(i_RuneTagProbe).TAG(probe_action)>]
 SYSMESSAGE {MARKER} read=[<f_RuneTag(probe_action)>]
 f_RuneTagAward(probe_action,award2)
+IF (<f_RuneTagFound>)
+ SYSMESSAGE {MARKER} returned=[yes]
+ELSE
+ SYSMESSAGE {MARKER} returned=[no]
+ENDIF
 SYSMESSAGE {MARKER} done
 RETURN 0
 """,
