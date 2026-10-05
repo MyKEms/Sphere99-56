@@ -46,6 +46,7 @@ enum CGVARIANT_TYPE
 {
 	CGVT_VOID = 0,		// No data
 	CGVT_INT,			// Integer value
+	CGVT_FIXED,		// Fixed-point value stored in tenths (script text keeps one decimal)
 	CGVT_DWORD,			// Unsigned 32-bit value (flags, UIDs)
 	CGVT_STR,			// String value (stored in m_str)
 	CGVT_UID,			// UID_INDEX reference to game object/resource
@@ -94,7 +95,8 @@ private:
 		m_str = other.m_str;
 		switch ( m_type )
 		{
-		case CGVT_INT:   m_iVal = other.m_iVal; break;
+		case CGVT_INT:
+		case CGVT_FIXED: m_iVal = other.m_iVal; break;
 		case CGVT_DWORD:
 		case CGVT_UID:   m_dwVal = other.m_dwVal; break;
 		case CGVT_REF:   m_pRef = other.m_pRef; break;
@@ -226,6 +228,16 @@ public:
 		m_str.Empty();
 	}
 
+	void SetFixed(int val)
+	{
+		FreeArray();
+		m_type = CGVT_FIXED;
+		m_dwUIDGeneration = 0;
+		m_pszUIDType = NULL;
+		m_iVal = val;
+		m_str.Empty();
+	}
+
 	void SetDWORD(DWORD val)
 	{
 		FreeArray();
@@ -285,6 +297,7 @@ public:
 		switch ( m_type )
 		{
 		case CGVT_INT:
+		case CGVT_FIXED:
 		case CGVT_DWORD:
 		case CGVT_UID:
 			return true;
@@ -329,6 +342,7 @@ public:
 		switch ( m_type )
 		{
 		case CGVT_INT:    return (m_iVal != 0);
+		case CGVT_FIXED:  return (m_iVal != 0);
 		case CGVT_DWORD:
 		case CGVT_UID:    return (m_dwVal != 0);
 		case CGVT_STR:    return (!m_str.IsEmpty() && strcmp((LPCTSTR)m_str, "0") != 0);
@@ -342,6 +356,7 @@ public:
 		switch ( m_type )
 		{
 		case CGVT_INT:    return m_iVal;
+		case CGVT_FIXED:  return m_iVal;
 		case CGVT_DWORD:
 		case CGVT_UID:    return (int) m_dwVal;
 		case CGVT_STR:
@@ -365,6 +380,7 @@ public:
 		switch ( m_type )
 		{
 		case CGVT_INT:    return (DWORD) m_iVal;
+		case CGVT_FIXED:  return (DWORD) m_iVal;
 		case CGVT_DWORD:
 		case CGVT_UID:    return m_dwVal;
 		case CGVT_STR:
@@ -404,6 +420,15 @@ public:
 			// Lazy format into string buffer (cast away const -- the original API is const-incorrect)
 			const_cast<CGVariant*>(this)->m_str.Format("%d", m_iVal);
 			return (LPCTSTR) m_str;
+		case CGVT_FIXED:
+			{
+				const int iAbs = (m_iVal < 0) ? -m_iVal : m_iVal;
+				const int iWhole = iAbs / 10;
+				const int iFraction = iAbs % 10;
+				const_cast<CGVariant*>(this)->m_str.Format(
+					"%s%d.%d", m_iVal < 0 ? "-" : "", iWhole, iFraction);
+				return (LPCTSTR) m_str;
+			}
 		case CGVT_DWORD:
 		case CGVT_UID:
 			const_cast<CGVariant*>(this)->m_str.Format("0%x", m_dwVal);
@@ -439,6 +464,7 @@ public:
 		case CGVT_UID:    return m_dwVal;
 		case CGVT_DWORD:  return m_dwVal;
 		case CGVT_INT:    return (UID_INDEX) m_iVal;
+		case CGVT_FIXED:  return (UID_INDEX) m_iVal;
 		case CGVT_STR:
 			{
 				LPCTSTR psz = (LPCTSTR)m_str;

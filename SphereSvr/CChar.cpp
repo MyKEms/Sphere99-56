@@ -1028,8 +1028,10 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		SKILL_TYPE iSkill = g_Cfg.FindSkillKey( pszKey, false );
 		if ( iSkill >= 0 && IsSkillBase( iSkill ))
 		{
-			// Check some skill name.
-			vValRet.SetInt( Skill_GetBase( iSkill ));
+			// Base skills are stored in tenths.  Keep that raw value for numeric
+			// expressions while rendering the stock one-decimal spelling in text
+			// escapes (for example, 300 becomes "30.0").
+			vValRet.SetFixed( Skill_GetBase( iSkill ));
 			return( NO_ERROR );
 		}
 
