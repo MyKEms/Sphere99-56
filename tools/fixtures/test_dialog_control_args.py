@@ -16,6 +16,7 @@ from run_suite import shutdown_failures
 EXPECTED = [
     "gumppic 30 210 12674",
     "button 160 330 2440 2440 0 1 0",
+    "button 75 360 2440 2440 0 1 2",
     "button 25 395 4005 4007 1 0 1",
     "gumppic 50 420 15",
 ]

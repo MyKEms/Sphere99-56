@@ -41,11 +41,19 @@ RETURN 0
 0 0
 gumppic 30 210 03182
 f_dialog_control_args_nested
+argo.f_dialog_control_args_indexed()
 argo.button(25,395,0fa5,0fa7,1,0,1)
 argo.gumppic(50,420,10+5)
 
 [FUNCTION f_dialog_control_args_nested]
 button 160 330 0988 0988 0 1 0
+
+[FUNCTION f_dialog_control_args_indexed]
+arg(index,1)
+tag(dialog_x[index],75)
+tag(icount,1)
+tag(dialog_y[tag(icount)],360)
+argo.button(<argo.tag(dialog_x[1])>,<argo.tag(dialog_y[1])>,0988,0988,0,1,2)
 """
     tables.write_text(table_text, encoding="ascii")
 
