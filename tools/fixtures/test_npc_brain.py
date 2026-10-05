@@ -15,6 +15,8 @@ from run_suite import shutdown_failures
 ACCOUNT = "NpcBrainProbe"
 LOGIN_TOKEN = "npc-brain-pw"
 MARKER = "SPHERE_NPC_BRAIN"
+DEFAULT_MARKER = "SPHERE_NPC_BRAIN default"
+ALIAS_MARKER = "SPHERE_NPC_BRAIN alias-created"
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -96,16 +98,20 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
     if f"{MARKER} created" not in messages:
-        failures.append("NPC creation event did not execute")
+        failures.append("named NPC creation event did not execute")
+    if not any(message.startswith(DEFAULT_MARKER) for message in messages):
+        failures.append("unresolved NPC brain did not preserve a default brain")
+    if ALIAS_MARKER not in messages:
+        failures.append("legacy BERSERK brain spelling did not create an NPC")
     if "NPC_SetBrain NULL" in log_contents:
-        failures.append("named NPC brain reached the NULL setter path")
+        failures.append("NPC brain creation reached the NULL setter path")
 
     if failures:
         print(f"messages: {messages!r}", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("NPC brain creation probe passed: 3/3 checks")
+    print("NPC brain creation probe passed: 4/4 checks")
     return 0
 
 

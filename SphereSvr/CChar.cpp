@@ -1360,6 +1360,25 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 				CVarDefPtr pBrain = g_Cfg.m_Const.FindKeyPtr( vVal.GetPSTR());
 				if ( pBrain )
 					iBrain = pBrain->GetValNum();
+				else if ( !_stricmp( vVal.GetPSTR(), "BRAIN_BERSERK" ))
+				{
+					// 0.99 scripts use both spellings; the enum and legacy DEFNAME
+					// use BESERK while older content writes BERSERK.
+					iBrain = NPCBRAIN_BESERK;
+				}
+				else if ( m_pNPC )
+				{
+					// NPC_LoadScript creates the default brain before @Create runs.
+					// Keep that stock-compatible default when an old script names a
+					// brain constant that is not present in the current DEFNAME table.
+					return NO_ERROR;
+				}
+				else
+				{
+					// A basic NPC can receive NPC= before its script has created the
+					// brain.  Use the body-derived default instead of rejecting it.
+					iBrain = GetCreatureType();
+				}
 			}
 			return NPC_SetBrain( (NPCBRAIN_TYPE) iBrain);
 		}

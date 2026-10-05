@@ -31,6 +31,12 @@ ON=@LogIn
 NEWNPC c_NpcBrainProbe
 LASTNEW.P=129,128,0
 SYSMESSAGE {MARKER} created
+NEWNPC c_NpcBrainDefault
+LASTNEW.P=130,128,0
+SYSMESSAGE {MARKER} default-created
+NEWNPC c_NpcBrainAlias
+LASTNEW.P=131,128,0
+SYSMESSAGE {MARKER} alias-created
 RETURN 0
 
 [CHARDEF c_NpcBrainProbe]
@@ -39,6 +45,22 @@ ID=c_man
 NAME=synthetic npc brain probe
 ON=@Create
 NPC=brain_animal
+RETURN 0
+
+[CHARDEF c_NpcBrainDefault]
+DEFNAME=c_NpcBrainDefault
+ID=c_man
+NAME=synthetic npc brain default probe
+ON=@Create
+NPC=brain_missing
+RETURN 0
+
+[CHARDEF c_NpcBrainAlias]
+DEFNAME=c_NpcBrainAlias
+ID=c_man
+NAME=synthetic npc brain alias probe
+ON=@Create
+NPC=brain_berserk
 RETURN 0
 """,
         encoding="ascii",
