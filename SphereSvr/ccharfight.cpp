@@ -1073,7 +1073,7 @@ int CChar::OnTakeDamage( int iDmg, CChar* pSrc, DAMAGE_TYPE uType )
 		}
 	}
 
-	if ( IsStatFlag( STATF_INVUL ))
+	if ( IsStatFlag( STATF_INVUL ) || IsGM())
 	{
 	effect_bounce:
 		if ( iDmg )

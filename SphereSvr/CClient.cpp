@@ -568,7 +568,10 @@ HRESULT CClient::s_PropSet( int iProp, CGVariant& vVal )
 	case P_GM: // toggle your GM status on/off
 		if ( GetPrivLevel() >= PLEVEL_GM )	// last ditch check.
 		{
+			const bool fWasGM = pAccount->IsPrivFlag( PRIV_GM );
 			pAccount->TogPrivFlags( PRIV_GM, vVal );
+			if ( m_pChar != NULL && fWasGM != pAccount->IsPrivFlag( PRIV_GM ))
+				m_pChar->Update();
 		}
 		break;
 	case P_HearAll:
