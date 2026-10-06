@@ -56,6 +56,10 @@ TIMER_DEFAULT_REMOVE_ITEM_UID = UID_F_ITEM | TIMER_DEFAULT_REMOVE_ITEM_SERIAL
 TIMER_DEFAULT_REMOVE_ITEM_ID = 0x0EA3
 TIMER_DEFAULT_REMOVE_MARKER = "SPHERE_TIMER_DEFAULT_REMOVE_TRIGGERED"
 TIMER_DEFAULT_REMOVE_AFTER_MARKER = "SPHERE_TIMER_DEFAULT_REMOVE_AFTER"
+TIMER_DEFAULT_HANDLER_ITEM_SERIAL = 302
+TIMER_DEFAULT_HANDLER_ITEM_UID = UID_F_ITEM | TIMER_DEFAULT_HANDLER_ITEM_SERIAL
+TIMER_DEFAULT_HANDLER_ITEM_ID = 0x0EA4
+TIMER_DEFAULT_HANDLER_MARKER = "SPHERE_TIMER_DEFAULT_HANDLER_TRIGGERED"
 CHARACTER_CONTENT_ACCOUNT = "CharacterContentProbe"
 CHARACTER_CONTENT_PASSWORD = "char_content_pw"
 CHARACTER_CONTENT_CHAR_SERIAL = 3
@@ -70,6 +74,7 @@ CHARACTER_CONTENT_SPECIAL_ITEM_LAYER = 22
 CHARACTER_CONTENT_MARKER = "SPHERE_CHARACTER_CONTENT"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
+NAMED_TIMER_MARKER = "SPHERE_NAMED_TIMER_TICK"
 NAMED_MULTI_NAME = "synthetic named multi"
 ROUNDTRIP_ITEM_ID = 0x0E9A
 ROUNDTRIP_DISP_ID = 0x0E9B
@@ -2151,6 +2156,13 @@ def write_scripts(
         f"SERV.B {TIMER_DEFAULT_REMOVE_MARKER} <ISUIDVALID {TIMER_DEFAULT_REMOVE_ITEM_UID}>\n"
         "REMOVE\n"
         f"SERV.B {TIMER_DEFAULT_REMOVE_AFTER_MARKER} <ISUIDVALID {TIMER_DEFAULT_REMOVE_ITEM_UID}>\n"
+        f"\n[ITEMDEF 0x{TIMER_DEFAULT_HANDLER_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_TIMER_DEFAULT_HANDLER\n"
+        "NAME=synthetic timer default handler\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=31\n"
+        "ON=@Timer\n"
+        f"SERV.B {TIMER_DEFAULT_HANDLER_MARKER} <ISUIDVALID {TIMER_DEFAULT_HANDLER_ITEM_UID}>\n"
         if timer_default_remove_probe
         else ""
     )
@@ -2349,15 +2361,16 @@ def write_scripts(
         if metadata_roundtrip_probe
         else ""
     )
-    # An @Timer handler that falls through lets the default timer path log the
-    # item's name instead of silently deleting the item.
+    # Keep a handled timer callback so the name is exercised through script
+    # execution while the generic diagnostic remains suppressed.  SYSMESSAGE
+    # writes to the disposable server console, so this probe stays client-free.
     named_item_name_sections = (
         f"\n[ITEMDEF 0x{NAMED_TIMER_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_NAMED_TIMER\n"
         "NAME=synthetic timer item\n"
         "TYPE=T_NORMAL\n"
         "ON=@Timer\n"
-        "SERV.B SPHERE_NAMED_TIMER_TICK\n"
+        f"SERV.SYSMESSAGE {NAMED_TIMER_MARKER} <NAME>\n"
         if named_item_name_probe
         else ""
     )
@@ -3035,7 +3048,7 @@ def write_world_load_counts_save(
                 "[WORLDITEM SYNTHETIC_NAMED_TIMER]",
                 "SERIAL=4",
                 f"NAME={NAMED_TIMER_ITEM_NAME}",
-                "TIMER=1",
+                "TIMER=5",
                 "P=128,128,0",
                 "[WORLDITEM SYNTHETIC_MULTI]",
                 "SERIAL=5",
@@ -3829,6 +3842,11 @@ def write_timer_default_remove_save(root: Path) -> None:
                 f"SERIAL={TIMER_DEFAULT_REMOVE_ITEM_SERIAL}",
                 f"CONT={TIMER_DEFAULT_REMOVE_OWNER_SERIAL}",
                 "LAYER=30",
+                f"TIMER={TIMER_DEFAULT_REMOVE_DELAY_SECONDS}",
+                "[WORLDITEM SYNTHETIC_TIMER_DEFAULT_HANDLER]",
+                f"SERIAL={TIMER_DEFAULT_HANDLER_ITEM_SERIAL}",
+                f"CONT={TIMER_DEFAULT_REMOVE_OWNER_SERIAL}",
+                "LAYER=31",
                 f"TIMER={TIMER_DEFAULT_REMOVE_DELAY_SECONDS}",
                 "[EOF]",
             ]

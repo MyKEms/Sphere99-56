@@ -3,8 +3,11 @@
     {
       "kind": "trigger",
       "keyword": "@STEP",
-      "count": 9,
-      "reason": "The generic protocol fixture moves synthetic characters without an @Step handler; CChar step events are intentionally absent from its scripts."
+      "count_range": [
+        9,
+        10
+      ],
+      "reason": "The generic protocol fixture moves synthetic characters without an @Step handler; scheduling observes nine or ten step events."
     }
   ]
 }

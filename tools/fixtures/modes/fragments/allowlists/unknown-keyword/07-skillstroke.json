@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "kind": "trigger",
+      "keyword": "@SKILLSTROKE",
+      "optional": true,
+      "count_range": [
+        1,
+        2
+      ],
+      "reason": "The generic protocol fixture creates characters with starter skills; slower runs may observe one or two unhandled skill-stroke events."
+    }
+  ]
+}

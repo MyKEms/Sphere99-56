@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that a RET_DEFAULT timer callback which removes itself stops cleanly."""
+"""Check handled RET_DEFAULT timer callbacks without misleading diagnostics."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from make_fixture import (
     TIMER_DEFAULT_REMOVE_ITEM_UID,
     TIMER_DEFAULT_REMOVE_MARKER,
     TIMER_DEFAULT_REMOVE_AFTER_MARKER,
+    TIMER_DEFAULT_HANDLER_MARKER,
 )
 from run_suite import shutdown_failures
 
@@ -21,6 +22,9 @@ from run_suite import shutdown_failures
 ACCOUNT_NAME = "TimerDefaultRemoveListener"
 LOGIN_VALUE = "timer-default-remove-pw"
 TIMER_ERROR = "Timer expired without DECAY flag 'synthetic timer default remove'?"
+TIMER_HANDLER_ERROR = (
+    "Timer expired without DECAY flag 'synthetic timer default handler'?"
+)
 TIMER_REMOVAL_RE = re.compile(
     rf"timer removed object uid=0x{TIMER_DEFAULT_REMOVE_ITEM_UID:x} reason=script\b",
     re.IGNORECASE,
@@ -50,7 +54,10 @@ def collect_markers(sock: socket.socket, initial: bytes, timeout: float) -> list
     sock.settimeout(0.2)
     while time.monotonic() < deadline:
         messages = system_messages(bytes(data))
-        if any(message.startswith(TIMER_DEFAULT_REMOVE_AFTER_MARKER) for message in messages):
+        if (
+            any(message.startswith(TIMER_DEFAULT_REMOVE_AFTER_MARKER) for message in messages)
+            and any(message.startswith(TIMER_DEFAULT_HANDLER_MARKER) for message in messages)
+        ):
             break
         try:
             chunk = sock.recv(65536)
@@ -143,16 +150,28 @@ def main() -> int:
         for message in observed
         if message.startswith(TIMER_DEFAULT_REMOVE_AFTER_MARKER)
     ]
+    handler_values = [
+        message.split()[-1]
+        for message in observed
+        if message.startswith(TIMER_DEFAULT_HANDLER_MARKER)
+    ]
     if trigger_values != ["1"]:
         failures.append(f"timer callback marker values were {trigger_values!r}")
     if after_values != ["0"]:
         failures.append(f"timer removal marker values were {after_values!r}")
+    if handler_values != ["1"]:
+        failures.append(f"default-handler marker values were {handler_values!r}")
     if log_contents.count(TIMER_ERROR):
         failures.append(
             f"self-removed timer emitted {log_contents.count(TIMER_ERROR)} generic timer error(s)"
         )
-    if "world load: created_items=1 created_chars=1" not in log_contents:
-        failures.append("saved self-removing timer fixture did not load its item and owner")
+    if log_contents.count(TIMER_HANDLER_ERROR):
+        failures.append(
+            "handled default timer emitted "
+            f"{log_contents.count(TIMER_HANDLER_ERROR)} generic timer error(s)"
+        )
+    if "world load: created_items=2 created_chars=1" not in log_contents:
+        failures.append("saved timer fixture did not load both items and its owner")
     removal_markers = TIMER_REMOVAL_RE.findall(log_contents)
     if len(removal_markers) != 1:
         failures.append(

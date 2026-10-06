@@ -3,9 +3,9 @@
 
 The fixture (make_fixture.py --world-load-counts --named-item-names) saves a
 named IT_MULTI item, whose region name is built from the item name while the
-save loads, and a named item whose saved timer expires on the first sector
-tick and logs the item name.  Run it under ASan to catch a name pointer that
-outlives its storage; the logged timer name is also checked byte for byte.
+save loads, and a named item whose saved timer callback reports the item name
+to the disposable server console.  Run it under ASan to catch a name pointer
+that outlives its storage; the callback value is checked byte for byte.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-from make_fixture import NAMED_TIMER_ITEM_NAME
+from make_fixture import NAMED_TIMER_ITEM_NAME, NAMED_TIMER_MARKER
 from run_suite import shutdown_failures, stop_server
 
 
@@ -26,7 +26,7 @@ EXPECTED_COUNT_LINE = (
     "world load: created_items=2 created_chars=1 read_items=2 read_chars=1 "
     "allocated_items=2 allocated_chars=1"
 )
-TIMER_LINE_RE = re.compile(r"Timer expired without DECAY flag '(.*)'\?")
+TIMER_LINE_RE = re.compile(rf"{re.escape(NAMED_TIMER_MARKER)}\s+(.*)")
 
 
 def read_log(path: Path) -> str:
@@ -65,7 +65,7 @@ def main() -> int:
     parser.add_argument(
         "--timer-timeout",
         type=float,
-        default=60.0,
+        default=10.0,
         help="seconds to wait for the saved item timer to expire after startup",
     )
     args = parser.parse_args()
@@ -108,15 +108,12 @@ def main() -> int:
                         "server did not listen after loading the named items "
                         f"(exit status {process.poll()})"
                     )
-                elif not wait_until(
-                    process,
-                    args.timer_timeout,
-                    lambda: TIMER_LINE_RE.search(read_log(log_path)) is not None,
-                ):
-                    failures.append(
-                        "saved item timer did not reach the default timer log line "
-                        f"(exit status {process.poll()})"
-                    )
+                else:
+                    # The disposable console is buffered while the server is
+                    # running; inspect the marker after graceful shutdown
+                    # below.  Waiting for the timer itself keeps the check
+                    # bounded without depending on a live-file flush.
+                    wait_until(process, args.timer_timeout, lambda: False)
             finally:
                 try:
                     server_returncode = stop_server(process)
@@ -132,17 +129,20 @@ def main() -> int:
     timer_names = TIMER_LINE_RE.findall(log_contents)
     if timer_names != [NAMED_TIMER_ITEM_NAME]:
         failures.append(
-            f"timer log names were {timer_names!r}; expected {[NAMED_TIMER_ITEM_NAME]!r}"
+            f"timer callback names were {timer_names!r}; expected "
+            f"{[NAMED_TIMER_ITEM_NAME]!r}"
         )
 
     unexpected_errors = [
         line
         for line in log_contents.splitlines()
         if (line.startswith("[ERROR]") or line.startswith("[CRITICAL]"))
-        and not TIMER_LINE_RE.search(line)
+        and "Timer expired without DECAY flag" not in line
     ]
     if unexpected_errors:
         failures.append(f"unexpected server errors: {unexpected_errors[:10]!r}")
+    if "Timer expired without DECAY flag" in log_contents:
+        failures.append("handled named timer emitted the generic timer diagnostic")
 
     if failures:
         print("item name lifetime probe failed:", file=sys.stderr)
@@ -154,7 +154,7 @@ def main() -> int:
 
     print(
         "item name lifetime probe passed: named multi loaded, "
-        f"timer logged {NAMED_TIMER_ITEM_NAME!r}"
+        f"timer callback reported {NAMED_TIMER_ITEM_NAME!r}"
     )
     return 0
 

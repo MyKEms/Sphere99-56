@@ -954,6 +954,8 @@ public:
 
 private:
 	virtual TRIGRET_TYPE OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec );
+	TRIGRET_TYPE OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec,
+		bool* pHasTriggerHandler );
 public:
 	TRIGRET_TYPE OnTrigger( CItemDef::T_TYPE_ trigger, CScriptExecContext& exec )
 	{
