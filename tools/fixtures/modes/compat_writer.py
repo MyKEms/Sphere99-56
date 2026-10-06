@@ -74,6 +74,7 @@ CHARACTER_CONTENT_SPECIAL_ITEM_LAYER = 22
 CHARACTER_CONTENT_MARKER = "SPHERE_CHARACTER_CONTENT"
 NAMED_TIMER_ITEM_ID = 0x0E8B
 NAMED_TIMER_ITEM_NAME = "synthetic named timer item"
+NAMED_TIMER_MARKER = "SPHERE_NAMED_TIMER_TICK"
 NAMED_MULTI_NAME = "synthetic named multi"
 ROUNDTRIP_ITEM_ID = 0x0E9A
 ROUNDTRIP_DISP_ID = 0x0E9B
@@ -2360,13 +2361,16 @@ def write_scripts(
         if metadata_roundtrip_probe
         else ""
     )
-    # Keep a timer item without an @Timer handler so the generic diagnostic
-    # remains covered for genuinely unhandled timers.
+    # Keep a handled timer callback so the name is exercised through script
+    # execution while the generic diagnostic remains suppressed.  SYSMESSAGE
+    # writes to the disposable server console, so this probe stays client-free.
     named_item_name_sections = (
         f"\n[ITEMDEF 0x{NAMED_TIMER_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_NAMED_TIMER\n"
         "NAME=synthetic timer item\n"
         "TYPE=T_NORMAL\n"
+        "ON=@Timer\n"
+        f"SERV.SYSMESSAGE {NAMED_TIMER_MARKER} <NAME>\n"
         if named_item_name_probe
         else ""
     )
@@ -3042,7 +3046,7 @@ def write_world_load_counts_save(
                 "[WORLDITEM SYNTHETIC_NAMED_TIMER]",
                 "SERIAL=4",
                 f"NAME={NAMED_TIMER_ITEM_NAME}",
-                "TIMER=1",
+                "TIMER=5",
                 "P=128,128,0",
                 "[WORLDITEM SYNTHETIC_MULTI]",
                 "SERIAL=5",
