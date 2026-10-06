@@ -2368,6 +2368,7 @@ void CWorld::Close( bool fResources )
 	m_TownStones.RemoveAll();
 	m_Parties.DeleteAll();
 	m_PartiesPendingDelete.DeleteAll();
+	m_PartiesReadyDelete.DeleteAll();
 	m_GMPages.DeleteAll();
 
 	for ( int i = 0; i<SECTOR_QTY; i++ )
@@ -2394,9 +2395,17 @@ void CWorld::QueuePartyForDelete( CPartyDef* pParty )
 
 void CWorld::DestroyPendingParties()
 {
-	// DeleteAll() runs the complete CPartyDef destructor while no client or
-	// sector callback from the current tick can still hold its raw pointer.
-	m_PartiesPendingDelete.DeleteAll();
+	// A disband can release the character references before a second client
+	// packet is dispatched. Keep the party for one complete client tick so
+	// that the no-party callback and any other queued packet finish before the
+	// destructor runs. The next pass destroys the prior generation, then
+	// advances newly queued parties into the ready list.
+	m_PartiesReadyDelete.DeleteAll();
+	while ( CPartyDef* pParty = m_PartiesPendingDelete.GetHead())
+	{
+		pParty->RemoveSelf();
+		m_PartiesReadyDelete.InsertTail( pParty );
+	}
 }
 
 void CWorld::GarbageCollection_GMPages()
