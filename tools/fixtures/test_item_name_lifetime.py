@@ -3,9 +3,10 @@
 
 The fixture (make_fixture.py --world-load-counts --named-item-names) saves a
 named IT_MULTI item, whose region name is built from the item name while the
-save loads, and a named item whose saved timer expires on the first sector
-tick and logs the item name.  Run it under ASan to catch a name pointer that
-outlives its storage; the logged timer name is also checked byte for byte.
+save loads, and a named item without a timer handler whose saved timer expires
+on the first sector tick and logs the item name.  Run it under ASan to catch a
+name pointer that outlives its storage; the logged timer name is also checked
+byte for byte.
 """
 
 from __future__ import annotations

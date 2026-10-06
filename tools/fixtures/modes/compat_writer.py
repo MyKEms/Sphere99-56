@@ -56,6 +56,10 @@ TIMER_DEFAULT_REMOVE_ITEM_UID = UID_F_ITEM | TIMER_DEFAULT_REMOVE_ITEM_SERIAL
 TIMER_DEFAULT_REMOVE_ITEM_ID = 0x0EA3
 TIMER_DEFAULT_REMOVE_MARKER = "SPHERE_TIMER_DEFAULT_REMOVE_TRIGGERED"
 TIMER_DEFAULT_REMOVE_AFTER_MARKER = "SPHERE_TIMER_DEFAULT_REMOVE_AFTER"
+TIMER_DEFAULT_HANDLER_ITEM_SERIAL = 302
+TIMER_DEFAULT_HANDLER_ITEM_UID = UID_F_ITEM | TIMER_DEFAULT_HANDLER_ITEM_SERIAL
+TIMER_DEFAULT_HANDLER_ITEM_ID = 0x0EA4
+TIMER_DEFAULT_HANDLER_MARKER = "SPHERE_TIMER_DEFAULT_HANDLER_TRIGGERED"
 CHARACTER_CONTENT_ACCOUNT = "CharacterContentProbe"
 CHARACTER_CONTENT_PASSWORD = "char_content_pw"
 CHARACTER_CONTENT_CHAR_SERIAL = 3
@@ -2151,6 +2155,13 @@ def write_scripts(
         f"SERV.B {TIMER_DEFAULT_REMOVE_MARKER} <ISUIDVALID {TIMER_DEFAULT_REMOVE_ITEM_UID}>\n"
         "REMOVE\n"
         f"SERV.B {TIMER_DEFAULT_REMOVE_AFTER_MARKER} <ISUIDVALID {TIMER_DEFAULT_REMOVE_ITEM_UID}>\n"
+        f"\n[ITEMDEF 0x{TIMER_DEFAULT_HANDLER_ITEM_ID:04X}]\n"
+        "DEFNAME=SYNTHETIC_TIMER_DEFAULT_HANDLER\n"
+        "NAME=synthetic timer default handler\n"
+        "TYPE=T_EQ_SCRIPT\n"
+        "LAYER=31\n"
+        "ON=@Timer\n"
+        f"SERV.B {TIMER_DEFAULT_HANDLER_MARKER} <ISUIDVALID {TIMER_DEFAULT_HANDLER_ITEM_UID}>\n"
         if timer_default_remove_probe
         else ""
     )
@@ -2349,15 +2360,13 @@ def write_scripts(
         if metadata_roundtrip_probe
         else ""
     )
-    # An @Timer handler that falls through lets the default timer path log the
-    # item's name instead of silently deleting the item.
+    # Keep a timer item without an @Timer handler so the generic diagnostic
+    # remains covered for genuinely unhandled timers.
     named_item_name_sections = (
         f"\n[ITEMDEF 0x{NAMED_TIMER_ITEM_ID:04X}]\n"
         "DEFNAME=SYNTHETIC_NAMED_TIMER\n"
         "NAME=synthetic timer item\n"
         "TYPE=T_NORMAL\n"
-        "ON=@Timer\n"
-        "SERV.B SPHERE_NAMED_TIMER_TICK\n"
         if named_item_name_probe
         else ""
     )
@@ -3827,6 +3836,11 @@ def write_timer_default_remove_save(root: Path) -> None:
                 f"SERIAL={TIMER_DEFAULT_REMOVE_ITEM_SERIAL}",
                 f"CONT={TIMER_DEFAULT_REMOVE_OWNER_SERIAL}",
                 "LAYER=30",
+                f"TIMER={TIMER_DEFAULT_REMOVE_DELAY_SECONDS}",
+                "[WORLDITEM SYNTHETIC_TIMER_DEFAULT_HANDLER]",
+                f"SERIAL={TIMER_DEFAULT_HANDLER_ITEM_SERIAL}",
+                f"CONT={TIMER_DEFAULT_REMOVE_OWNER_SERIAL}",
+                "LAYER=31",
                 f"TIMER={TIMER_DEFAULT_REMOVE_DELAY_SECONDS}",
                 "[EOF]",
             ]

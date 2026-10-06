@@ -2995,6 +2995,12 @@ HRESULT CItem::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 
 TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 {
+	return OnTrigger( pszTrigName, exec, NULL );
+}
+
+TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec,
+	bool* pHasTriggerHandler )
+{
 	// Is there trigger code in the script file ?
 	// RETURN:
 	//   false = continue default process normally.
@@ -3048,14 +3054,18 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 		{
 			DEBUG_ERR(( "0%x '%s' has unhandled [TYPEDEF %d]" LOG_CR, GetUID(), (LPCTSTR) GetName(), GetType()));
 			m_type = Item_GetDef()->GetType(); // reset the type.
+			if ( pHasTriggerHandler )
+				*pHasTriggerHandler = fHasTriggerHandler;
 			return( TRIGRET_RET_DEFAULT );
 		}
 
 		iRet = pResLink->OnTriggerScript( exec, iAction, pszTrigName );
-		if ( fReportUnknown )
+		if ( fReportUnknown || pHasTriggerHandler )
 			fHasTriggerHandler = pResLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet == TRIGRET_RET_VAL )
 		{
+			if ( pHasTriggerHandler )
+				*pHasTriggerHandler = fHasTriggerHandler;
 			return( TRIGRET_RET_VAL );	// Block further action.
 		}
 	}
@@ -3070,18 +3080,24 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec )
 			RES_GET_TYPE(pLink->GetUIDIndex()) != RES_ItemDef )
 			continue;
 		iRet = pLink->OnTriggerScript( exec, iAction, pszTrigName );
-		if ( fReportUnknown )
+		if ( fReportUnknown || pHasTriggerHandler )
 			fHasTriggerHandler = pLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 		if ( iRet != TRIGRET_RET_FALSE && iRet != TRIGRET_RET_DEFAULT )
+		{
+			if ( pHasTriggerHandler )
+				*pHasTriggerHandler = fHasTriggerHandler;
 			return iRet;
+		}
 	}
 
 	// Look up the trigger in the RES_ItemDef. (default)
 	iRet = Base_GetDef()->OnTriggerScript( exec, iAction, pszTrigName );
-	if ( fReportUnknown )
+	if ( fReportUnknown || pHasTriggerHandler )
 		fHasTriggerHandler = Base_GetDef()->HasTriggerName(pszTrigName) || fHasTriggerHandler;
 	if ( fReportUnknown && !fHasTriggerHandler )
 		ScriptUnknownRecord(SCRIPT_UNKNOWN_TRIGGER, pszTrigName, this);
+	if ( pHasTriggerHandler )
+		*pHasTriggerHandler = fHasTriggerHandler;
 	return( iRet ); // TRIGRET_RET_DEFAULT ?
 }
 
@@ -4721,9 +4737,10 @@ bool CItem::OnTick()
 	const DWORD dwTimerUID = static_cast<DWORD>(GetUID());
 
 	TRIGRET_TYPE iRet;
+	bool fHasTimerHandler = false;
 	{
 	CSphereExpContext exec(this, &g_Serv);
-	iRet = OnTrigger( CItemDef::T_Timer, exec );
+	iRet = OnTrigger( MAKEINTRESOURCE(CItemDef::T_Timer), exec, &fHasTimerHandler );
 	// A timer trigger that returns 1 has handled the timer even when it does
 	// not provide a value.  Script timers use RETURN 1 for this path; treating
 	// it as unhandled falls through to the misleading DECAY diagnostic.
@@ -4935,6 +4952,12 @@ bool CItem::OnTick()
 			LogTimerRemoval( "script" );
 		return false;
 	}
+
+	// A registered timer handler may intentionally fall through with the
+	// default result.  It has handled the timer, so the generic decay warning
+	// would be misleading.  Items without a handler still reach that warning.
+	if ( fHasTimerHandler )
+		return true;
 
 	DEBUG_ERR(( "Timer expired without DECAY flag '%s'?" LOG_CR, (LPCTSTR) GetName()));
 	return( true );
