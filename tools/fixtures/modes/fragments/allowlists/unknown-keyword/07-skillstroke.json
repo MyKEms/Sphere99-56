@@ -3,6 +3,7 @@
     {
       "kind": "trigger",
       "keyword": "@SKILLSTROKE",
+      "optional": true,
       "count_range": [
         1,
         2
