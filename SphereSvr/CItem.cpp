@@ -172,6 +172,11 @@ CItemPtr CItem::CreateBase( ITEMID_TYPE id )	// static
 		else if ( id == ITEMID_BACKPACK || id == ITEMID_VENDOR_BOX ) iType = IT_CONTAINER;
 		else if ( id == ITEMID_CORPSE ) iType = IT_CORPSE;
 	}
+	// ITEMID_MEMORY is a built-in marker whose C++ subtype owns the memory
+	// lifecycle.  A script definition may shadow its TYPE, but must not turn
+	// the object into a plain item and make later memory ticks unsafe.
+	if ( id == ITEMID_MEMORY || idErrorMsg == ITEMID_MEMORY )
+		iType = IT_EQ_MEMORY_OBJ;
 
 	switch ( iType )
 	{

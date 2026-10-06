@@ -31,9 +31,10 @@ PARTYMSG_Disband = 5
 PARTYMSG_NotoInvited = 7
 PARTYMSG_Accept = 8
 # The server's per-client flood limit grants a burst of 100 packets and then
-# 5 per server tick.  Twice the burst keeps both packets behind the refills
-# even on a slow runner; the wait lets an idle client's burst refill fully.
-FLOOD_PADDING = 200
+# 5 per server tick.  A bounded queue just beyond the burst makes the member
+# callback one dispatch behind the master's disband without relying on a
+# long, scheduler-sensitive refill window.
+FLOOD_PADDING = 120
 FLOOD_REFILL_WAIT = 2.5
 
 
@@ -236,23 +237,17 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                             )
 
                         # The master is processed first.  Keep the member's
-                        # packet inside the deferred-destruction window: the
-                        # same number of pings ahead of each packet uses up
-                        # both clients' flood-limit burst, so the refills,
-                        # which come at the same server ticks for both,
-                        # release the two packets in the same tick.
+                        # packet one dispatch behind the master's disband in
+                        # a bounded queue.  CServer processes one packet per
+                        # client per tick; the pre-fix destructor therefore
+                        # runs before the callback, while deferred destruction
+                        # keeps the party alive through the next tick.
                         time.sleep(FLOOD_REFILL_WAIT)
-                        # Keep the member's final packet one dispatch behind
-                        # the master's disband. This is the cross-client tick
-                        # boundary that exposed the premature party teardown.
                         master_padding = make_ping() * FLOOD_PADDING
                         member_padding = make_ping() * (FLOOD_PADDING + 1)
-                        # Send the disband first.  Concurrent writes made the
-                        # packet order scheduler-dependent on 32-bit CI: when
-                        # the member message won the race, it was handled while
-                        # the party still existed and the no-party callback
-                        # marker was never emitted.  Both queues remain padded
-                        # so the two packets stay in the same deferred window.
+                        # Send the disband first.  The master was created last,
+                        # so the newest-client walk handles its packet before
+                        # the member's queued packets on the same tick.
                         master.sendall(master_padding + make_extdata(PARTYMSG_Disband))
                         member.sendall(
                             member_padding
