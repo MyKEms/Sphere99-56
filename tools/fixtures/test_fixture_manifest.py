@@ -115,6 +115,8 @@ def main() -> int:
         "@NPCSEENEWPLAYER",
         "@TIMER",
         "@UNEQUIP",
+        "@SKILLSTART",
+        "@SKILLSTROKE",
     ]:
         errors.append("unknown-keyword allowlist fragments are not merged deterministically")
     if errors:
