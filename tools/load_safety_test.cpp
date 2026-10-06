@@ -772,6 +772,168 @@ static bool TestPendingSameCountPair()
 	return true;
 }
 
+// A pending manifest is a recovery record, not permission to mix a live
+// component with the recorded backup of its sibling.  If a recorded archive
+// disappeared, startup must refuse the pair and name the missing archive and
+// manifest instead of silently loading the live file.
+static bool TestPendingMissingArchiveRefuses()
+{
+	char szTempDir[] = "/tmp/sphere-save-missing-archive-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const std::string sCharsBackup = sBaseDir + "sphereb01c.scp";
+	const std::string sManifest = sBaseDir + "sphere.save.pending";
+	const std::string sMissingWorldBackup = sBaseDir + "sphereb01w.scp";
+	const char* pszWorld =
+		"TITLE=Live world\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_WORLD=live\n[EOF]\n";
+	const char* pszChars =
+		"TITLE=Live chars\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_CHARS=live\n[EOF]\n";
+	const char* pszCharsBackup =
+		"TITLE=Backup chars\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_CHARS=backup\n[EOF]\n";
+	const bool fFiles = WriteTextFile( sWorld, pszWorld ) &&
+		WriteTextFile( sChars, pszChars ) &&
+		WriteTextFile( sCharsBackup, pszCharsBackup ) &&
+		WriteTextFile( sManifest,
+			( "SAVECOUNT=1\nSTATE=PENDING\nROTATED=3\nARCHIVE_W=" +
+				sMissingWorldBackup + "\nARCHIVE_C=" + sCharsBackup +
+				"\n[EOF]\n" ).c_str());
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	const std::string sLogDir = sBaseDir + "logs";
+	const LOG_GROUP_TYPE dwLogMask = g_Log.GetLogGroupMask();
+	g_Log.SetLogGroupMask( dwLogMask | LOG_GROUP_SAVE );
+	const bool fLogOpened = mkdir( sLogDir.c_str(), 0700 ) == 0 &&
+		g_Log.OpenLog( sLogDir.c_str());
+	const bool fLoaded = g_World.LoadWorldForTest();
+	g_Log.Close();
+	g_Log.SetLogGroupMask( dwLogMask );
+	const std::string sLog = TakeDailyLogs( sLogDir );
+	g_World.Close( false );
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	unlink( sCharsBackup.c_str());
+	unlink( sManifest.c_str());
+	rmdir( sLogDir.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	const bool fNamed = sLog.find( "cannot find its recorded backup '" +
+		sMissingWorldBackup + "'" ) != std::string::npos &&
+		sLog.find( "sphere.save.pending" ) != std::string::npos;
+	if ( !fLogOpened || fLoaded || !fNamed )
+	{
+		std::fprintf( stderr,
+			"pending missing archive was mixed into live load: log=%d loaded=%d named=%d\n%s\n",
+			fLogOpened ? 1 : 0, fLoaded ? 1 : 0, fNamed ? 1 : 0, sLog.c_str());
+		return false;
+	}
+	return true;
+}
+
+// A one-sided SAVECOUNT is not a usable current pair, but with explicit
+// fallback enabled its count still identifies the backup level to walk back.
+// The refusal message must also tell an operator which option enables that
+// walk when no usable archive exists.
+static bool TestBackupFallbackDiagnostics()
+{
+	char szTempDir[] = "/tmp/sphere-save-fallback-diagnostics-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const std::string sWorldBackup = sBaseDir + "sphereb02w.scp";
+	const std::string sCharsBackup = sBaseDir + "sphereb02c.scp";
+	const char* pszCurrentWorld = "TITLE=Broken world\nVERSION=0.99\nSAVECOUNT=\n";
+	const char* pszCurrentChars = "TITLE=Current chars\nVERSION=0.99\nSAVECOUNT=2\n[EOF]\n";
+	const char* pszBackupWorld =
+		"TITLE=Backup world\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_WORLD=backup\n[EOF]\n";
+	const char* pszBackupChars =
+		"TITLE=Backup chars\nVERSION=0.99\nSAVECOUNT=1\n[VARNAMES]\nPAIR_CHARS=backup\n[EOF]\n";
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+	const bool fFiles = WriteTextFile( sWorld, pszCurrentWorld ) &&
+		WriteTextFile( sChars, pszCurrentChars ) &&
+		WriteTextFile( sWorldBackup, pszBackupWorld ) &&
+		WriteTextFile( sCharsBackup, pszBackupChars );
+	g_Cfg.m_fSaveBackupFallback = true;
+	g_World.m_iSaveCountID = 0;
+	const std::string sLogDir = sBaseDir + "logs";
+	const LOG_GROUP_TYPE dwLogMask = g_Log.GetLogGroupMask();
+	g_Log.SetLogGroupMask( dwLogMask | LOG_GROUP_SAVE );
+	const bool fLogOpened = mkdir( sLogDir.c_str(), 0700 ) == 0 &&
+		g_Log.OpenLog( sLogDir.c_str());
+	const bool fRecovered = fFiles && g_World.LoadWorldForTest();
+	g_Log.Close();
+	g_Log.SetLogGroupMask( dwLogMask );
+	const std::string sLog = TakeDailyLogs( sLogDir );
+	const std::string sWorldMarker = (LPCTSTR) g_Cfg.m_Var.FindKeyStr( "PAIR_WORLD" );
+	const std::string sCharsMarker = (LPCTSTR) g_Cfg.m_Var.FindKeyStr( "PAIR_CHARS" );
+	g_World.Close( false );
+	g_Cfg.m_Var.RemoveKey( "PAIR_WORLD" );
+	g_Cfg.m_Var.RemoveKey( "PAIR_CHARS" );
+	g_Cfg.m_fSaveBackupFallback = false;
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	unlink( sWorldBackup.c_str());
+	unlink( sCharsBackup.c_str());
+	rmdir( sLogDir.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	const bool fWalked = sWorldMarker == "backup" && sCharsMarker == "backup" &&
+		sLog.find( "Loading save backup '" + sWorldBackup + "'" ) != std::string::npos &&
+		sLog.find( "Loading save backup '" + sCharsBackup + "'" ) != std::string::npos;
+	if ( !fLogOpened || !fRecovered || !fWalked )
+	{
+		std::fprintf( stderr,
+			"one-sided SAVECOUNT did not walk backup pair: log=%d recovered=%d walked=%d world=%s chars=%s\n%s\n",
+			fLogOpened ? 1 : 0, fRecovered ? 1 : 0, fWalked ? 1 : 0,
+			sWorldMarker.c_str(), sCharsMarker.c_str(), sLog.c_str());
+		return false;
+	}
+
+	// With no archive at the selected level, the refusal must identify the
+	// configuration switch that would authorize a fallback walk.
+	char szRefuseDir[] = "/tmp/sphere-save-fallback-refuse-XXXXXX";
+	if ( mkdtemp( szRefuseDir ) == NULL )
+		return false;
+	const std::string sRefuseBase = std::string( szRefuseDir ) + "/";
+	const std::string sRefuseWorld = sRefuseBase + "sphereworld.scp";
+	const std::string sRefuseChars = sRefuseBase + "spherechars.scp";
+	WriteTextFile( sRefuseWorld, "TITLE=Broken world\nVERSION=0.99\nSAVECOUNT=2\n" );
+	WriteTextFile( sRefuseChars, "TITLE=Broken chars\nVERSION=0.99\nSAVECOUNT=2\n[EOF]\n" );
+	g_Cfg.m_sWorldBaseDir = sRefuseBase.c_str();
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.m_iSaveCountID = 0;
+	const std::string sRefuseLogDir = sRefuseBase + "logs";
+	const LOG_GROUP_TYPE dwRefuseLogMask = g_Log.GetLogGroupMask();
+	g_Log.SetLogGroupMask( dwRefuseLogMask | LOG_GROUP_SAVE );
+	const bool fRefuseLogOpened = mkdir( sRefuseLogDir.c_str(), 0700 ) == 0 &&
+		g_Log.OpenLog( sRefuseLogDir.c_str());
+	const bool fRefused = !g_World.LoadWorldForTest();
+	g_Log.Close();
+	g_Log.SetLogGroupMask( dwRefuseLogMask );
+	const std::string sRefuseLog = TakeDailyLogs( sRefuseLogDir );
+	g_World.Close( false );
+	unlink( sRefuseWorld.c_str());
+	unlink( sRefuseChars.c_str());
+	rmdir( sRefuseLogDir.c_str());
+	rmdir( szRefuseDir );
+	g_World.m_iSaveCountID = 0;
+	const bool fOptionNamed = sRefuseLog.find( "SAVEBACKUPFALLBACK=1" ) != std::string::npos;
+	if ( !fRefuseLogOpened || !fRefused || !fOptionNamed )
+	{
+		std::fprintf( stderr,
+			"backup refusal did not name SAVEBACKUPFALLBACK: log=%d refused=%d named=%d\n%s\n",
+			fRefuseLogOpened ? 1 : 0, fRefused ? 1 : 0, fOptionNamed ? 1 : 0,
+			sRefuseLog.c_str());
+		return false;
+	}
+	return true;
+}
+
 int main()
 {
 #ifdef SPHERE_PLANT_SENTINEL_ONLY
@@ -850,6 +1012,18 @@ int main()
 		return 1;
 	}
 	std::printf( "paired save load: unchanged-count pending pair loads backups unless both files were replaced\n" );
+	if ( !TestPendingMissingArchiveRefuses() )
+	{
+		std::fprintf( stderr, "pending save did not refuse a missing recorded archive\n" );
+		return 1;
+	}
+	std::printf( "paired save load: missing recorded archives refuse mixed-generation recovery\n" );
+	if ( !TestBackupFallbackDiagnostics() )
+	{
+		std::fprintf( stderr, "backup fallback diagnostics were incomplete\n" );
+		return 1;
+	}
+	std::printf( "backup fallback: one-sided counts walk a pair and refusals name SAVEBACKUPFALLBACK\n" );
 	if ( !TestLegacyPairRequiresBothUncounted() )
 	{
 		std::fprintf( stderr, "save pair accepted a file without SAVECOUNT next to a counted file\n" );

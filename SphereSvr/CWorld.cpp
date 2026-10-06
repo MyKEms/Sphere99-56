@@ -1959,15 +1959,25 @@ bool CWorld::LoadWorld() // Load world from script
 		CGString sArchive;
 		GetManifestArchive( manifest, CSaveManifest::COMPONENT_WORLD, g_Cfg.m_sWorldBaseDir,
 			'w', iPendingSaveCount, sArchive );
-		if (( manifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_WORLD )) && SaveFileExists( sArchive ))
+		if ( manifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_WORLD ))
 		{
+			if ( !SaveFileExists( sArchive ))
+			{
+				LogMissingSaveArchive( iPendingSaveCount, sArchive, sWorldName );
+				return( false );
+			}
 			sWorldName = sArchive;
 			LogSaveBackupSelected( sWorldName );
 		}
 		GetManifestArchive( manifest, CSaveManifest::COMPONENT_CHARS, g_Cfg.m_sWorldBaseDir,
 			'c', iPendingSaveCount, sArchive );
-		if (( manifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_CHARS )) && SaveFileExists( sArchive ))
+		if ( manifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_CHARS ))
 		{
+			if ( !SaveFileExists( sArchive ))
+			{
+				LogMissingSaveArchive( iPendingSaveCount, sArchive, sCharsName );
+				return( false );
+			}
 			sCharsName = sArchive;
 			LogSaveBackupSelected( sCharsName );
 		}
@@ -1998,8 +2008,16 @@ bool CWorld::LoadWorld() // Load world from script
 				"World/chars save pair mismatch: world=%d%s chars=%d%s" LOG_CR,
 				iWorldSaveCount, iWorldSaveCount == INT_MIN ? "(missing)" : "",
 				iCharsSaveCount, iCharsSaveCount == INT_MIN ? "(missing)" : "" );
-			if ( !fPendingManifest && iWorldSaveCount != INT_MIN )
-				m_iSaveCountID = iWorldSaveCount;
+			if ( !fPendingManifest )
+			{
+				// A half-counted pair is still useful for selecting the same
+				// backup level when explicit fallback is enabled.  Prefer the
+				// world count when present, otherwise use the character count.
+				const int iAvailableCount = iWorldSaveCount != INT_MIN ?
+					iWorldSaveCount : iCharsSaveCount;
+				if ( iAvailableCount != INT_MIN )
+					m_iSaveCountID = iAvailableCount;
+			}
 		}
 		const bool fWorldLoaded = fMatchingPair && LoadFile( sWorldName );
 		const bool fCharsLoaded = fWorldLoaded && LoadFile( sCharsName );
@@ -2047,7 +2065,8 @@ bool CWorld::LoadWorld() // Load world from script
 		LogSaveBackupSelected( sCharsName );
 	}
 
-	g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL, "No previous backup available ?" LOG_CR );
+	g_Log.Event( LOG_GROUP_INIT, LOGL_FATAL,
+		"No previous backup available ? Set SAVEBACKUPFALLBACK=1 to allow an older backup." LOG_CR );
 	return( false );
 }
 
