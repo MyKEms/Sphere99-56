@@ -3022,9 +3022,11 @@ def write_world_load_counts_save(
                 "[WORLDITEM DEFAULTITEM]",
                 "SERIAL=5",
                 "CONT=4",
+                "P=129,128,0",
                 "[WORLDITEM SYNTHETIC_OBJECT]",
                 "SERIAL=6",
-                "CONT=5",
+                "CONT=0",
+                "P=130,128,0",
             ]
         )
     elif typedef_container_reference:

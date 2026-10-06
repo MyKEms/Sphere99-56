@@ -251,7 +251,7 @@ def main() -> int:
         )
     elif args.noncontainer_reference:
         expected_diagnostics = (
-            "world load diagnostics: accepted=3 tolerated_legacy=0 rejected=0 "
+            "world load diagnostics: accepted=2 tolerated_legacy=0 rejected=1 "
             "defaulted=1 deleted=0"
         )
     else:
@@ -317,7 +317,7 @@ def main() -> int:
                         "WORLDCHAR load fallback",
                     )
                 elif args.noncontainer_reference:
-                    allowed_startup_error_fragments = ("WORLDITEM CONT defaulted:",)
+                    allowed_startup_error_fragments = ("WORLDITEM property rejected",)
                 elif args.script_item_type_reference:
                     # The parent head emits both invalid-type diagnostics;
                     # the assertion below turns that evidence into a
@@ -465,26 +465,27 @@ def main() -> int:
                             "DEFAULTCHAR fallback was incorrectly counted as a skipped section"
                         )
                 elif args.noncontainer_reference:
-                    defaulted_relocations = [
+                    placement_diagnostics = [
                         line
                         for line in startup_errors
                         if "WORLDITEM CONT defaulted:" in line
+                        or "Invalid container" in line
                     ]
-                    expected_relocations = ((
-                        "cont=0x4",
-                        "uid=0x40000005",
-                        "id=0x0e75",
-                    ),)
-                    if len(defaulted_relocations) != len(expected_relocations) or any(
-                        not any(
-                            all(fragment in line for fragment in fragments)
-                            for line in defaulted_relocations
-                        )
-                        for fragments in expected_relocations
-                    ):
+                    if placement_diagnostics:
                         raise RuntimeError(
-                            "nested non-container reference did not log the bounded "
-                            "CONT default with its original UIDs"
+                            "container placement emitted a stock-divergent diagnostic: "
+                            f"{placement_diagnostics!r}"
+                        )
+                    rejected_cont = [
+                        line
+                        for line in startup_errors
+                        if "WORLDITEM property rejected" in line
+                        and "key='CONT'" in line
+                    ]
+                    if len(rejected_cont) != 1:
+                        raise RuntimeError(
+                            "invalid CONT was not retained as one bounded property rejection: "
+                            f"{rejected_cont!r}"
                         )
                 elif args.gump_fallback:
                     if any(

@@ -2341,7 +2341,10 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 			m_layerLoadContainer = layer;
 			return( NO_ERROR );
 		}
-		if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
+		// During the load window the aggregate rejected count is the durable
+		// diagnostic. Keep the detailed message for live script assignments.
+		if ( !g_Serv.IsLoading() &&
+			g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
 			DEBUG_ERR(( "Invalid container 0%lx" LOG_CR, (DWORD) uid ));
 		return( HRES_INVALID_HANDLE );	// not valid object.
 	}
@@ -2401,7 +2404,10 @@ HRESULT CItem::LoadSetContainer( CSphereUID uid, LAYER_TYPE layer )
 			// Keep this recoverable legacy relation visible and bounded during
 			// world load. The original CONT value identifies the relation that
 			// was substituted; the item remains live at the target's top level.
-			if ( g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
+			// The defaulted counter in the load summary records this substitution;
+			// a per-object error would make a recoverable load look failed.
+			if ( !g_Serv.IsLoading() &&
+				g_World.ShouldLogLoadDetail( LOAD_LOG_WORLDITEM_PROPERTY_DETAIL ))
 			{
 				g_Log.Event( LOG_GROUP_INIT, LOGL_ERROR,
 					"WORLDITEM CONT defaulted: cont=0x%x uid=0x%x id=0x%04x "
