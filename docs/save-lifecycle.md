@@ -49,6 +49,15 @@ up by the retry.  If a recorded backup has disappeared, the retry stops
 instead of rotating again; the log names the missing file and the manifest
 (`sphere.save.pending`) to remove if that backup cannot be restored.
 
+Startup applies the same fail-closed rule to a pending manifest: a component
+whose recorded archive is missing is not silently taken from the live pair.
+It reports the missing path and leaves recovery for an operator to repair or
+abandon explicitly.  When `SAVEBACKUPFALLBACK=1` is enabled for an ordinary
+(non-pending) load, a pair with only one readable `SAVECOUNT` can still select
+the corresponding backup level; the fallback walk reports each selected file
+before loading it.  If no usable backup exists, the fatal diagnostic names
+`SAVEBACKUPFALLBACK=1` as the opt-in.
+
 A backup is taken as a hard link to the live file, so the live name never
 disappears.  Where a hard link is not possible, the live file is copied to a
 temporary name that is then renamed over the backup name; the backup name is
