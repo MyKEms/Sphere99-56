@@ -242,16 +242,20 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                         # which come at the same server ticks for both,
                         # release the two packets in the same tick.
                         time.sleep(FLOOD_REFILL_WAIT)
-                        padding = make_ping() * FLOOD_PADDING
+                        # Keep the member's final packet one dispatch behind
+                        # the master's disband. This is the cross-client tick
+                        # boundary that exposed the premature party teardown.
+                        master_padding = make_ping() * FLOOD_PADDING
+                        member_padding = make_ping() * (FLOOD_PADDING + 1)
                         # Send the disband first.  Concurrent writes made the
                         # packet order scheduler-dependent on 32-bit CI: when
                         # the member message won the race, it was handled while
                         # the party still existed and the no-party callback
                         # marker was never emitted.  Both queues remain padded
                         # so the two packets stay in the same deferred window.
-                        master.sendall(padding + make_extdata(PARTYMSG_Disband))
+                        master.sendall(master_padding + make_extdata(PARTYMSG_Disband))
                         member.sendall(
-                            padding
+                            member_padding
                             + make_extdata(
                                 PARTYMSG_Msg,
                                 "party object survived".encode("utf-16-be") + b"\0\0",
