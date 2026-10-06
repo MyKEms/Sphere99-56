@@ -4961,7 +4961,7 @@ bool CItem::OnTick()
 
 	// A registered timer handler may intentionally fall through with the
 	// default result.  It has handled the timer, so the generic decay warning
-	// would be misleading.  Items without a handler still reach that warning.
+	// would be misleading; only this handled-default path is suppressed.
 	if ( iRet == TRIGRET_RET_DEFAULT && fHasTimerHandler )
 		return true;
 
