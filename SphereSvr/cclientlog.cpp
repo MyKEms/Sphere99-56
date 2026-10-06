@@ -851,15 +851,19 @@ void CClient::xFlush()
 		int iLegacyLen = 0;
 		const bool fPrimeGameStream =
 			!m_fGameStreamPrimed && m_Crypt.GetCryptVer() >= 0x200040;
-		// Legacy 2.x/3.x clients expect one un-XORed five-byte player-view
-		// packet before the first compressed response.  The packet is the old
-		// draw-player form (0x20 + the character UID); the following stream
-		// resumes the XOR index after its compressed four-byte frame.
+		// Legacy 2.x/3.x clients expect a fixed four-byte un-XORed Huffman
+		// bootstrap before the first compressed response.  It is the old
+		// draw-player form (0x20 + the compact seed UID); the following stream
+		// resumes the XOR index after those four clear bytes.
 		if ( fPrimeGameStream )
 		{
 			BYTE legacyView[5];
 			legacyView[0] = XCMD_View;
-			DWORD dwUID = (DWORD)m_Targ.m_tmSetupCharList[0];
+			// The clear bootstrap is a fixed stock frame.  The selected player's
+			// real view arrives in the compressed response that follows; using its
+			// high serial here can expand the Huffman frame to five bytes and makes
+			// legacy clients consume one byte of the encrypted stream as prefix.
+			DWORD dwUID = 1;
 			dwUID = (dwUID & UID_INDEX_MASK) | 0x0e000000;
 			legacyView[1] = (BYTE)(dwUID >> 24);
 			legacyView[2] = (BYTE)(dwUID >> 16);

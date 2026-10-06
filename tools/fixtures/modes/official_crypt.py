@@ -17,8 +17,11 @@ def generate(output: Path) -> int:
     (output / "accounts" / "sphereaccu.scp").write_text(
         "[test_player]\n"
         "PASSWORD=test-pass\n"
-        "CHARUID=1\n"
-        "LASTCHARUID=1\n"
+        # Keep the selected serial above the compact Huffman prefix boundary.
+        # The first game response must retain the stock four-byte clear frame
+        # even when the player's real UID needs a longer encoded view packet.
+        "CHARUID=7226\n"
+        "LASTCHARUID=7226\n"
         "[EOF]\n",
         encoding="ascii",
     )
@@ -30,7 +33,7 @@ def generate(output: Path) -> int:
     (output / "save" / "spherechars.scp").write_text(
         save_header
         + "[WORLDCHAR c_MAN]\n"
-        + "SERIAL=1\n"
+        + "SERIAL=7226\n"
         + "ACCOUNT=test_player\n"
         + "NAME=Test Player\n"
         + "STR=100\nINT=100\nDEX=100\nHITS=100\nMAXHITS=100\n"
