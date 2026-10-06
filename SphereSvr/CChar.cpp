@@ -975,6 +975,16 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	// ARGS:
 	//  vValRet = return the value here.
 
+	// Sphere's VIT script property is the shared vitality ceiling used by the
+	// tutorial stat stone.  It is not a fourth persisted base stat: stock reads
+	// it from the stamina ceiling while applying it to both hit points and
+	// stamina.
+	if ( pszKey && !_stricmp( pszKey, "VIT" ))
+	{
+		vValRet.SetInt( m_StatMaxStam );
+		return NO_ERROR;
+	}
+
 	// P_Z (and its P_X/P_Y siblings) are inherited object properties.  The
 	// prefix lookup used by the character table would otherwise treat P_Z as
 	// the shorter P point property and return the complete point string.
@@ -1018,8 +1028,10 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		SKILL_TYPE iSkill = g_Cfg.FindSkillKey( pszKey, false );
 		if ( iSkill >= 0 && IsSkillBase( iSkill ))
 		{
-			// Check some skill name.
-			vValRet.SetInt( Skill_GetBase( iSkill ));
+			// Base skills are stored in tenths.  Keep that raw value for numeric
+			// expressions while rendering the stock one-decimal spelling in text
+			// escapes (for example, 300 becomes "30.0").
+			vValRet.SetFixed( Skill_GetBase( iSkill ));
 			return( NO_ERROR );
 		}
 
@@ -1171,6 +1183,19 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 
 HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	// VIT is a stock compatibility property.  Raising it raises both derived
+	// maxima; lowering the value does not discard an already established cap.
+	if ( pszKey && !_stricmp( pszKey, "VIT" ))
+	{
+		const STAT_LEVEL iVal = vVal.GetInt();
+		if ( iVal > m_StatMaxHealth )
+			m_StatMaxHealth = iVal;
+		if ( iVal > m_StatMaxStam )
+			m_StatMaxStam = iVal;
+		UpdateStatsFlag();
+		return NO_ERROR;
+	}
+
 	// Handle P= property for position
 	if ( ! _stricmp(pszKey, "P") )
 	{
@@ -1335,6 +1360,25 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 				CVarDefPtr pBrain = g_Cfg.m_Const.FindKeyPtr( vVal.GetPSTR());
 				if ( pBrain )
 					iBrain = pBrain->GetValNum();
+				else if ( !_stricmp( vVal.GetPSTR(), "BRAIN_BERSERK" ))
+				{
+					// 0.99 scripts use both spellings; the enum and legacy DEFNAME
+					// use BESERK while older content writes BERSERK.
+					iBrain = NPCBRAIN_BESERK;
+				}
+				else if ( m_pNPC )
+				{
+					// NPC_LoadScript creates the default brain before @Create runs.
+					// Keep that stock-compatible default when an old script names a
+					// brain constant that is not present in the current DEFNAME table.
+					return NO_ERROR;
+				}
+				else
+				{
+					// A basic NPC can receive NPC= before its script has created the
+					// brain.  Use the body-derived default instead of rejecting it.
+					iBrain = GetCreatureType();
+				}
 			}
 			return NPC_SetBrain( (NPCBRAIN_TYPE) iBrain);
 		}

@@ -107,6 +107,12 @@ void CChar::Stat_Set( STAT_TYPE i, STAT_LEVEL iVal )
 
 	m_Stat[i] = iVal;
 
+	// INT is the source of the stock mana ceiling.  Preserve an explicitly
+	// higher cap, but make a newly selected intelligence value usable by a
+	// fresh character before the tutorial portal copies the maxima to vitals.
+	if ( i == STAT_Int && m_StatMaxMana < iVal )
+		m_StatMaxMana = iVal;
+
 	// Now update anyone who may be looking.
 	UpdateStatsFlag();
 }

@@ -341,16 +341,36 @@ protected:
 		}
 		else if ( !fUIDRoot )
 		{
-			if ( pBase == NULL )
-				return false;
-			hRes = pBase->s_PropGet(szRoot, vCurrent, m_pSrc);
-			rejected.Observe(hRes, szRoot, m_pBaseObj);
+			if ( pBase != NULL )
+			{
+				hRes = pBase->s_PropGet(szRoot, vCurrent, m_pSrc);
+				rejected.Observe(hRes, szRoot, m_pBaseObj);
+				if ( hRes != NO_ERROR )
+				{
+					hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
+					rejected.Observe(hRes, szRoot, m_pBaseObj);
+					if ( hRes == NO_ERROR )
+						fEffect = true;
+				}
+			}
+			// A numeric resource reference can be produced by an inner escape in a
+			// deferred expression.  For example, the level-up scripts use
+			// <?<profession>.<arg(skillname)>?>; the object-valued <profession>
+			// escape is serialized while preparing ARG(), leaving its resource UID as
+			// the chain root.  Resolve that UID back to the resource before walking
+			// the suffix instead of treating the signed number as a DEFNAME.
 			if ( hRes != NO_ERROR )
 			{
-				hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
-				rejected.Observe(hRes, szRoot, m_pBaseObj);
-				if ( hRes == NO_ERROR )
-					fEffect = true;
+				CGVariant vNumeric(szRoot);
+				if ( vNumeric.IsNumeric() )
+				{
+					CResourceObj* pResource = ResolveResourceObject(vNumeric.GetUID());
+					if ( pResource != NULL )
+					{
+						vCurrent.SetRef(pResource);
+						hRes = NO_ERROR;
+					}
+				}
 			}
 			if ( hRes != NO_ERROR )
 				return false;
@@ -393,6 +413,8 @@ protected:
 			TCHAR szName[SCRIPT_MAX_LINE_LEN];
 			if ( !SplitDottedSegment(pszExpr + aStart[iSegment], aLen[iSegment], szName, sizeof(szName), vArgs) )
 				return false;
+			if ( !_stricmp(szName, "TAG") )
+				ExpandTagArgumentIndices(vArgs);
 
 			CGVariant vNext;
 			bool fFromFunction = false;
@@ -627,6 +649,8 @@ protected:
 		// Try method call on object.
 		if ( szKey[0] )
 		{
+			if ( !_stricmp(szKey, "TAG") )
+				ExpandTagArgumentIndices(vArgs);
 			hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, szKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
@@ -660,6 +684,15 @@ protected:
 					sResult = vSerial.GetPSTR();
 					return true;
 				}
+				// A live object without a scalar SERIAL property still needs its
+				// object reference preserved for assignment arguments.  Unresolved
+				// resource lookups have a zero hash index; keep those empty rather
+				// than turning them into a false serial such as 0x0.
+				if ( !_stricmp(pObj->GetUIDTypeName(), "world object") )
+				{
+					sResult.Format("0%x", (DWORD)pObj->GetUIDIndex());
+					return true;
+				}
 			}
 		}
 		sResult = vResult.IsEmpty() ? "" : vResult.GetPSTR();
@@ -679,6 +712,36 @@ protected:
 	{
 		return IsContainerAssignmentKey(pszKey) ||
 			(pszKey != NULL && !_stricmp(pszKey, "SRC"));
+	}
+
+	// A method call can carry an object assignment inside its argument list,
+	// for example FINDUID(pack).CONTENTS(CONT=<FINDUID(dest)>).  Preserve the
+	// live reference's serial while expanding that call; ordinary text
+	// expansion would use the object's display spelling, which cannot be
+	// resolved by the CONT setter.
+	static bool HasContainerAssignmentArgument(LPCTSTR pszKey)
+	{
+		for ( LPCTSTR p = pszKey; p && *p; p++ )
+		{
+			if ( _strnicmp(p, "CONT", 4) )
+				continue;
+			LPCTSTR q = p + 4;
+			while ( ISWHITESPACE(*q) ) q++;
+			if ( *q == '=' )
+				return true;
+		}
+		return false;
+	}
+
+	static bool HasContentsCall(LPCTSTR pszKey)
+	{
+		for ( LPCTSTR p = pszKey; p && *p; p++ )
+		{
+			if ( !_strnicmp(p, "CONTENTS", 8) &&
+				(p[8] == '\0' || p[8] == '(') )
+				return true;
+		}
+		return false;
 	}
 
 	static bool HasFindObjectSegment(LPCTSTR pszKey)
@@ -1345,8 +1408,10 @@ public:
 			return 0;
 
 		// Control-flow expressions and RETURN values need the same macro
-		// expansion as ordinary command arguments.
-		s_ParseEscapes(pszArg, 0, iBufCapacity);
+		// expansion as ordinary command arguments.  They are numeric, so an
+		// object reference (IF (<FINDID(x)>)) reads as its UID, not as empty
+		// text that would make an existing object look absent.
+		s_ParseEscapes(pszArg, CSCRIPT_PARSE_OBJECT_SERIAL, iBufCapacity);
 		if ( IsLineExpansionOverflow() )
 			return 0;
 
@@ -1454,6 +1519,139 @@ public:
 		return m_pSourceObj;
 	}
 
+	// TAG keys are expressions in Sphere's script grammar.  In particular,
+	// indexed local names such as obj_y[tag(icount)] and
+	// sloupec_x[index] must be resolved before the tag array sees the key;
+	// CVarDefArray deliberately stores only the resulting key text.
+	static bool IsTagMethodName(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL || *pszKey == '\0' )
+			return false;
+		LPCTSTR pszName = strrchr(pszKey, '.');
+		pszName = pszName ? pszName + 1 : pszKey;
+		return !_stricmp(pszName, "TAG");
+	}
+
+	bool ExpandTagArgumentIndices(TCHAR* pszArgs, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
+	{
+		if ( pszArgs == NULL || *pszArgs == '\0' || iBufCapacity == 0 )
+			return false;
+
+		// Only the first TAG argument is a key.  Find its comma without
+		// mistaking commas inside an indexed function call for the separator.
+		size_t iKeyLen = 0;
+		int iParenDepth = 0;
+		int iBracketDepth = 0;
+		for ( ; pszArgs[iKeyLen]; ++iKeyLen )
+		{
+			const TCHAR ch = pszArgs[iKeyLen];
+			if ( ch == '(' )
+				++iParenDepth;
+			else if ( ch == ')' && iParenDepth > 0 )
+				--iParenDepth;
+			else if ( ch == '[' )
+				++iBracketDepth;
+			else if ( ch == ']' && iBracketDepth > 0 )
+				--iBracketDepth;
+			else if ( ch == ',' && iParenDepth == 0 && iBracketDepth == 0 )
+				break;
+		}
+
+		TCHAR szExpanded[SCRIPT_MAX_LINE_LEN];
+		size_t iOut = 0;
+		bool fChanged = false;
+		for ( size_t i = 0; i < iKeyLen; )
+		{
+			if ( pszArgs[i] != '[' )
+			{
+				if ( iOut + 1 >= sizeof(szExpanded) )
+					return false;
+				szExpanded[iOut++] = pszArgs[i++];
+				continue;
+			}
+
+			size_t iClose = i + 1;
+			int iNested = 1;
+			for ( ; iClose < iKeyLen; ++iClose )
+			{
+				if ( pszArgs[iClose] == '[' )
+					++iNested;
+				else if ( pszArgs[iClose] == ']' && --iNested == 0 )
+					break;
+			}
+			if ( iClose >= iKeyLen )
+			{
+				if ( iOut + 1 >= sizeof(szExpanded) )
+					return false;
+				szExpanded[iOut++] = pszArgs[i++];
+				continue;
+			}
+
+			TCHAR szIndex[SCRIPT_MAX_LINE_LEN];
+			size_t iIndexLen = iClose - i - 1;
+			if ( iIndexLen >= sizeof(szIndex) )
+				return false;
+			memcpy(szIndex, pszArgs + i + 1, iIndexLen);
+			szIndex[iIndexLen] = '\0';
+			TCHAR* pszIndex = szIndex;
+			while ( ISWHITESPACE(*pszIndex) )
+				++pszIndex;
+			TCHAR* pszIndexEnd = pszIndex + strlen(pszIndex);
+			while ( pszIndexEnd > pszIndex && ISWHITESPACE(pszIndexEnd[-1]) )
+				*--pszIndexEnd = '\0';
+			if ( *pszIndex == '\0' )
+			{
+				if ( iOut + (iClose - i + 1) >= sizeof(szExpanded) )
+					return false;
+				memcpy(szExpanded + iOut, pszArgs + i, iClose - i + 1);
+				iOut += iClose - i + 1;
+				i = iClose + 1;
+				continue;
+			}
+
+			const int iIndex = GetScriptExpression(szIndex, sizeof(szIndex));
+			char szNumeric[32];
+			const int iNumericLen = snprintf(szNumeric, sizeof(szNumeric), "%d", iIndex);
+			if ( iNumericLen < 0 ||
+				iOut + static_cast<size_t>(iNumericLen) + 2 >= sizeof(szExpanded) )
+				return false;
+			szExpanded[iOut++] = '[';
+			memcpy(szExpanded + iOut, szNumeric, static_cast<size_t>(iNumericLen));
+			iOut += static_cast<size_t>(iNumericLen);
+			szExpanded[iOut++] = ']';
+			if ( iClose != i + static_cast<size_t>(iNumericLen) + 1 ||
+				strncmp(pszArgs + i + 1, szNumeric, static_cast<size_t>(iNumericLen)) != 0 )
+				fChanged = true;
+			i = iClose + 1;
+		}
+		if ( pszArgs[iKeyLen] )
+		{
+			const size_t iTailLen = strlen(pszArgs + iKeyLen);
+			if ( iOut + iTailLen >= sizeof(szExpanded) )
+				return false;
+			memcpy(szExpanded + iOut, pszArgs + iKeyLen, iTailLen);
+			iOut += iTailLen;
+		}
+		szExpanded[iOut] = '\0';
+		if ( iOut + 1 > iBufCapacity )
+			return false;
+		if ( fChanged )
+			memcpy(pszArgs, szExpanded, iOut + 1);
+		return fChanged;
+	}
+
+	void ExpandTagArgumentIndices(CGVariant& vArgs)
+	{
+		LPCTSTR pszArgs = vArgs.GetPSTR();
+		if ( pszArgs == NULL || *pszArgs == '\0' )
+			return;
+		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
+		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
+		szArgs[sizeof(szArgs) - 1] = '\0';
+		if ( ExpandTagArgumentIndices(szArgs, sizeof(szArgs)) )
+			vArgs.SetStr(szArgs);
+	}
+
 	// Check the complete replacement size before shifting the suffix.  The
 	// expression itself is temporarily NUL-terminated while it is evaluated,
 	// so strlen(pszBuf) cannot be used for this check; iBegin and iTrailLen
@@ -1532,7 +1730,12 @@ public:
 
 		for ( int i = 0; pszBuf[i]; i++ )
 		{
-			if ( pszBuf[i] != chBegin )
+			// ``<?...?>`` is Sphere's deferred expression form.  Dialog TEXT
+			// uses the HTML escape mode so literal tags such as <BASEFONT>
+			// remain untouched, but deferred expressions must still be
+			// evaluated in that mode at send time.
+			bool fDeferredMacro = pszBuf[i] == '<' && pszBuf[i+1] == '?';
+			if ( pszBuf[i] != chBegin && !fDeferredMacro )
 				continue;
 
 			// Handle <?...?> expression macros — alternative delimiters for nesting.
@@ -1992,6 +2195,8 @@ public:
 				pszArg = szCallArgs;
 			}
 		}
+		if ( IsTagMethodName(pszKey) && pszArg && *pszArg )
+			ExpandTagArgumentIndices(pszArg, SCRIPT_MAX_LINE_LEN);
 
 		// Try dispatching to the base object.  A dotted assignment belongs to
 		// the referenced object (ACT.P, LASTNEW.P, SRC.TAG.foo, ...); passing the
@@ -2491,8 +2696,10 @@ public:
 						// example the byte-token stream used by STRTOASCII).  The
 						// numeric return path used to collapse that text to its first
 						// token, producing an empty raw packet. Preserve quoted and
-						// whitespace-containing return values for script callers.
-						s_ParseEscapes(pszArg, 0, sizeof(szArg));
+						// whitespace-containing return values for script callers.  The
+						// value is also a numeric expression: expand object references as
+						// their UID here, before GetScriptExpression sees the text.
+						s_ParseEscapes(pszArg, CSCRIPT_PARSE_OBJECT_SERIAL, sizeof(szArg));
 						TCHAR* pszText = pszArg;
 						while ( ISWHITESPACE(*pszText) ) pszText++;
 						TCHAR* pszTextEnd = pszText + strlen(pszText);
@@ -2730,7 +2937,9 @@ public:
 								IsScriptFunction(pszCallFunction);
 						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
-							!_strnicmp(szKey, "TAG(", 4) || fScriptCall)
+							!_strnicmp(szKey, "TAG(", 4) ||
+							HasContainerAssignmentArgument(szKey) ||
+							HasContentsCall(szKey) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( szKey, dwKeyFlags );
 						if ( IsLineExpansionOverflow() )
@@ -2743,7 +2952,8 @@ public:
 						// empty scalar.
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
-							(fKeyEquals && IsObjectAssignmentKey(szKey)) ||
+							(fKeyEquals && (IsObjectAssignmentKey(szKey) ||
+								HasContainerAssignmentArgument(szKey) || HasContentsCall(szKey))) ||
 							IsScriptFunction(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,

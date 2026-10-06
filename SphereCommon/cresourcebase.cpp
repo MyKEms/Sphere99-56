@@ -341,6 +341,27 @@ bool CResourceQty::LoadResQty( LPCTSTR& pszCmds )
 		}
 		else
 		{
+			// 0.99 accepts a DEFNAME whose value is a brace-delimited
+			// random resource list (for example a CHARDEF RESOURCES entry).
+			// The list is metadata and is not a single CResourceQty, so do
+			// not report it as a missing resource or turn the whole script
+			// load into a diagnostic.  The caller will leave this list entry
+			// out of the scalar resource array, matching stock's load path.
+			CVarDef* pVar = g_Cfg.m_Const.FindKeyPtr( szTmp );
+			LPCTSTR pszList = pVar ? pVar->GetValStr() : NULL;
+			if ( pszList )
+			{
+				while ( ISWHITESPACE( *pszList ))
+					++pszList;
+				if ( *pszList == '{' )
+				{
+					while ( isalnum( (unsigned char)*pszCmds ) || *pszCmds == '_' )
+						++pszCmds;
+					m_rid.InitUID();
+					return( true );
+				}
+			}
+
 			DEBUG_ERR(( "Bad resource list id '%s'" LOG_CR, pszPrv ));
 			return( false );
 		}

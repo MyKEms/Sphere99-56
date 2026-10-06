@@ -976,6 +976,13 @@ CResourceObj* CSphereExpContext::ResolveResourceObject(UID_INDEX uid)
 	if ( !rid.IsValidRID() )
 		return NULL;
 	CResourceDefPtr pDef = g_Cfg.ResourceGetDef(rid);
+	// Resource-valued inner escapes can be serialized to their UID before a
+	// deferred dotted expression is evaluated.  Profession definitions are
+	// valid object roots for that path (the .explevel scripts read
+	// <profession>.<skill> dynamically), even though they are not world
+	// objects and therefore are not CObjBaseDef instances.
+	if ( rid.GetResType() == RES_Profession )
+		return dynamic_cast<CProfessionDef*>((CResourceDef*)pDef);
 	// A named resource is initially represented by a lazy CResourceLink.  It
 	// has no definition properties and must not become an object-chain root:
 	// SAFE existence probes would otherwise enter scripts for names that stock
@@ -1001,8 +1008,10 @@ bool CSphereExpContext::IsScriptFunction(LPCTSTR pszKey)
 
 bool CSphereExpContext::FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
 {
+	// An indexed DEFNAME (NAME[n]) is a plain value, not a resource name: the
+	// reference server returns its text, or nothing past the last index.
 	if ( pszExpr == NULL || *pszExpr == '\0' || strchr(pszExpr, '.') ||
-		strchr(pszExpr, '(') )
+		strchr(pszExpr, '(') || strchr(pszExpr, '[') )
 		return false;
 	CSphereUID rid = g_Cfg.ResourceGetIDByName(RES_UNKNOWN, pszExpr);
 	if ( !rid.IsValidRID() )
@@ -1316,7 +1325,22 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				vArgs.GetArrayPSTR(0), CSphereResourceMgr::sm_szResourceBlocks );
 			if ( restype <= RES_UNKNOWN || restype >= RES_QTY )
 				return HRES_BAD_ARGUMENTS;
-			CSphereUID rid = g_Cfg.ResourceGetIDByName( restype, vArgs.GetArrayPSTR(1) );
+			LPCTSTR pszName = vArgs.GetArrayPSTR(1);
+			CSphereUID rid = g_Cfg.ResourceGetIDByName( restype, pszName );
+			if ( !rid.IsValidRID() )
+			{
+				// Script functions may pass the local ARGS/ARGV token through
+				// unchanged. Evaluate it only after the literal resource lookup
+				// fails, preserving the normal FINDRES(SPELL,S_HEAL) path.
+				CGVariant vResolvedName;
+				CScriptUnknownRejectTracker ignored;
+				if ( pszName && EvaluateEscapeValue(pszName, vResolvedName, ignored) )
+				{
+					LPCTSTR pszResolved = vResolvedName.GetPSTR();
+					if ( pszResolved && *pszResolved )
+						rid = g_Cfg.ResourceGetIDByName( restype, pszResolved );
+				}
+			}
 			vValRet.SetRef( g_Cfg.ResourceGetDef( rid ));
 		}
 		break;

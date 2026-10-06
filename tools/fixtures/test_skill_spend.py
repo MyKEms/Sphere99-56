@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Check that named NPC creation does not hit the NPC setter."""
+"""Check dynamic skill assignment used by the level-up script."""
 
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 import sys
 import time
 from pathlib import Path
 
 from run_suite import shutdown_failures
+from modes.skill_spend import ACCOUNT, END_MARKER, MARKER, PASSWORD
 
 
-ACCOUNT = "NpcBrainProbe"
-LOGIN_TOKEN = "npc-brain-pw"
-MARKER = "SPHERE_NPC_BRAIN"
-DEFAULT_MARKER = "SPHERE_NPC_BRAIN default"
-ALIAS_MARKER = "SPHERE_NPC_BRAIN alias-created"
+MARKER_RE = re.compile(re.escape(MARKER) + r"\|([a-z]+)\|\[(.*)\]")
+EXPECTED = {
+    "before": "Anatomy|0|0.0|0",
+    "max": "1000|1",
+    "after": "Anatomy|5.0|50",
+}
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -36,7 +39,7 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=4594)
+    parser.add_argument("--port", type=int, default=4598)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
@@ -51,26 +54,20 @@ def main() -> int:
     failures: list[str] = []
 
     def exercise() -> None:
-        sock, _ = game_connect(
-            args.host,
-            args.port,
-            ACCOUNT,
-            LOGIN_TOKEN,
-            game_port=args.port + 1000,
-        )
+        sock, _ = game_connect(args.host, args.port, ACCOUNT, PASSWORD, game_port=args.port + 1000)
         if sock is None:
-            raise RuntimeError("NPC brain probe did not reach its character list")
+            raise RuntimeError("skill-spend probe did not reach its character list")
         try:
             sock.sendall(make_char_play(0))
             data = recv_until_game_start(sock, timeout=30.0)
             if not data:
-                raise RuntimeError("NPC brain probe character did not enter the world")
+                raise RuntimeError("skill-spend probe character did not enter the world")
             buffer = bytearray(data)
             deadline = time.monotonic() + 12.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(buffer))
-                if f"{MARKER} created" in messages:
+                if END_MARKER in messages:
                     return
                 try:
                     chunk = sock.recv(65536)
@@ -97,21 +94,26 @@ def main() -> int:
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
-    if f"{MARKER} created" not in messages:
-        failures.append("named NPC creation event did not execute")
-    if not any(message.startswith(DEFAULT_MARKER) for message in messages):
-        failures.append("unresolved NPC brain did not preserve a default brain")
-    if ALIAS_MARKER not in messages:
-        failures.append("legacy BERSERK brain spelling did not create an NPC")
-    if "NPC_SetBrain NULL" in log_contents:
-        failures.append("NPC brain creation reached the NULL setter path")
+    if messages.count(END_MARKER) != 1:
+        failures.append(f"end marker count {messages.count(END_MARKER)} != 1")
+
+    rows: dict[str, str] = {}
+    for message in messages:
+        match = MARKER_RE.fullmatch(message)
+        if match:
+            rows[match.group(1)] = match.group(2)
+    for key, expected in EXPECTED.items():
+        value = rows.get(key)
+        if value != expected:
+            failures.append(f"{key}: got {value!r}; expected {expected!r}")
 
     if failures:
-        print(f"messages: {messages!r}", file=sys.stderr)
+        print("observed messages:", messages, file=sys.stderr)
+        print("skill-spend probe failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("NPC brain creation probe passed: 4/4 checks")
+    print(f"skill-spend probe passed: {len(EXPECTED)}/{len(EXPECTED)} checks")
     return 0
 
 

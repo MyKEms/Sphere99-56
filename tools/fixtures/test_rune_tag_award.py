@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Check that named NPC creation does not hit the NPC setter."""
+"""Check a once-only award recorded in an equipped item TAG."""
 
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 import sys
 import time
 from pathlib import Path
 
+from modes.rune_tag_award import ACCOUNT, LOGIN_TOKEN, MARKER, ROWS
 from run_suite import shutdown_failures
 
 
-ACCOUNT = "NpcBrainProbe"
-LOGIN_TOKEN = "npc-brain-pw"
-MARKER = "SPHERE_NPC_BRAIN"
-DEFAULT_MARKER = "SPHERE_NPC_BRAIN default"
-ALIAS_MARKER = "SPHERE_NPC_BRAIN alias-created"
+ROW_RE = re.compile(re.escape(MARKER) + r" (\w+)=\[(.*)\]$")
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -36,14 +34,13 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=4594)
+    parser.add_argument("--port", type=int, default=2978)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
-    tools_path = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(tools_path))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from test_world_save_roundtrip import run_server
     from uo_test_client import game_connect, make_char_play, recv_until_game_start
 
@@ -51,26 +48,20 @@ def main() -> int:
     failures: list[str] = []
 
     def exercise() -> None:
-        sock, _ = game_connect(
-            args.host,
-            args.port,
-            ACCOUNT,
-            LOGIN_TOKEN,
-            game_port=args.port + 1000,
-        )
+        sock, _ = game_connect(args.host, args.port, ACCOUNT, LOGIN_TOKEN, game_port=args.port + 1000)
         if sock is None:
-            raise RuntimeError("NPC brain probe did not reach its character list")
+            raise RuntimeError("rune-tag award probe did not reach its character list")
         try:
             sock.sendall(make_char_play(0))
             data = recv_until_game_start(sock, timeout=30.0)
             if not data:
-                raise RuntimeError("NPC brain probe character did not enter the world")
+                raise RuntimeError("rune-tag award probe character did not enter the world")
             buffer = bytearray(data)
             deadline = time.monotonic() + 12.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(buffer))
-                if f"{MARKER} created" in messages:
+                if f"{MARKER} done" in messages:
                     return
                 try:
                     chunk = sock.recv(65536)
@@ -97,21 +88,26 @@ def main() -> int:
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
-    if f"{MARKER} created" not in messages:
-        failures.append("named NPC creation event did not execute")
-    if not any(message.startswith(DEFAULT_MARKER) for message in messages):
-        failures.append("unresolved NPC brain did not preserve a default brain")
-    if ALIAS_MARKER not in messages:
-        failures.append("legacy BERSERK brain spelling did not create an NPC")
-    if "NPC_SetBrain NULL" in log_contents:
-        failures.append("NPC brain creation reached the NULL setter path")
+
+    seen: dict[str, str] = {}
+    for message in messages:
+        match = ROW_RE.search(message)
+        if match:
+            seen[match.group(1)] = match.group(2)
+    for label, expected in ROWS:
+        got = seen.get(label)
+        if got != expected:
+            failures.append(f"{label}: expected {expected!r}, got {got!r}")
+    if f"{MARKER} done" not in messages:
+        failures.append("rune-tag award probe did not finish")
 
     if failures:
-        print(f"messages: {messages!r}", file=sys.stderr)
+        print("rune-tag award probe failed", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
+        print(f"messages: {messages!r}", file=sys.stderr)
         return 1
-    print("NPC brain creation probe passed: 4/4 checks")
+    print(f"rune-tag award probe passed: {len(ROWS)}/{len(ROWS)} rows")
     return 0
 
 

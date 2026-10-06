@@ -48,6 +48,14 @@ CSkillDef::CSkillDef( SKILL_TYPE skill ) :
 
 HRESULT CSkillDef::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc )
 {
+	// Skill definitions expose their script key through the stock NAME alias;
+	// the native property table only contains KEY, so callers such as
+	// FINDRES(SKILL,index).NAME otherwise receive an unresolved value.
+	if ( !_stricmp(pszKey, "NAME") )
+	{
+		vValRet = GetName();
+		return NO_ERROR;
+	}
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{

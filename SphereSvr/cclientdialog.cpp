@@ -245,7 +245,8 @@ private:
 		strncpy(szGumpKey, pszSub, sizeof(szGumpKey)-1);
 		szGumpKey[sizeof(szGumpKey)-1] = '\0';
 		TCHAR* pParen = strchr(szGumpKey, '(');
-		LPCTSTR pGumpArgs = "";
+		TCHAR szEmptyArgs[1] = { '\0' };
+		TCHAR* pGumpArgs = szEmptyArgs;
 		if ( pParen )
 		{
 			*pParen = '\0';
@@ -290,6 +291,8 @@ private:
 		// Try as method/property on argo object (e.g., argo.tag(width,400))
 		if ( m_pDialogObj )
 		{
+			if ( CScriptExecContext::IsTagMethodName(szGumpKey) )
+				ExpandTagArgumentIndices(pGumpArgs);
 			CGVariant vSubArgs(pGumpArgs);
 			CGVariant vSubRet;
 			// TAG is a method in 0.99 dialog layouts.  Its comma-separated

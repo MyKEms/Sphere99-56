@@ -1872,8 +1872,10 @@ int CClient::Setup_FillCharList( CUOEventCharDef* pCharList, const CChar* pCharF
 		j++;
 	}
 
-	// always show max count for some stupid reason. (client bug)
-	// pad out the rest of the chars.
+	// The packet always carries the complete five-slot array.  Newer clients
+	// use the count to locate the starting-city list, so it must describe the
+	// padded slot array rather than the number of occupied account entries.
+	// Pad out the rest of the chars.
 	for ( ;j<UO_MAX_CHARS_PER_ACCT;j++)
 	{
 		m_Targ.m_tmSetupCharList[j].InitUID();
@@ -1881,8 +1883,6 @@ int CClient::Setup_FillCharList( CUOEventCharDef* pCharList, const CChar* pCharF
 		memset( pCharList[j].m_charpass, 0, sizeof(pCharList[0].m_charpass));
 	}
 
-	if ( m_ProtoVer.GetCryptVer() >= 0x00300001 )
-		return iQty;
 	return( UO_MAX_CHARS_PER_ACCT );
 }
 
