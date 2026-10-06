@@ -242,11 +242,15 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                         # which come at the same server ticks for both,
                         # release the two packets in the same tick.
                         time.sleep(FLOOD_REFILL_WAIT)
-                        # Keep the member's final packet one dispatch behind
-                        # the master's disband. This is the cross-client tick
-                        # boundary that exposed the premature party teardown.
+                        # Keep both final packets at the same dispatch depth.
+                        # CServer walks newest clients first, and the master
+                        # was created last, so its disband is dispatched
+                        # before the member message in the same tick. Putting
+                        # the member one packet behind can spill it into the
+                        # following tick on a busy runner, after the deferred
+                        # party generation has been destroyed.
                         master_padding = make_ping() * FLOOD_PADDING
-                        member_padding = make_ping() * (FLOOD_PADDING + 1)
+                        member_padding = make_ping() * FLOOD_PADDING
                         # Send the disband first.  Concurrent writes made the
                         # packet order scheduler-dependent on 32-bit CI: when
                         # the member message won the race, it was handled while
