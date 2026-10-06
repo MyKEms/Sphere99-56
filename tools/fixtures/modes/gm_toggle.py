@@ -90,9 +90,9 @@ MODE = register_mode(
     FixtureMode(
         name="gm-toggle",
         fixture_args=None,
-        # Blocks through 104 are occupied by the current master manifest.
-        order=159,
-        id_block=105,
+        # Keep the GM fixture after every allocation in the current manifest.
+        order=171,
+        id_block=118,
         case=FixtureCase(
             name="gm-toggle",
             mode=None,
