@@ -1367,17 +1367,27 @@ public:
 
 	static int ApplyOperator(const OperatorToken& token, int left, int right)
 	{
+		// Sphere stores expression results in a 32-bit slot.  Convert through
+		// unsigned bits so the legacy wrap is explicit instead of relying on
+		// signed-overflow behavior (which UBSan correctly rejects).
+		auto WrapInt32 = [](int64_t value) -> int
+		{
+			const uint32_t bits = static_cast<uint32_t>(value);
+			if (bits & 0x80000000U)
+				return static_cast<int>(static_cast<int64_t>(bits) - 0x100000000LL);
+			return static_cast<int>(bits);
+		};
 		if (token.fLogical)
 			return token.op == '&' ? ((left && right) ? 1 : 0) : ((left || right) ? 1 : 0);
 		if (token.fShift)
 			return token.op == '<' ? (left << right) : (left >> right);
 		switch (token.op)
 		{
-		case '+': return left + right;
-		case '-': return left - right;
-		case '*': return left * right;
-		case '/': return right ? (left / right) : 0;
-		case '%': return right ? (left % right) : 0;
+		case '+': return WrapInt32(static_cast<int64_t>(left) + right);
+		case '-': return WrapInt32(static_cast<int64_t>(left) - right);
+		case '*': return WrapInt32(static_cast<int64_t>(left) * right);
+		case '/': return right ? WrapInt32(static_cast<int64_t>(left) / right) : 0;
+		case '%': return right ? WrapInt32(static_cast<int64_t>(left) % right) : 0;
 		case '|': return left | right;
 		case '&': return left & right;
 		case '^': return left ^ right;

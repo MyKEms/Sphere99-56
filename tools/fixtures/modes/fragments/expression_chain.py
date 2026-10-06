@@ -26,6 +26,9 @@ EXPRESSION_CHAIN_ORACLE_ROWS = (
     ("add_multiply_subtract", "2+3*4-1", "11"),
     ("zero_and_or", "0&&0||1", "0"),
     ("mod_add", "7%4+1", "2"),
+    # 0.99 keeps arithmetic in a signed 32-bit slot.  This product wraps
+    # through the low 32 bits instead of invoking signed-overflow behavior.
+    ("large_hex_multiply", "0D2000015*105", "570427549"),
 )
 
 EXPRESSION_CHAIN_QUIRK_EXPECTED = {
