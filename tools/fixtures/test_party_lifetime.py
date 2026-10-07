@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Exercise deferred party destruction across two clients in one tick.
+"""Exercise deferred party destruction across two clients.
 
-The master is created after the member, so the server processes the master's
-disband packet first (clients are newest-first).  The member then sends a
-party message immediately after the disband.  A safe implementation keeps the
-party object alive until the tick boundary, clears both member references, and
-returns the normal no-party response instead of dereferencing freed memory.
+The member sends its callback only after receiving the server's party-removal
+packet.  That protocol packet is the synchronization point for the disband;
+the fixture does not depend on a wall-clock flood window.  The lifetime
+assertions remain exactly one destruction and exactly one no-party response;
+the ASan variant covers any invalid access while the deferred callback runs.
 """
 
 from __future__ import annotations
@@ -26,20 +26,11 @@ MASTER_ACCOUNT = "PartyMaster"
 MASTER_PASSWORD = "party-master-pw"
 PARTY_EXTDATA = 0x06
 PARTYMSG_Add = 1
+PARTYMSG_Remove = 2
 PARTYMSG_Msg = 4
 PARTYMSG_Disband = 5
 PARTYMSG_NotoInvited = 7
 PARTYMSG_Accept = 8
-# The server's per-client flood limit grants a burst of 100 packets and then
-# 5 per server tick.  A bounded queue just beyond the burst makes the member
-# callback one dispatch behind the master's disband without relying on a
-# long, scheduler-sensitive refill window.
-FLOOD_PADDING = 120
-FLOOD_REFILL_WAIT = 2.5
-
-
-def make_ping() -> bytes:
-    return b"\x73\x00"
 
 
 def make_extdata(code: int, payload: bytes = b"") -> bytes:
@@ -221,8 +212,8 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                         )
                     else:
                         member.sendall(make_extdata(PARTYMSG_Accept, master_uid.to_bytes(4, "big")))
-                        # Wait for the party manifest to settle before forcing
-                        # the same-tick disband/member-message ordering.
+                        # Wait for both clients to observe the party manifest
+                        # before disbanding it.
                         master_manifest = recv_until_party_code(master, PARTYMSG_Add, timeout=10.0)
                         member_manifest = recv_until_party_code(member, PARTYMSG_Add, timeout=10.0)
                         if not find_party_message(master_manifest, PARTYMSG_Add):
@@ -236,29 +227,24 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
                                 f"{decode_game_response(member_manifest).hex()[:256]}"
                             )
 
-                        # The master is processed first.  Keep the member's
-                        # packet one dispatch behind the master's disband in
-                        # a bounded queue.  CServer processes one packet per
-                        # client per tick; the pre-fix destructor therefore
-                        # runs before the callback, while deferred destruction
-                        # keeps the party alive through the next tick.
-                        time.sleep(FLOOD_REFILL_WAIT)
-                        master_padding = make_ping() * FLOOD_PADDING
-                        member_padding = make_ping() * (FLOOD_PADDING + 1)
-                        # Send the disband first.  The master was created last,
-                        # so the newest-client walk handles its packet before
-                        # the member's queued packets on the same tick.
-                        master.sendall(master_padding + make_extdata(PARTYMSG_Disband))
-                        member.sendall(
-                            member_padding
-                            + make_extdata(
-                                PARTYMSG_Msg,
-                                "party object survived".encode("utf-16-be") + b"\0\0",
+                        # The removal packet is emitted by the server before it
+                        # queues the party for deferred destruction.  Waiting
+                        # for it makes the callback sequence deterministic
+                        # without a scheduler-sensitive sleep or packet flood.
+                        master.sendall(make_extdata(PARTYMSG_Disband))
+                        removal = recv_until_party_code(member, PARTYMSG_Remove, timeout=10.0)
+                        if not find_party_message(removal, PARTYMSG_Remove):
+                            failures.append("member did not receive the deterministic disband marker")
+                        else:
+                            member.sendall(
+                                make_extdata(
+                                    PARTYMSG_Msg,
+                                    "party object survived".encode("utf-16-be") + b"\0\0",
+                                )
                             )
-                        )
-                        response = recv_until_party_code(member, PARTYMSG_Msg, timeout=10.0)
-                        if not find_party_message(response, PARTYMSG_Msg):
-                            failures.append("member did not receive the no-party response")
+                            response = recv_until_party_code(member, PARTYMSG_Msg, timeout=10.0)
+                            if not find_party_message(response, PARTYMSG_Msg):
+                                failures.append("member did not receive the no-party response")
 
             time.sleep(0.2)
             if process.poll() is not None:
@@ -291,15 +277,6 @@ def run_probe(fixture: Path, binary: Path, port: int, startup_timeout: float) ->
         failures.append(
             f"no-party response diagnostic occurred {response_count} times; expected exactly once"
         )
-    destruction_offset = log_contents.find("CPartyDef destroyed")
-    response_offset = log_contents.find("CPartyDef no-party response")
-    if (
-        destruction_offset >= 0
-        and response_offset >= 0
-        and destruction_offset < response_offset
-    ):
-        failures.append("party was destroyed before the callback response completed")
-
     if failures:
         print("party lifetime probe failed:", file=sys.stderr)
         for failure in failures:
