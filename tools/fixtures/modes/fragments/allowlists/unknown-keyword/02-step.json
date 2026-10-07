@@ -5,9 +5,9 @@
       "keyword": "@STEP",
       "count_range": [
         9,
-        10
+        9
       ],
-      "reason": "The generic protocol fixture moves synthetic characters without an @Step handler; scheduling observes nine or ten step events."
+      "reason": "The generic protocol fixture moves synthetic characters without an @Step handler; the base fixture freezes the synthetic timer NPC so exactly nine step events are observed."
     }
   ]
 }
