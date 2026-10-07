@@ -135,9 +135,11 @@ bool CAccountMgr::Account_Load( CScript& s, bool fChanges )
 	return( true );
 }
 
-bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
+bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges,
+	LPCTSTR pszLoadName, bool fApplyChanges )
 {
 	// Load the accounts file. (at start up)
+	const bool fExplicitLoadName = pszLoadName != NULL && pszLoadName[0] != '\0';
 
 	CString sBaseDir;
 	if ( g_Cfg.m_sAcctBaseDir.IsEmpty())
@@ -160,12 +162,15 @@ bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
 	}
 
 	CGString sLoadName;
-	sLoadName.Format( _TEXT("%s%s"), (LPCTSTR)sBaseDir, pszBaseName );
+	if ( fExplicitLoadName )
+		sLoadName = pszLoadName;
+	else
+		sLoadName.Format( _TEXT("%s%s"), (LPCTSTR)sBaseDir, pszBaseName );
 
 	CScript s;
 	if ( ! s.Open( sLoadName, fChanges ? (OF_NONCRIT|OF_READ|OF_TEXT) : (OF_READ|OF_TEXT)))
 	{
-		if ( ! fChanges )
+		if ( ! fChanges && !fExplicitLoadName )
 		{
 			if ( Account_LoadAll( true ))	// if we have changes then we are ok.
 				return( true );
@@ -214,7 +219,7 @@ bool CAccountMgr::Account_LoadAll( bool fChanges, bool fClearChanges )
 #endif
 	}
 
-	if ( ! fChanges )
+	if ( ! fChanges && fApplyChanges )
 	{
 		Account_LoadAll( true );
 	}

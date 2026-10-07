@@ -77,6 +77,19 @@ def check_seeded_save_pairs(errors: list[str]) -> None:
                     f"{name} seeds a save pair the server rejects: "
                     f"world SAVECOUNT={world} chars SAVECOUNT={chars}"
                 )
+            if name == "fixture":
+                script = output / "scripts" / "spheretables.scp"
+                contents = script.read_text(encoding="utf-8", errors="replace")
+                for line in (
+                    "LASTNEWCHAR.FLAG_STONE=1",
+                    "LASTNEWCHAR.FLAG_IMMOBILE=1",
+                    "LASTNEWCHAR.TIMER=-1",
+                ):
+                    if line not in contents:
+                        errors.append(
+                            "fixture timer owner must be inert in the base world: "
+                            f"missing {line}"
+                        )
 
 
 def main() -> int:

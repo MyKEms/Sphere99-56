@@ -1237,6 +1237,30 @@ static bool SaveComponentReplaced( const CSaveManifest& manifest, int iComponent
 	return SaveFileExists( sArchive ) && SaveFileReplacedSince( pszCurrent, sArchive );
 }
 
+// A pending generation is committed enough to use its live world/chars pair
+// only after both files carry the pending count and both were replaced after
+// their recorded backups.  Account recovery uses the same decision before it
+// chooses between the live account file and its recorded archive.
+static bool IsPublishedPendingPair( const CSaveManifest& manifest, LPCTSTR pszBaseDir )
+{
+	if ( !manifest.m_fPending )
+		return false;
+	CGString sWorldName;
+	sWorldName.Format( "%s" SPHERE_FILE "world" SCRIPT_EXT, pszBaseDir ? pszBaseDir : "" );
+	CGString sCharsName;
+	sCharsName.Format( "%s" SPHERE_FILE "chars" SCRIPT_EXT, pszBaseDir ? pszBaseDir : "" );
+	int iLiveWorldCount = INT_MIN;
+	int iLiveCharsCount = INT_MIN;
+	const bool fLivePendingCount =
+		ReadSaveFileCount( sWorldName, iLiveWorldCount ) &&
+		ReadSaveFileCount( sCharsName, iLiveCharsCount ) &&
+		iLiveWorldCount == manifest.m_iSaveCount &&
+		iLiveCharsCount == manifest.m_iSaveCount;
+	return fLivePendingCount &&
+		SaveComponentReplaced( manifest, CSaveManifest::COMPONENT_WORLD, 'w', sWorldName ) &&
+		SaveComponentReplaced( manifest, CSaveManifest::COMPONENT_CHARS, 'c', sCharsName );
+}
+
 // Name a selected save backup with its own SAVECOUNT and save time (the file's
 // modification time) next to the wall-clock time of the selection; start-up
 // log lines carry no timestamp of their own.
@@ -1931,8 +1955,7 @@ bool CWorld::LoadWorld() // Load world from script
 	// the recorded backups are loaded, and the pending record is kept so the
 	// retry reuses them.
 	const bool fPublishedPending = fLivePendingCount &&
-		SaveComponentReplaced( manifest, CSaveManifest::COMPONENT_WORLD, 'w', sWorldName ) &&
-		SaveComponentReplaced( manifest, CSaveManifest::COMPONENT_CHARS, 'c', sCharsName );
+		IsPublishedPendingPair( manifest, g_Cfg.m_sWorldBaseDir );
 	if ( fHaveManifest && !fPendingManifest )
 	{
 		RemoveSaveManifest( g_Cfg.m_sWorldBaseDir );
@@ -2084,8 +2107,43 @@ bool CWorld::LoadAll( LPCTSTR pszLoadName ) // Load world from script
 	// The world has just started.
 	m_Clock.InitTime();		// will be loaded from the world file.
 
+	// Account publication precedes the world/character pair.  If a pending
+	// generation did not publish that pair, recover a recorded account archive
+	// with it instead of leaving accounts one generation ahead.  A published
+	// live pair is the committed generation even when its commit marker was the
+	// part interrupted, so its live accounts remain authoritative.
+	CGString sAccountArchive;
+	bool fLoadAccountArchive = false;
+	CSaveManifest accountManifest;
+	const bool fPendingAccountManifest =
+		ReadSaveManifest( g_Cfg.m_sWorldBaseDir, accountManifest ) &&
+		accountManifest.m_fPending;
+	if ( fPendingAccountManifest && !IsPublishedPendingPair( accountManifest, g_Cfg.m_sWorldBaseDir ) &&
+		( accountManifest.m_dwRotated & ( 1u << CSaveManifest::COMPONENT_ACCOUNTS )))
+	{
+		CString sAccountBaseDir;
+		if ( g_Cfg.m_sAcctBaseDir.IsEmpty())
+			sAccountBaseDir = g_Cfg.m_sWorldBaseDir;
+		else
+			sAccountBaseDir = g_Cfg.m_sAcctBaseDir;
+		CGString sAccountCurrent;
+		sAccountCurrent.Format( "%s" SPHERE_FILE "accu" SCRIPT_EXT,
+			(LPCTSTR) sAccountBaseDir );
+		GetManifestArchive( accountManifest, CSaveManifest::COMPONENT_ACCOUNTS,
+			(LPCTSTR) sAccountBaseDir, 'a', accountManifest.m_iSaveCount, sAccountArchive );
+		if ( !SaveFileExists( sAccountArchive ))
+		{
+			LogMissingSaveArchive( accountManifest.m_iSaveCount, sAccountArchive, sAccountCurrent );
+			return false;
+		}
+		fLoadAccountArchive = true;
+		LogSaveBackupSelected( sAccountArchive );
+	}
+
 	// Load all the accounts.
-	if ( ! g_Accounts.Account_LoadAll( false ))
+	if ( !g_Accounts.Account_LoadAll( false, false,
+		fLoadAccountArchive ? (LPCTSTR) sAccountArchive : NULL,
+		!fLoadAccountArchive ))
 	{
 		return( false );
 	}
