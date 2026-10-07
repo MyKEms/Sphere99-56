@@ -208,7 +208,11 @@ public:
 	bool Account_Load( CScript& s, bool fChanges );
 
 	bool Account_SaveAll();
-	bool Account_LoadAll( bool fChanges = true, bool fClearChanges = false );
+	// Load the normal account file.  A pending save recovery can provide an
+	// archived path and suppress the change file so accounts stay on the same
+	// generation as world and characters.
+	bool Account_LoadAll( bool fChanges = true, bool fClearChanges = false,
+		LPCTSTR pszLoadName = NULL, bool fApplyChanges = true );
 	int Account_GetCount() const
 	{
 		return( m_Accounts.GetSize());

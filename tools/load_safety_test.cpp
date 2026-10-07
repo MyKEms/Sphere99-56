@@ -833,6 +833,72 @@ static bool TestPendingMissingArchiveRefuses()
 	return true;
 }
 
+// An interrupted save may have published the new account file before the
+// paired world/character files.  Recovery must load the account archive named
+// by the pending manifest with those older files, rather than leaving the
+// account one generation ahead.
+static bool TestPendingAccountRecovery()
+{
+	char szTempDir[] = "/tmp/sphere-save-account-recovery-XXXXXX";
+	if ( mkdtemp( szTempDir ) == NULL )
+		return false;
+	const std::string sBaseDir = std::string( szTempDir ) + "/";
+	const std::string sWorld = sBaseDir + "sphereworld.scp";
+	const std::string sChars = sBaseDir + "spherechars.scp";
+	const std::string sAccounts = sBaseDir + "sphereaccu.scp";
+	const std::string sChanges = sBaseDir + "sphereacct.scp";
+	const std::string sAccountArchive = sBaseDir + "account-previous.scp";
+	const std::string sManifest = sBaseDir + "sphere.save.pending";
+	const char* pszWorld = "TITLE=Recovery world\nVERSION=0.99\nSAVECOUNT=4\n[EOF]\n";
+	const char* pszChars = "TITLE=Recovery chars\nVERSION=0.99\nSAVECOUNT=4\n[EOF]\n";
+	const char* pszCurrentAccounts = "[RECOVERY]\nPASSWORD=current\n[EOF]\n";
+	const char* pszArchivedAccounts = "[RECOVERY]\nPASSWORD=previous\n[EOF]\n";
+	const char* pszChanges = "[EOF]\n";
+	const bool fFiles = WriteTextFile( sWorld, pszWorld ) &&
+		WriteTextFile( sChars, pszChars ) &&
+		WriteTextFile( sAccounts, pszCurrentAccounts ) &&
+		WriteTextFile( sChanges, pszChanges ) &&
+		WriteTextFile( sAccountArchive, pszArchivedAccounts ) &&
+		WriteTextFile( sManifest,
+			( "SAVECOUNT=5\nSTATE=PENDING\nROTATED=4\nARCHIVE_A=" +
+				sAccountArchive + "\n[EOF]\n" ).c_str());
+	const std::string sOldWorldBaseDir = (LPCTSTR) g_Cfg.m_sWorldBaseDir;
+	const std::string sOldAcctBaseDir = (LPCTSTR) g_Cfg.m_sAcctBaseDir;
+	g_Cfg.m_sWorldBaseDir = sBaseDir.c_str();
+	g_Cfg.m_sAcctBaseDir.Empty();
+	g_Cfg.m_fSaveBackupFallback = false;
+	g_World.Close( false );
+	g_Accounts.Empty();
+	g_World.m_iSaveCountID = 0;
+	const bool fLoaded = fFiles && g_World.LoadAll();
+	CAccountPtr pAccount = g_Accounts.Account_FindNameCheck( "RECOVERY" );
+	const std::string sLoadedPassword = pAccount.IsValidRefObj() ?
+		(LPCTSTR) pAccount->GetPassword() : "missing";
+	const bool fRecovered = fLoaded && pAccount.IsValidRefObj() &&
+		!_stricmp( pAccount->GetPassword(), "previous" );
+	g_World.Close( false );
+	g_Accounts.Empty();
+	g_Cfg.m_sWorldBaseDir = sOldWorldBaseDir.c_str();
+	g_Cfg.m_sAcctBaseDir = sOldAcctBaseDir.c_str();
+	unlink( sWorld.c_str());
+	unlink( sChars.c_str());
+	unlink( sAccounts.c_str());
+	unlink( sChanges.c_str());
+	unlink( sAccountArchive.c_str());
+	unlink( sManifest.c_str());
+	rmdir( szTempDir );
+	g_World.m_iSaveCountID = 0;
+	if ( !fRecovered )
+	{
+		std::fprintf( stderr,
+			"pending account recovery loaded the wrong generation: files=%d loaded=%d account=%s\n",
+			fFiles ? 1 : 0, fLoaded ? 1 : 0,
+			sLoadedPassword.c_str());
+		return false;
+	}
+	return true;
+}
+
 // A one-sided SAVECOUNT is not a usable current pair, but with explicit
 // fallback enabled its count still identifies the backup level to walk back.
 // The refusal message must also tell an operator which option enables that
@@ -1018,6 +1084,12 @@ int main()
 		return 1;
 	}
 	std::printf( "paired save load: missing recorded archives refuse mixed-generation recovery\n" );
+	if ( !TestPendingAccountRecovery() )
+	{
+		std::fprintf( stderr, "pending save did not recover accounts with the world/chars generation\n" );
+		return 1;
+	}
+	std::printf( "paired save load: pending account archive matches world/chars recovery\n" );
 	if ( !TestBackupFallbackDiagnostics() )
 	{
 		std::fprintf( stderr, "backup fallback diagnostics were incomplete\n" );
