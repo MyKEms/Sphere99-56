@@ -2221,6 +2221,8 @@ def write_scripts(
         if container_shutdown_probe
         else ""
     )
+    # The timer-lifetime probe creates a working memory item, but its synthetic
+    # NPC must stay inert while the player waits for the callback.
     timer_lifetime_owner_create = (
         "ON=@Create\nITEM=SYNTHETIC_TIMER_LIFETIME\nLAYER=30\nTIMER=5\n"
         if not timer_lifetime_probe
@@ -2604,6 +2606,8 @@ IF (<ARG.timer_probe_match> == 1)
 NEWNPC SYNTHETIC_TIMER_OWNER
 LASTNEWCHAR.P=129,128,0
 LASTNEWCHAR.FLAG_STONE=1
+LASTNEWCHAR.FLAG_IMMOBILE=1
+LASTNEWCHAR.TIMER=-1
 SYSMESSAGE SPHERE_TIMER_OWNER_CREATED
 ENDIF
 ARG(trigger_value,5)

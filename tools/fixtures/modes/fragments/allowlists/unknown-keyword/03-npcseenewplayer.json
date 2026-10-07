@@ -7,7 +7,8 @@
         1,
         32
       ],
-      "reason": "The synthetic timer NPC has no new-player sight handler."
+      "optional": true,
+      "reason": "The synthetic timer NPC is deliberately held without a brain tick, so no new-player sight event is expected in the base fixture."
     }
   ]
 }
