@@ -148,6 +148,47 @@ def _command(sock: socket.socket, value: str) -> tuple[list[str], list[int]]:
     return [text for packet in packets if (text := _text(packet))], [packet.command for packet in packets]
 
 
+def _say(sock: socket.socket, text: str) -> list[str]:
+    sock.sendall(_talk(text))
+    return [text for packet in _decode(_drain(sock, 1.5)) if (text := _text(packet))]
+
+
+# A command without a value toggles one status flag, 1 sets it and 0 clears
+# it; the other status flags keep their state.
+STAT_FLAG_STEPS = (
+    (".INVIS", "Invis is now on."),
+    (".INVIS", "Invis is now off."),
+    (".INVIS", "Invis is now on."),
+    (".INVIS 0", "Invis is now off."),
+    (".INVIS 1", "Invis is now on."),
+    (".INVIS 0", "Invis is now off."),
+    (".INVUL", "Invulnerability ON"),
+    (".INVUL", "Invulnerability OFF"),
+    (".INVUL", "Invulnerability ON"),
+)
+
+
+def _stat_flag_failures(sock: socket.socket) -> list[str]:
+    failures: list[str] = []
+    for command, expected in STAT_FLAG_STEPS:
+        texts = _say(sock, command)
+        if expected not in texts:
+            failures.append(f"{command} response missing {expected!r}; texts={texts!r}")
+    # Invulnerability is on now. Toggling invisibility twice must not clear it.
+    for command in (".INVIS", ".INVIS"):
+        _say(sock, command)
+    texts, _ = _click(sock)
+    if EXPECTED_HITS["1"] not in texts:
+        failures.append(f"toggling invisibility cleared invulnerability: texts={texts!r}")
+    texts = _say(sock, ".INVUL 0")
+    if "Invulnerability OFF" not in texts:
+        failures.append(f".INVUL 0 response missing 'Invulnerability OFF'; texts={texts!r}")
+    texts, _ = _click(sock)
+    if EXPECTED_HITS["0"] not in texts:
+        failures.append(f".INVUL 0 did not allow damage: texts={texts!r}")
+    return failures
+
+
 def _click(sock: socket.socket) -> tuple[list[str], list[int]]:
     sock.sendall(struct.pack(">BI", 0x06, DAMAGE_ITEM_UID))
     packets = _decode(_recv_until(sock, lambda decoded: any(
@@ -229,6 +270,8 @@ def run_probe(port: int) -> list[str]:
                 f"GM 0 reset response missing {EXPECTED_TEXT['0']!r}; texts={texts!r}, "
                 f"packets={[hex(c) for c in commands]!r}"
             )
+
+        failures.extend(_stat_flag_failures(sock))
     except (OSError, RuntimeError, ValueError, struct.error) as error:
         failures.append(str(error))
     finally:
@@ -292,7 +335,7 @@ def main() -> int:
         return 1
     print(
         "GM toggle probe passed: responses, mode update, damage immunity, "
-        "and plain-player movement isolation"
+        "plain-player movement isolation, and status-flag toggles"
     )
     return 0
 
