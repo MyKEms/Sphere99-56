@@ -1866,6 +1866,26 @@ CSphereUID CSphereResourceMgr::ResourceGetNewID( RES_TYPE restype, LPCTSTR pszNa
 		return ridinvalid;
 	}
 
+	// 0.99 world saves may spell a character/item definition as a complete
+	// resource UID (for example #08e000122).  Keep the leading '#' spelling
+	// distinct from arithmetic expressions and resolve only the two world
+	// instance section types that accept a definition resource UID.
+	if ( pszName[0] == '#' && pszName[1] )
+	{
+		char* pszEnd = NULL;
+		const unsigned long ulResourceUID = strtoul( pszName + 1, &pszEnd, 16 );
+		while ( pszEnd && *pszEnd && isspace( (unsigned char)*pszEnd ))
+			++pszEnd;
+		if ( pszEnd != pszName + 1 && pszEnd && *pszEnd == '\0' )
+		{
+			const CSphereUID resourceUID( static_cast<UID_INDEX>( ulResourceUID ));
+			const bool fCharResource = ( restype == RES_WorldChar && resourceUID.GetResType() == RES_CharDef );
+			const bool fItemResource = ( restype == RES_WorldItem && resourceUID.GetResType() == RES_ItemDef );
+			if ( resourceUID.IsValidRID() && ( fCharResource || fItemResource ))
+				return CSphereUID( restype, resourceUID.GetResIndex());
+		}
+	}
+
 	CSphereUID rid;
 	int iPage = 0;	// sub page
 
