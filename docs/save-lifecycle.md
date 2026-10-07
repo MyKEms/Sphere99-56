@@ -36,6 +36,13 @@ The account file follows the same keep-then-replace rule: the previous
 temporary file, then the temporary file is renamed into place.  The directory
 is synchronized after that publication so the rename survives a sudden restart.
 
+At startup, a pending manifest whose account backup was recorded but whose
+world/character pair was not proven published selects that recorded account
+archive with the recorded world/character generation.  It does not apply the
+uncommitted account change file in that recovery path.  Once both live world
+and character files are proven to be the pending published pair, the live
+account file remains authoritative as well.
+
 A retry of a failed generation reuses every backup that the pending manifest
 records as already taken (world, characters, accounts, and the server list)
 instead of overwriting it with a file published by the failed attempt.  The
