@@ -1355,6 +1355,13 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			// raw variant, so resolve that name before treating it as an integer;
 			// otherwise the defname becomes zero and NPC_SetBrain rejects it.
 			int iBrain = vVal.GetInt();
+			if ( iBrain == NPCBRAIN_NONE && (vVal.IsEmpty() || vVal.IsNumeric()))
+			{
+				// Players and legacy character records can carry NPC=0 as a
+				// predicate value.  It does not request a brain and must not call
+				// NPC_SetBrain, which would report a false NULL-brain error.
+				return NO_ERROR;
+			}
 			if ( iBrain == NPCBRAIN_NONE && !vVal.IsEmpty() && !vVal.IsNumeric())
 			{
 				CVarDefPtr pBrain = g_Cfg.m_Const.FindKeyPtr( vVal.GetPSTR());

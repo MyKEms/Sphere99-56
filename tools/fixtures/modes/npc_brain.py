@@ -28,6 +28,7 @@ BRAIN_ANIMAL 1
 
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
+SYSMESSAGE {MARKER} player-npc=<NPC>
 NEWNPC c_NpcBrainProbe
 LASTNEW.P=129,128,0
 SYSMESSAGE {MARKER} created
@@ -62,6 +63,7 @@ NAME=synthetic npc brain alias probe
 ON=@Create
 NPC=brain_berserk
 RETURN 0
+
 """,
         encoding="ascii",
     )
@@ -92,6 +94,7 @@ SERIAL=3
 NAME=NpcBrainProbe
 ACCOUNT={ACCOUNT}
 EVENTS={EVENT_NAME}
+NPC=0
 STR=100
 INT=100
 DEX=100

@@ -17,6 +17,7 @@ LOGIN_TOKEN = "npc-brain-pw"
 MARKER = "SPHERE_NPC_BRAIN"
 DEFAULT_MARKER = "SPHERE_NPC_BRAIN default"
 ALIAS_MARKER = "SPHERE_NPC_BRAIN alias-created"
+PLAYER_MARKER = "SPHERE_NPC_BRAIN player-npc=0"
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -103,6 +104,8 @@ def main() -> int:
         failures.append("unresolved NPC brain did not preserve a default brain")
     if ALIAS_MARKER not in messages:
         failures.append("legacy BERSERK brain spelling did not create an NPC")
+    if PLAYER_MARKER not in messages:
+        failures.append("zero NPC assignment did not preserve the player state")
     if "NPC_SetBrain NULL" in log_contents:
         failures.append("NPC brain creation reached the NULL setter path")
 
@@ -111,7 +114,7 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("NPC brain creation probe passed: 4/4 checks")
+    print("NPC brain creation probe passed: 5/5 checks")
     return 0
 
 
