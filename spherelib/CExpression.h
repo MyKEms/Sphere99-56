@@ -404,10 +404,16 @@ public:
 		}
 	}
 
-	DWORD GetDWORDMask(DWORD flags1, DWORD flags2) const
+	DWORD GetDWORDMask(DWORD dwStart, DWORD dwMask) const
 	{
-		DWORD dw = GetDWORD();
-		return (dw & flags1) | (dw & flags2);
+		// Script flag argument: no value toggles the mask bits, a nonzero
+		// value sets them and zero clears them. Bits outside the mask keep
+		// their current state.
+		if ( IsEmpty())
+			return dwStart ^ dwMask;
+		if ( GetDWORD() != 0 )
+			return dwStart | dwMask;
+		return dwStart & ~dwMask;
 	}
 
 	LPCTSTR GetPSTR() const
