@@ -1190,6 +1190,7 @@ public:
 	CServConsole()
 	{
 		m_fCommandReadyFlag = false;
+		m_fConsoleTextReadyFlag = false;
 	}
 
 	virtual CGString GetName() const	// name of the console.
@@ -1234,6 +1235,22 @@ public:
 	void OnTriggerEvent( SERVTRIG_TYPE iType, uintptr_t dwArg1, uintptr_t dwArg2 );
 
 protected:
+	bool DispatchConsoleText()
+	{
+		if ( !m_fConsoleTextReadyFlag )
+			return true;
+		if ( m_sConsoleText.IsEmpty())
+		{
+			m_fConsoleTextReadyFlag = false;
+			return true;
+		}
+		if ( !SendCommand( m_sConsoleText ))
+			return false;
+		m_sConsoleText.Empty();
+		m_fConsoleTextReadyFlag = false;
+		return true;
+	}
+
 	CGString m_sCommand;		// local console input.
 	CGString m_sConsoleText;	// current console text being typed.
 	bool m_fCommandReadyFlag;	// interlocking flag for moving between tasks.

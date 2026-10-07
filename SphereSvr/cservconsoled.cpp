@@ -137,51 +137,60 @@ bool CServConsole::OnTick( int iWaitmSec )
 			m_fConsoleTextReadyFlag = true;
 		}
 
-		if ( ::GetTickCount() - dwTimeStart >= (DWORD)iWaitmSec )
-			return true;
+		if ( iWaitmSec > 0 && ::GetTickCount() - dwTimeStart >= (DWORD)iWaitmSec )
+			break;
 	}
 #else // _WIN32
-	// On Linux, use select() on stdin for non-blocking console input with proper sleep.
-	if ( iWaitmSec > 0 )
+	// On Linux, use select() on stdin for non-blocking console input.  The
+	// normal single-threaded server tick passes zero here, so that path must
+	// still poll once instead of skipping stdin entirely.
+	bool fKeepPolling = true;
+	while ( fKeepPolling )
 	{
-		// Sleep for the requested wait time, checking stdin periodically.
-		// This prevents a 100% CPU busy-loop on the monitor thread.
-		DWORD dwElapsed = 0;
-		while ( dwElapsed < (DWORD)iWaitmSec )
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(STDIN_FILENO, &readfds);
+
+		DWORD dwElapsed = ::GetTickCount() - dwTimeStart;
+		DWORD dwRemaining = ( iWaitmSec > 0 && dwElapsed < (DWORD)iWaitmSec )
+			? (DWORD)iWaitmSec - dwElapsed
+			: 0;
+		DWORD dwWait = ( dwRemaining > 500 ) ? 500 : dwRemaining;
+		struct timeval tv;
+		tv.tv_sec = dwWait / 1000;
+		tv.tv_usec = (dwWait % 1000) * 1000;
+
+		int ret = ::select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+		if ( ret > 0 && FD_ISSET(STDIN_FILENO, &readfds) )
 		{
-			fd_set readfds;
-			FD_ZERO(&readfds);
-			FD_SET(STDIN_FILENO, &readfds);
-
-			// Check stdin with a short timeout (up to 500ms at a time)
-			DWORD dwRemaining = (DWORD)iWaitmSec - dwElapsed;
-			DWORD dwWait = (dwRemaining > 500) ? 500 : dwRemaining;
-			struct timeval tv;
-			tv.tv_sec = dwWait / 1000;
-			tv.tv_usec = (dwWait % 1000) * 1000;
-
-			int ret = ::select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
-			if ( ret > 0 && FD_ISSET(STDIN_FILENO, &readfds) )
+			char ch;
+			if ( read(STDIN_FILENO, &ch, 1) == 1 )
 			{
-				char ch;
-				if ( read(STDIN_FILENO, &ch, 1) == 1 )
+				int iRet = AddConsoleKey( m_sConsoleText, ch, false );
+				if ( iRet == 2 )
 				{
-					int iRet = AddConsoleKey( m_sConsoleText, ch, false );
-					if ( iRet == 2 )
-					{
-						m_fConsoleTextReadyFlag = true;
-					}
+					m_fConsoleTextReadyFlag = true;
 				}
 			}
-
-			// Check if server wants to exit
-			if ( g_Serv.m_iExitFlag )
-				return true;
-
-			dwElapsed = ::GetTickCount() - dwTimeStart;
+			else
+			{
+				// EOF or an interrupted read: do not spin on a permanently
+				// readable closed stdin.
+				fKeepPolling = false;
+			}
 		}
+
+		// Check if server wants to exit.
+		if ( g_Serv.m_iExitFlag )
+			break;
+
+		// A zero-wait tick is a single non-blocking poll.  A positive wait
+		// continues until its budget expires, checking stdin in 500ms slices.
+		if ( iWaitmSec <= 0 || ::GetTickCount() - dwTimeStart >= (DWORD)iWaitmSec )
+			fKeepPolling = false;
 	}
 #endif // ! _WIN32
+	DispatchConsoleText();
 	return true;
 }
 
