@@ -983,6 +983,11 @@ CResourceObj* CSphereExpContext::ResolveResourceObject(UID_INDEX uid)
 	// objects and therefore are not CObjBaseDef instances.
 	if ( rid.GetResType() == RES_Profession )
 		return dynamic_cast<CProfessionDef*>((CResourceDef*)pDef);
+	// Skill DEFNAMEs are also reference roots in the 0.99 scripts.  The
+	// level-up calculations read fields such as Skill_EvalInt.effect and
+	// Skill_MagicResist.effect through this dotted form.
+	if ( rid.GetResType() == RES_Skill )
+		return dynamic_cast<CSkillDef*>((CResourceDef*)pDef);
 	// A named resource is initially represented by a lazy CResourceLink.  It
 	// has no definition properties and must not become an object-chain root:
 	// SAFE existence probes would otherwise enter scripts for names that stock
