@@ -8,7 +8,7 @@ from .registry import FixtureCase, FixtureMode, TestCase, register_mode
 
 
 ACCOUNT = "PotionEffectProbe"
-PASSWORD = "potion-effect-pw"
+PASSWORD = "pfx-pw"
 EVENT_NAME = "e_PotionEffectProbe"
 MARKER = "SPHERE_POTION_EFFECT"
 READY_MARKER = MARKER + "_READY"
