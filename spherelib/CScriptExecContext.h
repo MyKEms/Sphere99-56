@@ -2191,7 +2191,13 @@ public:
 				// read as the key, as in F_FUNC(<STRMATCH a,b>).
 				strncpy(szCallArgs, pszArg, sizeof(szCallArgs) - 1);
 				szCallArgs[sizeof(szCallArgs) - 1] = '\0';
-				s_ParseEscapes(szCallArgs, 0);
+				// EQUIP(<LASTNEW>) is a native object-consuming call.  Keep
+				// the live object's serial while expanding its call-form
+				// argument; ordinary text expansion renders that reference as
+				// an empty string before M_Equip can resolve it.
+				const DWORD dwCallArgFlags = !_stricmp(pszKey, "EQUIP")
+					? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
+				s_ParseEscapes(szCallArgs, dwCallArgFlags);
 				pszArg = szCallArgs;
 			}
 		}
@@ -2938,6 +2944,7 @@ public:
 						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
 							!_strnicmp(szKey, "TAG(", 4) ||
+							!_strnicmp(szKey, "EQUIP(", 6) ||
 							HasContainerAssignmentArgument(szKey) ||
 							HasContentsCall(szKey) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
@@ -2952,6 +2959,10 @@ public:
 						// empty scalar.
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
+							// Native EQUIP consumes an object reference.  Preserve
+							// LASTNEW's serial when it is used as its argument; the
+							// ordinary text spelling of a live item is empty.
+							!_stricmp(szKey, "EQUIP") ||
 							(fKeyEquals && (IsObjectAssignmentKey(szKey) ||
 								HasContainerAssignmentArgument(szKey) || HasContentsCall(szKey))) ||
 							IsScriptFunction(szKey))
