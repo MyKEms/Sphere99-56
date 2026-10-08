@@ -22,8 +22,25 @@ def generate(output: Path) -> int:
         return result
 
     tables = output / "scripts" / "spheretables.scp"
+    tables_text = tables.read_text(encoding="ascii")
+    # Keep the two resource roots generic while exercising the dotted fields
+    # used by the level page's mind-power and mind-defence calculations.
+    for skill_number, defname, key in (
+        (16, "Skill_EvalInt", "EI"),
+        (17, "Skill_MagicResist", "MagicResist"),
+    ):
+        start = tables_text.index(f"[SKILL {skill_number}]\n")
+        end = tables_text.index(f"[SKILL {skill_number + 1}]\n", start)
+        block = tables_text[start:end]
+        block = block.replace(
+            f"[SKILL {skill_number}]\nKEY=SYNTH_SKILL_{skill_number}",
+            f"[SKILL {skill_number}]\nDEFNAME={defname}\nKEY={key}",
+            1,
+        ).replace("EFFECT=0", "EFFECT=100", 1)
+        tables_text = tables_text[:start] + block + tables_text[end:]
+
     tables.write_text(
-        tables.read_text(encoding="ascii")
+        tables_text
         + f"""
 
 [EVENTS {EVENT_NAME}]
@@ -31,6 +48,7 @@ ON=@LogIn
 TAG(hitspeed,20971)
 TAG(SM,301535)
 TAG(OM,362395)
+SYSMESSAGE {MARKER} C|mind|[<Skill_EvalInt.effect>|<Skill_MagicResist.effect>|<eval ((0*Skill_EvalInt.effect)+(36*700))/1000>|<eval ((0*Skill_MagicResist.effect)+500)/1000>]
 SYSMESSAGE {MARKER} C|before|[<MAGERY>|<RESIST>|<eval MAGERY>|<eval RESIST>]
 MAGERY=<eval MAGERY+10>
 SYSMESSAGE {MARKER} C|after|[<MAGERY>|<RESIST>|<eval MAGERY>|<eval RESIST>]

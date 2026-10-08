@@ -16,6 +16,7 @@ from run_suite import shutdown_failures
 
 MARKER_RE = re.compile(re.escape(MARKER) + r" C\|([a-z0-9_]+)\|\[(.*)\]$")
 EXPECTED = {
+    "mind": "100|100|25|0",
     "before": "30.0|0.0|300|0",
     "after": "31.0|0.0|310|0",
     "tags": "20971|301535|362395",
