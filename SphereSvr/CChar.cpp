@@ -1820,8 +1820,17 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		break;
 	case M_Drop:	// uid
 		return ItemDrop( g_World.ItemFind( vArgs.GetUID()), GetTopPoint());
-	case M_Equip:	// uid
-		return ItemEquip( g_World.ItemFind( vArgs.GetUID()));
+	case M_Equip:	// uid or live item reference
+		{
+			// LASTNEW and other object-valued expressions retain a live
+			// reference.  Resolve that before falling back to the historical
+			// UID conversion; GetUID() is zero for CGVT_REF and silently turns
+			// EQUIP(<LASTNEW>) into a no-op.
+			CItem* pItem = dynamic_cast<CItem*>(vArgs.GetRef());
+			if ( pItem == NULL )
+				pItem = g_World.ItemFind( vArgs.GetUID());
+			return ItemEquip( pItem );
+		}
 	case M_EquipLast:
 		return ItemEquip( g_World.ItemFind( m_Act.m_Targ));
 	case M_EquipHalo:
