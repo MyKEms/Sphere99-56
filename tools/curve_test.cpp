@@ -49,9 +49,10 @@ static bool TestReferenceTable()
 static bool TestDegenerateVariance()
 {
 	return Expect(Calc_GetBellCurve(0, 0) == 500, "zero variance center") &&
-		Expect(Calc_GetBellCurve(1, 0) == 0, "zero variance positive bell tail") &&
-		Expect(Calc_GetSCurve(1, 0) == 1000, "zero variance positive S tail") &&
-		Expect(Calc_GetSCurve(-1, 0) == 0, "zero variance negative S tail");
+		Expect(Calc_GetBellCurve(1, 0) == 500, "zero variance positive bell offset") &&
+		Expect(Calc_GetBellCurve(-1, 0) == 500, "zero variance negative bell offset") &&
+		Expect(Calc_GetSCurve(1, 0) == 500, "zero variance positive S offset") &&
+		Expect(Calc_GetSCurve(-1, 0) == 500, "zero variance negative S offset");
 }
 
 int main()

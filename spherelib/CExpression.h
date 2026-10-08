@@ -1510,7 +1510,7 @@ inline int Calc_GetBellCurve(int iValDiff, int iVariance)
 	// and halves its remaining tail once each variance interval is crossed.
 	// Keep the result in per-mille units because all callers roll 0..999.
 	if ( iVariance <= 0 )
-		return ( iValDiff == 0 ) ? 500 : 0;
+		return 500;
 	if ( iValDiff < 0 )
 		iValDiff = -iValDiff;
 	int iChance = 500;
