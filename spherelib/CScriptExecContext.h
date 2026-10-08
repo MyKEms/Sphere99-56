@@ -1703,6 +1703,22 @@ public:
 		return false;
 	}
 
+	// A numeric comparison can put its less-than operator immediately after a
+	// closed escape, for example ``<arg(c)><20``.  Once the first escape has
+	// been substituted, the scanner must leave that operator for the numeric
+	// expression reader instead of treating ``<20`` as a new escape.  The
+	// opening form at the start of a line (``<20>``) remains a normal escape.
+	static bool IsNumericLessThanOperator(const TCHAR* pszBuf, int i)
+	{
+		if ( pszBuf == NULL || i <= 0 || pszBuf[i] != '<' )
+			return false;
+		const TCHAR chNext = pszBuf[i + 1];
+		if ( !isdigit(static_cast<unsigned char>(chNext)) && chNext != '-' && chNext != '+' )
+			return false;
+		const TCHAR chPrev = pszBuf[i - 1];
+		return isdigit(static_cast<unsigned char>(chPrev)) || chPrev == ')';
+	}
+
 	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags,
 		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
@@ -1730,6 +1746,9 @@ public:
 
 		for ( int i = 0; pszBuf[i]; i++ )
 		{
+			if ( chBegin == '<' && IsNumericLessThanOperator(pszBuf, i) )
+				continue;
+
 			// ``<?...?>`` is Sphere's deferred expression form.  Dialog TEXT
 			// uses the HTML escape mode so literal tags such as <BASEFONT>
 			// remain untouched, but deferred expressions must still be

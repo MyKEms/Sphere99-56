@@ -16,6 +16,18 @@ DOTTED_PROBE_CAPPED_WHILE = "WHILE (2>1)"
 DOTTED_PROBE_CAPPED_FOR = "FOR 20000"
 DOTTED_PROBE_MARKER = "SPHERE_DOTTED_EXPR"
 
+# The named ARG local is deliberately written as a closed escape immediately
+# followed by a comparison operator.  Stock treats these as ordinary numeric
+# predicates, including when the predicates are combined with && or ||.
+DOTTED_ADJACENT_CONDITION_ROWS = (
+    ("cond_arg_c5_or", 5, "(<arg(c)><20)||(<arg(c)>>28)", "1"),
+    ("cond_arg_c25_or", 25, "(<arg(c)><20)||(<arg(c)>>28)", "0"),
+    ("cond_arg_c30_or", 30, "(<arg(c)><20)||(<arg(c)>>28)", "1"),
+    ("cond_arg_c5_and", 5, "(<arg(c)><20)&&(<arg(c)>>0)", "1"),
+    ("cond_arg_c25_and", 25, "(<arg(c)><20)&&(<arg(c)>>0)", "0"),
+    ("cond_arg_c30_and", 30, "(<arg(c)><20)&&(<arg(c)>>0)", "0"),
+)
+
 DOTTED_EXPRESSION_ROWS = (
     # Forms without a function-root chain; their results must not change.
     ("src_name", "<src.name>", "CI"),
