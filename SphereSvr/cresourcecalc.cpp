@@ -381,7 +381,11 @@ bool CSphereResourceMgr::Calc_SkillCheck( int iSkillLevel, int iDifficulty )
 	if ( iDifficulty < 0 || iSkillLevel < 0 )	// auto failure.
 		return( false );
 
-	int iChanceForSuccess = Calc_GetSCurve( iSkillLevel - ( iDifficulty * 10 ), SKILL_VARIANCE );
+	// Calc_GetSCurve returns a percentage in the range 0..100, while the
+	// skill roll below uses a 0..999 range. Keep the roll's resolution (the
+	// caller reports this value as a per-mille chance) instead of accidentally
+	// capping every skill at ten percent.
+	int iChanceForSuccess = Calc_GetSCurve( iSkillLevel - ( iDifficulty * 10 ), SKILL_VARIANCE ) * 10;
 	int iRoll = Calc_GetRandVal(1000);
 
 #if 0
