@@ -22,6 +22,17 @@ from modes.mage_cast import (
 from run_suite import shutdown_failures
 
 
+SPELLS = (6, 10)
+# The reference sample used 50 casts per spell at Magery 30 (47/50 Night
+# Sight, 38/50 Cunning). These intervals are deliberately wider than a point
+# estimate, but reject both the old 0..100 curve (near-zero success) and the
+# caller-only x10 patch (always success).
+STOCK_SUCCESS_BOUNDS = {
+    6: (35, 50),
+    10: (25, 48),
+}
+
+
 def _messages(data: bytes) -> list[str]:
     from uo_packets import split_packet_stream
     from uo_test_client import decode_game_response
@@ -44,7 +55,7 @@ def _cast(spell: int) -> bytes:
 
 
 def _target(context: int, serial: int) -> bytes:
-    return struct.pack(">BBIBIHHBBH", 0x6C, 1, context, 0, serial, 128, 128, 0, 0, 0)
+    return struct.pack(">BBIBIHHBBH", 0x6C, 0, context, 0, serial, 0, 0, 0, 0, 0)
 
 
 def main() -> int:
@@ -54,7 +65,7 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=3170)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
-    parser.add_argument("--casts", type=int, default=20)
+    parser.add_argument("--casts", type=int, default=50)
     args = parser.parse_args()
 
     fixture = args.fixture.resolve()
@@ -92,7 +103,7 @@ def main() -> int:
                     data.extend(chunk)
 
             pump(0.5)
-            for spell in (6, 10):
+            for spell in SPELLS:
                 for _ in range(args.casts):
                     before_cast = len(data)
                     sock.sendall(_cast(spell))
@@ -154,9 +165,12 @@ def main() -> int:
         "sector_light=17|near_light=0]"
     ):
         failures.append(f"unexpected mage state: {ready!r}")
-    if len(casts) != args.casts * 2:
-        failures.append(f"spell-cast marker count {len(casts)} != {args.casts * 2}")
-    for spell in (6, 10):
+    if len(casts) != args.casts * len(SPELLS):
+        failures.append(
+            f"spell-cast marker count {len(casts)} != {args.casts * len(SPELLS)}"
+        )
+    spell_counts: dict[int, int] = {}
+    for spell in SPELLS:
         spell_token = f"{spell:02x}"
         cast_token = str(spell)
         if not any(
@@ -171,10 +185,12 @@ def main() -> int:
             for message in successes
             if message == f"{SUCCESS_MARKER}|[{spell_token}]"
         ]
-        if len(spell_successes) < args.casts // 2:
+        spell_counts[spell] = len(spell_successes)
+        minimum, maximum = STOCK_SUCCESS_BOUNDS[spell]
+        if not minimum <= len(spell_successes) <= min(maximum, args.casts):
             failures.append(
-                f"spell {spell} successes {len(spell_successes)} < {args.casts // 2}; "
-                f"fizzles={len(fizzles)}"
+                f"spell {spell} successes {len(spell_successes)} outside stock-calibrated "
+                f"bounds {minimum}..{min(maximum, args.casts)}; fizzles={len(fizzles)}"
             )
     if any("Je spatne videt." in message for message in messages):
         failures.append("a no-light fizzle was reported")
@@ -186,7 +202,7 @@ def main() -> int:
         return 1
     print(
         "mage-cast probe passed: "
-        f"{len(successes)} successes, {len(fizzles)} fizzles, "
+        f"{len(successes)} successes ({spell_counts}), {len(fizzles)} fizzles, "
         f"{len(casts)} spell-state rows"
     )
     return 0

@@ -243,6 +243,12 @@ string-sort-array-asan-test:
 		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_STRING_SORT_ARRAY_TEST" \
 		LDFLAGS="-fsanitize=address,undefined -lpthread" all
 
+curve-test:
+	$(MAKE) BUILD_DIR=build/curve TARGET=build/curve/curve_test \
+		TEST_SRC=tools/curve_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_CURVE_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
 http-access-test:
 	@mkdir -p build/http-access
 	$(CXX) $(DEFAULT_CXXFLAGS) -I$(BASEDIR)/spherelib -I$(BASEDIR)/SphereSvr \
@@ -262,4 +268,4 @@ clean:
 
 -include $(ALL_DEP)
 
-.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test plant-timer-asan-test container-list-test container-list-asan-test string-sort-array-test string-sort-array-asan-test http-access-test http-access-asan-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test plant-timer-asan-test container-list-test container-list-asan-test string-sort-array-test string-sort-array-asan-test curve-test http-access-test http-access-asan-test clean
