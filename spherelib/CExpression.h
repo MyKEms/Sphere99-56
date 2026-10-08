@@ -1494,30 +1494,32 @@ inline int CVarDefEvaluateExpression(LPCTSTR pszExpression)
 
 inline int Calc_GetRandVal(int iqty) { if (iqty <= 0) return 0; return rand() % iqty; }
 inline int Calc_GetLog2(int iNum) { int i = 0; while (iNum > 1) { iNum >>= 1; i++; } return i; }
+inline int Calc_GetBellCurve(int iValDiff, int iVariance);
 inline int Calc_GetSCurve(int iValDiff, int iVariance)
 {
-	// An S-curve for probability. iValDiff = how far IsFrom target. iVariance = total range.
-	// Return: 0 = very unlikely, 50 = 50/50, 100 = very likely
-	if ( iVariance <= 0 )
-		return ( iValDiff >= 0 ) ? 100 : 0;
-	int iVal = 50 + IMULDIV(iValDiff, 50, iVariance);
-	if ( iVal < 0 ) iVal = 0;
-	if ( iVal > 100 ) iVal = 100;
-	return iVal;
+	// An S-curve for probability. iValDiff = how far from the target.
+	// iVariance is one half of the central range. Return a per-mille chance.
+	// The stock curve is the complement of a halved bell curve, so its tails
+	// remain usable instead of clamping at the first variance boundary.
+	const int iChance = Calc_GetBellCurve( iValDiff, iVariance );
+	return ( iValDiff > 0 ) ? 1000 - iChance : iChance;
 }
 inline int Calc_GetBellCurve(int iValDiff, int iVariance)
 {
-	// A bell-curve for probability. iValDiff = how far from center. iVariance = std deviation.
-	// Return: 0 = very unlikely, 1000 = very likely (at center)
+	// A bell curve for probability. The 0.99 curve starts at 500 per mille
+	// and halves its remaining tail once each variance interval is crossed.
+	// Keep the result in per-mille units because all callers roll 0..999.
 	if ( iVariance <= 0 )
-		return ( iValDiff == 0 ) ? 1000 : 0;
-	if ( iValDiff < 0 ) iValDiff = -iValDiff;
-	if ( iValDiff > iVariance * 4 )
-		return 0;
-	// Simple approximation: linear falloff
-	int iVal = 1000 - IMULDIV(iValDiff, 1000, iVariance);
-	if ( iVal < 0 ) iVal = 0;
-	return iVal;
+		return ( iValDiff == 0 ) ? 500 : 0;
+	if ( iValDiff < 0 )
+		iValDiff = -iValDiff;
+	int iChance = 500;
+	while ( iValDiff > iVariance && iChance )
+	{
+		iValDiff -= iVariance;
+		iChance /= 2;
+	}
+	return iChance - IMULDIV( iChance / 2, iValDiff, iVariance );
 }
 
 #endif // _INC_CEXPRESSION_H

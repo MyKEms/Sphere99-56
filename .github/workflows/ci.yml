@@ -40,6 +40,11 @@ jobs:
           make string-sort-array-test
           build/string-sort-array/string_sort_array_test
 
+      - name: Run skill-curve regression
+        run: |
+          make curve-test
+          build/curve/curve_test
+
       - name: Run localhost-only HTTP access regression
         run: |
           make http-access-test
