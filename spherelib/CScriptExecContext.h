@@ -708,9 +708,12 @@ protected:
 		return !_stricmp(pszProp, "CONT");
 	}
 
+	// These assignments consume an object reference rather than display text;
+	// keep the referenced world serial when an escape expands on the RHS.
 	static bool IsObjectAssignmentKey(LPCTSTR pszKey)
 	{
 		return IsContainerAssignmentKey(pszKey) ||
+			(pszKey != NULL && !_stricmp(pszKey, "LINK")) ||
 			(pszKey != NULL && !_stricmp(pszKey, "SRC"));
 	}
 

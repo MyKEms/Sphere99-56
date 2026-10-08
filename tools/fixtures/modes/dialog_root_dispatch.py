@@ -1,6 +1,7 @@
 """Registered synthetic fixture mode: script functions called on a dialog.
 
-A double-clicked item opens a dialog on itself.  The layout writes one gump
+A double-clicked item assigns a reference-valued LINK and opens a dialog on
+that linked object.  The layout writes one gump
 control directly and builds the rest through script functions called on the
 dialog object, ``argo.<function>(...)``.  Those functions set a TAG on their
 base object, emit controls and texts both directly and through ARGO, and call
@@ -26,11 +27,14 @@ PASSWORD = "droot-pw"
 CHAR_SERIAL = 3
 MARKER = "SPHERE_DIALOG_ROOT"
 
-# The item whose double-click opens the first dialog, on itself.
+# The item whose double-click resolves a reference-valued LINK before opening
+# the first dialog on the linked object.
 ITEM_ID = 0x0EAC
 ITEM_NAME = "SYNTHETIC_DIALOG_ROOT"
 ITEM_UID = 0x40000020
+TARGET_UID = 0x40000021
 ITEM_POINT = (127, 128, 0)
+TARGET_POINT = (126, 128, 0)
 
 DIALOG_NAME = "d_synthetic_root_dispatch"
 NEXT_DIALOG_NAME = "d_synthetic_root_dispatch_next"
@@ -94,10 +98,17 @@ def scripts() -> str:
 [ITEMDEF 0x{ITEM_ID:04X}]
 DEFNAME={ITEM_NAME}
 NAME=synthetic dialog root
-TYPE=T_NORMAL
+TYPE=T_SYNTHETIC_DIALOG_ROOT
+
+[TYPEDEF 1100]
+DEFNAME=T_SYNTHETIC_DIALOG_ROOT
 ON=@UserDClick
-DIALOG {DIALOG_NAME}
+LINK=<FINDUID(0x{TARGET_UID:08X})>
+F_DIALOG_ROOT_LINK
 RETURN 1
+
+[FUNCTION F_DIALOG_ROOT_LINK]
+LINK.DIALOG {DIALOG_NAME}
 
 [DIALOG {DIALOG_NAME}]
 0 0
@@ -229,6 +240,9 @@ SAVECOUNT=0
 [WORLDITEM {ITEM_NAME}]
 SERIAL=0{ITEM_UID:x}
 P={x},{y},{z}
+[WORLDITEM {ITEM_NAME}]
+SERIAL=0{TARGET_UID:x}
+P={TARGET_POINT[0]},{TARGET_POINT[1]},{TARGET_POINT[2]}
 [EOF]
 """,
         encoding="ascii",

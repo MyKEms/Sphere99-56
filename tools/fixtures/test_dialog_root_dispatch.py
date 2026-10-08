@@ -38,6 +38,7 @@ from modes.dialog_root_dispatch import (
     FIRST_CONTROLS,
     FIRST_TEXTS,
     ITEM_UID,
+    TARGET_UID,
     MARKER,
     MISSING_FUNCTION,
     NEXT_BUTTON,
@@ -64,6 +65,7 @@ from uo_test_client import (  # noqa: E402
 
 CHECKS = (
     "first dialog",
+    "TYPEDEF fallback suppressed",
     "first dialog controls",
     "first dialog texts",
     "button handler",
@@ -77,6 +79,7 @@ CHECKS = (
 )
 OVERSIZE_LOG = "Gump dialog is too large to send"
 RECURSION_LOG = "Trigger Recursion error"
+FALLBACK_MESSAGE = "You can't think of a way to use that item."
 
 
 def _system_message(packet: bytes) -> Optional[str]:
@@ -200,8 +203,8 @@ def _check_gump(
         f"layout={gump.layout!r} texts={[text[:24] + ('...' if len(text) > 24 else '') for text in gump.texts]!r} "
         f"text_lengths={[len(text) for text in gump.texts]!r}"
     )
-    if gump.serial != ITEM_UID:
-        failures.append(f"{name}: dialog serial 0x{gump.serial:08x}, expected 0x{ITEM_UID:08x}")
+    if gump.serial != TARGET_UID:
+        failures.append(f"{name}: dialog serial 0x{gump.serial:08x}, expected 0x{TARGET_UID:08x}")
     else:
         passed.append(name)
     if sent_controls != controls:
@@ -232,6 +235,14 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str], l
         start = len(stream.packets)
         sock.sendall(bytes([0x06]) + ITEM_UID.to_bytes(4, "big"))
         index = stream.wait_for(lambda packet: packet[0] == 0xB0, start)
+        if index is not None:
+            if any(
+                _system_message(packet) == FALLBACK_MESSAGE
+                for packet in stream.packets[start:index + 1]
+            ):
+                failures.append("handled TYPEDEF item fell through to the generic use message")
+            else:
+                passed.append("TYPEDEF fallback suppressed")
         first = _check_gump(
             "first dialog",
             None if index is None else stream.packets[index],
