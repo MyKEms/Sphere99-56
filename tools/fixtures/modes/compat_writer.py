@@ -1725,6 +1725,7 @@ def write_scripts(
     unknown_keyword_admin_probe: bool = False,
     unknown_keyword_rejected_probe: bool = False,
     world_load_counts_probe: bool = False,
+    place_compat_hair: bool = False,
     script_item_type_probe: bool = False,
     world_save_probe: bool = False,
     unresolved_worldchar_type: bool = False,
@@ -1965,6 +1966,16 @@ def write_scripts(
         "SERV.SAVE\n"
         if world_save_probe
         else ""
+    )
+    compat_hair_login = (
+        ""
+        if timer_lifetime_probe
+        or memory_timer_probe
+        or timer_default_remove_probe
+        or suppress_login_item
+        or character_content_probe
+        else "NEWITEM SYNTHETIC_HAIR\n"
+        + ("LASTNEW.P=128,128,0\n" if place_compat_hair else "")
     )
     world_save_logout_event_login = (
         "EVENTS=e_WorldSaveProbe\n"
@@ -2634,7 +2645,7 @@ SYSMESSAGE SPHERE_RANGE_ARMOR <HITS>
 """ + food_probe_login + """
 """ + damage_trigger_login + """
 """ + ("NEWITEM SYNTHETIC_NO_POINT_STACK_ITEM\nLASTNEW.CONT=4\n" if stacking_probe else "") + """
-""" + ("" if timer_lifetime_probe or memory_timer_probe or timer_default_remove_probe or suppress_login_item or character_content_probe else "NEWITEM SYNTHETIC_HAIR\n") + """
+""" + compat_hair_login + """
 """ + world_load_counts_probe_script + script_item_type_probe_script + unknown_keyword_probe_script + unknown_keyword_overflow_script + dotted_expression_login + arg_locals_login + object_root_dispatch_login + expression_chain_login + dword_hex_login + region_weather_login + dialog_button_login + dialog_argv_login + dialog_argo_tag_login + typedef_container_itemdef + multi_property_typedef + map_property_typedef + multi_property_itemdef + map_property_itemdef + damage_trigger_event + """
 ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
@@ -4510,6 +4521,7 @@ def generate_fixture(
         unknown_keyword_admin_probe=args.unknown_keyword_admin_probe,
         unknown_keyword_rejected_probe=args.unknown_keyword_rejected_probe,
         world_load_counts_probe=args.world_load_counts_probe,
+        place_compat_hair=args.world_load_counts,
         world_save_probe=args.world_save_probe,
         unresolved_worldchar_type=args.unresolved_worldchar_type,
         typedef_container_probe=args.typedef_container_reference,
