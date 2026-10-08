@@ -4402,6 +4402,15 @@ bool CItem::OnSpellEffect( SPELL_TYPE spell, CChar* pCharSrc, int iSkillLevel, C
 	return( true );
 }
 
+bool CItem::OnPotionEffect( SPELL_TYPE spell, CChar* pCharSrc, int iSkillLevel )
+{
+	// Potions have their own source-item trigger.  A handler returning 1
+	// owns the effect; returning 0 leaves the normal character spell path
+	// available to the caller.
+	CSphereExpArgs exec( this, pCharSrc, (int) spell, iSkillLevel, this );
+	return OnTrigger( CItemDef::T_PotionEffect, exec ) == TRIGRET_RET_VAL;
+}
+
 int CItem::Armor_GetRepairPercent() const
 {
 	if ( ! m_itArmor.m_Hits_Max )

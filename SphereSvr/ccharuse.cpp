@@ -1213,8 +1213,11 @@ bool CChar::Use_Drink( CItem* pItem )
 
 		// Convey the effect of the potion.
 		int iSkillQuality = pItem->m_itPotion.m_skillquality;
-
-		OnSpellEffect( (SPELL_TYPE)RES_GET_INDEX(pItem->m_itPotion.m_Type), this, iSkillQuality, pItem );
+		SPELL_TYPE spell = (SPELL_TYPE)RES_GET_INDEX(pItem->m_itPotion.m_Type);
+		if ( ! pItem->OnPotionEffect( spell, this, iSkillQuality ))
+		{
+			OnSpellEffect( spell, this, iSkillQuality, pItem );
+		}
 
 		// Give me the marker that i've used a potion.
 		Spell_Equip_Create( SPELL_NONE, LAYER_FLAG_PotionUsed, iSkillQuality, 15*TICKS_PER_SEC, this, false );

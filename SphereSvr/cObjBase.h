@@ -1108,6 +1108,7 @@ public:
 
 	bool OnExplosion();
 	virtual bool OnSpellEffect( SPELL_TYPE spell, CChar* pCharSrc, int iSkillLevel, CItem* pSourceItem );
+	bool OnPotionEffect( SPELL_TYPE spell, CChar* pCharSrc, int iSkillLevel );
 	virtual int OnGetHit( int iDmg, CChar* pSrc, DAMAGE_TYPE uType = DAMAGE_HIT_BLUNT );
 	virtual int OnTakeDamage( int iDmg, CChar* pSrc, DAMAGE_TYPE uType = DAMAGE_HIT_BLUNT );
 
