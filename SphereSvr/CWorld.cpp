@@ -358,8 +358,22 @@ void CWorldThread::GarbageCollection_New()
 			}
 			else
 			{
-				g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR, "%d Lost object deleted" LOG_CR, m_ObjNew.GetCount());
-				m_ObjNew.DeleteAll();
+				const int iOrphaned = m_ObjNew.GetCount();
+				// Stock drops script-created objects that never received a valid
+				// point at the next cleanup.  They are transient, so report their
+				// aggregate in the load diagnostics instead of raising a Linux-only
+				// error for the expected cleanup path.
+				if ( g_World.HasLoadCounts())
+				{
+					for ( int i = 0; i < iOrphaned; ++i )
+						g_World.RecordLoadDiagnostic( LOAD_DIAG_DELETED );
+					m_ObjNew.DeleteAll();
+					g_World.LogLoadDiagnostics();
+				}
+				else
+				{
+					m_ObjNew.DeleteAll();
+				}
 			}
 		}
 		m_ObjDelete.DeleteAll();	// clean up our delete list.
