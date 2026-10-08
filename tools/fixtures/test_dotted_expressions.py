@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable, Optional, Union
 
 from make_fixture import (
+    DOTTED_ADJACENT_CONDITION_ROWS,
     DOTTED_CONDITION_ROWS,
     DOTTED_PROBE_CAPPED_FOR,
     DOTTED_PROBE_CAPPED_WHILE,
@@ -349,6 +350,13 @@ EXPECTED: dict[str, Expectation] = {
     "C|environ_max_depth": positive_at_most(2),
 }
 
+EXPECTED.update(
+    {
+        f"C|{key}": expected
+        for key, _value, _condition, expected in DOTTED_ADJACENT_CONDITION_ROWS
+    }
+)
+
 # Rows reported but deliberately not asserted: VAR.name reads are not
 # implemented yet, getter_unknown/getter_malformed stay literal,
 # dupe_reference prints an object reference, and cond_bracket_name_other is
@@ -373,6 +381,11 @@ BARE_REJECTED_ROOTS = {"TAG", "VAR"}
 def misparsed_report_key(entry: dict) -> bool:
     keyword = str(entry.get("keyword", ""))
     if " " in keyword:
+        return True
+    # A comparison operator immediately following a closed escape used to be
+    # consumed as the start of a macro.  The first token of the remainder was
+    # then reported as a function name such as ``20)||`` or ``20)&&``.
+    if re.fullmatch(r"\d+\)(&&|\|\|)", keyword):
         return True
     return entry.get("kind") == "rejected" and keyword in BARE_REJECTED_ROOTS
 

@@ -12,6 +12,7 @@ import struct
 from pathlib import Path
 
 from modes.fragments.dotted_expressions import (
+    DOTTED_ADJACENT_CONDITION_ROWS,
     DOTTED_CONDITION_ROWS,
     DOTTED_EXPRESSION_ROWS,
     DOTTED_PROBE_ACCOUNT,
@@ -1158,6 +1159,7 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
     ]
     login += dotted_expression_lines("C", "SYSMESSAGE")
     login += [
+        "F_DOTTED_ADJACENT_CONDITIONS",
         # Keep the function-root lifetime check on a live object.  Before UID
         # quarantine the removed disposable happened to become valid again
         # when a later item reused its slot, which hid the intended check.
@@ -1380,6 +1382,20 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "str 0\n"
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
+        "\n[FUNCTION f_dotted_adjacent_conditions]\n"
+        + "\n".join(
+            line
+            for key, _value, condition, _expected in DOTTED_ADJACENT_CONDITION_ROWS
+            for line in (
+                f"ARG(c,{_value})",
+                f"IF {condition}",
+                f"SYSMESSAGE {marker} C|{key}|[1]",
+                "ELSE",
+                f"SYSMESSAGE {marker} C|{key}|[0]",
+                "ENDIF",
+            )
+        )
+        + "\nRETURN 1\n"
         "\n[FUNCTION fixNumber]\n"
         "arg(len,<strlen(<args>)>)\n"
         "if (len<=0)\n"
