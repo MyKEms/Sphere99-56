@@ -7,7 +7,22 @@ def generate(output):
 
     from .legacy_generator import generate as generate_recipe
 
-    return generate_recipe(output, MODE)
+    result = generate_recipe(output, MODE)
+    if result:
+        return result
+
+    # The compatibility recipe creates a hair item to exercise @Create.  Put
+    # that item on the fixture map so the unplaced-NEWITEM diagnostic remains
+    # reserved for the dedicated cleanup probe.
+    scripts = output / "scripts" / "spheretables.scp"
+    text = scripts.read_text(encoding="ascii")
+    text = text.replace(
+        "NEWITEM SYNTHETIC_HAIR\n",
+        "NEWITEM SYNTHETIC_HAIR\nLASTNEW.P=128,128,0\n",
+        1,
+    )
+    scripts.write_text(text, encoding="ascii")
+    return 0
 
 
 MODE = register_mode(
