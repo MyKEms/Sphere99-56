@@ -343,6 +343,9 @@ HRESULT CSphereResourceMgr::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		if ( m_iMaxCharsPerAccount > UO_MAX_CHARS_PER_ACCT )
 			m_iMaxCharsPerAccount = UO_MAX_CHARS_PER_ACCT;
 		break;
+	case P_MaxBaseSkill:
+		m_iMaxBaseSkill = MAX(0, vVal.GetInt());
+		break;
 	case P_MainLogServer:
 		m_sMainLogServerDir = vVal.GetPSTR();
 		if ( m_sMainLogServerDir[0] == '0' )
