@@ -3019,6 +3019,15 @@ public:
 					}
 					TCHAR szCmd[SCRIPT_MAX_LINE_LEN];
 					LPCTSTR pszArgStr = script.GetArgRaw();
+					// The line reader splits at whitespace even inside a gump call.
+					// A deferred expression in TEXTA's quoted argument can therefore
+					// leave its opening `<?` in the key and its closing `?>` in the
+					// argument.  Expand that complete command after rebuilding it;
+					// expanding the two fragments separately cannot see the pair.
+					const bool fDeferredEscapeSpansSplit =
+						strchr(szKey, '<') != NULL && strchr(szKey, '>') == NULL &&
+						pszArgStr != NULL && strchr(pszArgStr, '>') != NULL &&
+						strchr(pszArgStr, '<') == NULL;
 					LPCTSTR pszSeparator = " ";
 					if ( iKeyDepth != 0 && fKeyEquals )
 						pszSeparator = "=";
@@ -3027,6 +3036,12 @@ public:
 					else
 						strncpy(szCmd, szKey, sizeof(szCmd) - 1);
 					szCmd[sizeof(szCmd) - 1] = '\0';
+					if ( fDeferredEscapeSpansSplit )
+					{
+						s_ParseEscapes(szCmd, 0, sizeof(szCmd));
+						if ( IsLineExpansionOverflow() )
+							return TRIGRET_RET_DEFAULT;
+					}
 					ExecuteCommand(szCmd, fKeyEquals && iKeyDepth == 0);
 				}
 				break;
