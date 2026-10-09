@@ -65,6 +65,9 @@ ON=@LogIn
 SYSMESSAGE {MARKER} C|before|[<eval tag(ra_manareg)>]
 f_ra_add(manareg)
 SYSMESSAGE {MARKER} C|after|[<eval tag(ra_manareg)>]
+tag(text_quoted,"2+1")
+tag(text_literal,alpha+1)
+SYSMESSAGE {MARKER} C|text|[<tag(text_quoted)>|<tag(text_literal)>]
 SYSMESSAGE {MARKER} C|indexed|[<safe.def_rearAbilities_manareg[0]>]
 SYSMESSAGE {MARKER} C|name|[<def_rearAbilities[1]>]
 SYSMESSAGE {MARKER} C|function|[<f_ra_add_hasClass(manareg)>]
