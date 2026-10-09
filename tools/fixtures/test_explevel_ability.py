@@ -18,6 +18,7 @@ MARKER_RE = re.compile(re.escape(MARKER) + r" C\|([a-z0-9_]+)\|\[(.*)\]$")
 EXPECTED = {
     "before": "0",
     "after": "1",
+    "text": "2+1|alpha+1",
     "indexed": "0,20",
     "name": "manareg",
     "function": "0",
