@@ -28,6 +28,7 @@ from uo_test_client import (  # noqa: E402
     find_start_packet,
     game_relogin,
     make_char_play,
+    make_unicode_talk,
     recv_until_game_start,
 )
 
@@ -211,6 +212,14 @@ def exercise(args: argparse.Namespace, failures: list[str], log: list[str]) -> N
                 failures.append(
                     f"speech packet length mismatch: declared {int.from_bytes(packet[1:3], 'big')} actual {len(packet)}"
                 )
+
+        # An unrelated speech must still be safe while the nearby synthetic
+        # NPC is considered as a listener.  NPC_OnHearName returns a negative
+        # no-match sentinel; the server must normalize it before indexing the
+        # incoming text buffer and keep the connection usable.
+        speech_start = len(stream.packets)
+        sock.sendall(make_unicode_talk("unrelated speech"))
+        stream.wait_for(lambda _packet: False, speech_start, timeout=0.5)
 
         walk_start = len(stream.packets)
         sock.sendall(_walk(1))

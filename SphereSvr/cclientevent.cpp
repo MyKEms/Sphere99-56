@@ -1956,6 +1956,11 @@ void CClient::Event_Talk_Common( TCHAR* szText ) // PC speech
 		{
 			// Named the char specifically ?
 			i = pChar->NPC_OnHearName( szText );
+			// Str_FindWord uses a negative value for "not found".  Keep the
+			// offset passed to NPC_OnHear inside the speech buffer when the
+			// nearby NPC was not addressed by name.
+			if ( i < 0 )
+				i = 0;
 			fNamed = true;
 		}
 		if ( i > 0 )
