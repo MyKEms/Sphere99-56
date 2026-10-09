@@ -53,6 +53,7 @@ SYSMESSAGE {MARKER} C|before|[<MAGERY>|<RESIST>|<eval MAGERY>|<eval RESIST>]
 MAGERY=<eval MAGERY+10>
 SYSMESSAGE {MARKER} C|after|[<MAGERY>|<RESIST>|<eval MAGERY>|<eval RESIST>]
 SYSMESSAGE {MARKER} C|tags|[<tag.hitspeed>|<tag.SM>|<tag.OM>]
+SYSMESSAGE {MARKER} C|qval|[<qval(1,"shown",)>|<qval(0,"yes","no")>|<qval(-1,"negative","zero","positive")>]
 SYSMESSAGE {END_MARKER}
 RETURN 0
 """,
