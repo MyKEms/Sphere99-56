@@ -1734,7 +1734,10 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			szTmp[sizeof(szTmp)-1] = '\0';
 			TCHAR* ppArgs[4] = { NULL, NULL, NULL, NULL };
 			const int iArgCount = Str_ParseCmds(szTmp, ppArgs, 4, ",");
-			int iTest = ppArgs[0] ? atoi(ppArgs[0]) : 0;
+			// The condition is an expression in stock scripts (for example
+			// ``<tag.atskill>==31``), not just a decimal prefix.  Evaluate the
+			// complete field before choosing the string-valued branch.
+			int iTest = ppArgs[0] ? Exp_GetValue(ppArgs[0]) : 0;
 			int iResult = 0;
 			if ( iArgCount <= 3 )
 				iResult = iTest ? 1 : 2;
