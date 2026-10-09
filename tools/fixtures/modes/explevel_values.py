@@ -55,6 +55,8 @@ SYSMESSAGE {MARKER} C|after|[<MAGERY>|<RESIST>|<eval MAGERY>|<eval RESIST>]
 SYSMESSAGE {MARKER} C|tags|[<tag.hitspeed>|<tag.SM>|<tag.OM>]
 SYSMESSAGE {MARKER} C|qval|[<qval(1,"shown",)>|<qval(0,"yes","no")>|<qval(-1,"negative","zero","positive")>]
 SYSMESSAGE {MARKER} C|qval_expr|[<qval(42==31,"shown",)>]
+SYSMESSAGE {MARKER} C|qval_cmp|[<qval(1==31,"yes","no")>|<qval(31==31,"yes","no")>]
+SYSMESSAGE {MARKER} C|qval_nested|[<qval(<eval 1+1>==2,"yes","no")>]
 SYSMESSAGE {END_MARKER}
 RETURN 0
 """,
