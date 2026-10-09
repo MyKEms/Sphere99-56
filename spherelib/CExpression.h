@@ -1062,8 +1062,9 @@ public:
 					pszVal[iLen-1] = '\0';
 				SetKeyStr(szTemp, pszVal, fQuoted);
 			}
-			else if ( IsPureArithmeticTagValue( pszVal ) )
-				SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( pszVal ) );
+			// Property-form TAG assignments preserve their complete text.  The
+			// stock arithmetic coercion applies to TAG(name,value) calls only;
+			// object-root reports use pipe-delimited property values.
 			else
 				SetKeyStr(szTemp, pszVal);
 		}
