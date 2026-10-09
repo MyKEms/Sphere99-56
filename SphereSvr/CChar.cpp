@@ -832,12 +832,11 @@ void CChar::InitPlayer( const CUOEvent* pBin, CClient* pClient )
 
 	SetUnkPoint( m_ptHome );	// Don't actaully put me in the world yet.
 
-	// randomize the skills first.
-	int i = SKILL_First;
-	for ( ; i < SKILL_QTY; i++ )
-	{
-		Skill_SetBase( (SKILL_TYPE)i, Calc_GetRandVal( g_Cfg.m_iMaxBaseSkill ));
-	}
+	// A newly created player starts with zero in every unselected skill.  The
+	// client packet below supplies the three chosen skills; seeding the whole
+	// table with random values first gives fresh players non-stock EvalInt and
+	// MagicResistance values.
+	int i = 0;
 
 	if ( pBin->Create.m_str + pBin->Create.m_dex + pBin->Create.m_int > 80 )
 	{
