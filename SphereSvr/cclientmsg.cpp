@@ -850,49 +850,53 @@ void CClient::addBarkUNICODE( const NCHAR* pwText, const CObjBaseTemplate* pSrc,
 		return;
 	}
 
-	CUOCommand cmd;
-	cmd.SpeakUNICODE.m_Cmd = XCMD_SpeakUNICODE;
+	// SpeakUNICODE has a variable-length text tail, but the protocol union
+	// stores only one code unit in that member. Keep the complete packet in
+	// owned storage so ASan can validate the tail while it is populated.
+	std::vector<BYTE> packet(sizeof(CUOCommand) + MAX_TALK_BUFFER * sizeof(NCHAR));
+	CUOCommand* pCmd = reinterpret_cast<CUOCommand*>(packet.data());
+	pCmd->SpeakUNICODE.m_Cmd = XCMD_SpeakUNICODE;
 
 	// string copy unicode (til null)
 	int i=0;
 	for ( ; pwText[i] && i < MAX_TALK_BUFFER; i++ )
 	{
-		cmd.SpeakUNICODE.m_utext[i] = pwText[i];
+		pCmd->SpeakUNICODE.m_utext[i] = pwText[i];
 	}
-	cmd.SpeakUNICODE.m_utext[i++] = '\0';	// add for the null
+	pCmd->SpeakUNICODE.m_utext[i++] = '\0';	// add for the null
 
-	int len = sizeof(cmd.SpeakUNICODE) + (i*sizeof(NCHAR));
-	cmd.SpeakUNICODE.m_len = len;
-	cmd.SpeakUNICODE.m_mode = mode;		// mode = range.
-	cmd.SpeakUNICODE.m_wHue = wHue;
-	cmd.SpeakUNICODE.m_font = font;		// font. 3 = system message just to you !
+	int len = sizeof(pCmd->SpeakUNICODE) + (i*sizeof(NCHAR));
+	pCmd->SpeakUNICODE.m_len = len;
+	pCmd->SpeakUNICODE.m_mode = mode;		// mode = range.
+	pCmd->SpeakUNICODE.m_wHue = wHue;
+	pCmd->SpeakUNICODE.m_font = font;		// font. 3 = system message just to you !
 
-	lang.GetStrDef(cmd.SpeakUNICODE.m_lang);
+	lang.GetStrDef(pCmd->SpeakUNICODE.m_lang);
 
 	int iNameLen;
 	if ( pSrc == NULL )
 	{
-		cmd.SpeakUNICODE.m_UID = 0;	// 0x01010101;
-		iNameLen = strcpylen( cmd.SpeakUNICODE.m_charname, "System" );
+		pCmd->SpeakUNICODE.m_UID = 0;	// 0x01010101;
+		iNameLen = strcpylen( pCmd->SpeakUNICODE.m_charname, "System" );
 	}
 	else
 	{
-		cmd.SpeakUNICODE.m_UID = pSrc->GetUID();
-		iNameLen = strcpylen( cmd.SpeakUNICODE.m_charname, (LPCTSTR) pSrc->GetName(), sizeof(cmd.SpeakUNICODE.m_charname));
+		pCmd->SpeakUNICODE.m_UID = pSrc->GetUID();
+		iNameLen = strcpylen( pCmd->SpeakUNICODE.m_charname, (LPCTSTR) pSrc->GetName(), sizeof(pCmd->SpeakUNICODE.m_charname));
 	}
-	memset( cmd.SpeakUNICODE.m_charname+iNameLen, 0, sizeof(cmd.SpeakUNICODE.m_charname)-iNameLen );
+	memset( pCmd->SpeakUNICODE.m_charname+iNameLen, 0, sizeof(pCmd->SpeakUNICODE.m_charname)-iNameLen );
 
 	if ( pSrc == NULL || pSrc->IsItem())
 	{
-		cmd.SpeakUNICODE.m_id = 0;	// 0x0101;
+		pCmd->SpeakUNICODE.m_id = 0;	// 0x0101;
 	}
 	else	// char id only.
 	{
 		CCharPtr pChar = PTR_CAST(CChar,const_cast <CObjBaseTemplate*>(pSrc));
 		ASSERT(pChar);
-		cmd.SpeakUNICODE.m_id = pChar->GetDispID();
+		pCmd->SpeakUNICODE.m_id = pChar->GetDispID();
 	}
-	xSendPkt( &cmd, len );
+	xSendPkt( pCmd, len );
 }
 
 void CClient::addBark( LPCTSTR pszText, const CObjBaseTemplate* pSrc, HUE_TYPE wHue, TALKMODE_TYPE mode, FONT_TYPE font )
