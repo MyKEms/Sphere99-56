@@ -1190,6 +1190,18 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 					return NO_ERROR;
 				if ( g_Cfg.m_Const.FindKeyVar(szExpandedKey, vValRet) )
 					return NO_ERROR;
+
+				// DEFNAMES store indexed members as ``root_<index>`` while
+				// scripts read them with the stock ``root[index]`` spelling.
+				// Keep an explicitly bracketed key authoritative, then fall
+				// back to that 0.99 DEFNAME representation.
+				TCHAR szDefNameKey[SCRIPT_MAX_LINE_LEN];
+				snprintf(szDefNameKey, sizeof(szDefNameKey), "%.*s_%d",
+					static_cast<int>(iRootLen), pszKey, iIndex);
+				if ( g_Cfg.m_Var.FindKeyVar(szDefNameKey, vValRet) )
+					return NO_ERROR;
+				if ( g_Cfg.m_Const.FindKeyVar(szDefNameKey, vValRet) )
+					return NO_ERROR;
 			}
 		}
 	}
