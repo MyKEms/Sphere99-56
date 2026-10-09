@@ -15,7 +15,13 @@ from run_suite import shutdown_failures
 
 
 MARKER_RE = re.compile(re.escape(MARKER) + r" C\|([a-z0-9_]+)\|\[(.*)\]$")
-EXPECTED = {"indexed": "0,20", "name": "manareg", "function": "0"}
+EXPECTED = {
+    "before": "0",
+    "after": "1",
+    "indexed": "0,20",
+    "name": "manareg",
+    "function": "0",
+}
 
 
 def system_messages(data: bytes) -> list[str]:

@@ -949,6 +949,35 @@ public:
 		SetKeyInt( pszKey, (DWORD)CVarDefEvaluateExpression( szExpression ));
 		return true;
 	}
+	static bool IsPureArithmeticTagValue(LPCTSTR pszValue)
+	{
+		if ( pszValue == NULL || *pszValue == '\0' )
+			return false;
+		bool fDigit = false;
+		bool fOperator = false;
+		for ( const unsigned char* p = reinterpret_cast<const unsigned char*>(pszValue);
+			*p; p++ )
+		{
+			if ( isdigit(*p) )
+			{
+				fDigit = true;
+				continue;
+			}
+			if ( ISWHITESPACE(*p) )
+				continue;
+			if ( strchr("+-*/%|&^().", *p) )
+			{
+				fOperator = true;
+				continue;
+			}
+			if ( (*p == 'x' || *p == 'X') && fDigit )
+				continue;
+			if ( isxdigit(*p) && fDigit )
+				continue;
+			return false;
+		}
+		return fDigit && fOperator;
+	}
 	void RemoveKey(LPCTSTR pszKey)
 	{
 		for (int i = 0; i < (int)this->GetSize(); i++)
@@ -1033,6 +1062,8 @@ public:
 					pszVal[iLen-1] = '\0';
 				SetKeyStr(szTemp, pszVal, fQuoted);
 			}
+			else if ( IsPureArithmeticTagValue( pszVal ) )
+				SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( pszVal ) );
 			else
 				SetKeyStr(szTemp, pszVal);
 		}
@@ -1071,8 +1102,12 @@ public:
 					int iLen = strlen(pszVal);
 					if ( iLen > 0 && pszVal[iLen - 1] == '"' )
 						pszVal[iLen - 1] = '\0';
+					SetKeyStr(szTemp, pszVal);
 				}
-				SetKeyStr(szTemp, pszVal);
+				else if ( IsPureArithmeticTagValue( pszVal ) )
+					SetKeyInt( szTemp, (DWORD)CVarDefEvaluateExpression( pszVal ) );
+				else
+					SetKeyStr(szTemp, pszVal);
 			}
 		}
 		else
