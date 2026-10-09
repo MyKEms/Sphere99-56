@@ -41,6 +41,35 @@ inline int Exp_GetHexValue( const char* psz, char** ppszEnd = NULL )
 	return (int)(unsigned int) strtoull( psz, ppszEnd, 16 );
 }
 
+// Parse the fixed-point spelling used by script assignments.  Sphere stores
+// skill values in tenths, so a string such as "30.0" is the integer 300.
+// Keep this conversion available to CGVariant before CExpression is declared.
+inline int Exp_GetFixedValue( const char* psz )
+{
+	if ( psz == NULL )
+		return 0;
+	bool fNeg = false;
+	if ( *psz == '-' )
+	{
+		fNeg = true;
+		psz++;
+	}
+	else if ( *psz == '+' )
+	{
+		psz++;
+	}
+	int iValue = 0;
+	for ( ; *psz; psz++ )
+	{
+		if ( *psz == '.' )
+			continue;
+		if ( !isdigit((unsigned char)*psz) )
+			break;
+		iValue = iValue * 10 + (*psz - '0');
+	}
+	return fNeg ? -iValue : iValue;
+}
+
 // Internal type tag for CGVariant
 enum CGVARIANT_TYPE
 {
@@ -369,6 +398,8 @@ public:
 					return Exp_GetHexValue(psz);
 				if ( psz[0] == '0' && isxdigit(psz[1]) )
 					return Exp_GetHexValue(psz);
+				if ( strchr(psz, '.') != NULL )
+					return Exp_GetFixedValue(psz);
 				return atoi(psz);
 			}
 		default:          return 0;
