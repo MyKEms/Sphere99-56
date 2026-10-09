@@ -40,7 +40,7 @@ def generate(output: Path) -> int:
 
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
-ANATOMY=0.0
+ANATOMY=10.0
 F_SKILL_SPEND_PROBE
 RETURN 0
 

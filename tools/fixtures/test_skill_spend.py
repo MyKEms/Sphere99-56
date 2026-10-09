@@ -16,9 +16,9 @@ from modes.skill_spend import ACCOUNT, END_MARKER, MARKER, PASSWORD
 
 MARKER_RE = re.compile(re.escape(MARKER) + r"\|([a-z]+)\|\[(.*)\]")
 EXPECTED = {
-    "before": "Anatomy|0|0.0|0",
+    "before": "Anatomy|100|10.0|100",
     "max": "1000|1",
-    "after": "Anatomy|5.0|50",
+    "after": "Anatomy|15.0|150",
 }
 
 
