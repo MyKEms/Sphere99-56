@@ -10,12 +10,17 @@ import sys
 import time
 from pathlib import Path
 
-from modes.player_skill_defaults import ACCOUNT, END_MARKER, MARKER, PASSWORD, CHARACTER
+from modes.player_skill_defaults import (
+    ACCOUNT_BY_LIMIT,
+    CHARACTER_BY_LIMIT,
+    END_MARKER,
+    MARKER,
+    PASSWORD,
+)
 from run_suite import shutdown_failures
 
 
 MARKER_RE = re.compile(re.escape(MARKER) + r" \[(.*)\]$")
-EXPECTED = ("0", "0")
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -37,10 +42,26 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=4620)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
+    parser.add_argument("--max-base-skill", type=int, choices=tuple(ACCOUNT_BY_LIMIT))
     args = parser.parse_args()
+
+    if args.max_base_skill is None:
+        parser.error("--max-base-skill is required")
 
     fixture = args.fixture.resolve()
     binary = args.binary.resolve()
+    ini_path = fixture / "sphere.ini"
+    ini = ini_path.read_text(encoding="ascii")
+    ini = re.sub(
+        r"(?im)^MAXBASESKILL=.*$",
+        f"MAXBASESKILL={args.max_base_skill}",
+        ini,
+    )
+    if "MAXBASESKILL=" not in ini.upper():
+        ini += f"\nMAXBASESKILL={args.max_base_skill}\n"
+    ini_path.write_text(ini, encoding="ascii")
+    account = ACCOUNT_BY_LIMIT[args.max_base_skill]
+    character = CHARACTER_BY_LIMIT[args.max_base_skill]
     tools_path = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(tools_path))
     from test_world_save_roundtrip import run_server
@@ -51,12 +72,12 @@ def main() -> int:
 
     def exercise() -> None:
         sock, _ = game_connect(
-            args.host, args.port, ACCOUNT, PASSWORD, game_port=args.port + 1000
+            args.host, args.port, account, PASSWORD, game_port=args.port + 1000
         )
         if sock is None:
             raise RuntimeError("fresh-player probe did not reach its character list")
         try:
-            sock.sendall(make_char_create(name=CHARACTER, start_loc=1))
+            sock.sendall(make_char_create(name=character, start_loc=1))
             data = bytearray(recv_until_game_start(sock, timeout=30.0))
             if not data:
                 raise RuntimeError("fresh-player probe did not enter the world")
@@ -100,8 +121,23 @@ def main() -> int:
         if match:
             observed = tuple(part.strip() for part in match.group(1).split("|"))
             break
-    if observed != EXPECTED:
-        failures.append(f"fresh-player unselected skills {observed!r}; expected {EXPECTED!r}")
+    if observed is None or len(observed) != 2:
+        failures.append(f"fresh-player skill marker {observed!r} has wrong shape")
+    else:
+        try:
+            evalint, resist = (int(value) for value in observed)
+        except ValueError:
+            failures.append(f"fresh-player skill marker is not numeric: {observed!r}")
+        else:
+            if not (0 <= evalint <= args.max_base_skill and 0 <= resist <= args.max_base_skill):
+                failures.append(
+                    f"unselected skills {(evalint, resist)!r} exceed configured "
+                    f"range 0..{args.max_base_skill}"
+                )
+            if args.max_base_skill == 0 and (evalint, resist) != (0, 0):
+                failures.append(
+                    f"MAXBASESKILL=0 produced nonzero unselected skills {(evalint, resist)!r}"
+                )
 
     if failures:
         print("player-skill-defaults probe failed:", file=sys.stderr)
@@ -109,7 +145,10 @@ def main() -> int:
             print(f"- {failure}", file=sys.stderr)
         print(f"messages: {messages!r}", file=sys.stderr)
         return 1
-    print("player-skill-defaults probe passed: 2/2 unselected skills are zero")
+    print(
+        "player-skill-defaults probe passed: "
+        f"MAXBASESKILL={args.max_base_skill} runtime/range checks"
+    )
     return 0
 
 

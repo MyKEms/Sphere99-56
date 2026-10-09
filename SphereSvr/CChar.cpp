@@ -832,11 +832,14 @@ void CChar::InitPlayer( const CUOEvent* pBin, CClient* pClient )
 
 	SetUnkPoint( m_ptHome );	// Don't actaully put me in the world yet.
 
-	// A newly created player starts with zero in every unselected skill.  The
-	// client packet below supplies the three chosen skills; seeding the whole
-	// table with random values first gives fresh players non-stock EvalInt and
-	// MagicResistance values.
-	int i = 0;
+	// Seed unselected skills from the configured creation range.  With the
+	// stock-compatible MAXBASESKILL=0 this is deterministic zero; shards that
+	// choose a nonzero limit retain the original bounded randomization.
+	int i = SKILL_First;
+	for ( ; i < SKILL_QTY; i++ )
+	{
+		Skill_SetBase( (SKILL_TYPE)i, Calc_GetRandVal( g_Cfg.m_iMaxBaseSkill ));
+	}
 
 	if ( pBin->Create.m_str + pBin->Create.m_dex + pBin->Create.m_int > 80 )
 	{
