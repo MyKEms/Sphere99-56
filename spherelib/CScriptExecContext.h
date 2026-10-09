@@ -183,7 +183,8 @@ protected:
 				fHashUID = true;
 			}
 		}
-		if ( pObj == NULL && pszFunctionRoot && (value.IsNumeric() || fHashUID) )
+		bool fTagRoot = pszFunctionRoot && !_stricmp(pszFunctionRoot, "TAG");
+		if ( pObj == NULL && pszFunctionRoot && (value.IsNumeric() || fHashUID || fTagRoot) )
 		{
 			// Script functions and the reference-valued argument helpers return
 			// object UIDs as strings. Named ARG locals can hold the same UID after
@@ -192,6 +193,7 @@ protected:
 			bool fUIDRoot = IsScriptFunction(pszFunctionRoot) ||
 				!_stricmp(pszFunctionRoot, "ARG") ||
 				!_stricmp(pszFunctionRoot, "ARGV") ||
+				!_stricmp(pszFunctionRoot, "TAG") ||
 				!_stricmp(pszFunctionRoot, "LASTNEW") ||
 				!_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
 				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
@@ -350,7 +352,14 @@ protected:
 					hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
 					rejected.Observe(hRes, szRoot, m_pBaseObj);
 					if ( hRes == NO_ERROR )
+					{
 						fEffect = true;
+						// TAG(name) is an object-root method in 0.99. Its UID is
+						// returned as text, so retain the root name for
+						// ResolveObjectResult before suffix traversal.
+						if ( !_stricmp(szRoot, "TAG") )
+							fRootFromFunction = true;
+					}
 				}
 			}
 			// A numeric resource reference can be produced by an inner escape in a
