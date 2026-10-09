@@ -22,6 +22,8 @@ EXPECTED = {
     "tags": "20971|301535|362395",
     "qval": "shown|no|negative",
     "qval_expr": "",
+    "qval_cmp": "no|yes",
+    "qval_nested": "yes",
 }
 
 
