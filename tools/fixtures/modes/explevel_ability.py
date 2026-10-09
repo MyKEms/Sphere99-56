@@ -56,8 +56,15 @@ while (i < argvCount)
 endwhile
 return 0
 
+[FUNCTION f_ra_add]
+tag(ra_<args>,<?eval tag(ra_<args>)?>+1)
+return 0
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
+SYSMESSAGE {MARKER} C|before|[<eval tag(ra_manareg)>]
+f_ra_add(manareg)
+SYSMESSAGE {MARKER} C|after|[<eval tag(ra_manareg)>]
 SYSMESSAGE {MARKER} C|indexed|[<safe.def_rearAbilities_manareg[0]>]
 SYSMESSAGE {MARKER} C|name|[<def_rearAbilities[1]>]
 SYSMESSAGE {MARKER} C|function|[<f_ra_add_hasClass(manareg)>]
