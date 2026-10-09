@@ -1958,7 +1958,7 @@ void CClient::Event_Talk_Common( TCHAR* szText ) // PC speech
 			i = pChar->NPC_OnHearName( szText );
 			fNamed = true;
 		}
-		if ( i )
+		if ( i > 0 )
 		{
 			while ( ISWHITESPACE( szText[i] ))
 				i++;
