@@ -19,6 +19,7 @@ static LPCTSTR const sm_pszDialogTags[] =		// GUMPCTL_QTY is more !
 	"radio",
 	"checkbox",
 	"textentry",	// textentry	// 7 = x,y,widthpix,widthchars,wHue,gumpid,startstringindex
+	"texta",	// inline text control; keep deferred macros in the layout line
 	"page",
 	"group",
 	"nomove",
