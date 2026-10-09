@@ -103,6 +103,7 @@ DEFNAME={NPC_DEFNAME}
 ID=0x0190
 NAME=synthetic speech helper
 NPC=brain_human
+TSPEECH=spk_SyntheticHear
 CAN=MT_USEHANDS
 MOVERATE=0
 STR=100
@@ -119,6 +120,10 @@ DORAND 3
 {real_speech}
 ENDDO
 RETURN 1
+
+[SPEECH spk_SyntheticHear]
+ON=*
+RETURN 0
 
 [EVENTS e_SpeechPacketProbe]
 ON=@LogIn
