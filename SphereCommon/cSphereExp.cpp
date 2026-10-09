@@ -1715,19 +1715,32 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 
 	case F_QVal:
 		{
-			// qval(test,ret_neg,ret_zero,ret_pos) — conditional.
+			// qval(test,true,false) is the common boolean form.  The legacy
+			// four-argument form selects negative, zero, or positive values.
 			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
 			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp)-1);
 			szTmp[sizeof(szTmp)-1] = '\0';
 			TCHAR* ppArgs[4] = { NULL, NULL, NULL, NULL };
-			Str_ParseCmds(szTmp, ppArgs, 4, ",");
+			const int iArgCount = Str_ParseCmds(szTmp, ppArgs, 4, ",");
 			int iTest = ppArgs[0] ? atoi(ppArgs[0]) : 0;
-			if ( iTest < 0 )
-				vValRet.SetInt( ppArgs[1] ? atoi(ppArgs[1]) : 0 );
+			int iResult = 0;
+			if ( iArgCount <= 3 )
+				iResult = iTest ? 1 : 2;
+			else if ( iTest < 0 )
+				iResult = 1;
 			else if ( iTest == 0 )
-				vValRet.SetInt( ppArgs[2] ? atoi(ppArgs[2]) : 0 );
+				iResult = 2;
 			else
-				vValRet.SetInt( ppArgs[3] ? atoi(ppArgs[3]) : 0 );
+				iResult = 3;
+			CGString sResult( ppArgs[iResult] ? ppArgs[iResult] : "" );
+			const int iResultLength = sResult.GetLength();
+			if ( iResultLength >= 2 && sResult.GetAt(0) == '\"' && sResult.GetAt(iResultLength - 1) == '\"' )
+			{
+				for ( int i = 1; i < iResultLength - 1; ++i )
+					sResult.SetAt( i - 1, sResult.GetAt(i) );
+				sResult.SetLength( iResultLength - 2 );
+			}
+			vValRet.SetStr( sResult.GetPtr() );
 		}
 		break;
 

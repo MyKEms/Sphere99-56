@@ -20,6 +20,7 @@ EXPECTED = {
     "before": "30.0|0.0|300|0",
     "after": "31.0|0.0|310|0",
     "tags": "20971|301535|362395",
+    "qval": "shown|no|negative",
 }
 
 
