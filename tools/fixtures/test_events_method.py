@@ -142,6 +142,30 @@ def main() -> int:
         for message in messages
         if message.startswith(f"{EVENTS_METHOD_MARKER}_REMOVE ")
     ]
+    isevent_add_markers = [
+        message
+        for message in messages
+        if message.startswith(f"{EVENTS_METHOD_MARKER}_ISEVENT_ADD ")
+    ]
+    if len(isevent_add_markers) != 1:
+        failures.append(f"EVENTS isevent-add marker count: {len(isevent_add_markers)}")
+    elif isevent_add_markers[0].split()[-1] != "1":
+        failures.append(
+            f"EVENTS isevent-add result: {isevent_add_markers[0]}"
+        )
+    isevent_remove_markers = [
+        message
+        for message in messages
+        if message.startswith(f"{EVENTS_METHOD_MARKER}_ISEVENT_REMOVE ")
+    ]
+    if len(isevent_remove_markers) != 1:
+        failures.append(
+            f"EVENTS isevent-remove marker count: {len(isevent_remove_markers)}"
+        )
+    elif isevent_remove_markers[0].split()[-1] != "0":
+        failures.append(
+            f"EVENTS isevent-remove result: {isevent_remove_markers[0]}"
+        )
     if len(add_markers) != 1:
         failures.append(f"EVENTS add marker count: {len(add_markers)}")
     elif EVENTS_METHOD_EVENT not in add_markers[0]:
@@ -189,7 +213,7 @@ def main() -> int:
             f"end marker count: {messages.count(end_marker)}"
         )
 
-    total = 6
+    total = 8
     if failures:
         print(
             f"EVENTS method probe failed: {max(0, total - len(failures))}/{total} checks passed",
