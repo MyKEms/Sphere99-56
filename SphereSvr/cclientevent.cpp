@@ -2094,51 +2094,50 @@ void CClient::Event_TalkUNICODE( const CUOEvent* pEvent )
 
 	if ( mode >= TALKMODE_TOKENIZED )
 	{
-		// Tokenized speech from modern clients (ClassicUO, etc.)
-		// Format: token_header_bytes + null-terminated ASCII text
-		// The text follows the token prefix. Find it by scanning for the
-		// null terminator of the text (which is the actual spoken text).
+		// Tokenized speech from modern clients (ClassicUO, etc.) is an ASCII
+		// payload with a compact token prefix. The prefix may contain embedded
+		// NULs, so looking for the first printable byte and then stopping at the
+		// next NUL treats the token itself as the speech. Keep the legacy
+		// token-walk semantics, but bound every look-ahead by the packet length.
 		mode -= TALKMODE_TOKENIZED;
 		const char* pRaw = (const char*)(pEvent->TalkUNICODE.m_utext);
-
-		// Skip token prefix: scan for the actual text after tokens.
-		// Token bytes are typically non-printable or in specific patterns.
-		// The text starts after the last non-text byte sequence.
-		// Find the null-terminated text by looking for the console cmd char
-		// or the first sequence of printable ASCII that ends with null.
 		int iRawLen = iPktLen - 12; // 12 = header size (cmd+len+mode+hue+font+lang)
 		if ( iRawLen < 0 ) iRawLen = 0;
 		if ( iRawLen > SCRIPT_MAX_LINE_LEN ) iRawLen = SCRIPT_MAX_LINE_LEN;
 
-		// Find the actual text: look for '.' or '/' (console cmd) or a
-		// sequence starting with a printable char followed by a null terminator.
-		int iTextStart = -1;
-		for ( int i = 0; i < iRawLen - 1; i++ )
+		int iTextStart = 0;
+		for ( ; iTextStart < iRawLen; ++iTextStart )
 		{
-			// Look for console command prefix (., /, =)
-			if ( pRaw[i] == '.' || pRaw[i] == '/' || pRaw[i] == '=' )
+			const BYTE ch = (BYTE)pRaw[iTextStart];
+			if ( ch >= 0x20 )
+				break;
+
+			if ( iTextStart + 1 >= iRawLen )
 			{
-				iTextStart = i;
+				iTextStart = iRawLen;
 				break;
 			}
-		}
-		if ( iTextStart < 0 )
-		{
-			// No console command found — find first printable string.
-			// Skip initial token bytes (typically < 0x20 or > 0x7F)
-			for ( int i = 0; i < iRawLen; i++ )
+			++iTextStart;
+			const BYTE token = (BYTE)pRaw[iTextStart];
+			if ( token > 0xc0 )
 			{
-				unsigned char ch = (unsigned char)pRaw[i];
-				if ( ch >= 0x20 && ch < 0x80 )
-				{
-					// Check if this looks like start of text (next chars also printable or null)
-					iTextStart = i;
-					break;
-				}
+				++iTextStart;
+				continue;
+			}
+
+			if ( iTextStart + 1 >= iRawLen )
+			{
+				iTextStart = iRawLen;
+				break;
+			}
+			const BYTE next = (BYTE)pRaw[iTextStart + 1];
+			if ( iTextStart <= 2 || next < 0x20 || next >= 0x80 )
+			{
+				++iTextStart;
 			}
 		}
 
-		if ( iTextStart >= 0 && iTextStart < iRawLen )
+		if ( iTextStart < iRawLen )
 		{
 			TCHAR szTokenText[MAX_TALK_BUFFER];
 			int j = 0;

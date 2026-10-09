@@ -108,6 +108,35 @@ def make_unicode_talk(
     )
 
 
+def make_tokenized_unicode_talk(
+    text="fixture tokenized speech",
+    mode=0xC0,
+    hue=0x03B2,
+    font=3,
+    language="IVL",
+    token_prefix=b"\x00\x20\x02\x00\x20",
+):
+    """Build the legacy tokenized ASCII speech form used by modern clients."""
+    if len(language) != 3 or not language.isascii():
+        raise ValueError("language must be a three-character ASCII code")
+    if not token_prefix:
+        raise ValueError("token_prefix must not be empty")
+    payload = token_prefix + text.encode("ascii") + b"\0"
+    packet_length = 12 + len(payload)
+    return (
+        struct.pack(
+            ">BHBHH4s",
+            0xAD,
+            packet_length,
+            mode,
+            hue,
+            font,
+            language.encode("ascii") + b"\0",
+        )
+        + payload
+    )
+
+
 def make_char_create(name="TestChar", sex=0, start_loc=1, str_val=30, dex_val=25, int_val=25,
                      skill1=0, val1=50, skill2=1, val2=50, skill3=17, val3=1):
     """Build XCMD_Create (0x00) — 104 bytes. Creates a new character.

@@ -28,6 +28,7 @@ DAILY_MARKERS = (
     re.compile(r"Setup_Start acct='[^']+', char='[^']+'"),
     re.compile(r"Client disconnected \[Total:\d+\]"),
     re.compile(r"Says UNICODE 'ENU' 'unicode fixture speech' mode=3"),
+    re.compile(r"Says 'bank' mode=0"),
 )
 
 # These are implementation traces used while diagnosing the Linux logging
@@ -77,6 +78,7 @@ def main() -> int:
         game_connect,
         make_char_create,
         make_char_play,
+        make_tokenized_unicode_talk,
         make_unicode_talk,
         recv_until_game_start,
     )
@@ -125,6 +127,16 @@ def main() -> int:
                 sock.sendall(make_char_play(0))
                 response = recv_until_game_start(sock, timeout=30.0)
                 sock.sendall(make_unicode_talk("unicode fixture speech"))
+                sock.sendall(make_tokenized_unicode_talk("bank"))
+                # Keep the game connection open until the server has had a
+                # tick to consume the second variable-length packet.  A
+                # close immediately after send can discard a queued packet
+                # before the dispatch loop reaches it.
+                speech_deadline = time.monotonic() + 3.0
+                while time.monotonic() < speech_deadline:
+                    if DAILY_MARKERS[-1].search(read_daily_logs(fixture)):
+                        break
+                    time.sleep(0.1)
             finally:
                 sock.close()
 
