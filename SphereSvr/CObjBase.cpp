@@ -839,7 +839,17 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 	switch (iProp)
 	{
 	case M_IsEvent:
-		vValRet.SetBool( m_Events.FindResourceID( vArgs.GetUID()) >= 0 );
+		{
+			CSphereUID rid( vArgs.GetUID());
+			// Script event names are commonly passed as bare arguments.  A
+			// name remains a string variant, so GetUID() alone yields zero and
+			// makes an attached event look absent.  Preserve numeric resource
+			// arguments and resolve only non-event UIDs through the event table.
+			if ( rid.GetResType() != RES_Events )
+				rid = g_Cfg.ResourceGetIDType( RES_Events, vArgs.GetPSTR());
+			vValRet.SetBool( rid.IsValidRID() && rid.GetResType() == RES_Events &&
+				m_Events.FindResourceID( rid ) >= 0 );
+		}
 		break;
 	case M_Events:
 		if ( ! m_Events.v_Set( vArgs, RES_Events ))
