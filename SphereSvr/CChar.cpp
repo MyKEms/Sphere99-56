@@ -1133,6 +1133,12 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 		// Extended for STATF_Stone etc.
 		vValRet.SetDWORD( m_StatFlag );
 		break;
+	case P_Flag_Conjured:
+		vValRet.SetBool( IsStatFlag( STATF_Conjured ));
+		break;
+	case P_Flag_Criminal:
+		vValRet.SetBool( IsStatFlag( STATF_Criminal ));
+		break;
 	case P_Flag_Immobile:
 		vValRet.SetBool( IsStatFlag( STATF_Immobile ));
 		break;
@@ -1148,8 +1154,53 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	case P_Flag_Freeze:
 		vValRet.SetBool( IsStatFlag( STATF_Freeze ));
 		break;
+	case P_Flag_HasShield:
+		vValRet.SetBool( IsStatFlag( STATF_HasShield ));
+		break;
+	case P_Flag_Hidden:
+		vValRet.SetBool( IsStatFlag( STATF_Hidden ));
+		break;
+	case P_Flag_Incognito:
+		vValRet.SetBool( IsStatFlag( STATF_Incognito ));
+		break;
+	case P_Flag_Invisible:
+		vValRet.SetBool( IsStatFlag( STATF_Invisible ));
+		break;
+	case P_Flag_NightSight:
+		vValRet.SetBool( IsStatFlag( STATF_NightSight ));
+		break;
+	case P_Flag_OnHorse:
+		vValRet.SetBool( IsStatFlag( STATF_OnHorse ));
+		break;
+	case P_Flag_Pet:
+		vValRet.SetBool( IsStatFlag( STATF_Pet ));
+		break;
+	case P_Flag_Poisoned:
+		vValRet.SetBool( IsStatFlag( STATF_Poisoned ));
+		break;
+	case P_Flag_Polymorphed:
+		vValRet.SetBool( IsStatFlag( STATF_Polymorph ));
+		break;
+	case P_Flag_Reactive:
+		vValRet.SetBool( IsStatFlag( STATF_Reactive ));
+		break;
+	case P_Flag_Reflection:
+		vValRet.SetBool( IsStatFlag( STATF_Reflection ));
+		break;
+	case P_Flag_Ridden:
+		vValRet.SetBool( IsStatFlag( STATF_Ridden ));
+		break;
+	case P_Flag_Sleeping:
+		vValRet.SetBool( IsStatFlag( STATF_Sleeping ));
+		break;
+	case P_Flag_Spawned:
+		vValRet.SetBool( IsStatFlag( STATF_Spawned ));
+		break;
 	case P_Flag_Stone:
 		vValRet.SetBool( IsStatFlag( STATF_Stone ));
+		break;
+	case P_Flag_War:
+		vValRet.SetBool( IsStatFlag( STATF_War ));
 		break;
 	case P_Font:
 		vValRet.SetInt( m_fonttype );
@@ -1293,6 +1344,12 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		// DO NOT MODIFY STATF_SaveParity, STATF_Spawned, STATF_Pet
 		m_StatFlag = ( vVal.GetInt() &~ (STATF_SaveParity|STATF_Pet|STATF_Spawned)) | ( m_StatFlag& (STATF_SaveParity|STATF_Pet|STATF_Spawned) );
 		break;
+	case P_Flag_Conjured:
+		StatFlag_Mod( STATF_Conjured, vVal.GetBool());
+		break;
+	case P_Flag_Criminal:
+		StatFlag_Mod( STATF_Criminal, vVal.GetBool());
+		break;
 	case P_Flag_Immobile:
 		StatFlag_Mod( STATF_Immobile, vVal.GetBool());
 		break;
@@ -1307,6 +1364,48 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_Flag_Freeze:
 		StatFlag_Mod( STATF_Freeze, vVal.GetBool());
+		break;
+	case P_Flag_HasShield:
+		// Equipment owns this derived flag; the script property is read-only in stock.
+		break;
+	case P_Flag_Hidden:
+		StatFlag_Mod( STATF_Hidden, vVal.GetBool());
+		break;
+	case P_Flag_Incognito:
+		StatFlag_Mod( STATF_Incognito, vVal.GetBool());
+		break;
+	case P_Flag_Invisible:
+		StatFlag_Mod( STATF_Invisible, vVal.GetBool());
+		break;
+	case P_Flag_NightSight:
+		StatFlag_Mod( STATF_NightSight, vVal.GetBool());
+		break;
+	case P_Flag_OnHorse:
+		// Mount state is maintained by the mount/ride relationship.
+		break;
+	case P_Flag_Pet:
+		// Pet state is maintained by the owner memory relationship.
+		break;
+	case P_Flag_Poisoned:
+		StatFlag_Mod( STATF_Poisoned, vVal.GetBool());
+		break;
+	case P_Flag_Polymorphed:
+		StatFlag_Mod( STATF_Polymorph, vVal.GetBool());
+		break;
+	case P_Flag_Reactive:
+		StatFlag_Mod( STATF_Reactive, vVal.GetBool());
+		break;
+	case P_Flag_Reflection:
+		StatFlag_Mod( STATF_Reflection, vVal.GetBool());
+		break;
+	case P_Flag_Ridden:
+		// A ridden flag follows the mount relationship and cannot be scripted directly.
+		break;
+	case P_Flag_Sleeping:
+		StatFlag_Mod( STATF_Sleeping, vVal.GetBool());
+		break;
+	case P_Flag_Spawned:
+		// Spawn ownership controls this flag, just as the existing FLAGS setter does.
 		break;
 	case P_Flag_Stone:
 		{
@@ -1329,6 +1428,9 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 				Update();
 			}
 		}
+		break;
+	case P_Flag_War:
+		StatFlag_Mod( STATF_War, vVal.GetBool());
 		break;
 	case P_Font:
 		m_fonttype = (FONT_TYPE) vVal.GetInt();
