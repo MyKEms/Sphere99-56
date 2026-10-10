@@ -445,7 +445,14 @@ protected:
 				hRes = pCurrent->s_Method(szName, vArgs, vNext, m_pSrc);
 				rejected.Observe(hRes, szName, pCurrent);
 				if ( hRes == NO_ERROR )
+				{
 					fEffect = true;
+					// TAG(name) returns a stored object UID string in 0.99.
+					// Keep the TAG root marker so the next dotted segment can
+					// resolve that string back to its live object.
+					if ( !_stricmp(szName, "TAG") )
+						fFromFunction = true;
+				}
 			}
 			if ( hRes != NO_ERROR )
 			{
@@ -1498,6 +1505,22 @@ public:
 			}
 		}
 
+		// Preserve the common stock spelling ``!(safe expression)``.  The
+		// outer negation otherwise reaches the arithmetic reader before the
+		// SAFE reference path can resolve the dotted object chain.
+		if ( pszExpr[0] == '!' && pszExpr[1] == '(' && pszEnd > pszExpr + 3 &&
+			pszEnd[-1] == ')' )
+		{
+			const size_t iInnerLen = static_cast<size_t>(pszEnd - pszExpr - 3);
+			if ( iInnerLen < SCRIPT_MAX_LINE_LEN )
+			{
+				TCHAR szInner[SCRIPT_MAX_LINE_LEN];
+				memcpy(szInner, pszExpr + 2, iInnerLen);
+				szInner[iInnerLen] = '\0';
+				return !GetScriptExpression(szInner, iBufCapacity);
+			}
+		}
+
 		// 0.99 uses a space-separated SAFE prefix in numeric conditions,
 		// notably `safe finduid(uid).isChar`.  The generic arithmetic reader
 		// otherwise sees SAFE as an ordinary identifier and never dispatches
@@ -2266,7 +2289,8 @@ public:
 				// the live object's serial while expanding its call-form
 				// argument; ordinary text expansion renders that reference as
 				// an empty string before M_Equip can resolve it.
-				const DWORD dwCallArgFlags = !_stricmp(pszKey, "EQUIP")
+				const DWORD dwCallArgFlags = (!_stricmp(pszKey, "EQUIP") ||
+					!_stricmp(pszKey, "VAR") || ! _stricmp(pszKey, "DIALOG"))
 					? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 				s_ParseEscapes(szCallArgs, dwCallArgFlags);
 				pszArg = szCallArgs;
@@ -3014,8 +3038,11 @@ public:
 								IsScriptFunction(pszCallFunction);
 						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
+							IsTagMethodName(szKey) ||
 							!_strnicmp(szKey, "TAG(", 4) ||
 							!_strnicmp(szKey, "EQUIP(", 6) ||
+							!_strnicmp(szKey, "VAR(", 4) ||
+							!_strnicmp(szKey, "DIALOG(", 7) ||
 							HasContainerAssignmentArgument(szKey) ||
 							HasContentsCall(szKey) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
@@ -3031,6 +3058,13 @@ public:
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
 							!_stricmp(szKey, "ARG") ||
+							// Global VAR(name,value) stores live object references in
+							// legacy helpers such as craftmenu's def_cm_* table.  Keep
+							// LASTNEW as its serial instead of rendering it as text.
+							!_stricmp(szKey, "VAR") ||
+							// DIALOG receives positional object roots in ARGV; the
+							// craftmenu helper passes its source item this way.
+							!_stricmp(szKey, "DIALOG") ||
 							// Native EQUIP consumes an object reference.  Preserve
 							// LASTNEW's serial when it is used as its argument; the
 							// ordinary text spelling of a live item is empty.
