@@ -184,20 +184,28 @@ protected:
 			}
 		}
 		bool fTagRoot = pszFunctionRoot && !_stricmp(pszFunctionRoot, "TAG");
-		if ( pObj == NULL && pszFunctionRoot && (value.IsNumeric() || fHashUID || fTagRoot) )
+		// Global VAR() and local ARGV()/ARG() helpers may serialize a live
+		// object as a non-numeric string (for example an empty reference or a
+		// legacy UID token).  Their function name is the authority that this
+		// value is an object root; do not send it through resource lookup just
+		// because the scalar spelling is not numeric.
+		bool fUIDRoot = pszFunctionRoot &&
+			(IsScriptFunction(pszFunctionRoot) ||
+			 !_stricmp(pszFunctionRoot, "ARG") ||
+			 !_stricmp(pszFunctionRoot, "ARGV") ||
+			 !_stricmp(pszFunctionRoot, "TAG") ||
+			 !_stricmp(pszFunctionRoot, "VAR") ||
+			 !_stricmp(pszFunctionRoot, "LASTNEW") ||
+			 !_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
+			 !_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
+			 m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL);
+		if ( pObj == NULL && pszFunctionRoot &&
+			(value.IsNumeric() || fHashUID || fTagRoot || fUIDRoot) )
 		{
 			// Script functions and the reference-valued argument helpers return
 			// object UIDs as strings. Named ARG locals can hold the same UID after
 			// ARGV() copies a function argument, so all of these roots use the
 			// engine's UID resolver before property chaining continues.
-			bool fUIDRoot = IsScriptFunction(pszFunctionRoot) ||
-				!_stricmp(pszFunctionRoot, "ARG") ||
-				!_stricmp(pszFunctionRoot, "ARGV") ||
-				!_stricmp(pszFunctionRoot, "TAG") ||
-				!_stricmp(pszFunctionRoot, "LASTNEW") ||
-				!_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
-				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
-				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
 			// A DEFNAME written with the #<hex-serial> spelling is already an
 			// object UID alias.  Unlike an ordinary numeric/resource DEFNAME, it
 			// must resolve through the world table before dotted properties run.
@@ -2448,6 +2456,14 @@ public:
 							return NO_ERROR;
 					}
 					CGVariant vArgs(pszArg);
+					// Z is exposed as a method alias for the read-only P_Z
+					// property.  Its assignment form accepts a numeric script
+					// expression (for example ARGV(0).Z=<ARGV(0).Z>-10),
+					// whereas the generic method path must preserve literal
+					// arguments for every other object method.
+					if ( fPropertySet &&
+						(!_stricmp(pszDot + 1, "Z") || !_stricmp(pszDot + 1, "P_Z")) )
+						vArgs.SetInt(GetComplex(pszArg));
 					CGVariant vValRet;
 					hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
 					rejected.Observe(hRes, pszDot + 1, pRootObj);

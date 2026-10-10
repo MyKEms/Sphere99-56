@@ -60,9 +60,23 @@ ON=7
 SYSMESSAGE {MARKER}|button|7
 RETURN 1
 
+[FUNCTION craftmenu_refs]
+// Keep the source character in a local VAR and exercise the three legacy
+// object-root forms that the craft helper uses on a live script tree.
+NEWITEM SYNTHETIC_CRAFT_SOURCE
+VAR(craft_root,<ARGV(0)>)
+VAR(craft_root).NEWITEM(SYNTHETIC_CRAFT_SOURCE)
+SYSMESSAGE {MARKER}|var-newitem=<LASTNEW.SERIAL>
+ARGV(0).NEWITEM(SYNTHETIC_CRAFT_SOURCE)
+SYSMESSAGE {MARKER}|argv-newitem=<LASTNEW.SERIAL>
+ARGV(0).Z=<ARGV(0).Z>-10
+SYSMESSAGE {MARKER}|argv-z=<ARGV(0).Z>
+RETURN 0
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 SYSMESSAGE {MARKER}|begin
+SRC.craftmenu_refs(<SRC>)
 NEWITEM SYNTHETIC_CRAFT_SOURCE
 LASTNEW.P=<P>
 VAR(def_cm_tinkering,<LASTNEW>)
@@ -107,7 +121,7 @@ MANA=100
 MAXMANA=100
 STAM=100
 MAXSTAM=100
-P=128,128,0
+P=128,128,20
 [EOF]
 """,
         encoding="ascii",

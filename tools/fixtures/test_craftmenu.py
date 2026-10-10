@@ -107,6 +107,31 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
             failures.append(f"craftmenu open markers were incomplete: {messages!r}")
             return
 
+        ref_prefixes = (
+            MARKER + "|var-newitem=",
+            MARKER + "|argv-newitem=",
+            MARKER + "|argv-z=",
+        )
+        ref_values = {}
+        for prefix in ref_prefixes:
+            matches = [message[len(prefix):] for message in messages if message.startswith(prefix)]
+            if len(matches) != 1 or not matches[0]:
+                failures.append(f"craftmenu object-root marker was incomplete for {prefix!r}: {messages!r}")
+                return
+            ref_values[prefix] = matches[0]
+        if ref_values[ref_prefixes[0]] == ref_values[ref_prefixes[1]]:
+            failures.append(
+                "VAR(...).NEWITEM and ARGV(0).NEWITEM did not create distinct items: "
+                f"{ref_values!r}"
+            )
+            return
+        if ref_values[ref_prefixes[2]] != "10":
+            failures.append(
+                "ARGV(0).Z assignment did not retain the referenced character: "
+                f"expected 10, got {ref_values[ref_prefixes[2]]!r}; messages={messages!r}"
+            )
+            return
+
         sock.sendall(make_gump_reply(gump.serial, gump.context, 7, switches=(0,)))
         marker = MARKER + "|button|7"
         deadline = time.monotonic() + 10.0
