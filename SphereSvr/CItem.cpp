@@ -58,6 +58,50 @@ static int FindLegacyAttrName(LPCTSTR pszAttrName)
 	return -1;
 }
 
+// Script ATTR assignments use the same readable bit names as the legacy
+// save keys, for example "ATTR_MOVE_NEVER|ATTR_NEWBIE".  Those names are
+// not DEFNAME constants, so the general expression reader cannot resolve
+// them on its own.  Resolve each pipe-separated bit name here, while leaving
+// numeric terms to the normal Sphere expression parser.
+static int ParseAttrExpression(LPCTSTR pszExpression)
+{
+	if ( pszExpression == NULL )
+		return 0;
+
+	int iValue = 0;
+	const TCHAR* pTerm = pszExpression;
+	while ( pTerm && *pTerm )
+	{
+		while ( isspace( static_cast<unsigned char>(*pTerm) ) )
+			pTerm++;
+		const TCHAR* pEnd = strchr( pTerm, '|' );
+		const TCHAR* pTrimEnd = pEnd ? pEnd : pTerm + strlen(pTerm);
+		while ( pTrimEnd > pTerm && isspace( static_cast<unsigned char>(pTrimEnd[-1]) ) )
+			pTrimEnd--;
+
+		TCHAR szTerm[256];
+		size_t iLength = static_cast<size_t>(pTrimEnd - pTerm);
+		if ( iLength >= sizeof(szTerm) )
+			iLength = sizeof(szTerm) - 1;
+		memcpy( szTerm, pTerm, iLength );
+		szTerm[iLength] = '\0';
+
+		LPCTSTR pszAttrTerm = szTerm;
+		if ( !_strnicmp( pszAttrTerm, "ATTR_", 5 ) )
+			pszAttrTerm += 5;
+		const int iAttr = FindLegacyAttrName( pszAttrTerm );
+		if ( iAttr >= 0 )
+			iValue |= _1BITMASK(iAttr);
+		else
+			iValue |= CExpression().GetComplex( szTerm );
+
+		if ( pEnd == NULL )
+			break;
+		pTerm = pEnd + 1;
+	}
+	return iValue;
+}
+
 /////////////////////////////////////////////////////////////////
 // -CItem
 
@@ -2702,13 +2746,20 @@ HRESULT CItem::s_PropSet( const char* pszKey, CGVariant& vVal ) // Load an item 
 		SetAmountUpdate( vVal.GetInt());
 		break;
 	case P_Attr:
+	{
 		// WriteKeyDWORD emits Sphere's leading-zero hexadecimal form
 		// (for example "01c").  GetDWORD() parses strings with base 0,
 		// so that form is interpreted as octal and loses ATTR_NEWBIE,
-		// ATTR_MOVE_ALWAYS, and ATTR_MOVE_NEVER on reload.  GetInt()
-		// follows the Sphere expression parser and preserves the bit mask.
-		m_AttrMask = static_cast<WORD>( vVal.GetInt());
+		// ATTR_MOVE_ALWAYS, and ATTR_MOVE_NEVER on reload.  Script setters
+		// can also pass a symbolic bit expression (for example
+		// ATTR_MOVE_NEVER|ATTR_NEWBIE), which is a string variant rather than
+		// a pre-evaluated integer.  Evaluate only those non-numeric strings
+		// through the same DEFNAME-aware expression reader used by scripts;
+		// numeric save values retain the existing leading-zero handling.
+		int iAttr = vVal.IsNumeric() ? vVal.GetInt() : ParseAttrExpression( vVal.GetPSTR());
+		m_AttrMask = static_cast<WORD>( iAttr);
 		break;
+	}
 	case P_Cont:	// needs special processing.
 		// Loading or import.
 		return LoadSetContainer( vVal.GetInt(), (LAYER_TYPE) GetUnkZ());
