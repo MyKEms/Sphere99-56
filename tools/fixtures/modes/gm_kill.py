@@ -15,6 +15,7 @@ PASSWORD = "gm-kill-pw"
 CHAR_NAME = "GmKillCharacter"
 NPC_DEFNAME = "SYNTHETIC_GM_KILL_NPC"
 TARGET_SERIALS = (4, 5)
+PLAYER_SERIAL = 1
 
 
 def generate(output: Path) -> int:
@@ -38,12 +39,31 @@ def generate(output: Path) -> int:
         "GmCommandLogCharacter", CHAR_NAME
     )
     tables = output / "scripts" / "spheretables.scp"
+    table_text = tables.read_text(encoding="ascii")
+    table_text = table_text.replace(
+        "ON=@EnvironChange\n",
+        """ON=@Death
+SYSMESSAGE GM_KILL_PLAYER_DEATH
+RETURN 0
+ON=@DeathCorpse
+ARG(follow,<MEMORYFINDTYPE(01000)>)
+SYSMESSAGE GM_KILL_PLAYER_MEMORY <ISUIDVALID <ARG(follow)>>
+SYSMESSAGE GM_KILL_PLAYER_CORPSE <ISUIDVALID <ARG(follow).LINK>>
+RETURN 0
+ON=@EnvironChange
+""",
+        1,
+    )
     tables.write_text(
-        tables.read_text(encoding="ascii")
+        table_text
         + f"""
 
 [TYPEDEF 74]
 DEFNAME=T_EQ_MEMORY_OBJ
+
+[ITEMDEF 0x2006]
+DEFNAME=i_corpse
+NAME=synthetic corpse
 
 [ITEMDEF 0x2007]
 DEFNAME=i_memory
