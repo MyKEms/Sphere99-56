@@ -897,6 +897,11 @@ public:
 	{
 		CItemDefPtr pItemDef = Item_GetDef();
 		ASSERT(pItemDef);
+		// Internal effect/memory layers are attached to the character but are
+		// not carried items.  This also covers legacy script-defined layers
+		// above LAYER_QTY.
+		if ( IsItemEquipped() && GetEquipLayer() >= LAYER_SPECIAL )
+			return 0;
 		const int64_t iWeight = static_cast<int64_t>(pItemDef->GetWeight()) * GetAmount();
 		DEBUG_CHECK( iWeight >= 0 );
 		return( SphereWeightClamp(iWeight) );

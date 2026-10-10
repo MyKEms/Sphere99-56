@@ -269,9 +269,15 @@ bool CChar::LayerAdd( CItem* pItem, LAYER_TYPE layer )
 	pItem->RemoveSelf(); // make sure all triggers fire. T_UnEquip
 	if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete) )
 		return false;
-	if ( ! CContainer::ContentAddPrivate( pItem ))
-		return false;
+	// Set the final layer before linking the item into the character.  Internal
+	// effect layers are weightless; CContainer::ContentAddPrivate() samples the
+	// item's weight while it updates the parent's aggregate.
 	pItem->SetEquipLayer( layerAct );
+	if ( ! CContainer::ContentAddPrivate( pItem ))
+	{
+		pItem->SetEquipLayer( LAYER_NONE );
+		return false;
+	}
 
 	// update flags etc for having equipped this.
 	switch ( layerAct )
