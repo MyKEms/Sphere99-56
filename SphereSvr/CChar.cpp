@@ -1302,6 +1302,9 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	case P_Flag_Invul:
 		StatFlag_Mod( STATF_INVUL, vVal.GetBool());
 		break;
+	case P_Flag_Dead:
+		StatFlag_Mod( STATF_DEAD, vVal.GetBool());
+		break;
 	case P_Flag_Freeze:
 		StatFlag_Mod( STATF_Freeze, vVal.GetBool());
 		break;
