@@ -1255,9 +1255,11 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	// Handle P= property for position
 	if ( ! _stricmp(pszKey, "P") )
 	{
+		const CPointMap ptOld = GetTopPoint();
 		CPointMap pt;
 		pt.v_Set( vVal );
-		MoveToChar( pt );
+		if ( MoveToChar( pt ))
+			UpdateMove( ptOld, NULL, true );
 		return NO_ERROR;
 	}
 
@@ -1512,9 +1514,11 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 	case P_P:
 		{
+			const CPointMap ptOld = GetTopPoint();
 			CPointMap pt;
 			pt.v_Set(vVal);
-			MoveToChar(pt);
+			if ( MoveToChar(pt) )
+				UpdateMove( ptOld, NULL, true );
 		}
 		break;
 	case P_SpeechColor:

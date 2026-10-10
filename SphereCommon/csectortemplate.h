@@ -26,7 +26,7 @@ class CCharsActiveList : public CGObListType<CChar>
 private:
 	int	   m_iClients;			// How many clients in this sector now?
 public:
-	DWORD  m_dwMapPlaneClients;	// What planes are we active on.
+	uint64_t m_dwMapPlaneClients;	// What planes are we active on.
 	CServTime m_timeLastClient;	// age the sector based on last client here.
 protected:
 	virtual void OnRemoveOb( CGObListRec* pObRec );	// Override this = called when removed from list.
@@ -41,7 +41,7 @@ public:
 		DEBUG_CHECK(m_iClients>0);
 		m_iClients--;
 	}
-	DWORD GetPlaneMask( MAPPLANE_TYPE iMapPlane ) const
+	uint64_t GetPlaneMask( MAPPLANE_TYPE iMapPlane ) const
 	{
 		return( _1BITMASK(iMapPlane & 0x3f));
 	}
