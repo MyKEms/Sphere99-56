@@ -926,7 +926,14 @@ HRESULT CItemDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 
 	case P_Layer:
 		// Is this equippable?
-		m_layer = (LAYER_TYPE) vVal.GetInt();
+		{
+			// Legacy definitions use named layer constants (for example
+			// a named legacy layer) as well as numeric layer values.  GetInt()
+			// turns a non-numeric token into zero, which routes the item through
+			// the generic special layer and makes its weight count as carried.
+			LPCTSTR pszValue = vVal.GetPSTR();
+			m_layer = (LAYER_TYPE)(( pszValue && *pszValue ) ? Exp_GetValue( pszValue ) : 0);
+		}
 		break;
 
 	case P_Repair:
