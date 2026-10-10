@@ -769,7 +769,14 @@ bool CChar::Memory_OnTick( CItemMemory* pMemory )
 		// I am following. (GM Feature)
 		CCharPtr pChar = g_World.CharFind(pMemory->m_uidLink);
 		if ( pChar == NULL )
-			return( false );
+		{
+			// Player death memories use the same stock 0x1000 flag but link
+			// to the corpse item.  Keep that memory alive while the corpse
+			// remains; deleting it on the first follow tick makes the ankh
+			// path report an unrested soul forever.
+			CItemPtr pCorpse = g_World.ItemFind(pMemory->m_uidLink);
+			return( pCorpse != NULL && pCorpse->IsType(IT_CORPSE));
+		}
 
 		if ( IsStatFlag( STATF_War ) || IsDisconnected())
 		{

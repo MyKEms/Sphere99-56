@@ -173,7 +173,7 @@ def _run_command(
     return True, delay is not None and delay <= DEATH_BOUND_SECONDS, delay, reference_seen, source_act_seen, uid_age_seen
 
 
-def _run_player_command(sock: socket.socket) -> tuple[bool, bool, bool, bool]:
+def _run_player_command(sock: socket.socket) -> tuple[bool, bool, bool, bool, bool, bool, bool, bool]:
     """Kill the logged-in player and require a corpse-linked follow memory."""
 
     sock.sendall(_talk(".KILL"))
@@ -185,9 +185,10 @@ def _run_player_command(sock: socket.socket) -> tuple[bool, bool, bool, bool]:
     memory_seen = False
     corpse_seen = False
     death_seen = False
+    probe_armed = False
 
     def player_death_seen(packets) -> bool:
-        nonlocal corpse_seen, death_seen, memory_seen
+        nonlocal corpse_seen, death_seen, memory_seen, probe_armed
         marker_seen = any(
             b"GM_KILL_PLAYER_DEATH" in packet.data
             for packet in packets
@@ -204,10 +205,39 @@ def _run_player_command(sock: socket.socket) -> tuple[bool, bool, bool, bool]:
             if packet.command == 0x1C
         )
         death_seen = marker_seen
+        probe_armed = any(
+            b"GM_KILL_PROBE_ARMED" in packet.data
+            for packet in packets
+            if packet.command == 0x1C
+        )
         return death_seen
 
     _recv_until(sock, player_death_seen, timeout=PLAYER_DEATH_BOUND_SECONDS)
-    return True, death_seen, memory_seen, corpse_seen
+    memory_after = False
+    corpse_after = False
+    after_marker = False
+
+    def player_memory_after_seen(packets) -> bool:
+        nonlocal memory_after, corpse_after, after_marker
+        after_marker = any(
+            b"GM_KILL_PLAYER_MEMORY_AFTER " in packet.data
+            for packet in packets
+            if packet.command == 0x1C
+        )
+        memory_after = any(
+            b"GM_KILL_PLAYER_MEMORY_AFTER 1" in packet.data
+            for packet in packets
+            if packet.command == 0x1C
+        )
+        corpse_after = any(
+            b"GM_KILL_PLAYER_CORPSE_AFTER 1" in packet.data
+            for packet in packets
+            if packet.command == 0x1C
+        )
+        return after_marker
+
+    _recv_until(sock, player_memory_after_seen, timeout=3.5)
+    return True, death_seen, memory_seen, corpse_seen, memory_after, corpse_after, probe_armed, after_marker
 
 
 def main() -> int:
@@ -260,7 +290,7 @@ def main() -> int:
                         failures.append(
                             f".{command} UID intermediate did not preserve the linked object's AGE"
                         )
-                cursor, killed, memory_seen, corpse_seen = _run_player_command(sock)
+                cursor, killed, memory_seen, corpse_seen, memory_after, corpse_after, probe_armed, after_marker = _run_player_command(sock)
                 if not cursor:
                     failures.append(".KILL did not open a target cursor for the logged-in player")
                 elif not killed:
@@ -269,6 +299,14 @@ def main() -> int:
                     failures.append("player @DeathCorpse did not expose a MEMORY_FOLLOW object")
                 elif not corpse_seen:
                     failures.append("player MEMORY_FOLLOW did not link the corpse")
+                elif not probe_armed:
+                    failures.append("player corpse-memory probe item was not armed")
+                elif not after_marker:
+                    failures.append("player corpse-memory probe did not fire")
+                elif not memory_after:
+                    failures.append("player MEMORY_FOLLOW did not survive its first timer tick")
+                elif not corpse_after:
+                    failures.append("player MEMORY_FOLLOW lost its corpse link after its first timer tick")
             finally:
                 sock.close()
     except (OSError, RuntimeError, ValueError, struct.error) as error:
