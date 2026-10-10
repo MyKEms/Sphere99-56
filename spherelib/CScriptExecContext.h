@@ -2245,7 +2245,29 @@ public:
 			(IsGumpCommand(pszKey) || !_strnicmp(pszKey, "settext", 7))) )
 		{
 			fCallForm = SplitCallStatement(pszKey, pszArg);
-			if ( fCallForm && strchr(pszArg, '<') )
+			bool fNumericCallArg = false;
+			if ( pszArg && *pszArg )
+			{
+				const unsigned char* pArg = (const unsigned char*)pszArg;
+				fNumericCallArg = isdigit( pArg[0] ) &&
+					( pArg[1] == '\0' || isdigit( pArg[1]) ||
+					  (pArg[0] == '0' && isxdigit( pArg[1])) ||
+					  (pArg[0] == '0' && (pArg[1] == 'x' || pArg[1] == 'X')) );
+			}
+			if ( fCallForm && !_stricmp(pszKey, "EQUIP") && pszArg && *pszArg &&
+				!fNumericCallArg && !strchr(pszArg, '<') &&
+				!strchr(pszArg, ',') && !strchr(pszArg, ' ') )
+			{
+				// Route a bare object token through the normal escape resolver.
+				// LASTNEW and ACT then retain their live object serial; a DEFNAME
+				// retains its numeric resource spelling and follows stock's
+				// invalid-handle result in CChar::M_Equip.
+				snprintf(szCallArgs, sizeof(szCallArgs), "<%s>", pszArg);
+				const DWORD dwCallArgFlags = CSCRIPT_PARSE_OBJECT_SERIAL;
+				s_ParseEscapes(szCallArgs, dwCallArgFlags);
+				pszArg = szCallArgs;
+			}
+			else if ( fCallForm && strchr(pszArg, '<') )
 			{
 				// An expression can start in the part of the line that was
 				// read as the key, as in F_FUNC(<STRMATCH a,b>).
