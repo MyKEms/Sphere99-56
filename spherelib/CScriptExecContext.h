@@ -427,7 +427,18 @@ protected:
 
 			CGVariant vNext;
 			bool fFromFunction = false;
-			hRes = pCurrent->s_PropGet(szName, vNext, m_pSrc);
+			// 0.99 treats UID as an object-preserving hop inside a dotted
+			// chain.  This is distinct from SERIAL text: expressions such as
+			// MEMORYFINDTYPE(01000).LINK.UID.AGE use UID to retain the linked
+			// object before reading its AGE.  Keep the reference live instead
+			// of asking the object property table for a scalar UID property.
+			if ( !_stricmp(szName, "UID") && vArgs.IsEmpty() )
+			{
+				vNext.SetRef(pCurrent);
+				hRes = NO_ERROR;
+			}
+			else
+				hRes = pCurrent->s_PropGet(szName, vNext, m_pSrc);
 			rejected.Observe(hRes, szName, pCurrent);
 			if ( hRes != NO_ERROR )
 			{
