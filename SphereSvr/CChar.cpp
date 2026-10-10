@@ -1142,6 +1142,9 @@ HRESULT CChar::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pS
 	case P_Flag_Invul:
 		vValRet.SetBool( IsStatFlag( STATF_INVUL ));
 		break;
+	case P_Flag_Dead:
+		vValRet.SetBool( IsStatFlag( STATF_DEAD ));
+		break;
 	case P_Flag_Freeze:
 		vValRet.SetBool( IsStatFlag( STATF_Freeze ));
 		break;
