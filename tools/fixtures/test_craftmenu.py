@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import socket
 import sys
 import time
@@ -109,6 +110,7 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
 
         ref_prefixes = (
             MARKER + "|var-newitem=",
+            MARKER + "|arg-p=",
             MARKER + "|argv-newitem=",
             MARKER + "|argv-z=",
         )
@@ -119,16 +121,22 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
                 failures.append(f"craftmenu object-root marker was incomplete for {prefix!r}: {messages!r}")
                 return
             ref_values[prefix] = matches[0]
-        if ref_values[ref_prefixes[0]] == ref_values[ref_prefixes[1]]:
+        if ref_values[ref_prefixes[0]] == ref_values[ref_prefixes[2]]:
             failures.append(
                 "VAR(...).NEWITEM and ARGV(0).NEWITEM did not create distinct items: "
-                f"{ref_values!r}"
+                f"{ref_values!r}; messages={messages!r}"
             )
             return
-        if ref_values[ref_prefixes[2]] != "10":
+        if ref_values[ref_prefixes[1]] != "128,128,20":
+            failures.append(
+                "ARG(item).P assignment changed the point: "
+                f"expected 128,128,20, got {ref_values[ref_prefixes[1]]!r}; messages={messages!r}"
+            )
+            return
+        if ref_values[ref_prefixes[3]] != "10":
             failures.append(
                 "ARGV(0).Z assignment did not retain the referenced character: "
-                f"expected 10, got {ref_values[ref_prefixes[2]]!r}; messages={messages!r}"
+                f"expected 10, got {ref_values[ref_prefixes[3]]!r}; messages={messages!r}"
             )
             return
 
@@ -173,6 +181,24 @@ def main() -> int:
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
+    report_path = fixture / "logs" / "unknown-keywords.json"
+    if not report_path.exists():
+        failures.append("craftmenu unknown-keyword report was not written")
+    else:
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            failures.append(f"craftmenu unknown-keyword report was invalid: {error}")
+        else:
+            rejected = {
+                (entry.get("kind"), entry.get("keyword"))
+                for entry in report.get("entries", [])
+            }
+            for keyword in ("Z", "ARGV.*", "ARG.*"):
+                if ("rejected", keyword) in rejected:
+                    failures.append(
+                        f"craftmenu reference fallback reported speculative rejection {keyword!r}"
+                    )
     if failures:
         print("craftmenu probe failed", file=sys.stderr)
         for failure in failures:

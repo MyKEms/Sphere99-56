@@ -61,17 +61,39 @@ SYSMESSAGE {MARKER}|button|7
 RETURN 1
 
 [FUNCTION craftmenu_refs]
-// Keep the source character in a local VAR and exercise the three legacy
-// object-root forms that the craft helper uses on a live script tree.
+// Keep the source character in a local VAR and exercise the argument-held
+// object roots used by the wall-building helpers.  The two explicit helper
+// calls mirror the production start-trigger -> build-wall call chain.  The
+// second call intentionally reads the reference through VAR: call-form
+// script functions must preserve that live object instead of rendering it as
+// an empty display string.
+VAR(craft_source,<ARGV(0)>)
+F_craftmenu_build(<VAR(craft_source)>)
+RETURN 0
+
+[FUNCTION f_craftmenu_build]
 NEWITEM SYNTHETIC_CRAFT_SOURCE
 VAR(craft_root,<ARGV(0)>)
 VAR(craft_root).NEWITEM(SYNTHETIC_CRAFT_SOURCE)
 SYSMESSAGE {MARKER}|var-newitem=<LASTNEW.SERIAL>
+TAG(wallsCount,1)
+ARG(n,0)
+WHILE (<TAG(wallsCount)> > <ARG(n)>)
+ARG(craft_root,<LASTNEW>)
+ARG(craft_root).P=<P>
+SYSMESSAGE {MARKER}|arg-p=<ARG(craft_root).P>
 ARGV(0).NEWITEM(SYNTHETIC_CRAFT_SOURCE)
 SYSMESSAGE {MARKER}|argv-newitem=<LASTNEW.SERIAL>
+ARG(wall_root,<LASTNEW>)
+ARG(wall_root).P=<P>
+F_craftmenu_arg_property(<ARG(wall_root)>)
+ARG(n,#+1)
+ENDWHILE
+RETURN 0
+
+[FUNCTION f_craftmenu_arg_property]
 ARGV(0).Z=<ARGV(0).Z>-10
 SYSMESSAGE {MARKER}|argv-z=<ARGV(0).Z>
-RETURN 0
 
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
@@ -98,6 +120,15 @@ LASTCHARUID=3
         encoding="ascii",
     )
     (output / "accounts" / "sphereacct.scp").write_text("[EOF]\n", encoding="ascii")
+    sphere_ini = output / "sphere.ini"
+    sphere_ini.write_text(
+        sphere_ini.read_text(encoding="ascii").replace(
+            "DEBUGLEVEL=0\n",
+            "DEBUGLEVEL=0\nUNKNOWNKEYWORDREPORT=logs/unknown-keywords.json\n",
+            1,
+        ),
+        encoding="ascii",
+    )
     (output / "save" / "sphereworld.scp").write_text(
         'TITLE="Sphere synthetic craftmenu fixture"\n'
         'VERSION="0.99z8"\nSAVECOUNT=0\n[EOF]\n',

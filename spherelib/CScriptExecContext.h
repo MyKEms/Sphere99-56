@@ -2217,6 +2217,8 @@ public:
 					rejected.Observe(hRes, "ARG", m_pBaseObj);
 					if ( hRes != HRES_UNKNOWN_PROPERTY )
 					{
+						if ( hRes == NO_ERROR )
+							rejected.Clear();
 						rejected.RecordIfPresent();
 						return hRes;
 					}
@@ -2298,7 +2300,8 @@ public:
 				// argument; ordinary text expansion renders that reference as
 				// an empty string before M_Equip can resolve it.
 				const DWORD dwCallArgFlags = (!_stricmp(pszKey, "EQUIP") ||
-					!_stricmp(pszKey, "VAR") || ! _stricmp(pszKey, "DIALOG"))
+					!_stricmp(pszKey, "VAR") || ! _stricmp(pszKey, "DIALOG") ||
+					!_strnicmp(pszKey, "F_", 2) || IsScriptFunction(pszKey))
 					? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 				s_ParseEscapes(szCallArgs, dwCallArgFlags);
 				pszArg = szCallArgs;
@@ -2336,7 +2339,10 @@ public:
 				}
 				rejected.Observe(hRes, pszKey, m_pBaseObj);
 				if ( hRes == NO_ERROR )
+				{
+					rejected.Clear();
 					return NO_ERROR;
+				}
 			}
 
 			// Try as a method call (KEY args).
@@ -2348,6 +2354,8 @@ public:
 			// an unknown method may fall through to global/script dispatch.
 			if ( hRes != HRES_UNKNOWN_PROPERTY )
 			{
+				if ( hRes == NO_ERROR )
+					rejected.Clear();
 				rejected.RecordIfPresent();
 				return hRes;
 			}
@@ -2453,7 +2461,10 @@ public:
 						hRes = pRootObj->s_PropSet(pszDot + 1, vVal);
 						rejected.Observe(hRes, pszDot + 1, pRootObj);
 						if ( hRes == NO_ERROR )
+						{
+							rejected.Clear();
 							return NO_ERROR;
+						}
 					}
 					CGVariant vArgs(pszArg);
 					// Z is exposed as a method alias for the read-only P_Z
@@ -2471,6 +2482,8 @@ public:
 					// method; do not reinterpret them as an unknown global method.
 					if ( hRes != HRES_UNKNOWN_PROPERTY )
 					{
+						if ( hRes == NO_ERROR )
+							rejected.Clear();
 						rejected.RecordIfPresent();
 						return hRes;
 					}
@@ -2509,7 +2522,10 @@ public:
 							m_fSpaceSeparatedFunctionArgs = fPreviousSpaceCall;
 							rejected.Observe(hRes, pszDot + 1, pRootObj);
 							if ( hRes == NO_ERROR )
+							{
+								rejected.Clear();
 								return NO_ERROR;
+							}
 						}
 					}
 				}
