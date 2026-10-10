@@ -20,6 +20,7 @@ MARKER = "SPHERE_SCRIPT_GAPS"
 ROW_RE = re.compile(re.escape(MARKER) + r" ([a-z0-9_]+)(?:\|\[(.*)\]|)$")
 EXPECTED = {
     "flag_initial": "0",
+    "flag_dead": "0",
     "flag_property": "1",
     "flag_method": "0",
     "find0": "synthetic gap child one",
@@ -132,7 +133,7 @@ def main() -> int:
         unexpected = [
             entry
             for entry in report.get("entries", [])
-            if str(entry.get("keyword", "")).upper() in {"FINDCONT", "FLAG_IMMOBILE"}
+            if str(entry.get("keyword", "")).upper() in {"FINDCONT", "FLAG_DEAD", "FLAG_IMMOBILE"}
         ]
         if unexpected:
             failures.append(f"target keywords still reported unknown: {unexpected!r}")
