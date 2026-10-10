@@ -49,6 +49,9 @@ ON=@DeathCorpse
 ARG(follow,<MEMORYFINDTYPE(01000)>)
 SYSMESSAGE GM_KILL_PLAYER_MEMORY <ISUIDVALID <ARG(follow)>>
 SYSMESSAGE GM_KILL_PLAYER_CORPSE <ISUIDVALID <ARG(follow).LINK>>
+SRC.NEWITEM=SYNTHETIC_CORPSE_MEMORY_PROBE
+EQUIP(<LASTNEW>)
+SYSMESSAGE GM_KILL_PROBE_ARMED <LASTNEW.SERIAL>
 RETURN 0
 ON=@EnvironChange
 """,
@@ -64,11 +67,28 @@ DEFNAME=T_EQ_MEMORY_OBJ
 [ITEMDEF 0x2006]
 DEFNAME=i_corpse
 NAME=synthetic corpse
+// The compact fixture has no script-level T_CORPSE constant; 108 is the
+// engine's IT_CORPSE value and keeps the synthetic corpse on the same path.
+TYPE=108
 
 [ITEMDEF 0x2007]
 DEFNAME=i_memory
 TYPE=T_EQ_MEMORY_OBJ
 LAYER=30
+
+[ITEMDEF 0x2008]
+DEFNAME=SYNTHETIC_CORPSE_MEMORY_PROBE
+NAME=synthetic corpse memory probe
+TYPE=T_EQ_SCRIPT
+LAYER=30
+ON=@Equip
+TIMER=2
+ON=@Timer
+ARG(follow,<CONT.MEMORYFINDTYPE(01000)>)
+CONT.SYSMESSAGE GM_KILL_PLAYER_MEMORY_AFTER <ISUIDVALID <ARG(follow)>>
+CONT.SYSMESSAGE GM_KILL_PLAYER_CORPSE_AFTER <ISUIDVALID <ARG(follow).LINK>>
+REMOVE
+RETURN 1
 
 [CHARDEF {NPC_DEFNAME}]
 DEFNAME={NPC_DEFNAME}
@@ -143,7 +163,7 @@ RETURN 1
         ]
     )
     chars.write_text(char_text.replace("[EOF]", insert + "\n[EOF]"), encoding="ascii")
-    write_mul_fixture(output, extra_item_id=0x2007)
+    write_mul_fixture(output, extra_item_id=0x2008)
 
     return 0
 
