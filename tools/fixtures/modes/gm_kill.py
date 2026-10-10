@@ -65,6 +65,8 @@ STAM=10
 
 [EVENTS e_synthetic_gm_kill]
 ON=@Death
+ARG(memory,<MEMORYFINDTYPE(0209c)>)
+SAY GM_KILL_DEATH_LINK <ISUIDVALID <ARG(memory).LINK>>
 SAY GM_KILL_DEATH
 """,
         encoding="ascii",
@@ -96,6 +98,20 @@ SAY GM_KILL_DEATH
             "MANA=100",
             "STAM=100",
             "P=130,129,0",
+            "",
+            "[WORLDITEM i_memory]",
+            "SERIAL=6",
+            "COLOR=0200",
+            "LINK=3",
+            "LAYER=30",
+            "CONT=4",
+            "",
+            "[WORLDITEM i_memory]",
+            "SERIAL=7",
+            "COLOR=0200",
+            "LINK=3",
+            "LAYER=30",
+            "CONT=5",
         ]
     )
     chars.write_text(char_text.replace("[EOF]", insert + "\n[EOF]"), encoding="ascii")

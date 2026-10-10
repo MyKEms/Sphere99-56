@@ -777,6 +777,28 @@ protected:
 			 !_stricmp(pszRoot, "LASTNEWCHAR"));
 	}
 
+	// Nested object references are arguments to the surrounding expression,
+	// rather than text.  Keep their UID while expanding the inner escape so
+	// predicates such as ISUIDVALID(<ARG(mem).LINK>) receive the live object.
+	// Ordinary text references retain their display form.
+	static bool HasNestedObjectReference(LPCTSTR pszExpr)
+	{
+		if ( pszExpr == NULL )
+			return false;
+		static LPCTSTR const sm_roots[] = { "ARG(", "ARGV(", "TAG(", NULL };
+		for ( LPCTSTR p = pszExpr; *p; p++ )
+		{
+			if ( *p != '<' )
+				continue;
+			for ( int i = 0; sm_roots[i] != NULL; i++ )
+			{
+				if ( !_strnicmp( p + 1, sm_roots[i], strlen(sm_roots[i]) ) )
+					return true;
+			}
+		}
+		return false;
+	}
+
 public:
 	// Numeric expressions (IF, ELIF, WHILE, RETURN, EVAL) read a bare
 	// reference operand such as SRC.STR, SECTOR.LIGHT or FINDUID(uid).NAME
@@ -1813,7 +1835,10 @@ public:
 				TCHAR* pszExpr = szNestedExpr; // skip '<?'
 
 				// Recursively resolve inner <...> and <?...?> tags.
-				s_ParseEscapes(pszExpr, dwFlags);
+				DWORD dwNestedFlags = dwFlags;
+				if ( HasNestedObjectReference(pszExpr) )
+					dwNestedFlags |= CSCRIPT_PARSE_OBJECT_SERIAL;
+				s_ParseEscapes(pszExpr, dwNestedFlags);
 
 				// Check for "safe" prefix.
 				bool fSafe = false;
@@ -1925,7 +1950,10 @@ public:
 			TCHAR* pszExpr = szNestedExpr;
 
 			// Recursively resolve any nested <...> first.
-			s_ParseEscapes(pszExpr, dwFlags);
+			DWORD dwNestedFlags = dwFlags;
+			if ( HasNestedObjectReference(pszExpr) )
+				dwNestedFlags |= CSCRIPT_PARSE_OBJECT_SERIAL;
+			s_ParseEscapes(pszExpr, dwNestedFlags);
 
 			// Check for "safe" prefix.
 			bool fSafe = false;
@@ -2990,6 +3018,7 @@ public:
 						// empty scalar.
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
+							!_stricmp(szKey, "ARG") ||
 							// Native EQUIP consumes an object reference.  Preserve
 							// LASTNEW's serial when it is used as its argument; the
 							// ordinary text spelling of a live item is empty.
