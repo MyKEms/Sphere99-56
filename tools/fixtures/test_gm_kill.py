@@ -130,18 +130,25 @@ def _run_command(
     sock: socket.socket,
     command: str,
     serial: int,
-) -> tuple[bool, bool, float | None]:
+) -> tuple[bool, bool, float | None, bool]:
     sock.sendall(_talk(f".{command}"))
     target_data = _recv_until(sock, lambda packets: _target_context(packets) is not None)
     context = _target_context(_decode(target_data))
     if context is None:
-        return False, False, None
+        return False, False, None, False
     started = time.monotonic()
     sock.sendall(_make_target(context, serial))
     death_at = [None]
+    reference_seen = False
 
     def death_seen(packets) -> bool:
+        nonlocal reference_seen
         marker_seen = any(b"GM_KILL_DEATH" in packet.data for packet in packets if packet.command == 0x1C)
+        reference_seen = any(
+            b"GM_KILL_DEATH_LINK 1" in packet.data
+            for packet in packets
+            if packet.command == 0x1C
+        )
         if marker_seen and _has_death_or_corpse(packets, serial):
             death_at[0] = time.monotonic()
             return True
@@ -149,7 +156,7 @@ def _run_command(
 
     _recv_until(sock, death_seen, timeout=DEATH_BOUND_SECONDS)
     delay = None if death_at[0] is None else death_at[0] - started
-    return True, delay is not None and delay <= DEATH_BOUND_SECONDS, delay
+    return True, delay is not None and delay <= DEATH_BOUND_SECONDS, delay, reference_seen
 
 
 def main() -> int:
@@ -183,12 +190,16 @@ def main() -> int:
                     ("GM KillAnimalOne", "GM KillAnimalTwo"),
                 ):
                     expected_logs.append(f"'{target_name}' was KILLed by 'GmKillProbe'")
-                    cursor, killed, delay = _run_command(sock, command, serial)
+                    cursor, killed, delay, reference_seen = _run_command(sock, command, serial)
                     if not cursor:
                         failures.append(f".{command} did not open a target cursor")
                     elif not killed:
                         failures.append(
                             f".{command} did not emit death and '{target_name}' was KILLed by 'GmKillProbe' within one engine tick"
+                        )
+                    elif not reference_seen:
+                        failures.append(
+                            f".{command} @Death memoryfindtype reference did not remain a valid UID"
                         )
             finally:
                 sock.close()
