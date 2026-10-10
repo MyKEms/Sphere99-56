@@ -67,7 +67,14 @@ STAM=10
 ON=@Death
 ARG(memory,<MEMORYFINDTYPE(0209c)>)
 SAY GM_KILL_DEATH_LINK <ISUIDVALID <ARG(memory).LINK>>
+SAY GM_KILL_ACT_REF <SRC.ACT.f_probe_source_act>
 SAY GM_KILL_DEATH
+
+[FUNCTION f_probe_source_act]
+ACT=0
+ACT=<SRC.ACT>
+SAY GM_KILL_RESTORED_ACT <ISUIDVALID <ACT>>
+RETURN 1
 """,
         encoding="ascii",
     )

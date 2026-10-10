@@ -722,6 +722,7 @@ protected:
 	static bool IsObjectAssignmentKey(LPCTSTR pszKey)
 	{
 		return IsContainerAssignmentKey(pszKey) ||
+			(pszKey != NULL && !_stricmp(pszKey, "ACT")) ||
 			(pszKey != NULL && !_stricmp(pszKey, "LINK")) ||
 			(pszKey != NULL && !_stricmp(pszKey, "SRC"));
 	}
