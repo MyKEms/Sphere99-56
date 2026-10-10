@@ -2248,6 +2248,10 @@ bool CChar::Death()
 
 	// This can return NULL
 	CItemCorpsePtr pCorpse = MakeCorpse( Calc_GetRandVal(2));
+	if ( pCorpse != NULL && m_pPlayer.IsValidNewObj())
+	{
+		Memory_AddObjTypes( pCorpse, MEMORY_FOLLOW );
+	}
 
 	m_StatHealth = 0;	// on my way to death.
 
