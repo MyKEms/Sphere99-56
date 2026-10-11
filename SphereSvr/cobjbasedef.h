@@ -981,6 +981,7 @@ public:
 
 	virtual HRESULT s_PropSet( LPCTSTR pszKey, CGVariant& vVal );
 	virtual HRESULT s_PropGet( LPCTSTR pszKey, CGVariant& vVal, CScriptConsole* pSrc );
+	virtual HRESULT s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc );
 	virtual bool s_LoadProps( CScript& s );
 
 	CCharDef( CREID_TYPE id );
