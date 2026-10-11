@@ -95,9 +95,9 @@ NPC=brain_human
 
 [FUNCTION ismyguard]
 IF (<NPC>)
-  IF (<TYPEDEF.TAG.GUARD>)
+  IF (TYPEDEF.TAG(GUARD))
     IF (<SRC.ISPLAYER>)
-      IF (<TYPEDEF.TAG.GUARD> == 1)
+      IF (<TYPEDEF.TAG(GUARD)> == 1)
         IF (<SRC.TAG.REALM> > 0)
           IF (!(<SRC.FLAG_CRIMINAL>))
             IF (!(<SRC.ISMURDERER>))

@@ -376,6 +376,15 @@ HRESULT CCharDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 	return NO_ERROR;
 }
 
+HRESULT CCharDef::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc )
+{
+	// Character-definition tags support both stock forms: TAG.name and
+	// TYPEDEF.TAG(name).  The latter is used by faction guard scripts.
+	if ( !_stricmp( pszKey, "TAG" ))
+		return m_TagDefs.s_MethodTags( vArgs, vValRet, pSrc );
+	return CResourceDef::s_Method( pszKey, vArgs, vValRet, pSrc );
+}
+
 bool CCharDef::s_LoadProps( CScript& s )
 {
 	CResourceObj::s_LoadProps(s);
