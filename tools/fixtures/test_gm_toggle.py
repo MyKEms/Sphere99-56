@@ -198,6 +198,43 @@ def _click(sock: socket.socket) -> tuple[list[str], list[int]]:
     return [text for packet in packets if (text := _text(packet))], [packet.command for packet in packets]
 
 
+def _scripted_relocate(gm_sock: socket.socket, player_sock: socket.socket) -> bool:
+    """Move a connected character through the scripted P property.
+
+    The target cursor is the same protocol path used by an in-game GM.  The
+    moved character must receive a self movement packet, otherwise its client
+    keeps the old position even though the server-side object moved.
+    """
+    target_x, target_y, target_z = 140, 129, 0
+    gm_sock.sendall(_talk(f".SET P={target_x},{target_y},{target_z}"))
+    target_packets = _decode(_recv_until(
+        gm_sock,
+        lambda decoded: any(packet.command == 0x6C and len(packet.data) >= 6 for packet in decoded),
+        timeout=4.0,
+    ))
+    cursor = next((packet for packet in target_packets if packet.command == 0x6C and len(packet.data) >= 6), None)
+    if cursor is None:
+        return False
+    context = struct.unpack_from(">I", cursor.data, 2)[0]
+    gm_sock.sendall(struct.pack(">BBIBIHHBBH", 0x6C, 1, context, 0, 0x40000003, target_x, target_y, 0, target_z, 0))
+    moved = _decode(_recv_until(
+        player_sock,
+        lambda decoded: any(
+            packet.command == 0x20
+            and len(packet.data) >= 19
+            and struct.unpack_from(">HHb", packet.data, 11) == (target_x, target_y, target_z)
+            for packet in decoded
+        ),
+        timeout=4.0,
+    ))
+    return any(
+        packet.command == 0x20
+        and len(packet.data) >= 19
+        and struct.unpack_from(">HHb", packet.data, 11) == (target_x, target_y, target_z)
+        for packet in moved
+    )
+
+
 def _walk(sock: socket.socket, direction: int, sequence: int):
     sock.sendall(struct.pack(">BBBI", 0x02, direction, sequence, 0))
     packets = _decode(_recv_until(
@@ -225,6 +262,9 @@ def run_probe(port: int) -> list[str]:
         # movement while the privileged character toggles its own mode. This
         # guards the run/door/plane movement paths against privilege leakage.
         player_sock = _enter_plain_player(port)
+        _drain(player_sock, 0.5)
+        if not _scripted_relocate(sock, player_sock):
+            failures.append("scripted P relocation did not publish a self movement packet")
         player_walk = _walk(player_sock, 2, 3)
         player_commands = [packet.command for packet in player_walk]
         if 0x22 not in player_commands:
