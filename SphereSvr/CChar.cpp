@@ -1682,10 +1682,19 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		}
 		break;
 
-	case M_MemoryFindType:	// Find a type of memory.
-		if ( vArgs.IsEmpty())
-			return HRES_BAD_ARG_QTY;
-		vValRet.SetRef( Memory_FindTypes( vArgs.GetDWORD()));
+	case M_MemoryFindType: // Find a type of memory.
+		{
+			if ( vArgs.IsEmpty())
+				return HRES_BAD_ARG_QTY;
+			// Dotted script calls pass method arguments as their original text.
+			// Resolve symbolic memory masks (for example MEMORY_ISPAWNED) before
+			// looking up the memory object; numeric and hexadecimal forms keep their
+			// existing conversion path.
+			DWORD dwMemTypes = vArgs.IsNumeric()
+				? vArgs.GetDWORD()
+				: static_cast<DWORD>(Exp_GetValue( vArgs.GetPSTR()));
+			vValRet.SetRef( Memory_FindTypes( static_cast<WORD>(dwMemTypes)));
+		}
 		break;
 
 	case M_Memory:		// Do something with the memory of this pSrc.
