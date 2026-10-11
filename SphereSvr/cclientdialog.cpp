@@ -140,7 +140,13 @@ protected:
 			return true;	// comment
 		if ( !_strnicmp( szLine, "argo.", 5 ))
 		{
-			s_ParseEscapes( szLine, 0 );
+			// TAG assignments can carry an object-valued escape (the stock
+			// craft menu stores its source item in ARGO.TAG). Preserve that
+			// object's serial while expanding the layout line.
+			const bool fTagCall = !_strnicmp(szLine + 5, "tag(", 4) ||
+				!_strnicmp(szLine + 5, "tag ", 4) || IsTagMethodName(szLine + 5);
+			s_ParseEscapes( szLine, fTagCall
+				? CSCRIPT_PARSE_OBJECT_SERIAL : 0 );
 			AddArgoLine( szLine + 5 );
 			return true;
 		}
