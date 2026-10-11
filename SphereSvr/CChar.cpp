@@ -2411,7 +2411,7 @@ void CChar::s_WriteProps( CScript& s )
 		if ( CChar::IsSkillNPC( Skill_GetActive()))
 			s.WriteKeyInt( "ACTION", Skill_GetActive());
 		else
-			s.WriteKey( "ACTION", g_Cfg.ResourceGetName( CSphereUID( RES_Skill, Skill_GetActive())));
+			s.WriteKey( "ACTION", g_Cfg.GetSkillKey( Skill_GetActive()));
 
 		if ( m_Act.m_atUnk.m_Arg1 )
 		{
