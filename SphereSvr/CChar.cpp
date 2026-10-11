@@ -1346,6 +1346,20 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 			}
 			SKILL_TYPE iSkill = g_Cfg.FindSkillKey( pszAction, true );
 			if ( iSkill == SKILL_NONE )
+			{
+				// Saved 0.99 characters use the skill DEFNAME (for example
+				// SKILL_MAGERY), while FindSkillKey intentionally matches the
+				// script KEY (Magery).  Resolve the typed DEFNAME only after the
+				// ordinary key/numeric forms have failed.
+				int iSkillIndex = g_Cfg.ResourceGetIndexType( RES_Skill, pszAction );
+				if ( iSkillIndex >= 0 )
+				{
+					SKILL_TYPE iNamedSkill = (SKILL_TYPE) iSkillIndex;
+					if ( CChar::IsSkillBase( iNamedSkill ) || CChar::IsSkillNPC( iNamedSkill ))
+						iSkill = iNamedSkill;
+				}
+			}
+			if ( iSkill == SKILL_NONE )
 				return HRES_INVALID_INDEX;
 			Skill_Start( iSkill );
 			break;
