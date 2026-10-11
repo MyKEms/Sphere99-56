@@ -110,7 +110,7 @@ MODE = register_mode(
             name="arg-property-assignment",
             mode="arg-property-assignment",
             tests=(TestCase("test_arg_property_assignment.py", (), True, True),),
-            ports={"native": 3170, "asan": 3171},
+            ports={"native": 3182, "asan": 3183},
             output="arg-property-assignment",
         ),
     )
