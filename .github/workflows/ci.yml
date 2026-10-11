@@ -75,9 +75,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   asan:
-    name: Build (ASan/UBSan x86-64)
+    name: Build (ASan/UBSan x86-64, shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       SPHERE_FIXTURE_BINARY: ${{ github.workspace }}/build/asan/sphere99svr
     steps:
@@ -136,6 +140,7 @@ jobs:
         uses: ./.github/actions/fixture-suite
         with:
           variant: asan
+          shard: "${{ matrix.shard }}/2"
 
       - name: Run integrity watchdog fixture under ASan/UBSan
         env:
@@ -256,9 +261,13 @@ jobs:
         run: shellcheck tools/*.sh
 
   fixture:
-    name: Headless synthetic fixture (32-bit Linux)
+    name: Headless synthetic fixture (32-bit Linux, shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       SPHERE_FIXTURE_BINARY: ${{ github.workspace }}/sphere99svr
     steps:
@@ -276,6 +285,7 @@ jobs:
         uses: ./.github/actions/fixture-suite
         with:
           variant: native
+          shard: "${{ matrix.shard }}/2"
 
       - name: Upload fixture server logs on failure
         if: failure()
