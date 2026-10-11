@@ -525,6 +525,13 @@ HRESULT CRaceClassDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		const int iRegen = STAT_Health + atoi( pszKey + 6 ) - 1;
 		if ( iRegen < STAT_Health || iRegen > STAT_Fame )
 			return HRES_INVALID_INDEX;
+		if ( iRegen == STAT_Food )
+		{
+			// 0.99 accepts REGEN_4 in race sections, but food keeps the
+			// server's fixed cadence.  Applying this legacy value turns a
+			// value such as REGEN_4=1 into a one-second drain.
+			return NO_ERROR;
+		}
 		int iSeconds = Exp_GetValue( vVal.GetPSTR());
 		return SetRegenRate(
 			(STAT_TYPE)iRegen,

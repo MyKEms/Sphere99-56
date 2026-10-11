@@ -28,7 +28,9 @@ DEFNAME=race_undeclared
 REGEN_1=1
 REGEN_2=1
 REGEN_3=1
-REGEN_4=1*60*24
+# Stock keeps the fixed food cadence; a legacy REGEN_4 value must not turn
+# food decay into a one-second timer.
+REGEN_4=1
 REGEN_5=1*60*48
 
 [ITEMDEF 0x0E8D]
