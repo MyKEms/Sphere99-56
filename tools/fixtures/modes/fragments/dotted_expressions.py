@@ -35,6 +35,14 @@ DOTTED_EXPRESSION_ROWS = (
     ("src_serial", "<src.serial>", "CI"),
     ("serv_name", "<serv.name>", "C"),
     ("var_paren", "<var(dotted_probe_var)>", "C"),
+    # A global VAR may use the same spelling as a live object's property.
+    # Keep the explicit VAR() read as the shadow value while a bare P must
+    # resolve against the active character, as SRC.P does.
+    ("base_p", "<src.p>", "C"),
+    ("bare_p", "<p>", "C"),
+    ("var_p", "<var(p)>", "C"),
+    ("bare_name", "<name>", "C"),
+    ("bare_defname", "<dotted_probe_const>", "C"),
     ("eval_decimal", "<eval 5*1.5>", "CI"),
     ("eval_decimal_zero", "<eval 30.0>", "C"),
     ("eval_paren_decimal", "<eval(2.5)>", "C"),

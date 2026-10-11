@@ -1050,6 +1050,14 @@ bool CSphereExpContext::ValidateUIDReference(const CGVariant& value,
 	return false;
 }
 
+bool CSphereExpContext::ShouldPreferBaseObjectProperty(LPCTSTR pszExpr)
+{
+	if ( pszExpr == NULL || *pszExpr == '\0' )
+		return false;
+	CGVariant vGlobal;
+	return g_Cfg.m_Var.FindKeyVar(pszExpr, vGlobal);
+}
+
 void CSphereExpContext::InitFunctions()	// static
 {
 	if ( sm_FunctionsAll.GetSize())
