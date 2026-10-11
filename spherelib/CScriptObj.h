@@ -121,6 +121,16 @@ public:
 		return true;
 	}
 
+	// Property/method dispatch probes a property before trying its legacy
+	// method alias.  A successful fallback resolves the command, so discard
+	// the speculative rejection instead of reporting a false unknown.
+	void Clear()
+	{
+		m_pObj = NULL;
+		m_szKeyword[0] = '\0';
+		m_fRejected = false;
+	}
+
 private:
 	const CScriptObj* m_pObj;
 	TCHAR m_szKeyword[256];
