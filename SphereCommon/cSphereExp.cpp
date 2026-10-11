@@ -1018,6 +1018,13 @@ bool CSphereExpContext::FormatSafeReference(LPCTSTR pszExpr, CGString& sResult)
 	if ( pszExpr == NULL || *pszExpr == '\0' || strchr(pszExpr, '.') ||
 		strchr(pszExpr, '(') || strchr(pszExpr, '[') )
 		return false;
+	// ``safe`` also reads global VAR values.  A craftmenu table stores the
+	// freshly-created source item in ``def_cm_<skill>`` and then tests that
+	// value through the bare dynamic name.  Do not reinterpret the variable
+	// name as a resource DEFNAME; preserve the value already resolved above.
+	CGVariant vGlobal;
+	if ( g_Cfg.m_Var.FindKeyVar(pszExpr, vGlobal) )
+		return false;
 	CSphereUID rid = g_Cfg.ResourceGetIDByName(RES_UNKNOWN, pszExpr);
 	if ( !rid.IsValidRID() )
 		return false;
@@ -1392,9 +1399,19 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			if ( vArgs.GetRef() == NULL && pszUID && *pszUID && !vArgs.IsNumeric())
 			{
 				CGVariant vResolved;
-				CScriptUnknownRejectTracker rejected;
-				if ( EvaluateEscapeValue(pszUID, vResolved, rejected) )
+				// Craftmenu keeps each generated source object in a global
+				// ``def_cm_<skill>`` VAR and resolves it through FINDUID in the
+				// next call.  Resolve that bare variable before the generic
+				// expression path; the latter treats an unresolved bare token as
+				// the current object shorthand.
+				if ( g_Cfg.m_Var.FindKeyVar(pszUID, vResolved) )
 					vUID = vResolved;
+				else
+				{
+					CScriptUnknownRejectTracker rejected;
+					if ( EvaluateEscapeValue(pszUID, vResolved, rejected) )
+						vUID = vResolved;
+				}
 			}
 			if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vUID.GetRef()) )
 				vValRet.SetRef(pObj);

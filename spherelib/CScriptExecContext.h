@@ -184,20 +184,28 @@ protected:
 			}
 		}
 		bool fTagRoot = pszFunctionRoot && !_stricmp(pszFunctionRoot, "TAG");
-		if ( pObj == NULL && pszFunctionRoot && (value.IsNumeric() || fHashUID || fTagRoot) )
+		// Global VAR() and local ARGV()/ARG() helpers may serialize a live
+		// object as a non-numeric string (for example an empty reference or a
+		// legacy UID token).  Their function name is the authority that this
+		// value is an object root; do not send it through resource lookup just
+		// because the scalar spelling is not numeric.
+		bool fUIDRoot = pszFunctionRoot &&
+			(IsScriptFunction(pszFunctionRoot) ||
+			 !_stricmp(pszFunctionRoot, "ARG") ||
+			 !_stricmp(pszFunctionRoot, "ARGV") ||
+			 !_stricmp(pszFunctionRoot, "TAG") ||
+			 !_stricmp(pszFunctionRoot, "VAR") ||
+			 !_stricmp(pszFunctionRoot, "LASTNEW") ||
+			 !_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
+			 !_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
+			 m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL);
+		if ( pObj == NULL && pszFunctionRoot &&
+			(value.IsNumeric() || fHashUID || fTagRoot || fUIDRoot) )
 		{
 			// Script functions and the reference-valued argument helpers return
 			// object UIDs as strings. Named ARG locals can hold the same UID after
 			// ARGV() copies a function argument, so all of these roots use the
 			// engine's UID resolver before property chaining continues.
-			bool fUIDRoot = IsScriptFunction(pszFunctionRoot) ||
-				!_stricmp(pszFunctionRoot, "ARG") ||
-				!_stricmp(pszFunctionRoot, "ARGV") ||
-				!_stricmp(pszFunctionRoot, "TAG") ||
-				!_stricmp(pszFunctionRoot, "LASTNEW") ||
-				!_stricmp(pszFunctionRoot, "LASTNEWITEM") ||
-				!_stricmp(pszFunctionRoot, "LASTNEWCHAR") ||
-				m_LocalArgs.FindKeyPtr(pszFunctionRoot) != NULL;
 			// A DEFNAME written with the #<hex-serial> spelling is already an
 			// object UID alias.  Unlike an ordinary numeric/resource DEFNAME, it
 			// must resolve through the world table before dotted properties run.
@@ -445,7 +453,14 @@ protected:
 				hRes = pCurrent->s_Method(szName, vArgs, vNext, m_pSrc);
 				rejected.Observe(hRes, szName, pCurrent);
 				if ( hRes == NO_ERROR )
+				{
 					fEffect = true;
+					// TAG(name) returns a stored object UID string in 0.99.
+					// Keep the TAG root marker so the next dotted segment can
+					// resolve that string back to its live object.
+					if ( !_stricmp(szName, "TAG") )
+						fFromFunction = true;
+				}
 			}
 			if ( hRes != NO_ERROR )
 			{
@@ -779,6 +794,15 @@ protected:
 				return true;
 		}
 		return false;
+	}
+
+	// ARG(name) can be an object root for a command chain as well as for an
+	// escape expression.  Keep this narrow so ordinary dotted commands retain
+	// their legacy setter/method precedence; the chain walker is needed only
+	// when the first segment is the reference-valued ARG helper.
+	static bool HasArgObjectRoot(LPCTSTR pszKey)
+	{
+		return pszKey != NULL && !_strnicmp(pszKey, "ARG(", 4);
 	}
 
 	static bool IsLastNewRoot(LPCTSTR pszRoot)
@@ -1498,6 +1522,40 @@ public:
 			}
 		}
 
+		// Preserve the common stock spelling ``!(safe expression)``.  The
+		// outer negation otherwise reaches the arithmetic reader before the
+		// SAFE reference path can resolve the dotted object chain.  Only a
+		// negation whose parenthesis closes at the end of the expression is
+		// unwrapped: ``!(a) && (b)`` is a compound condition, not ``!(a && b)``.
+		bool fNegatedWhole = false;
+		TCHAR* pszLast = pszExpr + strlen(pszExpr);
+		if ( pszExpr[0] == '!' && pszExpr[1] == '(' && pszLast > pszExpr + 3 &&
+			pszLast[-1] == ')' )
+		{
+			int iDepth = 0;
+			for ( TCHAR* p = pszExpr + 1; p < pszLast; ++p )
+			{
+				if ( *p == '(' )
+					++iDepth;
+				else if ( *p == ')' && --iDepth == 0 )
+				{
+					fNegatedWhole = ( p == pszLast - 1 );
+					break;
+				}
+			}
+		}
+		if ( fNegatedWhole )
+		{
+			const size_t iInnerLen = static_cast<size_t>(pszLast - pszExpr - 3);
+			if ( iInnerLen < SCRIPT_MAX_LINE_LEN )
+			{
+				TCHAR szInner[SCRIPT_MAX_LINE_LEN];
+				memcpy(szInner, pszExpr + 2, iInnerLen);
+				szInner[iInnerLen] = '\0';
+				return !GetScriptExpression(szInner, iBufCapacity);
+			}
+		}
+
 		// 0.99 uses a space-separated SAFE prefix in numeric conditions,
 		// notably `safe finduid(uid).isChar`.  The generic arithmetic reader
 		// otherwise sees SAFE as an ordinary identifier and never dispatches
@@ -2197,6 +2255,8 @@ public:
 					rejected.Observe(hRes, "ARG", m_pBaseObj);
 					if ( hRes != HRES_UNKNOWN_PROPERTY )
 					{
+						if ( hRes == NO_ERROR )
+							rejected.Clear();
 						rejected.RecordIfPresent();
 						return hRes;
 					}
@@ -2277,7 +2337,9 @@ public:
 				// the live object's serial while expanding its call-form
 				// argument; ordinary text expansion renders that reference as
 				// an empty string before M_Equip can resolve it.
-				const DWORD dwCallArgFlags = !_stricmp(pszKey, "EQUIP")
+				const DWORD dwCallArgFlags = (!_stricmp(pszKey, "EQUIP") ||
+					!_stricmp(pszKey, "VAR") || ! _stricmp(pszKey, "DIALOG") ||
+					!_strnicmp(pszKey, "F_", 2) || IsScriptFunction(pszKey))
 					? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 				s_ParseEscapes(szCallArgs, dwCallArgFlags);
 				pszArg = szCallArgs;
@@ -2315,7 +2377,10 @@ public:
 				}
 				rejected.Observe(hRes, pszKey, m_pBaseObj);
 				if ( hRes == NO_ERROR )
+				{
+					rejected.Clear();
 					return NO_ERROR;
+				}
 			}
 
 			// Try as a method call (KEY args).
@@ -2327,6 +2392,8 @@ public:
 			// an unknown method may fall through to global/script dispatch.
 			if ( hRes != HRES_UNKNOWN_PROPERTY )
 			{
+				if ( hRes == NO_ERROR )
+					rejected.Clear();
 				rejected.RecordIfPresent();
 				return hRes;
 			}
@@ -2338,7 +2405,8 @@ public:
 		// object lookup is not mistaken for a property and dispatched a second
 		// time below. Other dotted commands retain their normal setter/method
 		// precedence (for example LASTNEW.ATTR(...)).
-		if ( pObj && !fPropertySet && strchr(pszKey, '.') && HasFindObjectSegment(pszKey) )
+		if ( pObj && !fPropertySet && strchr(pszKey, '.') &&
+			(HasFindObjectSegment(pszKey) || HasArgObjectRoot(pszKey)) )
 		{
 			TCHAR szChainExpr[SCRIPT_MAX_LINE_LEN];
 			if ( *pszArg )
@@ -2432,9 +2500,20 @@ public:
 						hRes = pRootObj->s_PropSet(pszDot + 1, vVal);
 						rejected.Observe(hRes, pszDot + 1, pRootObj);
 						if ( hRes == NO_ERROR )
+						{
+							rejected.Clear();
 							return NO_ERROR;
+						}
 					}
 					CGVariant vArgs(pszArg);
+					// Z is exposed as a method alias for the read-only P_Z
+					// property.  Its assignment form accepts a numeric script
+					// expression (for example ARGV(0).Z=<ARGV(0).Z>-10),
+					// whereas the generic method path must preserve literal
+					// arguments for every other object method.
+					if ( fPropertySet &&
+						(!_stricmp(pszDot + 1, "Z") || !_stricmp(pszDot + 1, "P_Z")) )
+						vArgs.SetInt(GetComplex(pszArg));
 					CGVariant vValRet;
 					hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
@@ -2442,6 +2521,8 @@ public:
 					// method; do not reinterpret them as an unknown global method.
 					if ( hRes != HRES_UNKNOWN_PROPERTY )
 					{
+						if ( hRes == NO_ERROR )
+							rejected.Clear();
 						rejected.RecordIfPresent();
 						return hRes;
 					}
@@ -2480,7 +2561,10 @@ public:
 							m_fSpaceSeparatedFunctionArgs = fPreviousSpaceCall;
 							rejected.Observe(hRes, pszDot + 1, pRootObj);
 							if ( hRes == NO_ERROR )
+							{
+								rejected.Clear();
 								return NO_ERROR;
+							}
 						}
 					}
 				}
@@ -3025,8 +3109,11 @@ public:
 								IsScriptFunction(pszCallFunction);
 						}
 						DWORD dwKeyFlags = (!_strnicmp(szKey, "ARG(", 4) ||
+							IsTagMethodName(szKey) ||
 							!_strnicmp(szKey, "TAG(", 4) ||
 							!_strnicmp(szKey, "EQUIP(", 6) ||
+							!_strnicmp(szKey, "VAR(", 4) ||
+							!_strnicmp(szKey, "DIALOG(", 7) ||
 							HasContainerAssignmentArgument(szKey) ||
 							HasContentsCall(szKey) || fScriptCall)
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
@@ -3042,6 +3129,13 @@ public:
 						DWORD dwArgFlags = (!_strnicmp(szKey, "TAG(", 4) ||
 							!_stricmp(szKey, "TAG") ||
 							!_stricmp(szKey, "ARG") ||
+							// Global VAR(name,value) stores live object references in
+							// legacy helpers such as craftmenu's def_cm_* table.  Keep
+							// LASTNEW as its serial instead of rendering it as text.
+							!_stricmp(szKey, "VAR") ||
+							// DIALOG receives positional object roots in ARGV; the
+							// craftmenu helper passes its source item this way.
+							!_stricmp(szKey, "DIALOG") ||
 							// Native EQUIP consumes an object reference.  Preserve
 							// LASTNEW's serial when it is used as its argument; the
 							// ordinary text spelling of a live item is empty.

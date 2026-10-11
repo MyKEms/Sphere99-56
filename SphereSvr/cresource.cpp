@@ -1650,7 +1650,6 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 	case RES_Scroll:
 	case RES_Template:
 	case RES_Function:
-	case RES_RaceClass:
 		// Just index this for access later.
 
 		if ( pPrvDef )
@@ -1663,6 +1662,29 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 			pNewLink = new CResourceLink( rid );
 			ASSERT(pNewLink);
 			m_ResHash.AddSortKey( pNewLink, rid );
+		}
+		break;
+
+	case RES_RaceClass:
+		// Race classes contain data consumed by CCharDef::GetRace().  Keep a
+		// concrete definition in the resource table so the virtual property
+		// loader handles both modern and legacy race keys (REGEN_1..5).
+		if ( pPrvDef )
+		{
+			pNewDef = REF_CAST(CRaceClassDef,pPrvDef);
+			if ( pNewDef == NULL )
+				return( false );
+		}
+		else
+		{
+			pNewDef = new CRaceClassDef( rid );
+			ASSERT(pNewDef);
+			m_ResHash.AddSortKey( pNewDef, rid );
+		}
+		{
+			CScriptLineContext LineContext = s.GetContext();
+			pNewDef->s_LoadProps( s );
+			s.SeekContext( LineContext );
 		}
 		break;
 
@@ -1835,6 +1857,33 @@ bool CSphereResourceMgr::LoadScriptSection( CScript& s, CGString* pFailureReason
 		}
 
 		pNewLink->SetLinkSection(pResScript, LinkContext, sCoverageResourceName);
+	}
+	else if ( pNewDef && restype == RES_RaceClass )
+	{
+		// Concrete race definitions are fully loaded above, but still need the
+		// DEFNAME alias that script references use to select a race class.
+		CResourceScriptPtr pResScript = PTR_CAST(CResourceScript,&s);
+		if ( pResScript == NULL )
+		{
+			DEBUG_ERR(( "Can't link resources in the *WORLD.SCP file" LOG_CR ));
+			return( false );
+		}
+
+		CScriptLineContext LinkContext = s.GetContext();
+		while ( s.ReadKeyParse())
+		{
+			if ( ! _stricmp( s.GetKey(), "DEFNAME" ) || ! _stricmp( s.GetKey(), "DEFNAME2" ))
+			{
+				LPCTSTR pszDefName = s.GetArgStr();
+				if ( pszDefName && pszDefName[0] )
+				{
+					g_Cfg.m_Const.SetKeyVar( pszDefName, CGVariant( VARTYPE_UID, &rid ));
+					if ( ! _stricmp( s.GetKey(), "DEFNAME" ))
+						pNewDef->SetResourceName( pszDefName );
+				}
+			}
+		}
+		s.SeekContext( LinkContext );
 	}
 	else if ( pNewDef && pVarNum )
 	{
@@ -2956,6 +3005,7 @@ bool CSphereResourceMgr::Load( bool fResync )
 		}
 
 		m_DefaultRaceClass = new CRaceClassDef(RES_RaceClass);
+		m_ResHash.AddSortKey( m_DefaultRaceClass, CSphereUID( RES_RaceClass, 0 ));
 	}
 	else
 	{

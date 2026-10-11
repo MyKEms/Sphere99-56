@@ -19,6 +19,7 @@ OBSERVER_SERIAL = 5
 DAMAGE_ITEM_ID = 0x0EB2
 DAMAGE_ITEM_SERIAL = 2
 DAMAGE_ITEM_UID = 0x40000000 | DAMAGE_ITEM_SERIAL
+GHOST_CHAR_ID = 0x0123
 
 
 def generate(output: Path) -> int:
@@ -71,10 +72,10 @@ def generate(output: Path) -> int:
         tables.read_text(encoding="ascii")
         + f"""
 
-[CHARDEF 0x0123]
+[CHARDEF 0x{GHOST_CHAR_ID:04X}]
 DEFNAME=c_GHOST_MAN
 NAME=synthetic ghost
-ID=0x0123
+ID=0x{GHOST_CHAR_ID:04X}
 STR=100
 DEX=100
 

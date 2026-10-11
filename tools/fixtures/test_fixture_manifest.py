@@ -14,6 +14,7 @@ from pathlib import Path
 from fixture_cases import FIXTURE_CASES, MODE_GENERATORS, MODES
 from modes.fragments.allowlists import unknown_keyword_allowlist
 from modes.registry import FixtureMode, validate_modes
+from run_fixture_suite import parse_shard, shard_case_names
 
 ROOT = Path(__file__).resolve().parent
 SAVECOUNT_RE = re.compile(r"^\s*SAVECOUNT(?:\s*=\s*|\s+)(.*)$", re.IGNORECASE)
@@ -92,9 +93,36 @@ def check_seeded_save_pairs(errors: list[str]) -> None:
                         )
 
 
+def check_fixture_shards(errors: list[str]) -> None:
+    """Every manifest case belongs to exactly one requested shard."""
+
+    manifest = tuple(FIXTURE_CASES)
+    for shard_text in ("1/1", "1/2", "2/2", "1/3", "2/3", "3/3"):
+        shard, shards = parse_shard(shard_text)
+        selected = shard_case_names(shard, shards)
+        if len(selected) != len(set(selected)):
+            errors.append(f"fixture shard {shard_text} contains a duplicate case")
+        if any(name not in manifest for name in selected):
+            errors.append(f"fixture shard {shard_text} contains an unknown case")
+
+    first, second = shard_case_names(1, 2), shard_case_names(2, 2)
+    if set(first) & set(second):
+        errors.append("fixture shards 1/2 and 2/2 overlap")
+    if set(first) | set(second) != set(manifest):
+        errors.append("fixture shards 1/2 and 2/2 do not cover the manifest")
+
+    for invalid in ("0/2", "3/2", "1/0", "bad", "1"):
+        try:
+            parse_shard(invalid)
+        except ValueError:
+            continue
+        errors.append(f"invalid fixture shard {invalid!r} was accepted")
+
+
 def main() -> int:
     errors: list[str] = []
     check_seeded_save_pairs(errors)
+    check_fixture_shards(errors)
     for mode in MODES:
         if mode.fixture_args is not None and mode.name not in MODE_GENERATORS:
             errors.append(f"{mode.name} has no auto-discovered generator")
