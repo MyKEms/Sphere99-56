@@ -1515,11 +1515,29 @@ public:
 
 		// Preserve the common stock spelling ``!(safe expression)``.  The
 		// outer negation otherwise reaches the arithmetic reader before the
-		// SAFE reference path can resolve the dotted object chain.
-		if ( pszExpr[0] == '!' && pszExpr[1] == '(' && pszEnd > pszExpr + 3 &&
-			pszEnd[-1] == ')' )
+		// SAFE reference path can resolve the dotted object chain.  Only a
+		// negation whose parenthesis closes at the end of the expression is
+		// unwrapped: ``!(a) && (b)`` is a compound condition, not ``!(a && b)``.
+		bool fNegatedWhole = false;
+		TCHAR* pszLast = pszExpr + strlen(pszExpr);
+		if ( pszExpr[0] == '!' && pszExpr[1] == '(' && pszLast > pszExpr + 3 &&
+			pszLast[-1] == ')' )
 		{
-			const size_t iInnerLen = static_cast<size_t>(pszEnd - pszExpr - 3);
+			int iDepth = 0;
+			for ( TCHAR* p = pszExpr + 1; p < pszLast; ++p )
+			{
+				if ( *p == '(' )
+					++iDepth;
+				else if ( *p == ')' && --iDepth == 0 )
+				{
+					fNegatedWhole = ( p == pszLast - 1 );
+					break;
+				}
+			}
+		}
+		if ( fNegatedWhole )
+		{
+			const size_t iInnerLen = static_cast<size_t>(pszLast - pszExpr - 3);
 			if ( iInnerLen < SCRIPT_MAX_LINE_LEN )
 			{
 				TCHAR szInner[SCRIPT_MAX_LINE_LEN];
