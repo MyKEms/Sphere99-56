@@ -17,6 +17,7 @@ from modes.gm_toggle import (
     PASSWORD,
     PLAYER_ACCOUNT,
     PLAYER_PASSWORD,
+    PLAYER_SERIAL,
 )
 from run_suite import shutdown_failures, stop_server, tail, wait_for_port
 
@@ -245,6 +246,44 @@ def _walk(sock: socket.socket, direction: int, sequence: int):
     return packets
 
 
+def _target(sock: socket.socket, uid: int) -> bool:
+    """Answer the next GM target cursor with *uid*."""
+    packets = _decode(_recv_until(
+        sock,
+        lambda decoded: any(packet.command == 0x6C and len(packet.data) >= 6 for packet in decoded),
+        timeout=4.0,
+    ))
+    cursor = next((packet for packet in packets if packet.command == 0x6C and len(packet.data) >= 6), None)
+    if cursor is None:
+        return False
+    context = struct.unpack_from(">I", cursor.data, 2)[0]
+    sock.sendall(struct.pack(">BBIBIHHBBH", 0x6C, 1, context, 0, uid, 0, 0, 0, 0, 0))
+    return True
+
+
+def _dead_ghost_walk(gm_sock: socket.socket, player_sock: socket.socket) -> tuple[bool, str]:
+    """Kill the ordinary player and assert the running walk ACK is ghost-visible."""
+    gm_sock.sendall(_talk(".SET P=129,128,0"))
+    if not _target(gm_sock, PLAYER_SERIAL):
+        return False, "could not relocate the player before the death probe"
+    _drain(player_sock, 0.5)
+    gm_sock.sendall(_talk(".KILL"))
+    if not _target(gm_sock, PLAYER_SERIAL):
+        return False, "GM kill did not produce a target cursor"
+    time.sleep(0.5)
+    # Death enters the death menu in the client.  Explicitly leave combat so
+    # the assertion covers the ordinary ghost path rather than a war ghost.
+    player_sock.sendall(bytes((0x72, 0, 0, 0x32, 0)))
+    _drain(player_sock, 0.5)
+    packets = _walk(player_sock, 0, 6)
+    ack = next((packet for packet in packets if packet.command == 0x22), None)
+    if ack is None:
+        return False, f"dead player had no running walk ACK: packets={[hex(packet.command) for packet in packets]!r}"
+    if len(ack.data) < 3 or ack.data[2] != 0:
+        return False, f"dead player ACK was not ghost-visible: packet={ack.data.hex()}"
+    return True, ack.data.hex()
+
+
 def run_probe(port: int) -> list[str]:
     failures: list[str] = []
     sock = None
@@ -312,6 +351,9 @@ def run_probe(port: int) -> list[str]:
             )
 
         failures.extend(_stat_flag_failures(sock))
+        dead_ok, dead_detail = _dead_ghost_walk(sock, player_sock)
+        if not dead_ok:
+            failures.append(dead_detail)
     except (OSError, RuntimeError, ValueError, struct.error) as error:
         failures.append(str(error))
     finally:
