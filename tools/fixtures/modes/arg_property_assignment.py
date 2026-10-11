@@ -8,7 +8,7 @@ from .registry import FixtureCase, FixtureMode, TestCase, register_mode
 
 
 ACCOUNT = "ArgPropertyAssignmentProbe"
-PASSWORD = "arg-property-pw"
+LOGIN_VALUE = "arg-pw"
 EVENT_NAME = "e_ArgPropertyAssignmentProbe"
 MARKER = "SPHERE_ARG_PROPERTY_ASSIGNMENT"
 ITEM_NAME = "SYNTHETIC_OBJECT"
@@ -68,7 +68,7 @@ RETURN 0
     )
     (output / "accounts" / "sphereaccu.scp").write_text(
         f"""[ACCOUNT {ACCOUNT}]
-PASSWORD={PASSWORD}
+PASSWORD={LOGIN_VALUE}
 CHARUID=3
 LASTCHARUID=3
 [EOF]

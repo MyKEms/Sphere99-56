@@ -13,7 +13,7 @@ from pathlib import Path
 
 from run_suite import shutdown_failures
 
-from modes.arg_property_assignment import ACCOUNT, MARKER, PASSWORD
+from modes.arg_property_assignment import ACCOUNT, LOGIN_VALUE, MARKER
 
 
 END_MARKER = MARKER + "_END"
@@ -51,7 +51,7 @@ def main() -> int:
 
     def exercise() -> None:
         sock, _ = game_connect(
-            args.host, args.port, ACCOUNT, PASSWORD, game_port=args.port + 1000
+            args.host, args.port, ACCOUNT, LOGIN_VALUE, game_port=args.port + 1000
         )
         if sock is None:
             raise RuntimeError("ARG property assignment probe did not reach its character list")
