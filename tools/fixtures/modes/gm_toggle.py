@@ -13,6 +13,9 @@ CHAR_NAME = "GmToggleCharacter"
 PLAYER_ACCOUNT = "GmTogglePlayer"
 PLAYER_PASSWORD = "gm-player-pw"
 PLAYER_SERIAL = 3
+OBSERVER_ACCOUNT = "GmToggleObserver"
+OBSERVER_PASSWORD = "gm-observer-pw"
+OBSERVER_SERIAL = 5
 DAMAGE_ITEM_ID = 0x0EB2
 DAMAGE_ITEM_SERIAL = 2
 DAMAGE_ITEM_UID = 0x40000000 | DAMAGE_ITEM_SERIAL
@@ -38,6 +41,11 @@ def generate(output: Path) -> int:
         f"[{PLAYER_ACCOUNT}]\nPASSWORD={PLAYER_PASSWORD}\nPLEVEL=Player\n"
         f"CHARUID={PLAYER_SERIAL}\nLASTCHARUID={PLAYER_SERIAL}",
     )
+    account_text = account_text.replace(
+        "[EOF]\n",
+        f"[{OBSERVER_ACCOUNT}]\nPASSWORD={OBSERVER_PASSWORD}\nPLEVEL=Player\n"
+        f"CHARUID={OBSERVER_SERIAL}\nLASTCHARUID={OBSERVER_SERIAL}\n[EOF]\n",
+    )
     account_file.write_text(account_text, encoding="ascii")
 
     chars = output / "save" / "spherechars.scp"
@@ -50,6 +58,12 @@ def generate(output: Path) -> int:
         f"[WORLDCHAR c_MAN]\nSERIAL={PLAYER_SERIAL}\nACCOUNT={PLAYER_ACCOUNT}\n"
         "NAME=GmTogglePlayerCharacter\nEVENTS=e_AllPlayers\nSTR=100\nDEX=100\n"
         "INT=100\nHITS=100\nMAXHITS=100\nMANA=100\nSTAM=100\nP=140,128,0\n[EOF]\n",
+    )
+    char_text = char_text.replace(
+        "[EOF]\n",
+        f"[WORLDCHAR c_MAN]\nSERIAL={OBSERVER_SERIAL}\nACCOUNT={OBSERVER_ACCOUNT}\n"
+        "NAME=GmToggleObserverCharacter\nEVENTS=e_AllPlayers\nSTR=100\nDEX=100\n"
+        "INT=100\nHITS=100\nMAXHITS=100\nMANA=100\nSTAM=100\nP=128,128,0\n[EOF]\n",
     )
     chars.write_text(char_text, encoding="ascii")
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import socket
 import struct
 import subprocess
@@ -17,6 +18,8 @@ from modes.gm_toggle import (
     PASSWORD,
     PLAYER_ACCOUNT,
     PLAYER_PASSWORD,
+    OBSERVER_ACCOUNT,
+    OBSERVER_PASSWORD,
     PLAYER_SERIAL,
 )
 from run_suite import shutdown_failures, stop_server, tail, wait_for_port
@@ -143,6 +146,32 @@ def _enter_plain_player(port: int) -> socket.socket:
     return sock
 
 
+def _enter_observer(port: int) -> socket.socket:
+    """Enter the living observer used by the ghost visibility regression."""
+    tools_path = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(tools_path))
+    from uo_test_client import game_connect, make_char_play, recv_until_game_start
+
+    sock, _ = game_connect(
+        "127.0.0.1",
+        port,
+        OBSERVER_ACCOUNT,
+        OBSERVER_PASSWORD,
+        game_port=port + 1000,
+    )
+    if sock is None:
+        raise RuntimeError("observer did not reach the character list")
+    sock.sendall(make_char_play(0))
+    initial = recv_until_game_start(sock, timeout=10.0)
+    if not initial:
+        sock.close()
+        raise RuntimeError("observer did not enter the world")
+    _drain(sock, 0.5)
+    _first_step(sock)
+    _drain(sock, 0.5)
+    return sock
+
+
 def _command(sock: socket.socket, value: str) -> tuple[list[str], list[int]]:
     sock.sendall(_talk(f".GM {value}"))
     packets = _decode(_drain(sock, 2.0))
@@ -236,6 +265,96 @@ def _scripted_relocate(gm_sock: socket.socket, player_sock: socket.socket) -> bo
     )
 
 
+def _object_target(gm_sock: socket.socket, uid: int, timeout: float = 4.0) -> bool:
+    """Answer the next GM cursor with an object target."""
+    target_packets = _decode(_recv_until(
+        gm_sock,
+        lambda decoded: any(packet.command == 0x6C and len(packet.data) >= 6 for packet in decoded),
+        timeout=timeout,
+    ))
+    cursor = next((packet for packet in target_packets if packet.command == 0x6C and len(packet.data) >= 6), None)
+    if cursor is None:
+        return False
+    context = struct.unpack_from(">I", cursor.data, 2)[0]
+    gm_sock.sendall(struct.pack(">BBIBIHHBBH", 0x6C, 0, context, 0, uid, 0, 0, 0, 0, 0))
+    _drain(gm_sock, 0.5)
+    return True
+
+
+def _ghost_speech(packet) -> bool:
+    text = _text(packet)
+    if ">" in text:
+        text = text.rsplit(">", 1)[-1]
+    return bool(text) and re.fullmatch(r"[Oo]+", text) is not None
+
+
+def _ghost_visibility_failures(
+    gm_sock: socket.socket, ghost_sock: socket.socket, observer_sock: socket.socket
+) -> list[str]:
+    """Assert dead-ghost draw/remove transitions and transformed speech."""
+    failures: list[str] = []
+    # Synthetic world serials are emitted without the high UID bit on the wire.
+    ghost_uid = 3
+
+    # Place the ghost on the observer's fixture tile so all packets are in range.
+    gm_sock.sendall(_talk(".SET P=128,128,0,0"))
+    if not _object_target(gm_sock, ghost_uid):
+        return ["ghost SET P did not open a target cursor"]
+    _drain(observer_sock, 0.5)
+
+    gm_sock.sendall(_talk(".KILL"))
+    if not _object_target(gm_sock, ghost_uid):
+        return ["ghost KILL did not open a target cursor"]
+    death_packets = _decode(_drain(observer_sock, 1.5))
+    if not any(
+        packet.command == 0x1D
+        and len(packet.data) >= 5
+        and struct.unpack_from(">I", packet.data, 1)[0] == ghost_uid
+        for packet in death_packets
+    ):
+        failures.append("peaceful observer did not remove the dead ghost")
+
+    ghost_sock.sendall(_talk("ghost-speech"))
+    peace_speech = _decode(_drain(observer_sock, 1.5))
+    if not any(_ghost_speech(packet) for packet in peace_speech):
+        failures.append(
+            "living observer did not hear transformed peace ghost speech: "
+            f"packets={[hex(packet.command) for packet in peace_speech]!r}, "
+            f"texts={[_text(packet) for packet in peace_speech]!r}"
+        )
+
+    ghost_sock.sendall(bytes((0x72, 1, 0, 0x32, 0)))
+    war_packets = _decode(_drain(observer_sock, 1.5))
+    if not any(
+        packet.command in (0x77, 0x78)
+        and len(packet.data) >= (17 if packet.command == 0x77 else 19)
+        and (
+            struct.unpack_from(">I", packet.data, 1)[0]
+            if packet.command == 0x77
+            else struct.unpack_from(">I", packet.data, 3)[0] & 0x7FFFFFFF
+        ) == ghost_uid
+        and packet.data[15 if packet.command == 0x77 else 17] & 0x40
+        for packet in war_packets
+    ):
+        failures.append("war-mode observer did not draw the dead ghost with war flag")
+
+    ghost_sock.sendall(_talk("ghost-war-speech"))
+    war_speech = _decode(_drain(observer_sock, 1.5))
+    if not any(_ghost_speech(packet) for packet in war_speech):
+        failures.append("living observer did not hear transformed war ghost speech")
+
+    ghost_sock.sendall(bytes((0x72, 0, 0, 0x32, 0)))
+    off_packets = _decode(_drain(observer_sock, 1.5))
+    if not any(
+        packet.command == 0x1D
+        and len(packet.data) >= 5
+        and struct.unpack_from(">I", packet.data, 1)[0] == ghost_uid
+        for packet in off_packets
+    ):
+        failures.append("peace-mode observer did not remove the dead ghost")
+    return failures
+
+
 def _walk(sock: socket.socket, direction: int, sequence: int):
     sock.sendall(struct.pack(">BBBI", 0x02, direction, sequence, 0))
     packets = _decode(_recv_until(
@@ -288,6 +407,7 @@ def run_probe(port: int) -> list[str]:
     failures: list[str] = []
     sock = None
     player_sock = None
+    observer_sock = None
     try:
         sock = _enter(port)
         texts, commands = _command(sock, "0")
@@ -301,6 +421,7 @@ def run_probe(port: int) -> list[str]:
         # movement while the privileged character toggles its own mode. This
         # guards the run/door/plane movement paths against privilege leakage.
         player_sock = _enter_plain_player(port)
+        observer_sock = _enter_observer(port)
         _drain(player_sock, 0.5)
         if not _scripted_relocate(sock, player_sock):
             failures.append("scripted P relocation did not publish a self movement packet")
@@ -351,6 +472,7 @@ def run_probe(port: int) -> list[str]:
             )
 
         failures.extend(_stat_flag_failures(sock))
+        failures.extend(_ghost_visibility_failures(sock, player_sock, observer_sock))
         dead_ok, dead_detail = _dead_ghost_walk(sock, player_sock)
         if not dead_ok:
             failures.append(dead_detail)
@@ -361,6 +483,8 @@ def run_probe(port: int) -> list[str]:
             sock.close()
         if player_sock is not None:
             player_sock.close()
+        if observer_sock is not None:
+            observer_sock.close()
     return failures
 
 
@@ -417,7 +541,8 @@ def main() -> int:
         return 1
     print(
         "GM toggle probe passed: responses, mode update, damage immunity, "
-        "plain-player movement isolation, and status-flag toggles"
+        "plain-player movement isolation, status-flag toggles, and ghost "
+        "visibility/speech transitions"
     )
     return 0
 
