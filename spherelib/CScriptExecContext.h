@@ -796,6 +796,15 @@ protected:
 		return false;
 	}
 
+	// ARG(name) can be an object root for a command chain as well as for an
+	// escape expression.  Keep this narrow so ordinary dotted commands retain
+	// their legacy setter/method precedence; the chain walker is needed only
+	// when the first segment is the reference-valued ARG helper.
+	static bool HasArgObjectRoot(LPCTSTR pszKey)
+	{
+		return pszKey != NULL && !_strnicmp(pszKey, "ARG(", 4);
+	}
+
 	static bool IsLastNewRoot(LPCTSTR pszRoot)
 	{
 		return pszRoot != NULL &&
@@ -2396,7 +2405,8 @@ public:
 		// object lookup is not mistaken for a property and dispatched a second
 		// time below. Other dotted commands retain their normal setter/method
 		// precedence (for example LASTNEW.ATTR(...)).
-		if ( pObj && !fPropertySet && strchr(pszKey, '.') && HasFindObjectSegment(pszKey) )
+		if ( pObj && !fPropertySet && strchr(pszKey, '.') &&
+			(HasFindObjectSegment(pszKey) || HasArgObjectRoot(pszKey)) )
 		{
 			TCHAR szChainExpr[SCRIPT_MAX_LINE_LEN];
 			if ( *pszArg )
