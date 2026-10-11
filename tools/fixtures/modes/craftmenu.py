@@ -61,14 +61,9 @@ SYSMESSAGE {MARKER}|button|7
 RETURN 1
 
 [FUNCTION craftmenu_refs]
-// Keep the source character in a local VAR and exercise the argument-held
-// object roots used by the wall-building helpers.  The two explicit helper
-// calls mirror the production start-trigger -> build-wall call chain.  The
-// second call intentionally reads the reference through VAR: call-form
-// script functions must preserve that live object instead of rendering it as
-// an empty display string.
-VAR(craft_source,<ARGV(0)>)
-F_craftmenu_build(<VAR(craft_source)>)
+// Mirror the legacy helper chain: a function receives a live object
+// argument and its nested helper uses ARGV(0) as the object root.
+F_craftmenu_build(<UID>)
 RETURN 0
 
 [FUNCTION f_craftmenu_build]
@@ -82,7 +77,8 @@ WHILE (<TAG(wallsCount)> > <ARG(n)>)
 ARG(craft_root,<LASTNEW>)
 ARG(craft_root).P=<P>
 SYSMESSAGE {MARKER}|arg-p=<ARG(craft_root).P>
-ARGV(0).NEWITEM(SYNTHETIC_CRAFT_SOURCE)
+TAG(wallID,SYNTHETIC_CRAFT_SOURCE)
+ARGV(0).NEWITEM(<TAG(wallID)>)
 SYSMESSAGE {MARKER}|argv-newitem=<LASTNEW.SERIAL>
 ARG(wall_root,<LASTNEW>)
 ARG(wall_root).P=<P>
@@ -98,7 +94,7 @@ SYSMESSAGE {MARKER}|argv-z=<ARGV(0).Z>
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 SYSMESSAGE {MARKER}|begin
-SRC.craftmenu_refs(<SRC>)
+F_craftmenu_build(<UID>)
 NEWITEM SYNTHETIC_CRAFT_SOURCE
 LASTNEW.P=<P>
 VAR(def_cm_tinkering,<LASTNEW>)
