@@ -1069,6 +1069,12 @@ bool CChar::CanTouch( const CObjBase* pObj ) const
 	// We now have the top level object.
 	DEBUG_CHECK( pObj->IsTopLevel() || pObj->IsDisconnected());
 	DEBUG_CHECK( pObj == pObjTop );
+	// A dead player can still address its own character with ordinary self
+	// commands such as .WHERE, .WHOAMI, and .EXPLEVEL.  The reference server
+	// permits this; apply the dead-state touch restriction only to other
+	// objects.
+	if ( pObj == this && pObjTop == this && pObjTop->IsChar() )
+		return( true );
 
 	if ( ! fDeathImmune )
 	{
