@@ -622,6 +622,34 @@ protected:
 			return false;
 		}
 
+		// A bare identifier is also a property read on the active object.  The
+		// reference resolves that property before consulting global variables,
+		// so a helper such as VAR(P,...) cannot shadow the character's P.  Keep
+		// calls, dotted chains and space-separated functions on their existing
+		// dispatch paths; only a plain property spelling takes this precedence.
+		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
+		const bool fBareIdentifier = pszExpr && *pszExpr &&
+			strchr(pszExpr, '.') == NULL && strchr(pszExpr, '(') == NULL &&
+			strchr(pszExpr, ')') == NULL && strchr(pszExpr, ' ') == NULL &&
+			strchr(pszExpr, '\t') == NULL;
+		// Object UIDs use the high bits to distinguish items/resources from
+		// characters.  The precedence change is required for the attached
+		// character context; item callbacks retain their established lookup
+		// order because their bare names include legacy method/property aliases.
+		const bool fBaseCharacter = pObj != NULL && IsWorldObject(pObj) &&
+			(pObj->GetUIDIndex() & static_cast<UID_INDEX>(0xC0000000)) == 0;
+		if ( fBareIdentifier && fBaseCharacter &&
+			ShouldPreferBaseObjectProperty(pszExpr) )
+		{
+			hRes = pObj->s_PropGet(pszExpr, vValRet, m_pSrc);
+			rejected.Observe(hRes, pszExpr, m_pBaseObj);
+			if ( hRes == NO_ERROR )
+			{
+				vResult = vValRet;
+				return true;
+			}
+		}
+
 		// Try global function dispatch.
 		hRes = Function_Dispatch(szKey, vArgs, vValRet);
 		rejected.Observe(hRes, szKey, m_pBaseObj);
@@ -668,7 +696,6 @@ protected:
 			}
 		}
 
-		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
 		if ( pObj == NULL )
 			return false;
 
@@ -869,6 +896,15 @@ public:
 		LPCTSTR pszValue = vValue.GetPSTR();
 		iValue = GetSingle(pszValue);
 		return true;
+	}
+
+	// Derived server contexts may opt in to the narrow bare-property
+	// precedence rule. Generic expression contexts have no variable table, so
+	// they retain the historical global-first lookup.
+	virtual bool ShouldPreferBaseObjectProperty(LPCTSTR pszExpr)
+	{
+		(void)pszExpr;
+		return false;
 	}
 
 protected:

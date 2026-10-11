@@ -241,6 +241,7 @@ protected:
 	virtual CResourceObj* ResolveResourceObject(UID_INDEX uid);
 	virtual bool IsScriptFunction(LPCTSTR pszKey);
 	virtual bool FormatSafeReference(LPCTSTR pszExpr, CGString& sResult);
+	virtual bool ShouldPreferBaseObjectProperty(LPCTSTR pszExpr);
 	virtual bool ValidateUIDReference(const CGVariant& value, CResourceObj* pObj,
 		LPCTSTR pszProperty);
 	void EvaluateFunctionArgs( CGVariant& vArgs );

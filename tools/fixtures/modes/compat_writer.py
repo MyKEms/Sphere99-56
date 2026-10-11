@@ -1134,6 +1134,10 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         "TAG.script_hash=#0DE97",
         "SYSMESSAGE " + marker + " C|tag_script_hash_literal|[<tag(script_hash)>]",
         "VAR dotted_probe_var,globalvalue",
+        # Deliberately collide with the character's P property.  The explicit
+        # VAR() form remains the global value; bare <P> must use the active
+        # character property instead.
+        "VAR(P,4764,1350,10)",
         "NEWITEM SYNTHETIC_DOTTED_DISPOSABLE",
         "EQUIPLAST",
         "VAR dotted_cont_target,<SRC.FINDLAYER(21).SERIAL>",
