@@ -41,6 +41,25 @@ inline int Exp_GetHexValue( const char* psz, char** ppszEnd = NULL )
 	return (int)(unsigned int) strtoull( psz, ppszEnd, 16 );
 }
 
+// Saved VAR values use a leading '#' to preserve a live object's serial.
+// Treat a complete #<hex> token as numeric when a script consumes it as a
+// condition, UID argument, or scalar. A bare '#' followed by an operator
+// remains the current-value arithmetic spelling handled by assignment callers.
+inline bool Exp_IsHashValue( const char* psz )
+{
+	if ( psz == NULL || psz[0] != '#' || !isxdigit((unsigned char) psz[1]) )
+		return false;
+	const char* p = psz + 1;
+	while ( isxdigit((unsigned char) *p) )
+		p++;
+	return *p == '\0';
+}
+
+inline int Exp_GetHashValue( const char* psz )
+{
+	return Exp_GetHexValue( psz + 1 );
+}
+
 // Parse the fixed-point spelling used by script assignments.  Sphere stores
 // skill values in tenths, so a string such as "30.0" is the integer 300.
 // Keep this conversion available to CGVariant before CExpression is declared.
@@ -393,6 +412,8 @@ public:
 				LPCTSTR psz = (LPCTSTR)m_str;
 				if ( !psz || !*psz )
 					return 0;
+				if ( Exp_IsHashValue(psz) )
+					return Exp_GetHashValue(psz);
 				// Support hex (0x...) and Sphere convention (leading 0 + hex digit = hex)
 				if ( psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X') )
 					return Exp_GetHexValue(psz);
@@ -419,6 +440,8 @@ public:
 				LPCTSTR psz = (LPCTSTR)m_str;
 				if ( !psz || !*psz )
 					return 0;
+				if ( Exp_IsHashValue(psz) )
+					return (DWORD) Exp_GetHashValue(psz);
 				// Sphere treats a leading 0 followed by a hex digit as
 				// hexadecimal, including values whose high bit is set.  The
 				// C library's base-0 parser treats that form as octal instead.
@@ -507,6 +530,8 @@ public:
 				LPCTSTR psz = (LPCTSTR)m_str;
 				if ( !psz || !*psz )
 					return 0;
+				if ( Exp_IsHashValue(psz) )
+					return (UID_INDEX) Exp_GetHashValue(psz);
 				int iBase = 10;
 				if ( psz[0] == '0' && (psz[1] == 'x' || psz[1] == 'X') )
 					iBase = 16;
@@ -1239,6 +1264,15 @@ public:
 		// Skip whitespace
 		while (ISWHITESPACE(*pStr)) pStr++;
 		if (!*pStr) return 0;
+		// Saved object references use #<hex> spelling.  Accept that token in
+		// ordinary numeric expressions as the referenced UID value.
+		if (*pStr == '#' && isxdigit((unsigned char) pStr[1]))
+		{
+			LPCTSTR pHash = pStr + 1;
+			int value = Exp_GetHexValue(pHash, (char**)&pHash);
+			pStr = pHash;
+			return value;
+		}
 
 		// Handle hex
 		if (pStr[0] == '0' && (pStr[1] == 'x' || pStr[1] == 'X'))
