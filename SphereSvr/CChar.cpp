@@ -1333,7 +1333,23 @@ HRESULT CChar::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		m_Act.m_atUnk.m_Arg3 = vVal.GetInt();
 		break;
 	case P_Action:
-		return Skill_Start( g_Cfg.FindSkillKey( vVal.GetPSTR(), true ));
+		{
+			LPCTSTR pszAction = vVal.GetPSTR();
+			// ACTION=-1 and ACTION="" cancel the current skill.  They are
+			// valid control values, whereas any other unresolved name is a
+			// malformed skill key and must report an index error.
+			if ( vVal.IsEmpty() || pszAction == NULL || pszAction[0] == '\0' ||
+				!_stricmp( pszAction, "-1" ) || !_stricmp( pszAction, "\"\"" ))
+			{
+				Skill_Start( SKILL_NONE );
+				break;
+			}
+			SKILL_TYPE iSkill = g_Cfg.FindSkillKey( pszAction, true );
+			if ( iSkill == SKILL_NONE )
+				return HRES_INVALID_INDEX;
+			Skill_Start( iSkill );
+			break;
+		}
 	case P_Body:
 		SetID( (CREID_TYPE) g_Cfg.ResourceGetIndexType( RES_CharDef, vVal.GetStr()));
 		break;
