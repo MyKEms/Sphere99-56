@@ -156,6 +156,17 @@ void CCharDef::SetFoodType( LPCTSTR pszFood )
 
 HRESULT CCharDef::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole* pSrc )
 {
+	// Character definitions keep script-visible TAG values alongside their
+	// normal properties.  TYPEDEF.TAG.<name> is the stock way for an NPC
+	// event to inspect those values (for example, a faction guard marker).
+	// Handle the dynamic tag prefix before the generated property table.
+	if ( !_strnicmp( pszKey, "TAG.", 4 ) && pszKey[4] )
+	{
+		CVarDefPtr pVar = m_TagDefs.FindKeyPtr( pszKey + 4 );
+		vValRet.SetStr( pVar ? pVar->GetValStr() : "" );
+		return NO_ERROR;
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
@@ -249,6 +260,14 @@ HRESULT CCharDef::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole*
 
 HRESULT CCharDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	// Preserve dynamic TAG.<name> values on character definitions so the
+	// corresponding TYPEDEF.TAG.<name> read sees the value at runtime.
+	if ( !_strnicmp( pszKey, "TAG.", 4 ) && pszKey[4] )
+	{
+		m_TagDefs.SetKeyVar( pszKey + 4, vVal );
+		return NO_ERROR;
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
