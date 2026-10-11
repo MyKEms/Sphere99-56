@@ -16,6 +16,7 @@ PLAYER_SERIAL = 3
 DAMAGE_ITEM_ID = 0x0EB2
 DAMAGE_ITEM_SERIAL = 2
 DAMAGE_ITEM_UID = 0x40000000 | DAMAGE_ITEM_SERIAL
+GHOST_CHAR_ID = 0x0123
 
 
 def generate(output: Path) -> int:
@@ -56,6 +57,13 @@ def generate(output: Path) -> int:
     tables.write_text(
         tables.read_text(encoding="ascii")
         + f"""
+
+[CHARDEF 0x{GHOST_CHAR_ID:04X}]
+DEFNAME=c_GHOST_MAN
+NAME=synthetic ghost
+ID=0x{GHOST_CHAR_ID:04X}
+STR=100
+DEX=100
 
 [ITEMDEF 0x{DAMAGE_ITEM_ID:04X}]
 DEFNAME=GM_TOGGLE_DAMAGE
