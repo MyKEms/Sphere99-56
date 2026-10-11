@@ -516,6 +516,22 @@ HRESULT CRaceClassDef::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptCon
 
 HRESULT CRaceClassDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 {
+	// 0.99 race sections use REGEN_1 .. REGEN_5 for the health, mana,
+	// stamina, food, and fame intervals.  Keep accepting that legacy spelling
+	// in addition to the newer REGEN(stat,value) form.  The script values are
+	// expressed in seconds, while the runtime stores tick intervals.
+	if ( pszKey != NULL && !_strnicmp( pszKey, "REGEN_", 6 ))
+	{
+		const int iRegen = STAT_Health + atoi( pszKey + 6 ) - 1;
+		if ( iRegen < STAT_Health || iRegen > STAT_Fame )
+			return HRES_INVALID_INDEX;
+		int iSeconds = Exp_GetValue( vVal.GetPSTR());
+		return SetRegenRate(
+			(STAT_TYPE)iRegen,
+			iSeconds * TICKS_PER_SEC
+		) ? NO_ERROR : HRES_INVALID_INDEX;
+	}
+
 	P_TYPE_ iProp = (P_TYPE_) s_FindMyPropKey(pszKey);
 	if ( iProp < 0 )
 	{
