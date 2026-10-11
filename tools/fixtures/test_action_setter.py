@@ -95,6 +95,7 @@ def main() -> int:
     # setter, while the rejection report proves that the writes did not fall
     # through to the unknown-command path.
     expected = {
+        "loaded": f"{MARKER} loaded|[?]",
         "valid": f"{MARKER} valid|[?]",
         "minus-one": f"{MARKER} minus-one|[?]",
         "empty": f"{MARKER} empty|[?]",

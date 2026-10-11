@@ -44,6 +44,7 @@ RETURN 0
 // HIDING is a valid skill that does not require a target or a spell resource.
 // ACTION's legacy getter renders skill resources as '?' on this fixture; the
 // marker still proves that the value was expanded after the valid write.
+SYSMESSAGE {MARKER} loaded|[<ACTION>]
 ACTION=HIDING
 SYSMESSAGE {MARKER} valid|[<ACTION>]
 ACTION=-1
@@ -93,6 +94,7 @@ MANA=100
 MAXMANA=100
 STAM=100
 MAXSTAM=100
+ACTION=SKILL_HIDING
 P=128,128,0
 [EOF]
 """,
