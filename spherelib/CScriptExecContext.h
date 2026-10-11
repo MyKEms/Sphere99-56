@@ -2157,7 +2157,18 @@ public:
 		// route this one function-style statement through the active context.
 		if ( !_strnicmp(pszCmd, "ARG(", 4) )
 		{
-			LPCTSTR pszClose = strrchr(pszCmd, ')');
+			LPCTSTR pszClose = NULL;
+			int iArgDepth = 0;
+			for ( LPCTSTR p = pszCmd + 3; *p; p++ )
+			{
+				if ( *p == '(' )
+					iArgDepth++;
+				else if ( *p == ')' && --iArgDepth == 0 )
+				{
+					pszClose = p;
+					break;
+				}
+			}
 			if ( pszClose )
 			{
 				LPCTSTR pszTail = pszClose + 1;
