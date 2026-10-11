@@ -2905,6 +2905,8 @@ int CChar::Skill_Fighting( CSkillDef::T_TYPE_ stage )
 		// Hit or miss my current target.
 		if ( ! IsStatFlag( STATF_War ))
 			return -CSkillDef::T_Abort;
+		if ( ! Fight_IsActive())
+			return -CSkillDef::T_Abort;
 
 		if ( m_Act.m_atFight.m_War_Swing_State != WAR_SWING_SWINGING )
 		{
