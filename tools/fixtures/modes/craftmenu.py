@@ -91,9 +91,38 @@ RETURN 0
 ARGV(0).Z=<ARGV(0).Z>-10
 SYSMESSAGE {MARKER}|argv-z=<ARGV(0).Z>
 
+[FUNCTION f_craftmenu_negated_conditions]
+// A leading negation only wraps the whole condition when its parenthesis
+// closes at the end; otherwise it is one operand of a compound condition.
+ARG(a,0)
+ARG(b,0)
+IF !(<ARG(a)>) && (<ARG(b)>)
+  SYSMESSAGE {MARKER}|neg-and=1
+ELSE
+  SYSMESSAGE {MARKER}|neg-and=0
+ENDIF
+ARG(a,1)
+ARG(b,1)
+IF !(<ARG(a)>) || (<ARG(b)>)
+  SYSMESSAGE {MARKER}|neg-or=1
+ELSE
+  SYSMESSAGE {MARKER}|neg-or=0
+ENDIF
+IF !(ISGM) && (NPC)
+  SYSMESSAGE {MARKER}|neg-npc=1
+ELSE
+  SYSMESSAGE {MARKER}|neg-npc=0
+ENDIF
+IF !((<ARG(a)>) && (<ARG(b)>))
+  SYSMESSAGE {MARKER}|neg-whole=1
+ELSE
+  SYSMESSAGE {MARKER}|neg-whole=0
+ENDIF
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 SYSMESSAGE {MARKER}|begin
+F_craftmenu_negated_conditions
 F_craftmenu_build(<UID>)
 NEWITEM SYNTHETIC_CRAFT_SOURCE
 LASTNEW.P=<P>
@@ -165,7 +194,7 @@ MODE = register_mode(
         name="craftmenu",
         fixture_args=(),
         order=183,
-        id_block=130,
+        id_block=138,
         case=FixtureCase(
             name="craftmenu",
             mode="craftmenu",

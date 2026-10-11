@@ -108,6 +108,22 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
             failures.append(f"craftmenu open markers were incomplete: {messages!r}")
             return
 
+        expected_conditions = {
+            "neg-and": "0",
+            "neg-or": "1",
+            "neg-npc": "0",
+            "neg-whole": "0",
+        }
+        for name, want in expected_conditions.items():
+            prefix = f"{MARKER}|{name}="
+            got = [message[len(prefix):] for message in messages if message.startswith(prefix)]
+            if got != [want]:
+                failures.append(
+                    f"negated condition {name} evaluated to {got!r}; expected [{want!r}]"
+                )
+        if failures:
+            return
+
         ref_prefixes = (
             MARKER + "|var-newitem=",
             MARKER + "|arg-p=",
