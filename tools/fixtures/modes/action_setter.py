@@ -41,18 +41,20 @@ ON=@Logout
 RETURN 0
 
 [FUNCTION F_ACTION_SETTER]
-// HIDING is a valid skill that does not require a target or a spell resource.
+// SYNTH_SKILL_0 is a fixture skill with no external spell or target state.
 // ACTION's legacy getter renders skill resources as '?' on this fixture; the
 // marker still proves that the value was expanded after the valid write.
 SYSMESSAGE {MARKER} loaded|[<ACTION>]
-ACTION=HIDING
+ACTION=SYNTH_SKILL_0
 SYSMESSAGE {MARKER} valid|[<ACTION>]
 ACTION=-1
 SYSMESSAGE {MARKER} minus-one|[<ACTION>]
 ACTION=""
 SYSMESSAGE {MARKER} empty|[<ACTION>]
 ACTION=not-a-skill
+ACTION=SYNTH_SKILL_0
 SYSMESSAGE {MARKER}_END
+SERV.SAVE 1
 RETURN 0
 """
     tables.write_text(text, encoding="ascii")
@@ -70,6 +72,8 @@ RETURN 0
         f"""[ACCOUNT {ACCOUNT}]
 PASSWORD={LOGIN_VALUE}
 CHARUID=3
+CHARUID=4
+CHARUID=5
 LASTCHARUID=3
 [EOF]
 """,
@@ -94,8 +98,37 @@ MANA=100
 MAXMANA=100
 STAM=100
 MAXSTAM=100
-ACTION=SKILL_HIDING
 P=128,128,0
+[WORLDCHAR c_MAN]
+SERIAL=4
+ACCOUNT={ACCOUNT}
+NAME=ActionSetterProbeNpc
+STR=100
+INT=100
+DEX=100
+HITS=100
+MAXHITS=100
+MANA=100
+MAXMANA=100
+STAM=100
+MAXSTAM=100
+ACTION=SYNTH_SKILL_0
+P=130,128,0
+[WORLDCHAR c_MAN]
+SERIAL=5
+ACCOUNT={ACCOUNT}
+NAME=ActionSetterNpcAction
+STR=100
+INT=100
+DEX=100
+HITS=100
+MAXHITS=100
+MANA=100
+MAXMANA=100
+STAM=100
+MAXSTAM=100
+ACTION=101
+P=132,128,0
 [EOF]
 """,
         encoding="ascii",

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import socket
 import sys
 import time
@@ -13,6 +14,36 @@ from pathlib import Path
 from run_suite import shutdown_failures
 
 from modes.action_setter import ACCOUNT, LOGIN_VALUE, MARKER
+
+
+def wait_for_action_save(
+    fixture: Path,
+    expected_base_action: str,
+    previous: tuple[str, str] | None = None,
+) -> tuple[str, str]:
+    """Wait for a complete save pair carrying both ACTION forms."""
+
+    from test_world_save_roundtrip import read_saved_pair
+
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        try:
+            chars, world = read_saved_pair(fixture)
+        except OSError:
+            time.sleep(0.1)
+            continue
+        if (
+            "[EOF]" in chars
+            and "[EOF]" in world
+            and expected_base_action in chars
+            and re.search(r"(?ms)^\[WORLDCHAR c_MAN\]\nSERIAL=0?5.*?^ACTION=101$", chars)
+            and (previous is None or (chars != previous[0] and world != previous[1]))
+        ):
+            return chars, world
+        time.sleep(0.1)
+    raise RuntimeError(
+        f"world save did not publish base action {expected_base_action!r} and NPC action"
+    )
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -43,6 +74,7 @@ def main() -> int:
     from uo_test_client import game_connect, make_char_play, recv_until_game_start
 
     messages: list[str] = []
+    saved_pairs: list[tuple[str, str]] = []
 
     def exercise() -> None:
         sock, _ = game_connect(
@@ -61,7 +93,7 @@ def main() -> int:
             while time.monotonic() < deadline:
                 messages[:] = system_messages(bytes(data))
                 if f"{MARKER}_END" in messages:
-                    return
+                    break
                 try:
                     chunk = sock.recv(65536)
                 except socket.timeout:
@@ -74,6 +106,7 @@ def main() -> int:
             messages[:] = system_messages(bytes(data))
         finally:
             sock.close()
+        saved_pairs.append(wait_for_action_save(fixture, "ACTION="))
 
     returncode, runner_error, log_contents = run_server(
         fixture=fixture,
@@ -88,6 +121,10 @@ def main() -> int:
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
+
+    if not saved_pairs:
+        failures.append("ACTION setter probe did not capture its first world save")
+    saved_chars = saved_pairs[0][0] if saved_pairs else ""
 
     # Skill definitions are not entered in the legacy resource-name hash, so
     # ACTION's existing getter expands an active skill and an idle character
@@ -105,6 +142,65 @@ def main() -> int:
             failures.append(f"{label}: missing {wanted!r}")
     if f"{MARKER}_END" not in messages:
         failures.append("ACTION setter probe did not reach its end marker")
+
+    reload_messages: list[str] = []
+    reload_log = ""
+    if saved_pairs:
+        previous_pair = saved_pairs[-1]
+
+        def reload_character() -> None:
+            sock, _ = game_connect(
+                args.host, args.port, ACCOUNT, LOGIN_VALUE, game_port=args.port + 1000
+            )
+            if sock is None:
+                raise RuntimeError("saved ACTION setter character did not reach its character list")
+            try:
+                sock.sendall(make_char_play(0))
+                response = recv_until_game_start(sock, timeout=30.0)
+                if not response:
+                    raise RuntimeError("saved ACTION setter character did not enter the world")
+                data = bytearray(response)
+                sock.settimeout(0.2)
+                deadline = time.monotonic() + 12.0
+                while time.monotonic() < deadline:
+                    reload_messages[:] = system_messages(bytes(data))
+                    if f"{MARKER}_END" in reload_messages:
+                        break
+                    try:
+                        chunk = sock.recv(65536)
+                    except socket.timeout:
+                        continue
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                reload_messages[:] = system_messages(bytes(data))
+            finally:
+                sock.close()
+            saved_pairs.append(
+                wait_for_action_save(fixture, "ACTION=SYNTH_SKILL_0", previous_pair)
+            )
+
+        reload_returncode, reload_error, reload_log = run_server(
+            fixture=fixture,
+            binary=binary,
+            host=args.host,
+            port=args.port,
+            startup_timeout=args.startup_timeout,
+            log_path=fixture / "server-reload.log",
+            action=reload_character,
+        )
+        if reload_error:
+            failures.append(f"ACTION setter reload failed: {reload_error}")
+        failures.extend(shutdown_failures(reload_returncode, reload_log))
+        if re.search(r"WORLDCHAR property rejected:.*key='ACTION'", reload_log):
+            failures.append("saved ACTION value was rejected during reload")
+        if f"{MARKER}_END" not in reload_messages:
+            failures.append("reloaded ACTION setter character did not reach its end marker")
+
+    if saved_chars and "ACTION=SYNTH_SKILL_0" not in saved_chars:
+        failures.append("base skill ACTION was serialized as a non-resolvable value")
 
     report_path = fixture / "logs" / "unknown-keywords.json"
     try:
