@@ -4,6 +4,10 @@ inputs:
   variant:
     description: native or asan
     required: true
+  shard:
+    description: one-based fixture shard in I/N form
+    required: false
+    default: 1/1
 runs:
   using: composite
   steps:
@@ -12,5 +16,6 @@ runs:
       run: |
         python3 tools/fixtures/run_fixture_suite.py \
           --variant "${{ inputs.variant }}" \
+          --shard "${{ inputs.shard }}" \
           --binary "$SPHERE_FIXTURE_BINARY" \
           --root "$RUNNER_TEMP"

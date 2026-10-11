@@ -1,5 +1,6 @@
 CXX ?= g++
 BASEDIR := $(CURDIR)
+.DEFAULT_GOAL := all
 
 # Keep the historical default target as a 32-bit i386 binary.  Debug and
 # sanitizer targets below deliberately omit -m32 and use their own object
@@ -41,6 +42,13 @@ else
 STRICT_CXXFLAGS = $(COMMON_CXXFLAGS) $(GCC_CXXFLAGS) \
 	-fno-permissive -Werror=int-to-pointer-cast
 endif
+
+# Sanitizer regression executables use the same engine objects as the ASan
+# server build.  Keeping a single object tree avoids rebuilding the complete
+# engine once per small regression target in CI.
+ASAN_CXXFLAGS = $(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS \
+	-fsanitize=address,undefined -fno-omit-frame-pointer
+ASAN_LDFLAGS = -fsanitize=address,undefined -lpthread
 
 # Source files - excluding Windows-only files
 SPHERELIB_SRC = \
@@ -145,6 +153,22 @@ TEST_OBJ = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(TEST_SRC))
 ALL_DEP = $(ALL_OBJ:.o=.d)
 ALL_DEP += $(TEST_OBJ:.o=.d)
 
+ASAN_BUILD_DIR := build/asan
+ASAN_ALL_OBJ := $(patsubst %.cpp,$(ASAN_BUILD_DIR)/%.o,$(ALL_SRC))
+ASAN_SERVER_OBJ := $(ASAN_BUILD_DIR)/SphereSvr/spheresvr.o
+ASAN_LIB_OBJ := $(ASAN_BUILD_DIR)/SphereSvr/spheresvr-lib.o
+ASAN_REGRESSION_OBJ := $(filter-out $(ASAN_SERVER_OBJ),$(ASAN_ALL_OBJ))
+
+# Keep this target available even when a regression target is invoked directly;
+# the normal CI path has already built it through `make asan`.
+$(ASAN_ALL_OBJ): $(ASAN_BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(ASAN_CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(ASAN_LIB_OBJ): SphereSvr/spheresvr.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(ASAN_CXXFLAGS) -D_LIB -MMD -MP -c $< -o $@
+
 all: $(TARGET)
 
 $(TARGET): $(ALL_OBJ) $(TEST_OBJ)
@@ -172,8 +196,7 @@ debug:
 
 asan:
 	$(MAKE) BUILD_DIR=build/asan TARGET=build/asan/sphere99svr \
-		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer" \
-		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+		CXXFLAGS="$(ASAN_CXXFLAGS)" LDFLAGS="$(ASAN_LDFLAGS)" all
 
 recover:
 	$(MAKE) BUILD_DIR=build/recover TARGET=build/recover/sphere99svr \
@@ -206,17 +229,17 @@ integrity-test:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_INTEGRITY_TEST" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
-integrity-asan-test:
-	$(MAKE) BUILD_DIR=build/asan-integrity TARGET=build/asan-integrity/integrity_test \
-		TEST_SRC=tools/integrity_test.cpp \
-		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_INTEGRITY_TEST" \
-		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+integrity-asan-test: $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ)
+	@mkdir -p build/asan-integrity
+	$(CXX) $(ASAN_CXXFLAGS) -D_LIB -DSPHERE_INTEGRITY_TEST \
+		tools/integrity_test.cpp $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ) \
+		-o build/asan-integrity/integrity_test $(ASAN_LDFLAGS)
 
-plant-timer-asan-test:
-	$(MAKE) BUILD_DIR=build/asan-plant-timer TARGET=build/asan-plant-timer/plant_timer_test \
-		TEST_SRC=tools/load_safety_test.cpp \
-		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_LOAD_SAFETY_TEST -DSPHERE_PLANT_SENTINEL_ONLY" \
-		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+plant-timer-asan-test: $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ)
+	@mkdir -p build/asan-plant-timer
+	$(CXX) $(ASAN_CXXFLAGS) -D_LIB -DSPHERE_LOAD_SAFETY_TEST -DSPHERE_PLANT_SENTINEL_ONLY \
+		tools/load_safety_test.cpp $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ) \
+		-o build/asan-plant-timer/plant_timer_test $(ASAN_LDFLAGS)
 
 container-list-test:
 	@mkdir -p build/container-list
@@ -237,11 +260,11 @@ string-sort-array-test:
 		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_STRING_SORT_ARRAY_TEST" \
 		LDFLAGS="$(DEFAULT_LDFLAGS)" all
 
-string-sort-array-asan-test:
-	$(MAKE) BUILD_DIR=build/asan-string-sort-array TARGET=build/asan-string-sort-array/string_sort_array_test \
-		TEST_SRC=tools/string_sort_array_test.cpp \
-		CXXFLAGS="$(STRICT_CXXFLAGS) -O1 -g -D_GLIBCXX_ASSERTIONS -fsanitize=address,undefined -fno-omit-frame-pointer -D_LIB -DSPHERE_STRING_SORT_ARRAY_TEST" \
-		LDFLAGS="-fsanitize=address,undefined -lpthread" all
+string-sort-array-asan-test: $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ)
+	@mkdir -p build/asan-string-sort-array
+	$(CXX) $(ASAN_CXXFLAGS) -D_LIB -DSPHERE_STRING_SORT_ARRAY_TEST \
+		tools/string_sort_array_test.cpp $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ) \
+		-o build/asan-string-sort-array/string_sort_array_test $(ASAN_LDFLAGS)
 
 curve-test:
 	$(MAKE) BUILD_DIR=build/curve TARGET=build/curve/curve_test \
@@ -267,5 +290,6 @@ clean:
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
 
 -include $(ALL_DEP)
+-include $(ASAN_ALL_OBJ:.o=.d) $(ASAN_LIB_OBJ:.o=.d)
 
 .PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test plant-timer-asan-test container-list-test container-list-asan-test string-sort-array-test string-sort-array-asan-test curve-test http-access-test http-access-asan-test clean
