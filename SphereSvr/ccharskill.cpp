@@ -922,6 +922,17 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 	if ( pItemDef == NULL )
 		return( false );
 
+	// CANMAKE is used to enumerate craftable definitions.  An item with no
+	// skill or resource rule is not a recipe: ResourceConsume() treats an
+	// empty resource list as satisfied, which would otherwise make every
+	// ordinary item appear craftable during the selection probe.
+	if ( stage == CSkillDef::T_Select &&
+		pItemDef->m_SkillMake.GetSize() == 0 &&
+		pItemDef->m_BaseResources.GetSize() == 0 )
+	{
+		return( false );
+	}
+
 	// Trigger Target item for creating the new item.
 	CItemPtr pItemTarg = g_World.ItemFind(uidTarg);
 	if ( pItemTarg && stage == CSkillDef::T_Select )
