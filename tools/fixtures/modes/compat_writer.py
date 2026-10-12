@@ -216,9 +216,9 @@ DIALOG_ARGO_LAYOUT_NAME = "d_synthetic_argo_layout"
 DIALOG_ARGO_BUTTON = 9
 DIALOG_ARGO_LONG_FIELDS = (10, 130, 200, 60, 1, 0, 1)
 DIALOG_ARGO_CONTROLS = (
-    "htmlgump 10 10 200 60 0 1 0",
-    f"button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
-    "htmlgump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
+    "HTMLGump 10 10 200 60 0 1 0",
+    f"Button 20 80 2151 2152 1 0 {DIALOG_ARGO_BUTTON}",
+    "HTMLGump " + " ".join(str(field) for field in DIALOG_ARGO_LONG_FIELDS),
 )
 # A dialog-layout tag setter is also used by the race/class flow.  The
 # comma-form ARGO.TAG(name,value) must survive layout construction so the
@@ -247,17 +247,18 @@ DIALOG_FLOW_RANK = 1
 DIALOG_FLOW_ROWS = 3
 DIALOG_FLOW_BUTTON = 22
 DIALOG_FLOW_DECLINED_CONTROLS = ("resizepic 0 0 5054 100 100",)
+DIALOG_FLOW_DECLINED_WIRE_CONTROLS = ("ResizePic 0 0 5054 100 100",)
 DIALOG_FLOW_CONTROLS = (
-    "resizepic 0 0 5054 240 300",
-    f"button 20 20 2151 2152 1 0 {DIALOG_FLOW_BUTTON}",
-    "text 20 40 0 1",
-    *(f"text 20 {60 + row * 20} 0 {4 + row}" for row in range(DIALOG_FLOW_ROWS)),
-    f"gumppic 200 20 {100 + DIALOG_FLOW_RANK}",
+    "ResizePic 0 0 5054 240 300",
+    f"Button 20 20 2151 2152 1 0 {DIALOG_FLOW_BUTTON}",
+    "Text 20 40 0 1",
+    *(f"Text 20 {60 + row * 20} 0 {4 + row}" for row in range(DIALOG_FLOW_ROWS)),
+    f"GumpPic 200 20 {100 + DIALOG_FLOW_RANK}",
 )
 # (x, y, controls) of each dialog sent, in order.
 DIALOG_FLOW_GUMPS = (
-    (0, 0, ("resizepic 0 0 5054 200 100", "button 10 10 2151 2152 1 0 31")),
-    (40, 50, ("resizepic 0 0 5054 220 120", "button 10 10 2151 2152 1 0 32")),
+    (0, 0, ("ResizePic 0 0 5054 200 100", "Button 10 10 2151 2152 1 0 31")),
+    (40, 50, ("ResizePic 0 0 5054 220 120", "Button 10 10 2151 2152 1 0 32")),
     (30, 60, DIALOG_FLOW_CONTROLS),
 )
 

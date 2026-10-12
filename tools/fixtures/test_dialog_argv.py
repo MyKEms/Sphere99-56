@@ -99,7 +99,7 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
             failures.append("dialog was not opened")
             return
         controls = [" ".join(control.split()) for control in gump_dialog_controls(gump)]
-        expected = f"button 20 20 2151 2152 1 0 {DIALOG_ARGV_FORWARD_BUTTON}"
+        expected = f"Button 20 20 2151 2152 1 0 {DIALOG_ARGV_FORWARD_BUTTON}"
         if controls != [expected]:
             failures.append(f"layout controls {controls!r}; expected {[expected]!r}")
             return

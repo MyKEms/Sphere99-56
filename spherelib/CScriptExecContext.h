@@ -999,6 +999,52 @@ public:
 		return 0;
 	}
 
+	// The legacy server writes control names with these spellings in the
+	// packet layout.  Script lookup remains case-insensitive, but the wire
+	// spelling is observable by clients and by tools that compare layouts.
+	static LPCTSTR DialogWireName(LPCTSTR pszKey)
+	{
+		struct GumpName
+		{
+			LPCTSTR m_pszScript;
+			LPCTSTR m_pszWire;
+		};
+		static const GumpName sm_names[] =
+		{
+			{ "resizepic", "ResizePic" },
+			{ "gumppic", "GumpPic" },
+			{ "tilepic", "TilePic" },
+			{ "text", "Text" },
+			{ "texta", "TextA" },
+			{ "croppedtext", "CroppedText" },
+			{ "htmlgump", "HTMLGump" },
+			{ "htmlgumpa", "HTMLGumpA" },
+			{ "xmfhtmlgump", "XMFHTMLGump" },
+			{ "button", "Button" },
+			{ "radio", "Radio" },
+			{ "checkbox", "CheckBox" },
+			{ "textentry", "TextEntry" },
+			{ "textentrya", "TextEntryA" },
+			{ "page", "Page" },
+			{ "group", "Group" },
+			{ "nomove", "NoMove" },
+			{ "noclose", "NoClose" },
+			{ "nodispose", "NoDispose" },
+			{ "gumppictiled", "GumpPicTiled" },
+			{ "checkertrans", "CheckerTrans" },
+			{ "xmfhtmlgumpcolor", "XMFHTMLGumpColor" },
+			{ "tilepichue", "TilePicHue" },
+		};
+		if ( pszKey == NULL )
+			return pszKey;
+		for ( size_t i = 0; i < COUNTOF(sm_names); i++ )
+		{
+			if ( !_stricmp(pszKey, sm_names[i].m_pszScript) )
+				return sm_names[i].m_pszWire;
+		}
+		return pszKey;
+	}
+
 	static void NormalizeGumpControl(TCHAR* pszControl)
 	{
 		if ( pszControl == NULL || !*pszControl )
@@ -1014,9 +1060,21 @@ public:
 			return;
 		memcpy( szKey, pKey, iKeyLen );
 		szKey[iKeyLen] = '\0';
+		LPCTSTR pszWireKey = DialogWireName(szKey);
 		const unsigned iMask = DialogNumericMask(szKey);
 		if ( iMask == 0 )
+		{
+			if ( strcmp(pszWireKey, szKey) != 0 )
+			{
+				TCHAR szNormalized[SCRIPT_MAX_LINE_LEN];
+				int iWritten = snprintf(szNormalized, sizeof(szNormalized), "%s%s",
+					pszWireKey, pKey + iKeyLen);
+				if ( iWritten >= 0 && static_cast<size_t>(iWritten) < sizeof(szNormalized) )
+					strncpy(pszControl, szNormalized, SCRIPT_MAX_LINE_LEN - 1);
+				pszControl[SCRIPT_MAX_LINE_LEN - 1] = '\0';
+			}
 			return;
+		}
 
 		TCHAR szFields[16][SCRIPT_MAX_LINE_LEN];
 		int iFields = 0;
@@ -1052,7 +1110,7 @@ public:
 			return;
 
 		TCHAR szNormalized[SCRIPT_MAX_LINE_LEN];
-		int iWritten = snprintf(szNormalized, sizeof(szNormalized), "%s", szKey);
+		int iWritten = snprintf(szNormalized, sizeof(szNormalized), "%s", pszWireKey);
 		if ( iWritten < 0 || static_cast<size_t>(iWritten) >= sizeof(szNormalized) )
 			return;
 		for ( int i = 0; i < iFields; i++ )
@@ -1243,7 +1301,7 @@ public:
 			if ( FormatDialogNumber(ppArgs[i], szNum[i], sizeof(szNum[i])) )
 				ppOut[i] = szNum[i];
 		}
-		pControls->AddFormat("htmlgump %s %s %s %s %d %s %s",
+		pControls->AddFormat("HTMLGump %s %s %s %s %d %s %s",
 			ppOut[0], ppOut[1], ppOut[2], ppOut[3], iTextID, ppOut[5], ppOut[6]);
 		return true;
 	}
@@ -1338,7 +1396,7 @@ public:
 			if ( FormatDialogNumber(ppArgs[i], szNum[i], sizeof(szNum[i])) )
 				ppOut[i] = szNum[i];
 		}
-		pControls->AddFormat("text %s %s %s %d",
+		pControls->AddFormat("Text %s %s %s %d",
 			ppOut[0], ppOut[1], ppOut[2], iTextID);
 		return true;
 	}

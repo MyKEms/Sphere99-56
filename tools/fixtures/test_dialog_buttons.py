@@ -41,6 +41,7 @@ from make_fixture import (
     DIALOG_FLOW_BUTTON,
     DIALOG_FLOW_CONTROLS,
     DIALOG_FLOW_DECLINED_CONTROLS,
+    DIALOG_FLOW_DECLINED_WIRE_CONTROLS,
     DIALOG_FLOW_GUMPS,
 )
 from run_suite import shutdown_failures
@@ -173,7 +174,7 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 gump = wait_for(lambda data: parse_gump_dialog(data) is not None)
             declined = [
                 entry for entry in sent
-                if not entry[2] or entry[2] == DIALOG_FLOW_DECLINED_CONTROLS
+                if not entry[2] or entry[2] == DIALOG_FLOW_DECLINED_WIRE_CONTROLS
             ]
             if declined:
                 failures.append(f"layouts that returned were sent: {declined!r}")
@@ -191,6 +192,25 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
                 failures.append(f"argo layout sent {controls!r}")
             else:
                 passed.append("argo layout")
+        else:
+            # The legacy server preserves the canonical wire spelling of
+            # gump controls.  Keep this check on the raw layout rather than
+            # the semantic parser, which intentionally case-folds names.
+            expected_controls = [
+                "ResizePic 0 0 5054 240 200",
+                f"Button 20 20 2151 2152 1 0 {DIALOG_BUTTON_NUMBERED}",
+                f"Button 20 60 2151 2152 1 0 {DIALOG_BUTTON_FALLBACK}",
+                f"CheckBox 20 100 210 211 0 {DIALOG_BUTTON_SWITCH}",
+                f"TextEntry 20 140 180 20 0 {DIALOG_BUTTON_TEXT_ID} 0",
+            ]
+            controls = controls_of(gump)
+            if controls != expected_controls:
+                failures.append(
+                    f"gump controls used non-stock wire casing: {controls!r}; "
+                    f"expected {expected_controls!r}"
+                )
+            else:
+                passed.append("stock control casing")
         for button, switches, texts, expected in presses:
             if gump is None:
                 failures.append(f"no dialog was open for button {button}")
@@ -268,7 +288,7 @@ def main() -> int:
     elif args.argo_layout:
         total = 1 + len(ARGO_PRESSES)
     else:
-        total = len(PRESSES)
+        total = len(PRESSES) + 1
     if failures:
         print(f"dialog-button probe failed: {len(passed)}/{total} checks passed", file=sys.stderr)
         for failure in failures:
