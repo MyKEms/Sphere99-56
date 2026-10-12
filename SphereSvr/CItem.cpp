@@ -114,6 +114,7 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	m_fUnEquipTriggerActive = false;
 	m_fNoLayerCharContent = false;
 	m_fNoExplicitLayer = false;
+	m_fScriptCreated = false;
 	m_uidLoadContainer.InitUID();
 	m_layerLoadContainer = LAYER_NONE;
 	m_amount = 1;
@@ -311,6 +312,7 @@ CItemPtr CItem::CreateScript( ITEMID_TYPE id, CChar* pCharSrc ) // static
 	{
 		return NULL;
 	}
+	pItem->m_fScriptCreated = true;
 
 	if ( pCharSrc && ( pItem->IsType(IT_MULTI) || pItem->IsType(IT_SHIP)))
 	{
@@ -1452,6 +1454,24 @@ bool CItem::Stack( CItem* pItem )
 
 	SetAmount( pItem->GetAmount() + GetAmount());
 	pItem->DeleteThis();
+	return( true );
+}
+
+bool CItem::StackInto( CItem* pItem )
+{
+	// Script-generated rewards should add to an existing pile without
+	// replacing the saved pile's UID.  The ordinary Stack() direction is
+	// retained for client and legacy callers.
+	if ( pItem == this )
+		return( true );
+	if ( ! IsStackable( pItem ))
+		return( false );
+
+	if ( IsAttr( ATTR_NEWBIE ) != pItem->IsAttr( ATTR_NEWBIE ))
+		pItem->ClrAttr( ATTR_NEWBIE );
+
+	pItem->SetAmountUpdate( pItem->GetAmount() + GetAmount());
+	DeleteThis();
 	return( true );
 }
 

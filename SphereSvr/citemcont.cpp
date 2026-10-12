@@ -301,6 +301,9 @@ void CItemContainer::ContentAdd( CItemPtr pItem, POINT pt )
 			if ( fValidPoint &&
 				( tryPoint.x != pt.x || tryPoint.y != pt.y ))
 				continue;
+			if (( pItem->IsScriptCreated() || pTry->IsScriptCreated()) &&
+				pItem->StackInto( pTry ))
+				return;
 			if ( pItem->Stack( pTry ))
 			{
 				// Stack() keeps pItem and deletes pTry.  Preserve the existing
