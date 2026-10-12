@@ -1504,6 +1504,34 @@ public:
 		return fDigit && fOperator;
 	}
 
+	static bool HasTopLevelComma(LPCTSTR pszValue)
+	{
+		// A script function can return a comma-separated value that is consumed
+		// as one inline-gump argument (for example, an x,y coordinate pair).
+		// Keep that value as text so the caller can split it at its own level.
+		if ( pszValue == NULL )
+			return false;
+		bool fQuoted = false;
+		int iDepth = 0;
+		for ( const TCHAR* p = pszValue; *p; p++ )
+		{
+			if ( *p == '"' && ( p == pszValue || p[-1] != '\\' ) )
+			{
+				fQuoted = !fQuoted;
+				continue;
+			}
+			if ( fQuoted )
+				continue;
+			if ( *p == '(' )
+				++iDepth;
+			else if ( *p == ')' && iDepth > 0 )
+				--iDepth;
+			else if ( *p == ',' && iDepth == 0 )
+				return true;
+		}
+		return false;
+	}
+
 	static bool IsScriptByteTokenStream(LPCTSTR pszValue)
 	{
 		if ( pszValue == NULL || *pszValue == '\0' )
@@ -2964,7 +2992,7 @@ public:
 							*--pszTextEnd = '\0';
 						const size_t iTextLen = strlen(pszText);
 						if ( (iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"') ||
-							IsScriptByteTokenStream(pszText) )
+							IsScriptByteTokenStream(pszText) || HasTopLevelComma(pszText) )
 						{
 							if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
 							{

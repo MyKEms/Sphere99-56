@@ -14,7 +14,7 @@ from run_suite import shutdown_failures
 
 
 EXPECTED_RANGES = ("(80 - 120)", "(60 - 90)", "(20 - 50)", "(80 - 130)", "nested coordinates")
-EXPECTED_POSITIONS = (233, 269, 305, 341, 13)
+EXPECTED_POSITIONS = (233, 269, 305, 341, 377)
 
 
 def _packets(data: bytes):
