@@ -171,7 +171,21 @@ bool CResourceRefArray::v_Set( CGVariant& vVal, RES_TYPE restype )
 			if ( pszCmd[0] == '+' ) pszCmd ++;
 		}
 
-		CResourceDefPtr pResDef = g_Cfg.ResourceGetDefByName( restype, pszCmd );
+		// Script resource lists accept quoted names after the optional +/-
+		// modifier.  The parser keeps the quotes in the argument text, while
+		// the resource table stores the bare name.  Strip one balanced pair
+		// before lookup so EVENTS "<tag>" has the same result as EVENTS <tag>.
+		CGString sUnquoted;
+		LPCTSTR pszLookup = pszCmd;
+		const size_t iCmdLen = strlen(pszCmd);
+		if ( iCmdLen >= 2 && pszCmd[0] == '"' && pszCmd[iCmdLen - 1] == '"' )
+		{
+			sUnquoted.Copy( pszCmd + 1 );
+			sUnquoted.SetLength( static_cast<int>( iCmdLen - 2 ));
+			pszLookup = sUnquoted;
+		}
+
+		CResourceDefPtr pResDef = g_Cfg.ResourceGetDefByName( restype, pszLookup );
 		CResourceLinkPtr pResLink = REF_CAST(CResourceLink,pResDef);
 		if ( pResLink == NULL )
 		{
@@ -180,7 +194,7 @@ bool CResourceRefArray::v_Set( CGVariant& vVal, RES_TYPE restype )
 			// missing removal into a rejected script command.
 			fRet = fRemove;
 			if ( ! fRemove )
-				DEBUG_ERR(( "Unknown '%s' Resource '%s'" LOG_CR, CSphereResourceMgr::GetResourceBlockName(restype), pszCmd ));
+				DEBUG_ERR(( "Unknown '%s' Resource '%s'" LOG_CR, CSphereResourceMgr::GetResourceBlockName(restype), pszLookup ));
 			continue;
 		}
 
