@@ -13,8 +13,8 @@ from make_texta_fixture import ACCOUNT, ITEM_SERIAL, PASSWORD
 from run_suite import shutdown_failures
 
 
-EXPECTED_RANGES = ("(80 - 120)", "(60 - 90)", "(20 - 50)", "(80 - 130)")
-EXPECTED_POSITIONS = (233, 269, 305, 341)
+EXPECTED_RANGES = ("(80 - 120)", "(60 - 90)", "(20 - 50)", "(80 - 130)", "nested coordinates")
+EXPECTED_POSITIONS = (233, 269, 305, 341, 13)
 
 
 def _packets(data: bytes):
@@ -87,8 +87,8 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
             failures.append(f"raw TEXTA controls reached the packet: {len(raw_texta)}")
         else:
             passed.append("no raw TEXTA controls")
-        if len(text_controls) != 4:
-            failures.append(f"expected four visible text controls, got {len(text_controls)}")
+        if len(text_controls) != 5:
+            failures.append(f"expected five visible text controls, got {len(text_controls)}")
             return
         if any(control.kind.casefold() != "text" for control in text_controls):
             failures.append("inline controls were not normalized to Text")
@@ -101,8 +101,8 @@ def exercise(args: argparse.Namespace, failures: list[str], passed: list[str]) -
         else:
             passed.append("range control positions")
         text_ids = tuple(int(control.args[3]) for control in text_controls)
-        if text_ids != tuple(range(4)):
-            failures.append(f"range text ids {text_ids!r}, expected 0..3")
+        if text_ids != tuple(range(5)):
+            failures.append(f"range text ids {text_ids!r}, expected 0..4")
         ranges = tuple(gump.texts[text_id] for text_id in text_ids if 0 <= text_id < len(gump.texts))
         if ranges != EXPECTED_RANGES:
             failures.append(f"range texts {ranges!r}, expected {EXPECTED_RANGES!r}")

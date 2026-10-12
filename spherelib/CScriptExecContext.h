@@ -1089,6 +1089,33 @@ public:
 		return false;
 	}
 
+	// Find a comma that separates top-level inline-gump arguments. Script
+	// expressions commonly contain nested calls such as
+	// <argo.dialog_textpos(0,0)>; commas inside those calls or quoted text are
+	// part of the argument and must not split the control.
+	static TCHAR* FindInlineArgComma(TCHAR* pszArgs)
+	{
+		int iDepth = 0;
+		bool fQuoted = false;
+		for ( TCHAR* p = pszArgs; p && *p; p++ )
+		{
+			if ( *p == '"' && ( p == pszArgs || p[-1] != '\\' ) )
+			{
+				fQuoted = !fQuoted;
+				continue;
+			}
+			if ( fQuoted )
+				continue;
+			if ( *p == '(' )
+				iDepth++;
+			else if ( *p == ')' && iDepth > 0 )
+				iDepth--;
+			else if ( *p == ',' && iDepth == 0 )
+				return p;
+		}
+		return NULL;
+	}
+
 	// Sphere 0.99 accepts HTMLGUMPa as an inline-text variant of HTMLGUMP.
 	// The client packet has no inline-text control: append the text to the
 	// packet text table and emit the ordinary HTMLGUMP form with its index.
@@ -1245,7 +1272,7 @@ public:
 			for ( int i = 0; i < 3; i++ )
 			{
 				ppArgs[i] = p;
-				TCHAR* pComma = strchr(p, ',');
+				TCHAR* pComma = FindInlineArgComma(p);
 				if ( pComma == NULL )
 					return false;
 				*pComma = '\0';
