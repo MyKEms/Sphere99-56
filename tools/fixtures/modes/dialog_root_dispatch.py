@@ -59,15 +59,15 @@ def bulk_line(index: int) -> str:
 # functions, then one control that reads the TAG the first function set.
 PANEL_Y = 3 + 20
 FIRST_CONTROLS = (
-    "gumppic 140 200 2200",
-    "gumppictiled 10 3 300 200 2624",
-    "gumppic 10 8 2201",
-    f"htmlgump 10 {PANEL_Y} 280 40 1 0 0",
-    f"button 40 150 4005 4007 1 0 {FIRST_BUTTON}",
-    "text 80 150 0 2",
-    "htmlgump 10 70 280 40 5 0 0",
-    "htmlgump 10 120 280 40 6 0 0",
-    f"text 200 {PANEL_Y} 0 3",
+    "GumpPic 140 200 2200",
+    "GumpPicTiled 10 3 300 200 2624",
+    "GumpPic 10 8 2201",
+    f"HTMLGump 10 {PANEL_Y} 280 40 1 0 0",
+    f"Button 40 150 4005 4007 1 0 {FIRST_BUTTON}",
+    "Text 80 150 0 2",
+    "HTMLGump 10 70 280 40 5 0 0",
+    "HTMLGump 10 120 280 40 6 0 0",
+    f"Text 200 {PANEL_Y} 0 3",
 )
 FIRST_TEXTS = (
     LONG_TEXT,
@@ -80,10 +80,10 @@ FIRST_TEXTS = (
 )
 NEXT_LABEL_TEXT_ID = BULK_LINE_COUNT
 NEXT_CONTROLS = (
-    "resizepic 0 0 5054 420 400",
-    "htmlgump 20 20 380 320 0 1 1",
-    f"button 20 360 4005 4007 1 0 {NEXT_BUTTON}",
-    f"text 60 360 0 {NEXT_LABEL_TEXT_ID}",
+    "ResizePic 0 0 5054 420 400",
+    "HTMLGump 20 20 380 320 0 1 1",
+    f"Button 20 360 4005 4007 1 0 {NEXT_BUTTON}",
+    f"Text 60 360 0 {NEXT_LABEL_TEXT_ID}",
 )
 NEXT_TEXTS = tuple(bulk_line(index) for index in range(BULK_LINE_COUNT)) + ("label 60",)
 
