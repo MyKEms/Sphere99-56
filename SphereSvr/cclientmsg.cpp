@@ -2289,8 +2289,12 @@ void CClient::addReSync()
 {
 	// Reloads the client with all it needs.
 	CPointMap ptold;	// invalid value.
-	addPlayerView( ptold );
+	// Send the player's own mobile/equipment before the potentially large
+	// ground-item view. A dense world view may contain thousands of short-lived
+	// effects; keeping the backpack in the first entry burst prevents the
+	// client from seeing XCMD_Start without its container state.
 	addChar( m_pChar );
+	addPlayerView( ptold );
 	addLight();		// Current light level where I am.
 }
 
