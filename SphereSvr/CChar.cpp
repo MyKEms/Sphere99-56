@@ -2136,6 +2136,18 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 
 	case M_NewItem:	// just add an item but don't put it anyplace yet..
 		{
+			// 0.99 treats the zero resource emitted by HVAL for an empty or
+			// unresolved argument as a silent no-op.  Keep the rejected form out
+			// of the unknown-keyword report and clear LASTNEW so a caller cannot
+			// accidentally reuse an item created by an earlier statement.
+			CSphereUID rid = g_Cfg.ResourceGetIDByName( RES_ItemDef, vArgs.GetPSTR() );
+			if ( rid.IsValidRID() && rid.GetResType() == RES_ItemDef &&
+				rid.GetResIndex() == 0 )
+			{
+				CSphereThread::GetCurrentThread()->m_uidLastNewItem.InitUID();
+				vValRet.SetVoid();
+				return NO_ERROR;
+			}
 			CItemPtr pItem = CItem::CreateHeader( vArgs, NULL, pCharSrc, false );
 			if ( pItem == NULL )
 				return( HRES_BAD_ARGUMENTS );

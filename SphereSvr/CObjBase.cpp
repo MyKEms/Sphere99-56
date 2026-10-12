@@ -852,6 +852,11 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 		}
 		break;
 	case M_Events:
+		// An empty expansion is a valid no-op in the stock script engine.  It
+		// occurs when a dynamic tag has no event name; it must not become a
+		// rejected EVENTS diagnostic.
+		if ( vArgs.GetPSTR() == NULL || !*vArgs.GetPSTR() )
+			break;
 		if ( ! m_Events.v_Set( vArgs, RES_Events ))
 			return HRES_BAD_ARGUMENTS;
 		break;
