@@ -16,12 +16,16 @@ LOGIN_VALUE = "link-trigger-pw"
 EVENT_NAME = "e_LinkTriggerProbe"
 TARGET_DEFNAME = "i_link_trigger_target"
 DRIVER_DEFNAME = "i_link_trigger_driver"
+EXPLICIT_TARGET_DEFNAME = "i_link_trigger_explicit_target"
 TARGET_ID = 0x0EF1
 DRIVER_ID = 0x0EF2
+EXPLICIT_TARGET_ID = 0x0EF3
 TARGET_SERIAL = 2
 DRIVER_SERIAL = 1
+EXPLICIT_TARGET_SERIAL = 4
 TARGET_UID = 0x40000000 | TARGET_SERIAL
 DRIVER_UID = 0x40000000 | DRIVER_SERIAL
+EXPLICIT_TARGET_UID = 0x40000000 | EXPLICIT_TARGET_SERIAL
 MARKER = "SPHERE_LINK_TRIGGER"
 
 
@@ -47,7 +51,18 @@ NAME=synthetic linked trigger target
 TYPE=T_EQ_SCRIPT
 LAYER=31
 ON=@Timer
-SERV.B {MARKER}|target
+SRC.TAG.link_shorthand=1
+SERV.B {MARKER}|target-shorthand|<SRC.SERIAL>|<SRC.TAG.link_shorthand>
+RETURN 1
+
+[ITEMDEF 0x{EXPLICIT_TARGET_ID:04X}]
+DEFNAME={EXPLICIT_TARGET_DEFNAME}
+NAME=synthetic explicit trigger target
+TYPE=T_EQ_SCRIPT
+LAYER=32
+ON=@Timer
+SRC.TAG.link_explicit=1
+SERV.B {MARKER}|target-explicit|<SRC.SERIAL>|<SRC.TAG.link_explicit>
 RETURN 1
 
 [ITEMDEF 0x{DRIVER_ID:04X}]
@@ -58,14 +73,17 @@ LAYER=30
 ON=@Timer
 SERV.B {MARKER}|driver
 LINK.TRIGGER(TIMER)
-SERV.B {MARKER}|after_link
-FINDUID(0x{TARGET_UID:08X}).TRIGGER(TIMER)
-SERV.B {MARKER}|after_object
+SERV.B {MARKER}|after-shorthand|<SRC.TAG.link_shorthand>
+FINDUID(0x{EXPLICIT_TARGET_UID:08X}).TRIGGER(@TIMER)
+SERV.B {MARKER}|after-explicit|<SRC.TAG.link_explicit>
 RETURN 1
 
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 SYSMESSAGE {MARKER}|login
+FINDUID(0x{DRIVER_UID:08X}).TRIGGER(TIMER)
+RETURN 0
+ON=@ItemTimer
 RETURN 0
 ON=@Logout
 RETURN 0
@@ -118,17 +136,20 @@ P=128,128,0
 SERIAL={TARGET_SERIAL}
 CONT=3
 LAYER=31
+[WORLDITEM {EXPLICIT_TARGET_DEFNAME}]
+SERIAL={EXPLICIT_TARGET_SERIAL}
+CONT=3
+LAYER=32
 [WORLDITEM {DRIVER_DEFNAME}]
 SERIAL={DRIVER_SERIAL}
 LINK={TARGET_UID}
 CONT=3
 LAYER=30
-TIMER=15
 [EOF]
 """,
         encoding="ascii",
     )
-    write_mul_fixture(output, extra_item_id=max(TARGET_ID, DRIVER_ID))
+    write_mul_fixture(output, extra_item_id=max(TARGET_ID, DRIVER_ID, EXPLICIT_TARGET_ID))
     return 0
 
 
@@ -136,8 +157,8 @@ MODE = register_mode(
     FixtureMode(
         name="link-trigger",
         fixture_args=(),
-        order=193,
-        id_block=144,
+        order=194,
+        id_block=145,
         case=FixtureCase(
             name="link-trigger",
             mode="link-trigger",
