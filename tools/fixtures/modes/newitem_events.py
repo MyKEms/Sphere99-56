@@ -169,13 +169,13 @@ MODE = register_mode(
     FixtureMode(
         name="newitem-events",
         fixture_args=(),
-        order=194,
-        id_block=146,
+        order=197,
+        id_block=148,
         case=FixtureCase(
             name="newitem-events",
             mode="newitem-events",
             tests=(TestCase("test_newitem_events.py", (), True, True),),
-            ports={"native": 3210, "asan": 9210},
+            ports={"native": 43203, "asan": 43204},
             output="newitem-events",
         ),
     )
