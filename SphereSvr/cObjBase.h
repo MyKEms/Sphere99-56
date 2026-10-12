@@ -350,6 +350,7 @@ private:
 	bool m_fUnEquipTriggerActive;	// Prevent recursive T_UnEquip on this item.
 	bool m_fNoLayerCharContent;	// Loaded directly under a character without an equip layer.
 	bool m_fNoExplicitLayer;	// Loaded from a character relation without a saved LAYER.
+	bool m_fScriptCreated;	// Created by a script; preserve an existing pile when it is added.
 	CSphereUID m_uidLoadContainer;	// deferred CONT target while loading sections out of order.
 	LAYER_TYPE m_layerLoadContainer;
 
@@ -867,7 +868,9 @@ public:
 	bool  IsStackableException() const;
 	bool  IsStackable( const CItem* pItem ) const;
 	bool  IsSameType( const CObjBase* pObj ) const;
+	bool  IsScriptCreated() const { return m_fScriptCreated; }
 	bool  Stack( CItem* pItem );
+	bool  StackInto( CItem* pItem );
 	int ConsumeAmount( int iQty = 1, bool fTest = false );
 
 	CREID_TYPE GetCorpseType() const
