@@ -15,7 +15,7 @@ MODE = register_mode(
             name="ghost-self-commands",
             mode=None,
             tests=(TestCase("test_ghost_self_commands.py", (), True, True),),
-            ports={"native": 3170, "asan": 3171},
+            ports={"native": 6012, "asan": 9012},
             generator="make_ghost_self_commands_fixture.py",
             output="ghost-self-commands",
         ),

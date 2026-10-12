@@ -112,7 +112,7 @@ MODE = register_mode(
             name="unplaced-newitem",
             mode="unplaced-newitem",
             tests=(TestCase("test_unplaced_newitem.py", (), True, True),),
-            ports={"native": 3160, "asan": 3161},
+            ports={"native": 6034, "asan": 9034},
             output="unplaced-newitem",
         ),
     )

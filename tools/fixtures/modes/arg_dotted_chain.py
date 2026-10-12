@@ -125,7 +125,7 @@ MODE = register_mode(
             name="arg-dotted-chain",
             mode="arg-dotted-chain",
             tests=(TestCase("test_arg_dotted_chain.py", (), True, True),),
-            ports={"native": 3172, "asan": 3173},
+            ports={"native": 6000, "asan": 9000},
             output="arg-dotted-chain",
         ),
     )

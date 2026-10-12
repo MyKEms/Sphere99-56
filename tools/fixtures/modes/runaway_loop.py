@@ -21,7 +21,7 @@ MODE = register_mode(
             name="runaway-loop",
             mode="runaway-loop",
             tests=(TestCase("test_runaway_loop.py", (), True, True),),
-            ports={"native": 2754, "asan": 2755},
+            ports={"native": 6038, "asan": 9038},
             output="runaway-loop",
         ),
     )

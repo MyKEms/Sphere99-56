@@ -34,7 +34,7 @@ MODE = register_mode(
                     True,
                 ),
             ),
-            ports={"native": 2762, "asan": 2762},
+            ports={"native": 6010, "asan": 9010},
             mode_by_variant={},
             generator="make_fixture.py",
             generator_args=(),

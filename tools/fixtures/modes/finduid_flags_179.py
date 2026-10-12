@@ -108,7 +108,7 @@ MODE = register_mode(
             name="finduid-flags-179",
             mode="finduid-flags-179",
             tests=(TestCase("test_finduid_flags_179.py", (), True, True),),
-            ports={"native": 2900, "asan": 2901},
+            ports={"native": 6042, "asan": 9042},
             generator="make_fixture.py",
             output="finduid-flags-179",
         ),

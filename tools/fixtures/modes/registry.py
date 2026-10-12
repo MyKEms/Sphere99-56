@@ -103,6 +103,35 @@ def validate_modes(modes: Sequence[FixtureMode]) -> None:
             )
 
 
+def validate_ports(cases: Mapping[str, FixtureCase]) -> tuple[str, ...]:
+    """Return listen/game endpoint collisions between fixture cases.
+
+    Native and ASan cases run in separate jobs, so each variant has its own
+    endpoint namespace.  A case owns both its listen port and the game port
+    at ``listen + 1000``; either endpoint colliding with another case is a
+    manifest error because a leaked server can make the following case fail.
+    """
+
+    errors: list[str] = []
+    for variant in ("native", "asan"):
+        endpoints: dict[int, tuple[str, str]] = {}
+        for name, case in sorted(cases.items()):
+            port = case.selected_port(variant)
+            if port is None:
+                continue
+            for endpoint, role in ((port, "listen"), (port + 1000, "game")):
+                previous = endpoints.get(endpoint)
+                if previous is not None:
+                    previous_name, previous_role = previous
+                    errors.append(
+                        f"{variant} port {endpoint} is used by "
+                        f"{previous_name} ({previous_role}) and {name} ({role})"
+                    )
+                else:
+                    endpoints[endpoint] = (name, role)
+    return tuple(errors)
+
+
 def make_case(
     name: str,
     *,

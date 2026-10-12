@@ -13,7 +13,7 @@ from pathlib import Path
 
 from fixture_cases import FIXTURE_CASES, MODE_GENERATORS, MODES
 from modes.fragments.allowlists import unknown_keyword_allowlist
-from modes.registry import FixtureMode, validate_modes
+from modes.registry import FixtureCase, FixtureMode, TestCase, validate_modes, validate_ports
 from run_fixture_suite import parse_shard, shard_case_names
 
 ROOT = Path(__file__).resolve().parent
@@ -119,10 +119,36 @@ def check_fixture_shards(errors: list[str]) -> None:
         errors.append(f"invalid fixture shard {invalid!r} was accepted")
 
 
+def check_fixture_ports(errors: list[str]) -> None:
+    """Every case must own a unique listen/game endpoint per build variant."""
+
+    errors.extend(validate_ports(FIXTURE_CASES))
+    collision_probe = {
+        "left": FixtureCase(
+            name="left",
+            mode=None,
+            tests=(TestCase("left.py"),),
+            ports={"native": 6100, "asan": 6101},
+        ),
+        "right": FixtureCase(
+            name="right",
+            mode=None,
+            tests=(TestCase("right.py"),),
+            ports={"native": 7100, "asan": 6101},
+        ),
+    }
+    probe_errors = validate_ports(collision_probe)
+    if not any("native port 7100" in error for error in probe_errors):
+        errors.append("port guard missed a native listen/game collision")
+    if not any("asan port 6101" in error for error in probe_errors):
+        errors.append("port guard missed a same-variant listen collision")
+
+
 def main() -> int:
     errors: list[str] = []
     check_seeded_save_pairs(errors)
     check_fixture_shards(errors)
+    check_fixture_ports(errors)
     for mode in MODES:
         if mode.fixture_args is not None and mode.name not in MODE_GENERATORS:
             errors.append(f"{mode.name} has no auto-discovered generator")
