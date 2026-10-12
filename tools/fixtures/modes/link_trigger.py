@@ -157,13 +157,13 @@ MODE = register_mode(
     FixtureMode(
         name="link-trigger",
         fixture_args=(),
-        order=194,
-        id_block=145,
+        order=198,
+        id_block=149,
         case=FixtureCase(
             name="link-trigger",
             mode="link-trigger",
             tests=(TestCase("test_link_trigger.py", (), True, True),),
-            ports={"native": 3178, "asan": 3179},
+            ports={"native": 43205, "asan": 43206},
             output="link-trigger",
         ),
     )
