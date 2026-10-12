@@ -16,7 +16,7 @@ from run_suite import shutdown_failures
 ACCOUNT = "CanMakeProbe"
 PASSWORD = "canmake-pw"
 MARKER = "SPHERE_CANMAKE_ELIGIBILITY"
-EXPECTED = {"empty": "0", "rule": "1"}
+EXPECTED = {"empty": "0", "rule": "1", "resource": "1"}
 ROW_RE = re.compile(re.escape(MARKER) + r"\|(\w+)=(.*)$")
 
 

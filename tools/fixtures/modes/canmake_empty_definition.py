@@ -14,6 +14,7 @@ EVENT_NAME = "e_CanMakeEligibilityProbe"
 MARKER = "SPHERE_CANMAKE_ELIGIBILITY"
 EMPTY_ITEM_ID = 0x0F91
 RULE_ITEM_ID = 0x0F92
+RESOURCE_ONLY_ITEM_ID = 0x0F93
 
 
 def generate(output: Path) -> int:
@@ -37,9 +38,16 @@ NAME=synthetic item with a make rule
 TYPE=T_NORMAL
 SKILLMAKE=SYNTH_SKILL_0 0.0
 
+[ITEMDEF 0x{RESOURCE_ONLY_ITEM_ID:04X}]
+DEFNAME=SYNTHETIC_CANMAKE_RESOURCE
+NAME=synthetic item with a resource-only make rule
+TYPE=T_NORMAL
+RESOURCES=1 SYNTHETIC_CANMAKE_LATE_RESOURCE
+
 [FUNCTION f_CanMakeEligibilityProbe]
 SYSMESSAGE {MARKER}|empty=<CANMAKE(SYNTHETIC_CANMAKE_EMPTY)>
 SYSMESSAGE {MARKER}|rule=<CANMAKE(SYNTHETIC_CANMAKE_RULE)>
+SYSMESSAGE {MARKER}|resource=<CANMAKE(SYNTHETIC_CANMAKE_RESOURCE)>
 SYSMESSAGE {MARKER}|done
 RETURN 1
 
@@ -88,7 +96,7 @@ P=128,128,0
 """,
         encoding="ascii",
     )
-    write_mul_fixture(output, extra_item_id=max(EMPTY_ITEM_ID, RULE_ITEM_ID))
+    write_mul_fixture(output, extra_item_id=max(EMPTY_ITEM_ID, RULE_ITEM_ID, RESOURCE_ONLY_ITEM_ID))
     return 0
 
 

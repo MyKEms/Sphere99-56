@@ -21,6 +21,7 @@ CSCRIPT_CLASS_IMP1(ObjBaseDef,CObjBaseDef::sm_Props,NULL,NULL,ResourceTriggered)
 
 CObjBaseDef::CObjBaseDef( CSphereUID id ) : CResourceTriggered( id )
 {
+	m_fResourcesDeclared = false;
 	m_wDispIndex = 0;	// Assume nothing til told differently.
 	m_CanFlags = CAN_C_INDOORS;	// most things can cover us from the weather.
 	m_Height = PLAYER_HEIGHT;	// default height of object or creature.
@@ -84,6 +85,7 @@ HRESULT CObjBaseDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 
 	case P_Resources:
+		m_fResourcesDeclared = true;
 		m_BaseResources.s_LoadKeys( vVal.GetPSTR());
 		break;
 	case P_ResourceNames:
@@ -116,6 +118,7 @@ void CObjBaseDef::CopyTransfer( CObjBaseDef* pBase )
 
 	m_sName = pBase->m_sName;
 	m_BaseResources.CopyArray( pBase->m_BaseResources);
+	m_fResourcesDeclared = pBase->m_fResourcesDeclared;
 
 	CopyBasic( pBase );
 }

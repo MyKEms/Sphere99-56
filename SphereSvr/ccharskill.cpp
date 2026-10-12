@@ -926,9 +926,7 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 	// skill or resource rule is not a recipe: ResourceConsume() treats an
 	// empty resource list as satisfied, which would otherwise make every
 	// ordinary item appear craftable during the selection probe.
-	if ( stage == CSkillDef::T_Select &&
-		pItemDef->m_SkillMake.GetSize() == 0 &&
-		pItemDef->m_BaseResources.GetSize() == 0 )
+	if ( stage == CSkillDef::T_Select && !pItemDef->HasMakeRule())
 	{
 		return( false );
 	}
