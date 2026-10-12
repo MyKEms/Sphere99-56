@@ -133,7 +133,7 @@ MODE = register_mode(
             name="craftmenu-hash-var",
             mode="craftmenu-hash-var",
             tests=(TestCase("test_craftmenu_hash_var.py", (), True, True),),
-            ports={"native": 3172, "asan": 3173},
+            ports={"native": 6002, "asan": 9002},
             generator="make_fixture.py",
             output="craftmenu-hash-var",
         ),

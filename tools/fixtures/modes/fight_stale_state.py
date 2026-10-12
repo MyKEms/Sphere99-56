@@ -42,7 +42,7 @@ MODE = register_mode(
             name="fight-stale-state",
             mode="fight-stale-state",
             tests=(TestCase("test_fight_stale_state.py", (), True, True),),
-            ports={"native": 3002, "asan": 3003},
+            ports={"native": 6026, "asan": 9026},
             output="fight-stale-state",
         ),
     )

@@ -58,7 +58,7 @@ MODE = register_mode(
                 TestCase("test_official_crypt_300c.py", (), True, True),
                 TestCase("test_charlist_count.py", (), True, True),
             ),
-            ports={"native": 2941, "asan": 2942},
+            ports={"native": 6032, "asan": 9032},
             output="official-crypt",
         ),
     )
