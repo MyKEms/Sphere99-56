@@ -11,6 +11,7 @@ ACCOUNT = "NewItemEventsProbe"
 PASSWORD = "newitempw"
 EVENT_NAME = "e_NewItemEventsProbe"
 ITEM_ID = 0xA5E0
+FULL_ITEM_ID = f"0a200{ITEM_ID:04x}"
 ITEM_NAME = "SYNTHETIC_NEWITEM_EVENTS"
 MARKER = "SPHERE_NEWITEM_EVENTS"
 
@@ -19,6 +20,16 @@ def generate(output: Path) -> int:
     result = generate_recipe(output, BASE_MODE)
     if result:
         return result
+
+    ini = output / "sphere.ini"
+    ini_text = ini.read_text(encoding="ascii")
+    if "UNKNOWNKEYWORDREPORT=" not in ini_text:
+        ini_text = ini_text.replace(
+            "DEBUGLEVEL=0\n",
+            "DEBUGLEVEL=0\nUNKNOWNKEYWORDREPORT=logs/unknown-keywords.json\n",
+            1,
+        )
+        ini.write_text(ini_text, encoding="ascii")
 
     tables = output / "scripts" / "spheretables.scp"
     tables.write_text(
@@ -36,6 +47,10 @@ IF <TAG.probe_done>
 RETURN 0
 ENDIF
 TAG.probe_done=1
+SYSMESSAGE {MARKER} NEWITEM_ZERO|[ready]
+NEWITEM(<HVAL 00>)
+SYSMESSAGE {MARKER} EVENTS_EMPTY|[ready]
+EVENTS
 ARG(item_id,0A5E0)
 NEWITEM {ITEM_NAME}
 SYSMESSAGE {MARKER} DIRECT|[<LASTNEW.NAME>]
@@ -45,6 +60,9 @@ SYSMESSAGE {MARKER} HVAL_ARG|[<LASTNEW.NAME>]
 LASTNEW.REMOVE
 NEWITEM(<HVAL 0A5E0>)
 SYSMESSAGE {MARKER} HVAL_LITERAL|[<LASTNEW.NAME>]
+LASTNEW.REMOVE
+NEWITEM(<HVAL {FULL_ITEM_ID}>)
+SYSMESSAGE {MARKER} HVAL_FULL_RESOURCE|[<LASTNEW.NAME>]
 LASTNEW.REMOVE
 f_newitem_events_args({ITEM_NAME})
 SRC.f_newitem_events_src_args({ITEM_NAME})
@@ -59,6 +77,10 @@ EVENTS -<TAG(spawnEvent)>
 SYSMESSAGE {MARKER} EVENTS_MINUS|[<ISEVENT({EVENT_NAME})>]
 EVENTS "<TAG(spawnEvent)>"
 SYSMESSAGE {MARKER} EVENTS_QUOTED|[<ISEVENT({EVENT_NAME})>]
+ARG(event_index,0)
+TAG(spawnEvent[0],{EVENT_NAME})
+EVENTS <TAG(spawnEvent[<ARG(event_index)>])>
+SYSMESSAGE {MARKER} EVENTS_INDEXED_TAG|[<ISEVENT({EVENT_NAME})>]
 SYSMESSAGE {MARKER}_END
 RETURN 0
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import socket
 import sys
@@ -18,8 +19,11 @@ END_MARKER = MARKER + "_END"
 ROW_RE = re.compile(r"^" + re.escape(MARKER) + r" ([A-Z_]+)\|\[(.*)\]$")
 EXPECTED = {
     "DIRECT": "synthetic newitem events",
+    "NEWITEM_ZERO": "ready",
+    "EVENTS_EMPTY": "ready",
     "HVAL_ARG": "synthetic newitem events",
     "HVAL_LITERAL": "synthetic newitem events",
+    "HVAL_FULL_RESOURCE": "synthetic newitem events",
     "HVAL_ARGS": "synthetic newitem events",
     "HVAL_SRC_ARGS": "synthetic newitem events",
     "HVAL_ARGV": "synthetic newitem events",
@@ -28,6 +32,7 @@ EXPECTED = {
     "EVENTS_PLUS": "1",
     "EVENTS_MINUS": "0",
     "EVENTS_QUOTED": "1",
+    "EVENTS_INDEXED_TAG": "1",
 }
 
 
@@ -141,6 +146,21 @@ def main() -> int:
     ]
     if is_item_errors:
         failures.append(f"unexpected isItem evaluation errors: {is_item_errors!r}")
+
+    report_path = fixture / "logs" / "unknown-keywords.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        failures.append(f"unknown-keyword report unavailable: {error}")
+    else:
+        unexpected = [
+            entry
+            for entry in report.get("entries", [])
+            if str(entry.get("keyword", "")).upper() in {"NEWITEM", "EVENTS"}
+            and str(entry.get("kind", "")).lower() == "rejected"
+        ]
+        if unexpected:
+            failures.append(f"target commands still reported rejected: {unexpected!r}")
 
     if failures:
         print("observed messages:", messages, file=sys.stderr)
