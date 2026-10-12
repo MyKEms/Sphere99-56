@@ -156,6 +156,28 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
             )
             return
 
+        findcont_prefix = MARKER + "|findcont-local="
+        findcont_messages = [message for message in messages if message.startswith(findcont_prefix)]
+        if len(findcont_messages) != 1:
+            failures.append(f"local findcont marker was incomplete: {messages!r}")
+            return
+        findcont_fields = dict(
+            part.split("=", 1)
+            for part in findcont_messages[0].split("|")[1:]
+            if "=" in part
+        )
+        if (
+            not findcont_fields.get("findcont-local")
+            or findcont_fields.get("findcont-local") == findcont_fields.get("other")
+            or findcont_fields.get("findcont-local") != findcont_fields.get("want")
+        ):
+            failures.append(
+                "findcont(local-index) selected the wrong child: "
+                f"expected {findcont_fields.get('want')!r}, "
+                f"got {findcont_fields.get('findcont-local')!r}; messages={messages!r}"
+            )
+            return
+
         sock.sendall(make_gump_reply(gump.serial, gump.context, 7, switches=(0,)))
         marker = MARKER + "|button|7"
         deadline = time.monotonic() + 10.0

@@ -267,6 +267,38 @@ protected:
 		return true;
 	}
 
+	// Dotted method arguments are parsed after the surrounding escape has been
+	// split into segments. A local ARG name in that position (for example the
+	// craft-menu loop's FINDCONT(icount)) therefore arrives as literal text,
+	// while the ordinary call path would resolve the name through m_LocalArgs.
+	// Substitute only an existing local, preserving DEFNAME/resource arguments
+	// such as FINDID(i_ingot) for the object's method resolver.
+	void ResolveLocalChainArgument(CGVariant& vArgs)
+	{
+		if ( vArgs.IsEmpty() )
+			return;
+		LPCTSTR pszRaw = vArgs.GetPSTR();
+		if ( pszRaw == NULL || *pszRaw == '\0' )
+			return;
+		while ( ISWHITESPACE(*pszRaw) )
+			pszRaw++;
+		TCHAR szName[SCRIPT_MAX_LINE_LEN];
+		size_t iLen = 0;
+		while ( pszRaw[iLen] && !ISWHITESPACE(pszRaw[iLen]) &&
+			iLen + 1 < sizeof(szName) )
+			iLen++;
+		LPCTSTR pszTail = pszRaw + iLen;
+		while ( ISWHITESPACE(*pszTail) )
+			pszTail++;
+		if ( *pszTail != '\0' || iLen == 0 )
+			return;
+		memcpy(szName, pszRaw, iLen);
+		szName[iLen] = '\0';
+		CGVariant vLocal;
+		if ( m_LocalArgs.FindKeyVar(szName, vLocal) )
+			vArgs = vLocal;
+	}
+
 	// Resolve a reference chain such as SRC.FINDLAYER(30).NAME,
 	// FINDUID(uid).TAG(name), F_FUNC(arg).CONT.UID or SECTOR.LIGHT.  The root
 	// is a context function or, failing that, a reference property or method
@@ -432,6 +464,8 @@ protected:
 				return false;
 			if ( !_stricmp(szName, "TAG") )
 				ExpandTagArgumentIndices(vArgs);
+			else
+				ResolveLocalChainArgument(vArgs);
 
 			CGVariant vNext;
 			bool fFromFunction = false;

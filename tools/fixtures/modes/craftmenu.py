@@ -13,6 +13,7 @@ EVENT_NAME = "e_CraftMenuProbe"
 MARKER = "SPHERE_CRAFTMENU"
 END_MARKER = MARKER + "_END"
 ITEM_ID = 0x0E91
+CONTAINER_ID = 0x0E98
 
 
 def generate(output: Path) -> int:
@@ -31,6 +32,15 @@ def generate(output: Path) -> int:
 DEFNAME=SYNTHETIC_CRAFT_SOURCE
 NAME=synthetic craft source
 TYPE=T_NORMAL
+
+[TYPEDEFS]
+T_CONTAINER 1
+
+[ITEMDEF 0x{CONTAINER_ID:04X}]
+DEFNAME=SYNTHETIC_CRAFT_CONTAINER
+NAME=synthetic craft container
+TYPE=T_CONTAINER
+TDATA2=1
 
 [FUNCTION craftmenu]
 if (safe def_cm_<argv(0)>)
@@ -83,6 +93,20 @@ SYSMESSAGE {MARKER}|argv-newitem=<LASTNEW.SERIAL>
 ARG(wall_root,<LASTNEW>)
 ARG(wall_root).P=<P>
 F_craftmenu_arg_property(<ARG(wall_root)>)
+
+// Craft dialogs enumerate a container with a local loop index:
+// `findcont(icount)`. Keep two children so a raw argument that falls back to
+// zero cannot satisfy this regression row.
+NEWITEM SYNTHETIC_CRAFT_CONTAINER
+ARG(craft_container,<LASTNEW>)
+NEWITEM SYNTHETIC_CRAFT_SOURCE
+LASTNEW.CONT=<ARG(craft_container)>
+ARG(craft_first,<LASTNEW>)
+NEWITEM SYNTHETIC_CRAFT_SOURCE
+LASTNEW.CONT=<ARG(craft_container)>
+ARG(craft_second,<LASTNEW>)
+ARG(index,1)
+SYSMESSAGE {MARKER}|findcont-local=<ARG(craft_container).FINDCONT(index).SERIAL>|want=<ARG(craft_first).SERIAL>|other=<ARG(craft_second).SERIAL>
 ARG(n,#+1)
 ENDWHILE
 RETURN 0
