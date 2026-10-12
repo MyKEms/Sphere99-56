@@ -29,8 +29,8 @@ ON=@UserDClick
 DIALOG d_texta_probe
 RETURN 1
 
-[FUNCTION nested_zero]
-RETURN 0
+[FUNCTION nested_coordinates]
+RETURN 180,377
 
 [DIALOG d_texta_probe]
 0 0
@@ -39,7 +39,7 @@ texta 180 233 1000 \"(80 - 120)\"
 argo.texta(180,269,1000,\"(60 - 90)\")
 texta 180 305 1000 \"(20 - 50)\"
 argo.texta(180,341,1000,\"(80 - 130)\")
-argo.texta(<nested_zero(1,0)>,13,1000,\"nested coordinates\")
+argo.texta(<nested_coordinates(1,0)>,1000,\"nested coordinates\")
 """
 
 
