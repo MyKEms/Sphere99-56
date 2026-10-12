@@ -19,10 +19,10 @@ MARKER = "SPHERE_LINK_TRIGGER"
 EXPECTED = (
     f"{MARKER}|login",
     f"{MARKER}|driver",
-    f"{MARKER}|target",
-    f"{MARKER}|after_link",
-    f"{MARKER}|target",
-    f"{MARKER}|after_object",
+    f"{MARKER}|target-shorthand|03|1",
+    f"{MARKER}|after-shorthand|1",
+    f"{MARKER}|target-explicit|03|1",
+    f"{MARKER}|after-explicit|1",
 )
 
 
