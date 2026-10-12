@@ -936,7 +936,19 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 				exec.m_pO1 = pArgObj;
 			}
 
-			TRIGRET_TYPE iRet = OnTrigger(vArgs.GetArrayPSTR(0), exec);
+			// Script trigger calls traditionally use both ``@Name`` and the
+			// shorthand ``Name``.  The latter is used by linked-item timer
+			// scripts (for example LINK.TRIGGER(TIMER)); normalize it before
+			// looking up the trigger so the target object receives the same
+			// callback as the explicit form.
+			LPCTSTR pszTriggerName = vArgs.GetArrayPSTR(0);
+			TCHAR szTriggerName[SCRIPT_MAX_LINE_LEN];
+			if ( pszTriggerName[0] != '@' )
+			{
+				snprintf(szTriggerName, sizeof(szTriggerName), "@%s", pszTriggerName);
+				pszTriggerName = szTriggerName;
+			}
+			TRIGRET_TYPE iRet = OnTrigger(pszTriggerName, exec);
 			if ( iRet == TRIGRET_RET_VAL && !exec.m_vValRet.IsEmpty() )
 				vValRet = exec.m_vValRet;
 			else
