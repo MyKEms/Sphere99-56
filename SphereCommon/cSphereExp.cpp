@@ -1483,6 +1483,41 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		}
 		break;
 
+	case F_Nid:
+		{
+			// NID is the numeric counterpart to the reference-preserving helpers:
+			// evaluate the complete operand once, including dotted object
+			// properties, and pass its 32-bit value to a numeric command.
+			LPCTSTR pszStr = vArgs.GetPSTR();
+			if ( pszStr == NULL || *pszStr == '\0' )
+			{
+				vValRet.SetInt(0);
+				break;
+			}
+			// GetValue() intentionally tokenizes a numeric chain before asking
+			// the execution context to resolve it.  NID's operand is already a
+			// complete deferred expression (for example ARGO.TAG(...).DISPIDDEC),
+			// so evaluate that expression as a whole first.  This preserves the
+			// object/reference result and avoids losing the suffix at the numeric
+			// parser boundary.
+			CGVariant vResolved;
+			CScriptUnknownRejectTracker rejected;
+			const bool fResolved = EvaluateEscapeValue(pszStr, vResolved, rejected);
+			if ( fResolved )
+			{
+				if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResolved.GetRef()) )
+					vValRet.SetInt(static_cast<int>(pObj->GetUIDIndex()));
+				else
+				{
+					LPCTSTR pszValue = vResolved.GetPSTR();
+					vValRet.SetInt(pszValue ? GetValue(pszValue) : 0);
+				}
+			}
+			else
+				vValRet.SetInt(GetValue(pszStr));
+		}
+		break;
+
 	case F_Safe:
 		{
 			// Error-safe wrapper: try to resolve the expression, return 0 on failure.
