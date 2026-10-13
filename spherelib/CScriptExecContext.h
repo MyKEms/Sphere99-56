@@ -1824,6 +1824,12 @@ public:
 	void SetSourceObject(CScriptObj* pObj)
 	{
 		m_pSourceObj = pObj;
+		// An explicit SRC=<object> assignment supersedes the inherited
+		// null-source marker.  Keep the marker for a genuinely missing
+		// source, but do not let it hide a newly assigned object in a bare
+		// <SRC> expansion.
+		if ( pObj != NULL )
+			m_fNullSource = false;
 	}
 
 	CScriptObj* GetSourceObject() const

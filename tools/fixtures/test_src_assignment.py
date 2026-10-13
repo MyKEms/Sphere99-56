@@ -43,7 +43,8 @@ EXPECTED = {
     "caller_after": "SrcProbe",
     "timer_source": "SrcProbe",
     "timer_after": "SrcProbe",
-    "spell_effect": "#00",
+    "spell_effect_assigned": "040000005|040000005",
+    "spell_effect_restored": "#00",
     "step_context": "SrcStepNpc|07|step-source",
 }
 
