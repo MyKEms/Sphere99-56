@@ -133,15 +133,39 @@ def main() -> int:
     failures.extend(shutdown_failures(returncode, log_contents))
     if END_MARKER not in observed:
         failures.append("SRC assignment login did not reach its end marker")
-    rows: dict[str, str] = {}
+    rows: dict[str, list[str]] = {}
     for message in observed:
         match = MARKER_RE.fullmatch(message)
         if match:
-            rows[match.group(1)] = match.group(2)
+            rows.setdefault(match.group(1), []).append(match.group(2))
     for key, expected in EXPECTED.items():
-        value = rows.get(key)
+        values = rows.get(key, [])
+        value = values[-1] if values else None
         if value != expected:
             failures.append(f"{key}: got {value!r}; expected {expected!r}")
+
+    # Both trigger spellings must preserve the caller object.  The bare SRC
+    # spelling is intentionally checked for presence rather than a fixed UID:
+    # stock allocates a runtime UID while the synthetic fixture uses a stable
+    # low serial.
+    handlers = rows.get("trigger_handler", [])
+    if len(handlers) != 2:
+        failures.append(f"trigger_handler: got {handlers!r}; expected two rows")
+    else:
+        for expected_tag, value in zip(("explicit", "shorthand"), handlers):
+            fields = value.split("|")
+            if (
+                len(fields) != 4
+                or fields[0] != expected_tag
+                or not fields[1]
+                or fields[2] != "SrcProbe"
+                or fields[3] != "03"
+            ):
+                failures.append(
+                    f"trigger_handler {expected_tag}: got {value!r}; "
+                    "expected non-empty SRC, SrcProbe, 03"
+                )
+
     report_path = fixture / "logs" / "unknown-keywords.json"
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -162,10 +186,11 @@ def main() -> int:
         print("\n--- server log (tail) ---", file=sys.stderr)
         print("\n".join(log_contents.splitlines()[-80:]), file=sys.stderr)
         return 1
-    print(f"SRC assignment probe passed: {len(EXPECTED)}/{len(EXPECTED)} checks")
+    print(f"SRC assignment probe passed: {len(EXPECTED) + 2}/{len(EXPECTED) + 2} checks")
     print("SRC assignment rows:")
     for key in EXPECTED:
-        print(f"- {key}={rows.get(key)}")
+        print(f"- {key}={rows.get(key, [])[-1] if rows.get(key) else None}")
+    print(f"- trigger_handler={rows.get('trigger_handler', [])}")
     return 0
 
 

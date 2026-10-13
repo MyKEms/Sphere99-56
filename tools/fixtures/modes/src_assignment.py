@@ -60,6 +60,9 @@ RETURN 1
 DEFNAME={TARGET_ITEM}
 NAME=synthetic SRC target
 TYPE=T_NORMAL
+ON=@UserDClick
+SRC.SYSMESSAGE {MARKER} trigger_handler|[<SRC.TAG.src_trigger_probe>|<SRC>|<SRC.NAME>|<SRC.SERIAL>]
+RETURN 1
 
 [FUNCTION F_SRC_ASSIGNMENT]
 SYSMESSAGE {MARKER} <ARGV(0)>_before|[<SRC.NAME>]
@@ -87,6 +90,13 @@ F_SRC_ASSIGNMENT(literal,{TARGET_UID_LITERAL})
 F_SRC_ASSIGNMENT(var,<VAR(src_target_uid)>)
 F_SRC_ASSIGNMENT(missing,<VAR(src_missing_uid)>)
 F_SRC_ASSIGNMENT_DYNAMIC()
+VAR(trigger_source,<SRC>)
+SRC.TAG(src_trigger_probe,explicit)
+FINDUID({UID_F_ITEM | TARGET_SERIAL}).TRIGGER(@USERDCLICK)
+SRC=<VAR(trigger_source)>
+SRC.TAG(src_trigger_probe,shorthand)
+FINDUID({UID_F_ITEM | TARGET_SERIAL}).TRIGGER(USERDCLICK)
+SRC=<VAR(trigger_source)>
 TAG(src_assignment_probe,tag-probe)
 SYSMESSAGE {MARKER} tag_probe|[<TAG.src_assignment_probe>]
 ACT={UID_F_ITEM | TARGET_SERIAL}
