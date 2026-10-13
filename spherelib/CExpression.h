@@ -105,6 +105,11 @@ class CGVariant
 {
 private:
 	CGVARIANT_TYPE m_type;
+	// A string read from a script table can retain the source quote form.
+	// The value text itself stays unquoted; consumers that need the legacy
+	// delimiter behaviour (such as deferred inline gump text) can inspect this
+	// bit without guessing from the value contents.
+	bool m_fQuoted;
 	// When a live object reference is copied through script arguments, retain
 	// the UID-slot generation that was current when the reference was taken.
 	// Non-reference values remain generation-neutral.
@@ -138,6 +143,7 @@ private:
 	void CopyFrom(const CGVariant& other)
 	{
 		m_type = other.m_type;
+		m_fQuoted = other.m_fQuoted;
 		m_dwUIDGeneration = other.m_dwUIDGeneration;
 		m_pszUIDType = other.m_pszUIDType;
 		m_str = other.m_str;
@@ -166,23 +172,23 @@ private:
 public:
 	// Constructors
 	CGVariant()
-		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_fQuoted(false), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 	}
 
 	CGVariant(const CGVariant& other)
-		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_fQuoted(false), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 		CopyFrom(other);
 	}
 
 	CGVariant(const UID_INDEX uid)
-		: m_type(CGVT_UID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_dwVal(uid), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_UID), m_fQuoted(false), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_dwVal(uid), m_pArray(NULL), m_iArrayCount(0)
 	{
 	}
 
 	CGVariant(LPCTSTR pszValue)
-		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_fQuoted(false), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 		if ( pszValue )
 		{
@@ -192,7 +198,7 @@ public:
 	}
 
 	CGVariant(VARTYPE type, void* pData)
-		: m_type(CGVT_VOID), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
+		: m_type(CGVT_VOID), m_fQuoted(false), m_dwUIDGeneration(0), m_pszUIDType(NULL), m_iVal(0), m_pArray(NULL), m_iArrayCount(0)
 	{
 		// VARTYPE constants from CScriptableInterface.h:
 		//   VARTYPE_BOOL=0, VARTYPE_CSTRING=1, VARTYPE_INT=2,
@@ -240,6 +246,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_UID;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_dwVal = uid;
@@ -250,6 +257,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_REF;
+		m_fQuoted = false;
 		m_dwUIDGeneration = val ? val->GetUIDGeneration() : 0;
 		m_pszUIDType = val ? val->GetUIDTypeName() : NULL;
 		m_pRef = val;
@@ -260,6 +268,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_INT;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_iVal = val ? 1 : 0;
@@ -270,6 +279,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_INT;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_iVal = val;
@@ -280,6 +290,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_FIXED;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_iVal = val;
@@ -290,6 +301,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_DWORD;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_dwVal = val;
@@ -300,16 +312,28 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_str = pszStr ? pszStr : "";
 		m_iVal = 0;
 	}
 
+	void SetQuoted(bool fQuoted)
+	{
+		m_fQuoted = fQuoted && m_type == CGVT_STR;
+	}
+
+	bool IsQuoted() const
+	{
+		return m_fQuoted && m_type == CGVT_STR;
+	}
+
 	void SetStrFormat(LPCTSTR format, ...) __printfargs(2, 3)
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		va_list vargs;
@@ -322,6 +346,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_VOID;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_iVal = 0;
@@ -691,6 +716,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		va_list vargs;
@@ -756,6 +782,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_STR;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_str = str;
@@ -765,6 +792,7 @@ public:
 	CGVariant& operator=(LPCTSTR pszStr)
 	{
 		FreeArray();
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		if ( pszStr )
@@ -784,6 +812,7 @@ public:
 	{
 		FreeArray();
 		m_type = CGVT_INT;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 		m_iVal = val;
@@ -821,6 +850,7 @@ private:
 			m_str += m_pArray[i].GetPSTR();
 		}
 		m_type = CGVT_STR;
+		m_fQuoted = false;
 		m_dwUIDGeneration = 0;
 		m_pszUIDType = NULL;
 	}
@@ -954,12 +984,14 @@ public:
 	}
 	int SetKeyVar(LPCTSTR pszKey, const CGVariant& val)
 	{
+		if ( val.IsQuoted() )
+			return SetKeyStr(pszKey, (LPCTSTR)const_cast<CGVariant&>(val), true);
 		if (val.IsNumeric())
 		{
 			SetKeyInt(pszKey, (DWORD)const_cast<CGVariant&>(val).GetInt());
 			return 0;
 		}
-		return SetKeyStr(pszKey, (LPCTSTR)const_cast<CGVariant&>(val));
+		return SetKeyStr(pszKey, (LPCTSTR)const_cast<CGVariant&>(val), val.IsQuoted());
 	}
 	CGVariant FindKeyVar(LPCTSTR pszKey) const
 	{
@@ -968,6 +1000,8 @@ public:
 			return CGVariant();
 		CGVariant v;
 		v = pVar->GetValStr();
+		CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
+		v.SetQuoted( pStr != NULL && pStr->IsQuoted() );
 		return v;
 	}
 	bool FindKeyVar(LPCTSTR pszKey, CGVariant& val)
@@ -976,6 +1010,8 @@ public:
 		if (!pVar)
 			return false;
 		val = pVar->GetValStr();
+		CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
+		val.SetQuoted( pStr != NULL && pStr->IsQuoted() );
 		return true;
 	}
 	CGString FindKeyStr(LPCTSTR pszKey) const
@@ -1174,6 +1210,8 @@ public:
 			if ( pVar )
 			{
 				vValRet.SetStr(pVar->GetValStr());
+				CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
+				vValRet.SetQuoted( pStr != NULL && pStr->IsQuoted() );
 			}
 			else
 			{

@@ -559,7 +559,11 @@ HRESULT CObjBase::s_PropGet( LPCTSTR pszKey, CGVariant& vValRet, CScriptConsole*
 		{
 			CVarDefPtr pVar = m_TagDefs.FindKeyPtr( pszTag );
 			if ( pVar )
+			{
 				vValRet.SetStr( pVar->GetValStr());
+				CVarDefStr* pStr = dynamic_cast<CVarDefStr*>(pVar);
+				vValRet.SetQuoted( pStr != NULL && pStr->IsQuoted() );
+			}
 			else if ( fTagZero )
 				vValRet.SetInt( 0 );
 			else
