@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import socket
+import struct
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ ACCOUNT = "ScriptGapsProbe"
 LOGIN_VALUE = "script-gaps-pw"
 MARKER = "SPHERE_SRC_ASSIGNMENT"
 END_MARKER = MARKER + "_END"
+STEP_RESULT_PREFIX = f"{MARKER} step_result|"
 MARKER_RE = re.compile(re.escape(MARKER) + r" ([a-z_]+)\|\[(.*)\]$")
 
 EXPECTED = {
@@ -41,6 +43,7 @@ EXPECTED = {
     "caller_after": "SrcProbe",
     "timer_source": "SrcProbe",
     "timer_after": "SrcProbe",
+    "step_context": "SrcStepNpc|07|step-source",
 }
 
 
@@ -105,7 +108,7 @@ def main() -> int:
                 if END_MARKER in observed and any(
                     message.startswith(f"{MARKER} timer_after") for message in observed
                 ):
-                    return
+                    break
                 try:
                     chunk = sock.recv(65536)
                 except socket.timeout:
@@ -116,6 +119,30 @@ def main() -> int:
                     break
                 data.extend(chunk)
             observed[:] = system_messages(bytes(data))
+            if END_MARKER in observed and any(
+                message.startswith(f"{MARKER} timer_after") for message in observed
+            ):
+                # The stepped tile's handler changes SRC to a different NPC,
+                # creates an item through that source, and fires LASTNEW's
+                # trigger.  Two packets are used so the first establishes the
+                # facing direction and the second crosses the tile.
+                sock.sendall(struct.pack(">BBBI", 0x02, 2, 0, 0))
+                sock.sendall(struct.pack(">BBBI", 0x02, 2, 1, 0))
+                deadline = time.monotonic() + 5.0
+                while time.monotonic() < deadline:
+                    observed[:] = system_messages(bytes(data))
+                    if any(message.startswith(STEP_RESULT_PREFIX) for message in observed):
+                        break
+                    try:
+                        chunk = sock.recv(65536)
+                    except socket.timeout:
+                        continue
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                observed[:] = system_messages(bytes(data))
         finally:
             sock.close()
 
@@ -166,6 +193,32 @@ def main() -> int:
                     "expected non-empty SRC, SrcProbe, 03"
                 )
 
+    step_rows = rows.get("step_result", [])
+    if len(step_rows) != 1:
+        failures.append(f"step_result: got {step_rows!r}; expected one row")
+    else:
+        fields = step_rows[0].split("|")
+        if len(fields) != 6:
+            failures.append(f"step_result: got {step_rows[0]!r}; expected six fields")
+        else:
+            source_name, source_serial, source_tag, lastnew_serial, point, attr = fields
+            if source_name != "SrcStepNpc":
+                failures.append(f"step source name: got {source_name!r}; expected 'SrcStepNpc'")
+            if not source_serial or source_serial.lstrip("0") != "7":
+                failures.append(
+                    f"step source serial: got {source_serial!r}; expected NPC serial 7"
+                )
+            if source_tag != "step-source":
+                failures.append(
+                    f"step source tag: got {source_tag!r}; expected 'step-source'"
+                )
+            if not lastnew_serial:
+                failures.append("step LASTNEW serial was empty")
+            if point != "130,128,0":
+                failures.append(f"step LASTNEW point: got {point!r}; expected '130,128,0'")
+            if not attr:
+                failures.append("step LASTNEW ATTR was empty")
+
     report_path = fixture / "logs" / "unknown-keywords.json"
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -186,11 +239,12 @@ def main() -> int:
         print("\n--- server log (tail) ---", file=sys.stderr)
         print("\n".join(log_contents.splitlines()[-80:]), file=sys.stderr)
         return 1
-    print(f"SRC assignment probe passed: {len(EXPECTED) + 2}/{len(EXPECTED) + 2} checks")
+    print(f"SRC assignment probe passed: {len(EXPECTED) + 3}/{len(EXPECTED) + 3} checks")
     print("SRC assignment rows:")
     for key in EXPECTED:
         print(f"- {key}={rows.get(key, [])[-1] if rows.get(key) else None}")
     print(f"- trigger_handler={rows.get('trigger_handler', [])}")
+    print(f"- step_result={step_rows}")
     return 0
 
 
