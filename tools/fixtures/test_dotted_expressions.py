@@ -346,6 +346,8 @@ EXPECTED: dict[str, Expectation] = {
     "C|dupe_value_count": "1",
     "C|dupe_value_valid": "1",
     "C|dupe_value_valid_count": "1",
+    "C|quoted_value": "abc def",
+    "C|quoted_compare": "0",
     "I|uid_dupe_item_delta": "1",
     # The @EnvironChange handler sets its sector light behind a guard that
     # never matches.  Entering the world runs it once; its own write may run
@@ -581,9 +583,9 @@ def main() -> int:
             if not response or find_start_packet(decode_game_response(response)) is None:
                 raise RuntimeError("probe character did not enter the world")
             data = bytearray(response)
-            # The fixture opens the same indexed-table HTML gump shape as the
-            # production nation page.  Keep this assertion here so the
-            # parser regression fails before the table-value fix lands.
+            # The fixture opens deferred indexed-table HTML controls.  Keep
+            # the exact text assertions here so both the HTMLGUMPa delimiter
+            # rule and ordinary HTMLGUMP stay pinned to the reference output.
             gumps = []
             for packet in split_packet_stream(
                 decode_game_response(response), allow_truncated=True
@@ -600,10 +602,14 @@ def main() -> int:
                     text for gump in gumps for text in gump.texts
                     if "BASEFONT" in text or text.strip() == '" "' or text.strip() == ""
                 ]
-                expected = '<BASEFONT SIZE="+5" COLOR="#000080"> </BASEFONT>"'
-                if expected not in quoted:
+                expected = {
+                    '<BASEFONT SIZE="+5" COLOR="#000080"> </BASEFONT>',
+                    '<BASEFONT SIZE="+5" COLOR="#000080">abc def</BASEFONT>"',
+                }
+                missing = sorted(expected - set(quoted))
+                if missing:
                     failures.append(
-                        f"quoted-table gump text {quoted!r}; expected {expected!r}"
+                        f"quoted-table gump text {quoted!r}; missing {missing!r}"
                     )
             deadline = time.monotonic() + 30.0
             sock.settimeout(0.2)

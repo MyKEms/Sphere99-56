@@ -2018,10 +2018,10 @@ public:
 		return isdigit(static_cast<unsigned char>(chPrev)) || chPrev == ')';
 	}
 
-	// Stock preserves one closing quote when a quoted table value is expanded
-	// inside the quoted text argument of HTMLGUMPa. Restrict that compatibility
-	// rule to the inline HTML text itself; ordinary messages and numeric gump
-	// arguments keep the value text-only.
+	// A non-whitespace quoted table value preserves one closing quote when it is
+	// expanded inside the quoted text argument of HTMLGUMPa. Restrict that
+	// compatibility rule to inline HTML text; ordinary messages and numeric
+	// gump arguments keep the value text-only.
 	static bool IsQuotedInlineHtmlText(const TCHAR* pszBuf, size_t iBegin)
 	{
 		if ( pszBuf == NULL || iBegin == 0 )
@@ -2029,7 +2029,8 @@ public:
 		bool fHtmlGumpA = false;
 		for ( size_t i = 0; pszBuf[i]; i++ )
 		{
-			if ( !_strnicmp( pszBuf + i, "HTMLGUMPA", 8 ) )
+			if ( !_strnicmp( pszBuf + i, "HTMLGUMPA", 9 ) &&
+				( pszBuf[i + 9] == '\0' || !isalnum(static_cast<unsigned char>(pszBuf[i + 9])) ) )
 			{
 				fHtmlGumpA = true;
 				break;
@@ -2187,7 +2188,19 @@ public:
 				if ( fSafe )
 					FormatSafeReference(pszExpr, sResult);
 				else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
-					sResult += "\x1f";
+				{
+					bool fOnlyWhitespace = true;
+					for ( const TCHAR* p = sResult; *p; ++p )
+					{
+						if ( !ISWHITESPACE(*p) )
+						{
+							fOnlyWhitespace = false;
+							break;
+						}
+					}
+					if ( !fOnlyWhitespace )
+						sResult += "\x1f";
+				}
 
 				// Replace <?...?> with result, shifting buffer.
 				int iExprLen = iEnd - iBegin + 1;
@@ -2307,7 +2320,19 @@ public:
 			if ( fSafe )
 				FormatSafeReference(pszExpr, sResult);
 			else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
-				sResult += "\x1f";
+			{
+				bool fOnlyWhitespace = true;
+				for ( const TCHAR* p = sResult; *p; ++p )
+				{
+					if ( !ISWHITESPACE(*p) )
+					{
+						fOnlyWhitespace = false;
+						break;
+					}
+				}
+				if ( !fOnlyWhitespace )
+					sResult += "\x1f";
+			}
 
 			// Replace <expr> with the resolved value, shifting the buffer.
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
