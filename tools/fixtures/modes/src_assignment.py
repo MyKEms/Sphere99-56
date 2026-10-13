@@ -60,6 +60,7 @@ ON=@Timer
 SRC=<CONT>
 SERV.B {MARKER} timer_source|[<SRC.NAME>]
 F_SRC_ASSIGNMENT(timer,{UID_F_ITEM | TARGET_SERIAL})
+SECTOR.ALLCHARS(F_SRC_SPELL_EFFECT)
 SERV.B {MARKER} timer_after|[<SRC.NAME>]
 RETURN 1
 
@@ -115,6 +116,10 @@ SRC=<ARGV(1)>
 SYSMESSAGE {MARKER} <ARGV(0)>_inside|[<SRC.NAME>]
 RETURN 1
 
+[FUNCTION F_SRC_SPELL_EFFECT]
+SPELLEFFECT(41,1000)
+RETURN 0
+
 [FUNCTION NEWITEMSAFE]
 NEWITEM <ARGV(0)>
 
@@ -161,6 +166,9 @@ RETURN 0
 ON=@GetHit
 TAG(combatTarget,<ACT>)
 SYSMESSAGE {MARKER} tag_hit|[<TAG.combatTarget>]
+RETURN 0
+ON=@SpellEffect
+SYSMESSAGE {MARKER} spell_effect|[<SRC>]
 RETURN 0
 """
     tables.write_text(text, encoding="ascii")

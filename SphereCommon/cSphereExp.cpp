@@ -1321,6 +1321,7 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 			CSphereExpArgs exec( STATIC_CAST(CResourceObj, GetBaseObject()), GetSrc(), vCallArgs,
 				!m_fSpaceSeparatedFunctionArgs );
 			exec.SetSourceObject(GetSourceObject());
+			exec.SetNullSource(IsNullSource());
 			TRIGRET_TYPE iRet = exec.ExecuteScript( sFunction, TRIGRUN_SECTION_TRUE );
 			vValRet = exec.m_vValRet;
 			return( NO_ERROR );
