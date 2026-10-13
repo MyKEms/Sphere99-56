@@ -1465,9 +1465,54 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 
 	case F_Eval:
 		{
-			// Evaluate a numeric expression and return the result.
+			// Evaluate a numeric expression and return the result.  0.99 permits
+			// the expression to be supplied indirectly: ARGV/ARG can return a
+			// property name (for example ``Stamina``), and EVAL then resolves that
+			// name against the active object.  The old numeric-only path converted
+			// the returned text directly through GetValue(), where a property name
+			// was mistaken for an unresolved DEFNAME and became zero.
 			LPCTSTR pszStr = vArgs.GetPSTR();
 			if ( pszStr == NULL ) { vValRet.SetInt(0); break; }
+			// Keep ordinary EVAL expressions on the established numeric path.  The
+			// deferred property lookup is specifically the legacy ARGV/ARG form;
+			// restricting it here preserves helpers such as fixNumber, whose
+			// ``EVAL args`` operand is deliberately parsed as a number/string value.
+			const size_t iExpressionLength = strlen(pszStr);
+			const bool fWholeIndirectArgument = iExpressionLength > 0 &&
+				pszStr[iExpressionLength - 1] == ')';
+			const bool fIndirectArgument = fWholeIndirectArgument &&
+				(!_strnicmp(pszStr, "ARGV(", 5) || !_strnicmp(pszStr, "ARG(", 4));
+			if ( fIndirectArgument )
+			{
+				CGVariant vResolved;
+				CScriptUnknownRejectTracker rejected;
+				if ( EvaluateEscapeValue(pszStr, vResolved, rejected) )
+				{
+					LPCTSTR pszResolved = vResolved.GetPSTR();
+					if ( pszResolved && *pszResolved && _stricmp(pszResolved, pszStr) )
+					{
+						CGVariant vDynamic;
+						if ( EvaluateEscapeValue(pszResolved, vDynamic, rejected) )
+						{
+							if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vDynamic.GetRef()) )
+								vValRet.SetInt(static_cast<int>(pObj->GetUIDIndex()));
+							else
+								vValRet.SetInt(vDynamic.GetInt());
+							break;
+						}
+						// A returned scalar may still contain an arithmetic expression;
+						// parse that second-stage text without dispatching the original
+						// function a second time.
+						vValRet.SetInt(GetValue(pszResolved));
+						break;
+					}
+					if ( CResourceObj* pObj = dynamic_cast<CResourceObj*>(vResolved.GetRef()) )
+						vValRet.SetInt(static_cast<int>(pObj->GetUIDIndex()));
+					else
+						vValRet.SetInt(vResolved.GetInt());
+					break;
+				}
+			}
 			long lVal = GetValue(pszStr);
 			vValRet.SetInt(lVal);
 		}
