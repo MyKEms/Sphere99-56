@@ -2728,7 +2728,17 @@ public:
 			m_fSpaceSeparatedFunctionArgs = fPreviousSpaceCall;
 			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
+			{
+				// A script function may finish after a final function call instead
+				// of an explicit RETURN.  Sphere 0.99 exposes that final call's
+				// value to the caller (for example a helper that delegates to a
+				// resource-reduction function).  Keep this implicit-return rule
+				// scoped to script functions; native commands must retain their
+				// existing statement semantics.
+				if ( IsScriptFunction(pszKey) )
+					m_vValRet = vValRet;
 				return NO_ERROR;
+			}
 		}
 
 		// During dialog construction, intercept gump commands and settext.
