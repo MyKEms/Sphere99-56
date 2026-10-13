@@ -1249,7 +1249,18 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 					char* pszEnd = NULL;
 					unsigned long ulUID = strtoul(pszUID + 1, &pszEnd, 16);
 					if ( pszEnd != pszUID + 1 && *pszEnd == '\0' )
+					{
+						if ( ulUID == 0 )
+						{
+							// A saved null SRC is a valid value to restore after a
+							// temporary explicit assignment.
+							SetSourceObject(NULL);
+							SetNullSource(true);
+							vValRet.SetStr("#00");
+							return NO_ERROR;
+						}
 						pSource = ResolveUIDObject((UID_INDEX)ulUID);
+					}
 				}
 				else if ( vArgs.IsNumeric() )
 					pSource = ResolveUIDObject(vArgs.GetUID());

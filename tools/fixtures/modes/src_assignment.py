@@ -168,7 +168,11 @@ TAG(combatTarget,<ACT>)
 SYSMESSAGE {MARKER} tag_hit|[<TAG.combatTarget>]
 RETURN 0
 ON=@SpellEffect
-SYSMESSAGE {MARKER} spell_effect|[<SRC>]
+VAR(saved_src,<SRC>)
+SRC={TARGET_UID_LITERAL}
+SYSMESSAGE {MARKER} spell_effect_assigned|[<SRC>|<SRC.SERIAL>]
+SRC=<VAR(saved_src)>
+SYSMESSAGE {MARKER} spell_effect_restored|[<SRC>]
 RETURN 0
 """
     tables.write_text(text, encoding="ascii")
