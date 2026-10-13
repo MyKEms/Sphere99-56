@@ -56,6 +56,10 @@ class CScriptExecContext : public CExpression
 private:
 	CScriptObj* m_pBaseObj;		// the "this" object we are scripting
 	CScriptConsole* m_pSrc;	// who triggered this (the console/player source)
+	// A few stock callbacks deliberately have no source object.  Keep that
+	// distinction even when the native caller uses the server console as the
+	// execution console for permission and logging paths.
+	bool m_fNullSource;
 	bool m_fLineExpansionOverflow;
 	bool m_fLineExpansionWarningReported;
 	const CScript* m_pCurrentScript;
@@ -581,6 +585,15 @@ protected:
 	{
 		if ( pfChainResolved )
 			*pfChainResolved = false;
+		// Stock serialises a missing trigger source as the null UID.  A null
+		// source is different from an attached server console: the latter is
+		// still useful to native calls, but it must not make <SRC> look like an
+		// unresolved literal in script text.
+		if ( m_fNullSource && pszExpr && !_stricmp(pszExpr, "SRC") )
+		{
+			vResult.SetStr("#00");
+			return true;
+		}
 
 		// Split function name from arguments: "FUNC(args)" or "FUNC args" or "OBJ.PROP"
 		TCHAR szKey[SCRIPT_MAX_LINE_LEN];
@@ -1429,6 +1442,7 @@ public:
 
 	CScriptExecContext(CScriptObj* pObj, CScriptConsole* pConsole)
 		: m_pBaseObj(pObj), m_pSrc(pConsole),
+		  m_fNullSource(false),
 		  m_fLineExpansionOverflow(false), m_fLineExpansionWarningReported(false),
 		  m_pCurrentScript(NULL),
 		  m_pSourceObj(NULL),
@@ -1795,6 +1809,16 @@ public:
 	CScriptConsole* GetSrc() const
 	{
 		return m_pSrc;
+	}
+
+	void SetNullSource(bool fNullSource = true)
+	{
+		m_fNullSource = fNullSource;
+	}
+
+	bool IsNullSource() const
+	{
+		return m_fNullSource;
 	}
 
 	void SetSourceObject(CScriptObj* pObj)

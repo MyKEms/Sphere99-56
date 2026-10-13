@@ -914,6 +914,7 @@ HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet
 				exec.m_vVal = pParentArgs->m_vVal;
 				exec.m_ArgArray = pParentArgs->m_ArgArray;
 				exec.SetSourceObject( pParentArgs->GetSourceObject());
+				exec.SetNullSource( pParentArgs->IsNullSource());
 			}
 
 			if ( iArgQty > 1 )

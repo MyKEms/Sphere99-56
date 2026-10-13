@@ -4301,6 +4301,7 @@ bool CItem::OnSpellEffect( SPELL_TYPE spell, CChar* pCharSrc, int iSkillLevel, C
 		return false;
 	{
 	CSphereExpArgs exec( this, pCharSrc, (int) spell, iSkillLevel, pSourceItem );
+	exec.SetNullSource(pCharSrc == NULL);
 	if ( OnTrigger( CItemDef::T_SpellEffect, exec ) == TRIGRET_RET_VAL )
 		return false;
 	}

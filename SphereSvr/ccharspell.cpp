@@ -1963,6 +1963,7 @@ bool CChar::OnSpellEffect( SPELL_TYPE spell, CChar* pCharSrc, int iSkillLevel, C
 	CSphereExpArgs Args( this, 
 		( pCharSrc != NULL ) ? ((CScriptConsole*) pCharSrc ) : ((CScriptConsole*) &g_Serv ),
 		(int) spell, iSkillLevel, pSourceItem );
+	Args.SetNullSource(pCharSrc == NULL);
 	if ( OnTrigger( CCharDef::T_SpellEffect, Args ) == TRIGRET_RET_VAL )
 		return( false );
 
