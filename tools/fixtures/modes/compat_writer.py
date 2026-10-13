@@ -1114,6 +1114,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
 
     marker = DOTTED_PROBE_MARKER
     login = [
+        # Keep the production shape of the nation-info page: the dialog
+        # stores a table name in a TAG and expands its indexed value inside
+        # ARGO.HTMLGUMPa.  The second value is deliberately a quoted single
+        # space; stock removes the storage quotes before rendering it.
+        "DIALOG dotted_quoted_table",
         "TAG.probe_text=chartext",
         "TAG.probe_num=7",
         # 0.99 current-value TAG assignments must evaluate against the
@@ -1385,6 +1390,13 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         f"i_dotted_findid 0x{DOTTED_PROBE_FINDID_ID:04X}\n"
         "layer_pack 21\n"
         "str 0\n"
+        "\n[DEFNAMES dotted_quoted_table]\n"
+        "quoted_table[0] first\n"
+        'quoted_table[1] " "\n'
+        "\n[DIALOG dotted_quoted_table]\n"
+        "0 0\n"
+        'TAG(startdialog,"quoted_table")\n'
+        'ARGO.HTMLGUMPa(10,10,200,40,"<BASEFONT SIZE=\\"+5\\" COLOR=\\"#000080\\"><?<tag(startdialog)>[1]?></BASEFONT>",0,0)\n'
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
         "\n[FUNCTION f_dotted_adjacent_conditions]\n"

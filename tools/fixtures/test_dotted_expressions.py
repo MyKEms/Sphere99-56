@@ -547,6 +547,8 @@ def main() -> int:
         make_char_create,
         recv_until_game_start,
     )
+    from uo_gumps import parse_gump_dialog  # pylint: disable=import-outside-toplevel
+    from uo_packets import split_packet_stream  # pylint: disable=import-outside-toplevel
 
     failures: list[str] = []
     messages: list[str] = []
@@ -579,6 +581,30 @@ def main() -> int:
             if not response or find_start_packet(decode_game_response(response)) is None:
                 raise RuntimeError("probe character did not enter the world")
             data = bytearray(response)
+            # The fixture opens the same indexed-table HTML gump shape as the
+            # production nation page.  Keep this assertion here so the
+            # parser regression fails before the table-value fix lands.
+            gumps = []
+            for packet in split_packet_stream(
+                decode_game_response(response), allow_truncated=True
+            ):
+                if packet.command in (0xB0, 0xDD):
+                    try:
+                        gumps.append(parse_gump_dialog(packet.data))
+                    except ValueError as error:
+                        failures.append(f"quoted-table gump malformed: {error}")
+            if not gumps:
+                failures.append("quoted-table gump did not arrive")
+            else:
+                quoted = [
+                    text for gump in gumps for text in gump.texts
+                    if "BASEFONT" in text or text.strip() == '" "' or text.strip() == ""
+                ]
+                expected = '<BASEFONT SIZE="+5" COLOR="#000080"> </BASEFONT>"'
+                if expected not in quoted:
+                    failures.append(
+                        f"quoted-table gump text {quoted!r}; expected {expected!r}"
+                    )
             deadline = time.monotonic() + 30.0
             sock.settimeout(0.2)
             while time.monotonic() < deadline:

@@ -300,14 +300,21 @@ CGVariant& CScript::GetArgVar()
 	// Return a variant wrapping the current arg as a string.
 	// The string will be resolved to numeric values when needed via expression evaluation.
 	static CGVariant s_vArg;
-	LPCTSTR pszArg = GetArgRaw();
-	if ( pszArg && *pszArg )
+	// Preserve whether a resource value used the quoted-string grammar while
+	// keeping the value text itself unquoted.  Consumers such as deferred
+	// inline gumps need that source bit to reproduce the stock delimiter rule.
+	LPCTSTR pszRaw = GetArgRaw();
+	const size_t iRawLen = pszRaw ? strlen(pszRaw) : 0;
+	const bool fQuoted = iRawLen >= 2 && pszRaw[0] == '"' && pszRaw[iRawLen - 1] == '"';
+	LPCTSTR pszArg = GetArgStr();
+	if ( pszArg && (*pszArg || fQuoted) )
 	{
-		s_vArg = CGVariant( pszArg );
+		s_vArg.SetStr( pszArg );
+		s_vArg.SetQuoted( fQuoted );
 	}
 	else
 	{
-		s_vArg = CGVariant();
+		s_vArg.SetVoid();
 	}
 	return s_vArg;
 }
