@@ -96,10 +96,16 @@ def main() -> int:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
     rows = [message for message in messages if message.startswith(MARKER)]
-    if not any(message.startswith(MARKER + "|") for message in rows):
-        failures.append(f"missing source-resists result marker; messages={messages!r}")
-    if not any(message.startswith(MARKER + "_TAG|") for message in rows):
-        failures.append(f"missing source-resists tag marker; messages={messages!r}")
+    expected = {
+        MARKER + "|[00]",
+        MARKER + "_TAG|[00]",
+        MARKER + "_TAG_TEXT|[<SRC.TAG(name)>]",
+        MARKER + "_TAG_LENGTH|[<STRLEN(<SRC.TAG(name)>)>]",
+        MARKER + "_NAME|[<SRC.NAME>]",
+    }
+    missing = sorted(expected.difference(rows))
+    if missing:
+        failures.append(f"source-resists values differ from stock; missing={missing!r}; messages={messages!r}")
     if messages.count(END_MARKER) != 1:
         failures.append(f"end marker count {messages.count(END_MARKER)} != 1")
 
@@ -111,18 +117,18 @@ def main() -> int:
     else:
         rejected = [
             entry for entry in report.get("entries", [])
-            if str(entry.get("keyword", "")).upper() in {"SRC", "SRC.*"}
+            if str(entry.get("keyword", "")).upper() in {"SRC.ISSUMMON"}
         ]
         if rejected:
             failures.append(f"missing-source SRC reads were unresolved: {rejected!r}")
 
     if failures:
         print("observed messages:", messages, file=sys.stderr)
-        print(f"SRC-resists probe failed: {max(0, 3 - len(failures))}/3 checks passed", file=sys.stderr)
+        print(f"SRC-resists probe failed: {max(0, 6 - len(failures))}/6 checks passed", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("SRC-resists probe passed: 3/3 checks")
+    print("SRC-resists probe passed: 6/6 checks")
     return 0
 
 

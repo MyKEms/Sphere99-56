@@ -377,15 +377,19 @@ protected:
 		CGVariant vArgs;
 		if ( !SplitDottedSegment(pszExpr + aStart[0], aLen[0], szRoot, sizeof(szRoot), vArgs) )
 			return false;
-		// A callback can execute with no trigger source.  Stock keeps that
-		// null reference as UID zero for both the bare SRC escape and its
-		// dotted properties; do not send SRC.<property> through the ordinary
-		// object and function dispatch paths, which would report a spurious
-		// unresolved SRC.* expression and abort the containing statement.
+		// A callback can execute with no trigger source.  Stock exposes the
+		// numeric ISSUMMON property as zero, but it leaves string/property
+		// expressions unresolved (their original escape text is preserved).
+		// Keep this narrow: returning the null UID for every dotted property
+		// changes STRLEN/TAG control flow and creates a different script path.
 		if ( HasEffectiveNullSource() && iSegments > 1 && !_stricmp(szRoot, "SRC") )
 		{
-			vValRet.SetStr("#00");
-			return true;
+			if ( iSegments == 2 && !_stricmp(pszExpr + aStart[1], "ISSUMMON") )
+			{
+				vValRet.SetStr("00");
+				return true;
+			}
+			return false;
 		}
 
 		CGVariant vCurrent;
@@ -614,6 +618,19 @@ protected:
 		{
 			vResult.SetStr("#00");
 			return true;
+		}
+		// A failed nested SRC property aborts the containing escape on stock;
+		// it does not become a string argument to an outer helper such as
+		// STRLEN.  Preserve that original escape text for the diagnostic/string
+		// forms while leaving the proven numeric SRC.ISSUMMON path above intact.
+		if ( HasEffectiveNullSource() && pszExpr &&
+			_stricmp(pszExpr, "SRC.ISSUMMON") != 0 )
+		{
+			for ( LPCTSTR p = pszExpr; *p; ++p )
+			{
+				if ( !_strnicmp(p, "SRC.", 4) )
+					return false;
+			}
 		}
 
 		// Split function name from arguments: "FUNC(args)" or "FUNC args" or "OBJ.PROP"
