@@ -4,12 +4,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import socket
 import sys
 import time
 from pathlib import Path
 
-from modes.safe_command import ACCOUNT, MACRO_MARKER, MEMORY_MARKER, MARKER, PASSWORD
+from modes.safe_command import (
+    ACCOUNT,
+    MACRO_MARKER,
+    MEMORY_MARKER,
+    MARKER,
+    PASSWORD,
+)
 from run_suite import shutdown_failures
 
 
@@ -117,10 +124,28 @@ def main() -> int:
         message_index = messages.index(message)
         macro_index = messages.index(MACRO_MARKER)
         memory_index = messages.index(MEMORY_MARKER)
-        if callback_index >= message_index or macro_index >= message_index or memory_index >= message_index:
+        if (
+            callback_index >= message_index
+            or macro_index >= message_index
+            or memory_index >= message_index
+        ):
             failures.append("command callback did not precede the message")
     except ValueError:
         pass
+
+    report_path = fixture / "logs" / "unknown-keywords.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        failures.append(f"unknown-keyword report is unreadable: {error}")
+    else:
+        rejected = [
+            entry
+            for entry in report.get("entries", [])
+            if entry.get("kind") == "rejected" and entry.get("keyword") == "EQUIP"
+        ]
+        if rejected:
+            failures.append(f"SAFE EQUIP rejection leaked into report: {rejected!r}")
 
     if failures:
         print("observed messages:", messages, file=sys.stderr)
@@ -128,7 +153,7 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("SAFE command probe passed: 6/6 checks")
+    print("SAFE command probe passed: 7/7 checks")
     return 0
 
 

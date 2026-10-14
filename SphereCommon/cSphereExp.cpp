@@ -641,6 +641,20 @@ bool ScriptUnknownReportIsEnabled()
 	return g_UnknownKeywordReportEnabled.load(std::memory_order_acquire);
 }
 
+static thread_local bool g_fUnknownRejectionsSuppressed = false;
+
+bool ScriptUnknownRejectionsSuppressed()
+{
+	return g_fUnknownRejectionsSuppressed;
+}
+
+bool ScriptUnknownSetRejectionsSuppressed(bool fSuppress)
+{
+	const bool fPrevious = g_fUnknownRejectionsSuppressed;
+	g_fUnknownRejectionsSuppressed = fSuppress;
+	return fPrevious;
+}
+
 bool ScriptUnknownResultIsRejected(HRESULT hRes)
 {
 	return hRes == HRES_BAD_ARG_QTY ||
@@ -1723,11 +1737,13 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				// the normal setter path while retaining SAFE's error suppression.
 				if ( IsSafeAssignment(pszStr) )
 				{
+					CScriptUnknownRejectionScope suppressRejected;
 					vValRet.SetInt( ExecuteCommand(pszStr) == NO_ERROR ? 1 : 0 );
 					break;
 				}
 				if ( IsSafeCommand(pszStr) )
 				{
+					CScriptUnknownRejectionScope suppressRejected;
 					vValRet.SetInt( ExecuteCommand(pszStr) == NO_ERROR ? 1 : 0 );
 					break;
 				}
