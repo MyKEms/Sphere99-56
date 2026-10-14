@@ -143,6 +143,7 @@ RECURSION_DEPTH_LIMIT = 40
 TRIGGER_RECURSION_ACCOUNT = "TriggerCycle"
 TRIGGER_RECURSION_PASSWORD = "trig_pw"
 TRIGGER_RECURSION_MARKER = "SPHERE_TRIGGER_RECURSION"
+TRIGGER_RESURRECT_ALIAS_MARKER = "SPHERE_TRIGGER_RESURRECT_ALIAS"
 
 # Same-definition stacking probe.  Two movable, stackable ground items are
 # dragged into the character's pack at the same explicit point.  A second
@@ -2158,6 +2159,7 @@ def write_scripts(
         f"SYSMESSAGE {TRIGGER_RECURSION_MARKER}_BEGIN\n"
         "FINDUID(4).DAMAGE_NORESPONSE 1,2,3\n"
         f"SYSMESSAGE {TRIGGER_RECURSION_MARKER}_RETURNED\n"
+        "FINDUID(3).RESURRECT_PLAYER\n"
         if trigger_recursion_probe
         else ""
     )
@@ -2179,6 +2181,9 @@ def write_scripts(
         "EVENTS=-e_AllPlayers\n"
         "DAMAGE <ARGV(0)>,<ARGV(1)>,<ARGV(2)>\n"
         "EVENTS=+e_AllPlayers\n"
+        "RETURN 1\n"
+        "\n[FUNCTION resurrect_player]\n"
+        f"SRC.SYSMESSAGE {TRIGGER_RESURRECT_ALIAS_MARKER}_FUNCTION\n"
         "RETURN 1\n"
         if trigger_recursion_probe
         else ""

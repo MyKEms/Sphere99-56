@@ -75,6 +75,10 @@ CCHARMETHOD(Poly,			0,					"",				"polymorph spell on me")
 CCHARMETHOD(PrivSet,		0,					"",				"Set my priv level")
 CCHARMETHOD(Remove,			0,					"",				"Delete me")
 CCHARMETHOD(Resurrect,		0,					"",				"Resurrect from the dead")
+// Sphere 0.99 scripts use RESURRECT_PLAYER as the native resurrection verb.
+// Keep it explicit so underscore-suffixed script functions do not revive the
+// old broad prefix matching that makes DAMAGE_NORESPONSE call DAMAGE.
+CCHARMETHOD(Resurrect_Player,	0,					"",				"Resurrect from the dead (legacy alias)")
 CCHARMETHOD(Salute,			0,					"",				"Salute animation") //	salute to player
 CCHARMETHOD(ScriptLoad,		CSCRIPTPROP_NARG1,	"(sScriptBookName)", "Load and start a script book on this player")	
 CCHARMETHOD(Sex,			0,					"(stringmale,stringfemale)","return male string or female string")
