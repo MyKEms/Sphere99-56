@@ -2289,6 +2289,7 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		DeleteThis();
 		break;
 	case M_Resurrect:
+	case M_Resurrect_Player:
 		if ( ! OnSpellEffect( SPELL_Resurrection, pCharSrc, 1000, NULL ))
 			return HRES_INVALID_HANDLE;
 		break;

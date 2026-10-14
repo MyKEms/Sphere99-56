@@ -137,6 +137,14 @@ RECURSION_DEPTH_ACCOUNT_TWO = "RecursionDepthTwo"
 RECURSION_DEPTH_PASSWORD = "recursion_pw"
 RECURSION_DEPTH_LIMIT = 40
 
+# Generic damage-trigger cycle used to verify that a script-level
+# damage_noresponse helper suppresses @GetHit while native DAMAGE remains
+# available to the helper.
+TRIGGER_RECURSION_ACCOUNT = "TriggerCycle"
+TRIGGER_RECURSION_PASSWORD = "trig_pw"
+TRIGGER_RECURSION_MARKER = "SPHERE_TRIGGER_RECURSION"
+TRIGGER_RESURRECT_ALIAS_MARKER = "SPHERE_TRIGGER_RESURRECT_ALIAS"
+
 # Same-definition stacking probe.  Two movable, stackable ground items are
 # dragged into the character's pack at the same explicit point.  A second
 # equal-definition item is added by script without a point, exercising the
@@ -1114,8 +1122,20 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
 
     marker = DOTTED_PROBE_MARKER
     login = [
+        # Keep the deferred table/value shape used by ordinary dialogs: the
+        # dialog stores a table name in a TAG and expands indexed values
+        # inside HTMLGUMPa.  The table also supplies generic font fragments so
+        # the test covers nested defname expansion without depending on
+        # application-specific script names.
+        "DIALOG dotted_quoted_table",
         "TAG.probe_text=chartext",
         "TAG.probe_num=7",
+        f"SYSMESSAGE {marker} C|quoted_value|[<?probe_text_value?>]",
+        'IF ("<?probe_text_value?>" == "abc def")',
+        f"SYSMESSAGE {marker} C|quoted_compare|[1]",
+        "ELSE",
+        f"SYSMESSAGE {marker} C|quoted_compare|[0]",
+        "ENDIF",
         # 0.99 current-value TAG assignments must evaluate against the
         # existing numeric value while ordinary and string writes stay intact.
         "TAG.current_num=10",
@@ -1385,6 +1405,23 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         f"i_dotted_findid 0x{DOTTED_PROBE_FINDID_ID:04X}\n"
         "layer_pack 21\n"
         "str 0\n"
+        "\n[DEFNAMES dotted_quoted_table]\n"
+        "quoted_table[0] first\n"
+        'quoted_table[1] " "\n'
+        'quoted_table[2] "abc def"\n'
+        'probe_text_value "abc def"\n'
+        'probe_font_open <BASEFONT SIZE="+5" COLOR="#000080">\n'
+        # Keep the closing HTML fragment in its own generic DEFNAMES section,
+        # matching the reference's separately loaded font constants.  The
+        # deferred table value still travels through the same HTMLGUMPa text
+        # path as the opening fragment.
+        "\n[DEFNAMES dotted_quoted_fragments]\n"
+        'probe_font_close </BASEFONT>\n'
+        "\n[DIALOG dotted_quoted_table]\n"
+        "0 0\n"
+        'TAG(probe_table,"quoted_table")\n'
+        'ARGO.HTMLGUMPa(10,10,200,40,"<?probe_font_open?><?<tag(probe_table)>[1]?><?probe_font_close?>",0,0)\n'
+        'ARGO.HTMLGUMPa(10,60,200,40,"<?probe_font_open?><?<tag(probe_table)>[2]?><?probe_font_close?>",0,0)\n'
         "\n[FUNCTION f_dotted_serial]\n"
         "RETURN <SERIAL>\n"
         "\n[FUNCTION f_dotted_adjacent_conditions]\n"
@@ -1787,6 +1824,7 @@ def write_scripts(
     gm_command_log_probe: bool = False,
     runaway_loop_probe: bool = False,
     recursion_depth_probe: bool = False,
+    trigger_recursion_probe: bool = False,
     movement_stairs_probe: bool = False,
     character_content_probe: bool = False,
     stacking_probe: bool = False,
@@ -2115,6 +2153,39 @@ def write_scripts(
         "F_RECURSION_DEPTH_PROBE\n"
         "RETURN 1\n"
         if recursion_depth_probe
+        else ""
+    )
+    trigger_recursion_login = (
+        f"SYSMESSAGE {TRIGGER_RECURSION_MARKER}_BEGIN\n"
+        "FINDUID(4).DAMAGE_NORESPONSE 1,2,3\n"
+        f"SYSMESSAGE {TRIGGER_RECURSION_MARKER}_RETURNED\n"
+        "FINDUID(3).RESURRECT_PLAYER\n"
+        if trigger_recursion_probe
+        else ""
+    )
+    trigger_recursion_event = (
+        "ON=@GetHit\n"
+        f"SYSMESSAGE {TRIGGER_RECURSION_MARKER}_HIT\n"
+        "IF (<SERIAL> == 4)\n"
+        "FINDUID(3).DAMAGE_NORESPONSE 1,2,<SERIAL>\n"
+        "ELSE\n"
+        "FINDUID(4).DAMAGE_NORESPONSE 1,2,<SERIAL>\n"
+        "ENDIF\n"
+        "RETURN 1\n"
+        if trigger_recursion_probe
+        else ""
+    )
+    trigger_recursion_sections = (
+        "\n[FUNCTION damage_noresponse]\n"
+        f"SRC.SYSMESSAGE {TRIGGER_RECURSION_MARKER}_FUNCTION\n"
+        "EVENTS=-e_AllPlayers\n"
+        "DAMAGE <ARGV(0)>,<ARGV(1)>,<ARGV(2)>\n"
+        "EVENTS=+e_AllPlayers\n"
+        "RETURN 1\n"
+        "\n[FUNCTION resurrect_player]\n"
+        f"SRC.SYSMESSAGE {TRIGGER_RESURRECT_ALIAS_MARKER}_FUNCTION\n"
+        "RETURN 1\n"
+        if trigger_recursion_probe
         else ""
     )
     timer_lifetime_before_markers = (
@@ -2632,7 +2703,7 @@ DEX=100
 [EVENTS e_AllPlayers]
 ON=@LogIn
 """ + events_method_login + """
-""" + world_save_logout_event_login + escape_overflow_login + gm_command_log_login + recursion_depth_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
+""" + world_save_logout_event_login + escape_overflow_login + gm_command_log_login + recursion_depth_login + trigger_recursion_login + world_save_login_probe_script + container_shutdown_login + findarg_login + timer_lifetime_baseline + timer_sibling_mutation_before_markers + """
 """ + timer_lifetime_observer_login + timer_sibling_mutation_observer_login + """
 """ + runaway_loop_login + """
 ARG(timer_probe_match,<STRMATCH <NAME>,TimerLifetimeProbe>)
@@ -2674,7 +2745,7 @@ ON=@EnvironChange
 """ + environ_change_body + """ON=@Logout
 """ + ("" if suppress_login_item else world_save_probe_script) + """
 RETURN 0
-""" + recursion_depth_trigger + """
+""" + recursion_depth_trigger + trigger_recursion_event + """
 ON=@FixtureCustom
 SYSMESSAGE SPHERE_CHAR_TRIGGER <SRC.NAME>|<ARGN>|<ARGS>|<ARGO.NAME>
 RETURN 1
@@ -2710,7 +2781,7 @@ RETURN 10
 [FUNCTION f_fixture_getter]
 VAR dotted_getter_calls,<EVAL <VAR(dotted_getter_calls)>+1>
 RETURN <SRC.SERIAL>
-""" + dotted_expression_sections + arg_locals_sections + object_root_dispatch_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + escape_overflow_sections + events_method_sections + """
+""" + dotted_expression_sections + arg_locals_sections + object_root_dispatch_sections + expression_chain_sections + dword_hex_sections + dialog_button_sections + dialog_argv_sections + dialog_argo_tag_sections + runaway_loop_sections + recursion_depth_sections + escape_overflow_sections + events_method_sections + trigger_recursion_sections + """
 [SPEECH spk_AllPlayers]
 
 [AREA Synthetic world]
@@ -3686,6 +3757,68 @@ def write_damage_trigger_save(root: Path) -> None:
     )
 
 
+def write_trigger_recursion_save(root: Path) -> None:
+    """Seed one generic player for the damage-trigger recursion probe."""
+
+    write_text(
+        root / "save" / "sphereworld.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic trigger recursion fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "accounts" / "sphereaccu.scp",
+        "\n".join(
+            [
+                f"[ACCOUNT {TRIGGER_RECURSION_ACCOUNT}]",
+                f"PASSWORD={TRIGGER_RECURSION_PASSWORD}",
+                "LASTCHARUID=3",
+                "CHARUID=3",
+                "[EOF]",
+            ]
+        ),
+    )
+    write_text(
+        root / "save" / "spherechars.scp",
+        "\n".join(
+            [
+                "TITLE=Sphere synthetic trigger recursion fixture",
+                "VERSION=0.99",
+                "SAVECOUNT=0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=3",
+                f"ACCOUNT={TRIGGER_RECURSION_ACCOUNT}",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[WORLDCHAR c_MAN]",
+                "SERIAL=4",
+                "EVENTS=e_AllPlayers",
+                "STR=100",
+                "INT=100",
+                "DEX=100",
+                "HITS=100",
+                "MAXHITS=100",
+                "MANA=100",
+                "STAM=100",
+                "P=128,128,0",
+                "[EOF]",
+            ]
+        ),
+    )
+
+
 def write_region_weather_save(root: Path) -> None:
     """Seed an existing character inside the synthetic weather region."""
 
@@ -4405,6 +4538,39 @@ def generate_fixture(
     ):
         parser.error("recursion-depth probe cannot be combined with another fixture mode")
 
+    if args.trigger_recursion_probe and any(
+        (
+            args.world_load_counts,
+            any(world_load_modes),
+            args.timer_lifetime_probe,
+            args.memory_timer_probe,
+            args.timer_default_remove_probe,
+            args.timer_lifetime_item_first_probe,
+            args.timer_sibling_mutation_probe,
+            args.timer_sibling_mutation_owner_first_probe,
+            args.ontick_content_mutation_probe,
+            args.container_shutdown_probe,
+            args.book_pages_probe,
+            args.dialog_button_probe,
+            args.dialog_argo_layout_probe,
+            args.dialog_flow_layout_probe,
+            args.dialog_argv_probe,
+            args.dialog_argo_tag_probe,
+            args.dword_hex_probe,
+            args.region_weather_probe,
+            args.spawn_gem_probe,
+            args.spawn_gem_duplicate_serial_probe,
+            args.spawn_point_probe,
+            args.events_attr_probe,
+            args.legacy_metadata_probe,
+            args.escape_overflow_probe,
+            args.movement_stairs_probe,
+            args.movement_stacking_probe,
+            args.recursion_depth_probe,
+        )
+    ):
+        parser.error("trigger-recursion probe cannot be combined with another fixture mode")
+
     if args.events_attr_probe and (
         args.world_load_counts
         or any(world_load_modes)
@@ -4588,6 +4754,7 @@ def generate_fixture(
         escape_overflow_probe=(args.escape_overflow_probe or args.daily_logging_probe),
         runaway_loop_probe=(args.runaway_loop_probe or args.daily_logging_probe),
         recursion_depth_probe=args.recursion_depth_probe,
+        trigger_recursion_probe=args.trigger_recursion_probe,
         movement_stairs_probe=args.movement_stairs_probe,
         character_content_probe=args.character_content_probe,
         stacking_probe=args.movement_stacking_probe,
@@ -4649,6 +4816,8 @@ def generate_fixture(
         write_gm_command_log_save(root)
     if args.movement_stairs_probe:
         write_movement_stairs_save(root)
+    if args.trigger_recursion_probe:
+        write_trigger_recursion_save(root)
     if args.timer_sibling_mutation_probe or args.timer_sibling_mutation_owner_first_probe:
         write_timer_sibling_mutation_save(root)
     if args.container_shutdown_probe:

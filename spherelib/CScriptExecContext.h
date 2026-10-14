@@ -772,11 +772,14 @@ protected:
 	}
 
 	bool EvaluateEscapeExpression(LPCTSTR pszExpr, CGString& sResult,
-		CScriptUnknownRejectTracker& rejected, DWORD dwFlags = 0)
+		CScriptUnknownRejectTracker& rejected, DWORD dwFlags = 0,
+		bool* pfQuoted = NULL)
 	{
 		CGVariant vResult;
 		if ( !EvaluateEscapeValue(pszExpr, vResult, rejected) )
 			return false;
+		if ( pfQuoted )
+			*pfQuoted = vResult.IsQuoted();
 		// Bare ACT and SRC references are text-serialised by 0.99 when an item
 		// trigger is reflected to the character.  Keep the assignment-specific
 		// flag for other object roots, but preserve these trigger values in
@@ -1202,7 +1205,6 @@ public:
 		TCHAR szArgs[SCRIPT_MAX_LINE_LEN];
 		strncpy(szArgs, pszArgs, sizeof(szArgs) - 1);
 		szArgs[sizeof(szArgs) - 1] = '\0';
-
 		TCHAR* ppArgs[7] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 		TCHAR* p = szArgs;
 		if ( strchr(szArgs, ',') != NULL )
@@ -1295,12 +1297,21 @@ public:
 		}
 		TCHAR* pRead = pszText;
 		TCHAR* pWrite = pszText;
+		bool fQuotedTableValue = false;
 		while ( *pRead )
 		{
+			if ( *pRead == '\x1f' )
+			{
+				fQuotedTableValue = true;
+				pRead++;
+				continue;
+			}
 			if ( pRead[0] == '\\' && pRead[1] == '"' )
 				pRead++;
 			*pWrite++ = *pRead++;
 		}
+		if ( fQuotedTableValue )
+			*pWrite++ = '"';
 		*pWrite = '\0';
 
 		const int iTextID = pTexts->GetSize();
@@ -2037,6 +2048,36 @@ public:
 		return isdigit(static_cast<unsigned char>(chPrev)) || chPrev == ')';
 	}
 
+	// A quoted table value preserves one closing quote when it is expanded
+	// inside the quoted text argument of HTMLGUMPa. Restrict that compatibility
+	// rule to inline HTML text; ordinary messages and numeric gump arguments keep
+	// the value text-only.
+	static bool IsQuotedInlineHtmlText(const TCHAR* pszBuf, size_t iBegin)
+	{
+		if ( pszBuf == NULL || iBegin == 0 )
+			return false;
+		bool fHtmlGumpA = false;
+		for ( size_t i = 0; pszBuf[i]; i++ )
+		{
+			if ( !_strnicmp( pszBuf + i, "HTMLGUMPA", 9 ) &&
+				( pszBuf[i + 9] == '\0' || !isalnum(static_cast<unsigned char>(pszBuf[i + 9])) ) )
+			{
+				fHtmlGumpA = true;
+				break;
+			}
+		}
+		if ( !fHtmlGumpA )
+			return false;
+
+		bool fQuoted = false;
+		for ( size_t i = 0; i < iBegin && pszBuf[i]; i++ )
+		{
+			if ( pszBuf[i] == '"' && ( i == 0 || pszBuf[i - 1] != '\\' ) )
+				fQuoted = !fQuoted;
+		}
+		return fQuoted;
+	}
+
 	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags,
 		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
@@ -2141,10 +2182,12 @@ public:
 				// Evaluate the expression (same as <...> evaluation).
 				CGString sResult;
 				bool fResolved = false;
+				bool fQuotedResult = false;
 				CScriptUnknownRejectTracker rejected;
 				try
 				{
-					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags);
+					fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags,
+						&fQuotedResult);
 				}
 				catch (...)
 				{
@@ -2174,6 +2217,8 @@ public:
 
 				if ( fSafe )
 					FormatSafeReference(pszExpr, sResult);
+				else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
+					sResult += "\x1f";
 
 				// Replace <?...?> with result, shifting buffer.
 				int iExprLen = iEnd - iBegin + 1;
@@ -2256,11 +2301,13 @@ public:
 			// Try to resolve the expression.
 			CGString sResult;
 			bool fResolved = false;
+			bool fQuotedResult = false;
 			CScriptUnknownRejectTracker rejected;
 
 			try
 			{
-				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags);
+				fResolved = EvaluateEscapeExpression(pszExpr, sResult, rejected, dwFlags,
+					&fQuotedResult);
 			}
 			catch (...)
 			{
@@ -2290,6 +2337,8 @@ public:
 
 			if ( fSafe )
 				FormatSafeReference(pszExpr, sResult);
+			else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
+				sResult += "\x1f";
 
 			// Replace <expr> with the resolved value, shifting the buffer.
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
