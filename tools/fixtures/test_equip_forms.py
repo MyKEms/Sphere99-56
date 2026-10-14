@@ -20,6 +20,8 @@ ROW_PATTERNS = {
     "ACT": re.compile(r"^SPHERE_EQUIP_ACT (\d+)\|(\d+)$"),
     "DEFNAME": re.compile(r"^SPHERE_EQUIP_DEFNAME (\d+)$"),
     "UID": re.compile(r"^SPHERE_EQUIP_UID (\d+)\|(\d+)$"),
+    "TWOHANDS_FALSE": re.compile(r"^SPHERE_EQUIP_TWOHANDS_FALSE ([0-9A-Fa-f]+)\|([0-9A-Fa-f]*)\|([0-9A-Fa-f]*)$"),
+    "TWOHANDS_NUMERIC": re.compile(r"^SPHERE_EQUIP_TWOHANDS_NUMERIC ([0-9A-Fa-f]+)\|([0-9A-Fa-f]*)\|([0-9A-Fa-f]*)$"),
 }
 
 
@@ -103,6 +105,8 @@ def main() -> int:
     failures.extend(shutdown_failures(returncode, log_contents))
 
     for label, pattern in ROW_PATTERNS.items():
+        if label in {"TWOHANDS_FALSE", "TWOHANDS_NUMERIC"}:
+            continue
         rows = [message for message in messages if message.startswith(f"SPHERE_EQUIP_{label} ")]
         if len(rows) != 1:
             failures.append(f"{label.lower()} marker count {len(rows)} != 1")
@@ -121,10 +125,48 @@ def main() -> int:
         elif values[0] == 0 or values[0] != values[1]:
             failures.append(f"{label.lower()} serial/equipped mismatch: {values!r}")
 
+    rows = [
+        message
+        for message in messages
+        if message.startswith("SPHERE_EQUIP_TWOHANDS_FALSE ")
+    ]
+    if len(rows) != 1:
+        failures.append(f"twohands=false marker count {len(rows)} != 1")
+    else:
+        match = ROW_PATTERNS["TWOHANDS_FALSE"].fullmatch(rows[0])
+        if match is None:
+            failures.append(f"malformed twohands=false marker: {rows[0]!r}")
+        else:
+            item_serial, hand1_serial, hand2_serial = match.groups()
+            if not item_serial or hand1_serial or hand2_serial != item_serial:
+                failures.append(
+                    "explicit TWOHANDS=N did not preserve hand 2: "
+                    f"{item_serial}|{hand1_serial}|{hand2_serial}"
+                )
+
+    numeric_rows = [
+        message
+        for message in messages
+        if message.startswith("SPHERE_EQUIP_TWOHANDS_NUMERIC ")
+    ]
+    if len(numeric_rows) != 1:
+        failures.append(f"twohands=numeric marker count {len(numeric_rows)} != 1")
+    else:
+        match = ROW_PATTERNS["TWOHANDS_NUMERIC"].fullmatch(numeric_rows[0])
+        if match is None:
+            failures.append(f"malformed twohands=numeric marker: {numeric_rows[0]!r}")
+        else:
+            item_serial, hand1_serial, hand2_serial = match.groups()
+            if not item_serial or hand1_serial or hand2_serial != item_serial:
+                failures.append(
+                    "numeric TWOHANDS=0 did not preserve hand 2: "
+                    f"{item_serial}|{hand1_serial}|{hand2_serial}"
+                )
+
     if messages.count(END_MARKER) != 1:
         failures.append(f"end marker count {messages.count(END_MARKER)} != 1")
 
-    total = 5
+    total = 7
     if failures:
         print("observed messages:", messages, file=sys.stderr)
         print(f"EQUIP forms probe failed: {max(0, total - len(failures))}/{total} checks passed", file=sys.stderr)

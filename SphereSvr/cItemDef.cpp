@@ -968,15 +968,27 @@ HRESULT CItemDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 
 	case P_TwoHands:
+		{
 		// In some cases the layer is not set right.
 		// override the layer here.
 		if ( ! IsTypeEquippable())
 			return( HRES_INVALID_HANDLE );
-		if ( vVal.GetBool())
+		bool fTwoHands = vVal.GetBool();
+		LPCTSTR pszTwoHands = vVal.GetPSTR();
+		if ( pszTwoHands && ( !_stricmp( pszTwoHands, "N" ) ||
+			!_stricmp( pszTwoHands, "NO" ) || !_stricmp( pszTwoHands, "FALSE" )))
+		{
+			fTwoHands = false;
+		}
+		if ( fTwoHands )
 		{
 			m_layer = LAYER_HAND2;
 		}
+		// A false declaration leaves the layer from the item definition/MUL
+		// data unchanged. Legacy records use TWOHANDS=N as a compatibility
+		// hint, and stock does not rewrite a tiledata hand layer for it.
 		break;
+		}
 	case P_Type:
 		return SetBaseType( 
 				(IT_TYPE) g_Cfg.ResourceGetIndexType( RES_TypeDef, vVal.GetPSTR()), 
