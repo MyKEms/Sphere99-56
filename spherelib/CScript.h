@@ -222,11 +222,13 @@ inline int s_FindKeyInTable(LPCTSTR pszKey, const CScriptMethod pTable[])
 		if ( !_stricmp(pszKey, pTable[i].m_pszName) )
 			return i;
 	}
-	// Try prefix match for compound method keys like "Tag.xyz" matching "Tag"
+	// Try prefix match for dotted compound method keys like "Tag.xyz" matching "Tag".
+	// Underscore suffixes are distinct script-function names (for example
+	// DAMAGE_NORESPONSE), so they must not fall through to the DAMAGE method.
 	LPCTSTR pSep = NULL;
 	for ( LPCTSTR p = pszKey; *p; p++ )
 	{
-		if ( *p == '.' || *p == '_' )
+		if ( *p == '.' )
 		{
 			pSep = p;
 			break;

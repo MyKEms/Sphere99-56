@@ -607,7 +607,13 @@ inline TRIGRET_TYPE CResourceTriggered::OnTriggerScript(CScriptExecContext& cont
 
 	// Execute the trigger's script block.
 	ScriptExecutionCoverageHit(GetTriggerCoverageToken(pszName));
-	return context.ExecuteScript(s, TRIGRUN_SECTION_TRUE);
+	CSphereThread* pThread = CSphereThread::GetCurrentThread();
+	if ( pThread != NULL )
+		pThread->PushTriggerFrame( context.GetBaseObject(), pszName, &s );
+	TRIGRET_TYPE iRet = context.ExecuteScript(s, TRIGRUN_SECTION_TRUE);
+	if ( pThread != NULL )
+		pThread->PopTriggerFrame();
+	return iRet;
 }
 
 inline void CResourceTriggered::SetLinkSection(

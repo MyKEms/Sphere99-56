@@ -893,6 +893,74 @@ const CScriptPropX CSphereExpContext::sm_Functions[CSphereExpContext::F_QTY+1] =
 
 CScriptPropArray CSphereExpContext::sm_FunctionsAll;	// static
 
+void CSphereThread::PushTriggerFrame(CScriptObj* pObject, LPCTSTR pszTrigger, const CScript* pScript)
+{
+	if ( m_iTriggerFrameCount >= SCRIPT_MAX_RECURSION_DEPTH )
+		return;
+
+	SCRIPT_TRIGGER_FRAME& frame = m_TriggerFrames[m_iTriggerFrameCount++];
+	frame.m_sObject.Empty();
+	if ( pObject != NULL )
+	{
+		frame.m_sObject = pObject->GetName();
+		if ( frame.m_sObject.IsEmpty() )
+			frame.m_sObject = pObject->GetUIDTypeName();
+	}
+	else
+		frame.m_sObject = "<none>";
+	frame.m_sTrigger = pszTrigger ? pszTrigger : "<unknown>";
+	frame.m_sScript = pScript ? pScript->GetFileTitle() : "<native>";
+	frame.m_iLine = pScript ? pScript->GetContext().m_iLineNum : 0;
+}
+
+void CSphereThread::PopTriggerFrame()
+{
+	if ( m_iTriggerFrameCount <= 0 )
+		return;
+	--m_iTriggerFrameCount;
+	m_TriggerFrames[m_iTriggerFrameCount].m_sObject.Empty();
+	m_TriggerFrames[m_iTriggerFrameCount].m_sTrigger.Empty();
+	m_TriggerFrames[m_iTriggerFrameCount].m_sScript.Empty();
+	m_TriggerFrames[m_iTriggerFrameCount].m_iLine = 0;
+}
+
+void CSphereThread::FormatTriggerChain(CGString& sChain) const
+{
+	sChain.Empty();
+	sChain.Format( "frames=%d", m_iTriggerFrameCount );
+	for ( int i = 0; i < m_iTriggerFrameCount; )
+	{
+		const SCRIPT_TRIGGER_FRAME& frame = m_TriggerFrames[i];
+		int iRunLength = 1;
+		while ( i + iRunLength < m_iTriggerFrameCount )
+		{
+			const SCRIPT_TRIGGER_FRAME& next = m_TriggerFrames[i + iRunLength];
+			if ( strcmp( frame.m_sObject, next.m_sObject ) != 0 ||
+				strcmp( frame.m_sTrigger, next.m_sTrigger ) != 0 ||
+				strcmp( frame.m_sScript, next.m_sScript ) != 0 ||
+				frame.m_iLine != next.m_iLine )
+				break;
+			++iRunLength;
+		}
+		CGString sFrame;
+		sFrame.Format( " -> x%d object=%s trigger=%s script=%s:%d",
+			iRunLength,
+			(LPCTSTR)frame.m_sObject, (LPCTSTR)frame.m_sTrigger,
+			(LPCTSTR)frame.m_sScript, frame.m_iLine );
+		// CLogBase formats into a 1 KiB stack buffer. Preserve the complete
+		// run-length summary while bounding arbitrary object/script names.
+		if ( sChain.GetLength() + sFrame.GetLength() > 900 )
+		{
+			CGString sOmitted;
+			sOmitted.Format( " -> ... omitted=%d ...", m_iTriggerFrameCount - i );
+			sChain += sOmitted;
+			break;
+		}
+		sChain += sFrame;
+		i += iRunLength;
+	}
+}
+
 CSphereExpContext::CSphereExpContext( CResourceObj* pBaseObj, CScriptConsole* pSrc )
 	: CScriptExecContext(pBaseObj,pSrc),
 	  m_pPrvExecContext(NULL),
@@ -912,12 +980,18 @@ CSphereExpContext::CSphereExpContext( CResourceObj* pBaseObj, CScriptConsole* pS
 				m_fRecursionBlocked = true;
 				if ( !pThread->m_fScriptRecursionReported )
 				{
-					const CScript* pScript = pThread->m_pScriptContext;
-					LPCTSTR pszFile = pScript ? pScript->GetFileTitle() : "<native>";
-					int iLine = pScript ? pScript->GetContext().m_iLineNum : 0;
-					DEBUG_ERR(( "Trigger Recursion error ! depth=%d limit=%d chain=%s(%d)" LOG_CR,
+					CGString sChain;
+					pThread->FormatTriggerChain(sChain);
+					if ( sChain.IsEmpty() )
+					{
+						const CScript* pScript = pThread->m_pScriptContext;
+						LPCTSTR pszFile = pScript ? pScript->GetFileTitle() : "<native>";
+						int iLine = pScript ? pScript->GetContext().m_iLineNum : 0;
+						sChain.Format( "%s(%d)", pszFile ? pszFile : "<native>", iLine );
+					}
+					DEBUG_ERR(( "Trigger Recursion error ! depth=%d limit=%d chain=%s" LOG_CR,
 						pThread->m_iScriptRecursionDepth, SCRIPT_MAX_RECURSION_DEPTH,
-						pszFile ? pszFile : "<native>", iLine ));
+						(LPCTSTR)sChain ));
 					pThread->m_fScriptRecursionReported = true;
 				}
 			}
