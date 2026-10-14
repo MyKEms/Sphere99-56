@@ -3489,6 +3489,23 @@ public:
 					}
 					if ( script.GetArgMod() && *script.GetArgMod() )
 					{
+						// SAFE wraps both reads and commands.  A wrapped EQUIP may
+						// receive a live object escape (for example LASTNEW); preserve
+						// that reference while expanding SAFE's inner statement so the
+						// command dispatcher can resolve the item instead of seeing an
+						// empty argument.
+						bool fSafeEquipCommand = false;
+						if ( !_stricmp(szKey, "SAFE") )
+						{
+							for ( LPCTSTR p = script.GetArgMod(); *p; ++p )
+							{
+								if ( !_strnicmp(p, "EQUIP(", 6) )
+								{
+									fSafeEquipCommand = true;
+									break;
+								}
+							}
+						}
 						// Script functions receive reference-valued arguments as UID text,
 						// so ARG()/CONT chains keep the referenced object instead of an
 						// empty scalar.
@@ -3508,6 +3525,7 @@ public:
 							!_stricmp(szKey, "EQUIP") ||
 							(fKeyEquals && (IsObjectAssignmentKey(szKey) ||
 								HasContainerAssignmentArgument(szKey) || HasContentsCall(szKey))) ||
+							fSafeEquipCommand ||
 							IsScriptFunction(szKey))
 							? CSCRIPT_PARSE_OBJECT_SERIAL : 0;
 						s_ParseEscapes( script.GetArgMod(), dwArgFlags,
