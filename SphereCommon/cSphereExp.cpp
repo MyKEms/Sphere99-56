@@ -62,6 +62,65 @@ static bool IsSafeAssignment(LPCTSTR pszText)
 	return false;
 }
 
+static bool IsSafeCommandName(const TCHAR* pszName, size_t iLength)
+{
+	static const char* const s_pNames[] = { "EQUIP" };
+	for ( const char* pszKnown : s_pNames )
+	{
+		if ( strlen(pszKnown) == iLength && !_strnicmp(pszName, pszKnown, iLength) )
+			return true;
+	}
+	return false;
+}
+
+// SAFE is also used around commands whose effects are deliberately ignored on
+// failure.  Keep ordinary reads in the expression path, but recognize a
+// command name before a call (including REF.COMMAND(...)) so the command
+// dispatcher can perform its side effects.
+static bool IsSafeCommand(LPCTSTR pszText)
+{
+	if ( pszText == NULL || *pszText == '\0' )
+		return false;
+	while ( ISWHITESPACE(*pszText) )
+		++pszText;
+
+	const TCHAR* pszFirst = pszText;
+	const TCHAR* pszLastCall = NULL;
+	size_t iLastCallLength = 0;
+	bool fQuoted = false;
+	for ( const TCHAR* p = pszText; *p; ++p )
+	{
+		if ( *p == '"' && (p == pszText || p[-1] != '\\') )
+		{
+			fQuoted = !fQuoted;
+			continue;
+		}
+		if ( fQuoted || !(isalpha((unsigned char)*p) || *p == '_') )
+			continue;
+		const TCHAR* pName = p;
+		++p;
+		while ( isalnum((unsigned char)*p) || *p == '_' )
+			++p;
+		if ( *p == '(' )
+		{
+			pszLastCall = pName;
+			iLastCallLength = static_cast<size_t>(p - pName);
+		}
+		--p;
+	}
+
+	if ( pszLastCall != NULL && IsSafeCommandName(pszLastCall, iLastCallLength) )
+		return true;
+
+	// Also accept the space-separated form, e.g. SAFE CAST spell.  A dotted
+	// reference with no call remains an expression and is intentionally left
+	// alone.
+	const TCHAR* pFirstEnd = pszFirst;
+	while ( isalpha((unsigned char)*pFirstEnd) || *pFirstEnd == '_' )
+		++pFirstEnd;
+	return pFirstEnd != pszFirst && IsSafeCommandName(pszFirst, static_cast<size_t>(pFirstEnd - pszFirst));
+}
+
 static CSphereExpContext g_Exp( NULL, &g_Serv );	// default expression context.
 
 // DEFNAME resolver for CExpression — resolves identifiers like MT_WALK to their numeric values.
@@ -1663,6 +1722,11 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 				// silently discarded.  Execute the narrow assignment form through
 				// the normal setter path while retaining SAFE's error suppression.
 				if ( IsSafeAssignment(pszStr) )
+				{
+					vValRet.SetInt( ExecuteCommand(pszStr) == NO_ERROR ? 1 : 0 );
+					break;
+				}
+				if ( IsSafeCommand(pszStr) )
 				{
 					vValRet.SetInt( ExecuteCommand(pszStr) == NO_ERROR ? 1 : 0 );
 					break;
