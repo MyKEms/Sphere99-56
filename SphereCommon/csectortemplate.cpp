@@ -343,10 +343,21 @@ bool CSectorTemplate::LinkRegion( CRegionBasic* pRegionNew )
 				DEBUG_ERR(( "Conflicting region!" LOG_CR ));
 				return( false );
 			}
-			if ( pRegionNew->IsInside(pRegion))	
+			// Keep the most specific region first.  The map loader normally
+			// presents the enclosing area before a later room/area, so a new
+			// region contained by the current one must be inserted ahead of it.
+			// Conversely, leave an existing contained region ahead of a new
+			// enclosing region.  GetRegion() returns the first matching link.
+			if ( pRegionNew->IsInside(pRegion) )
+			{
+				m_RegionLinks.InsertAt( i, pRegionNew );
+				return( true );
+			}
+			if ( pRegion->IsInside(pRegionNew) )
 				continue;
 
-			// must insert before this.
+			// Partially overlapping regions retain the historical insertion
+			// order because neither one is more specific than the other.
 			m_RegionLinks.InsertAt( i, pRegionNew );
 			return( true );
 		}
