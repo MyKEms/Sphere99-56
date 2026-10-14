@@ -213,6 +213,9 @@ public:
 		while ( *pszVal && *pszVal != ',' ) pszVal++;
 		if ( *pszVal == ',' ) pszVal++;
 		m_bottom = atoi( pszVal );
+		// Stock accepts RECT values written in either corner order.  Normalize
+		// before validity and sector-link checks consume the parsed rectangle.
+		NormalizeRect();
 	}
 };
 
