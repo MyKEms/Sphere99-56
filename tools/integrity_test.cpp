@@ -20,6 +20,46 @@ public:
 	}
 };
 
+class CIntegrityReparentItem : public CIntegrityItem
+{
+	CIntegrityContainer* m_pDestination;
+	CItem* m_pMoved;
+	bool m_fAttempted = false;
+	bool m_fAccepted = false;
+
+	TRIGRET_TYPE OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& ) override
+	{
+		if ( ! m_fAttempted && ISINTRESOURCE( pszTrigName ) &&
+			GETINTRESOURCE( pszTrigName ) == CItemDef::T_UnEquip )
+		{
+			m_fAttempted = true;
+			m_pMoved->DeleteThis();
+			m_fAccepted = m_pDestination->AttachRaw( m_pMoved );
+		}
+		return TRIGRET_RET_DEFAULT;
+	}
+
+public:
+	CIntegrityReparentItem( ITEMID_TYPE id, CItemDef* pItemDef,
+		CIntegrityContainer* pDestination, CItem* pMoved ) :
+		CIntegrityItem( id, pItemDef ), m_pDestination( pDestination ), m_pMoved( pMoved ) {}
+	bool WasAttempted() const { return m_fAttempted; }
+	bool WasAccepted() const { return m_fAccepted; }
+};
+
+class CIntegrityTrackedItem : public CIntegrityItem
+{
+	int* m_pDestructions;
+
+public:
+	CIntegrityTrackedItem( ITEMID_TYPE id, CItemDef* pItemDef, int* pDestructions ) :
+		CIntegrityItem( id, pItemDef ), m_pDestructions( pDestructions ) {}
+	~CIntegrityTrackedItem() override
+	{
+		++*m_pDestructions;
+	}
+};
+
 static bool TestRegionRectStorage()
 {
 	CGRegion region;
@@ -199,6 +239,34 @@ static bool TestDeferredUIDReuseKeepsNewOwner()
 	return fPreserved;
 }
 
+static bool TestPendingChildCannotBeReattached()
+{
+	CCharDefPtr pCharDef = new CCharDef( CREID_MAN );
+	g_Cfg.m_ResHash.AddSortKey( pCharDef, pCharDef->GetUIDIndex());
+	CChar* pCharRaw = new CChar( CREID_MAN );
+	CCharPtr pChar = pCharRaw;
+	CItemDef containerDef( ITEMID_MULTI_MAX );
+	CItemDef itemDef( ITEMID_MULTI_MAX );
+	CIntegrityContainer* pPackRaw = new CIntegrityContainer( ITEMID_MULTI_MAX, &containerDef );
+	CItemPtr pPack = pPackRaw;
+	int iDestructions = 0;
+	CItemPtr pItem = new CIntegrityTrackedItem( ITEMID_MULTI_MAX, &itemDef, &iDestructions );
+	CItemPtr pEquipped = new CIntegrityReparentItem( ITEMID_MULTI_MAX, &itemDef, pPackRaw, pItem );
+	static_cast<CContainer*>( pCharRaw )->InsertHead( pPack );
+	if ( !pPackRaw->AttachRaw( pItem ))
+		return false;
+	pEquipped->SetEquipLayer( LAYER_HAND1 );
+	if ( !static_cast<CContainer*>( pCharRaw )->InsertHead( pEquipped ))
+		return false;
+	pCharRaw->DeleteThis();
+	const int iIntegrity = g_World.CheckIntegrity( 0 );
+	const CIntegrityReparentItem* pTrigger = static_cast<const CIntegrityReparentItem*>( static_cast<const CItem*>( pEquipped ));
+	const bool fClean = pTrigger->WasAttempted() && pTrigger->WasAccepted() &&
+		pItem->GetParent() == &g_World.m_ObjDelete && iIntegrity == 0;
+	g_World.GarbageCollection_New();
+	return fClean && iDestructions == 1;
+}
+
 static bool TestRepeatedViolationIsSummarized()
 {
 	// End the preceding injected cycle so its keys are no longer active.
@@ -316,6 +384,11 @@ int main()
 	if ( !TestDeferredUIDReuseKeepsNewOwner())
 	{
 		std::fprintf( stderr, "deferred UID reuse lost the replacement object\n" );
+		return 1;
+	}
+	if ( !TestPendingChildCannotBeReattached())
+	{
+		std::fprintf( stderr, "pending child was reattached during character teardown\n" );
 		return 1;
 	}
 	if ( !TestRepeatedViolationIsSummarized())

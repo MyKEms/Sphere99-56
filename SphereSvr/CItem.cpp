@@ -144,7 +144,21 @@ void CItem::DeleteThis()
 	// NOTE: we should make this object useless just in case.
 	if ( ! CObjBase::sm_fDeleteReal &&
 		( IsDeletePending() || GetParent() == &(g_World.m_ObjDelete) ))
+	{
+		// A removal callback can temporarily reattach an item after its first
+		// DeleteThis() queued it and freed its UID.  Do not leave that pending
+		// item linked to a live container: the next container teardown must be
+		// able to detach it before the UID watchdog observes a stale child.
+		if ( IsDeletePending() && GetParent() != NULL &&
+			GetParent() != &(g_World.m_ObjDelete) )
+		{
+			Detach();
+			if ( GetParent() == NULL && ! g_World.m_ObjDelete.InsertHead( this ))
+				g_Log.Event( LOG_GROUP_DEBUG, LOGL_ERROR,
+					"Unable to requeue pending item 0%x after detaching" LOG_CR, GetUID());
+		}
 		return;
+	}
 
 	if ( ! g_Serv.IsLoading())
 		switch ( m_type )
