@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from .base import MODE as BASE_MODE
+from .compat_writer import write_equipment_tile
 from .legacy_generator import generate as generate_recipe
 from .registry import FixtureCase, FixtureMode, TestCase, register_mode
 
@@ -12,6 +13,8 @@ PASSWORD = "eq-pw"
 EVENT_NAME = "e_EquipFormsProbe"
 ITEM_ID = 0x0E92
 ITEM_DEF = "SYNTHETIC_EQUIP_FORM"
+ONE_HAND_ITEM_ID = 0x0E93
+ONE_HAND_ITEM_DEF = "SYNTHETIC_ONE_HAND_HAMMER"
 
 
 def generate(output: Path) -> int:
@@ -20,8 +23,13 @@ def generate(output: Path) -> int:
         return result
 
     tables = output / "scripts" / "spheretables.scp"
+    table_text = tables.read_text(encoding="ascii").replace(
+        "[CHARDEF 0x0190]\nDEFNAME=c_MAN\n",
+        "[CHARDEF 0x0190]\nDEFNAME=c_MAN\nCAN=0x314\n",
+        1,
+    )
     tables.write_text(
-        tables.read_text(encoding="ascii")
+        table_text
         + f"""
 
 [ITEMDEF 0x{ITEM_ID:04X}]
@@ -29,6 +37,19 @@ DEFNAME={ITEM_DEF}
 NAME=synthetic equip form item
 TYPE=T_EQ_SCRIPT
 LAYER=30
+ON=@Equip
+RETURN 0
+
+[ITEMDEF 0x{ONE_HAND_ITEM_ID:04X}]
+DEFNAME={ONE_HAND_ITEM_DEF}
+NAME=synthetic one-hand hammer
+# Keep this synthetic fixture independent of the optional type-name table.
+TYPE=11
+LAYER=2
+TWOHANDS=N
+REQSTR=0
+DAM=1,2
+SKILL=Mace Fighting
 ON=@Equip
 RETURN 0
 
@@ -71,11 +92,18 @@ arg(uid_equipped,<findlayer(30).serial>)
 SYSMESSAGE SPHERE_EQUIP_UID <arg(uid_serial)>|<arg(uid_equipped)>
 findlayer(30).remove
 
+newitemsafe({ONE_HAND_ITEM_DEF})
+equip(lastnew)
+SYSMESSAGE SPHERE_EQUIP_TWOHANDS_FALSE <lastnew.serial>|<findlayer(1).serial>|<findlayer(2).serial>
+findlayer(1).remove
+findlayer(2).remove
+
 SYSMESSAGE SPHERE_EQUIP_FORMS_END
 RETURN 0
 """,
         encoding="ascii",
     )
+    write_equipment_tile(output / "muls" / "tiledata.mul", ONE_HAND_ITEM_ID, 2)
     (output / "accounts" / "sphereaccu.scp").write_text(
         f"""[ACCOUNT {ACCOUNT}]
 PASSWORD={PASSWORD}

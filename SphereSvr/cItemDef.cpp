@@ -968,15 +968,31 @@ HRESULT CItemDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		break;
 
 	case P_TwoHands:
+		{
 		// In some cases the layer is not set right.
 		// override the layer here.
 		if ( ! IsTypeEquippable())
 			return( HRES_INVALID_HANDLE );
-		if ( vVal.GetBool())
+		bool fTwoHands = vVal.GetBool();
+		LPCTSTR pszTwoHands = vVal.GetPSTR();
+		if ( pszTwoHands && ( !_stricmp( pszTwoHands, "N" ) ||
+			!_stricmp( pszTwoHands, "NO" ) || !_stricmp( pszTwoHands, "FALSE" )))
+		{
+			fTwoHands = false;
+		}
+		if ( fTwoHands )
 		{
 			m_layer = LAYER_HAND2;
 		}
+		else
+		{
+			// An explicit one-handed declaration overrides a tiledata default.
+			// Some weapon records carry the two-handed layer in MUL data even
+			// though their script definition says TWOHANDS=N.
+			m_layer = LAYER_HAND1;
+		}
 		break;
+		}
 	case P_Type:
 		return SetBaseType( 
 				(IT_TYPE) g_Cfg.ResourceGetIndexType( RES_TypeDef, vVal.GetPSTR()), 
