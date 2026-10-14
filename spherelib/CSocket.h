@@ -327,6 +327,14 @@ public:
 		return errno;
 #endif
 	}
+	static inline bool IsPeerClosedError( int iError )
+	{
+#ifdef _WIN32
+		return iError == WSAECONNRESET || iError == WSAECONNABORTED;
+#else
+		return iError == EPIPE || iError == ECONNRESET || iError == ECONNABORTED;
+#endif
+	}
 
 	operator CSocketAddress() const
 	{

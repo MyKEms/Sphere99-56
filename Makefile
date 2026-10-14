@@ -285,6 +285,18 @@ http-access-asan-test:
 		tools/http_access_test.cpp -o build/asan-http-access/http_access_test \
 		-fsanitize=address,undefined
 
+socket-peer-close-test:
+	$(MAKE) BUILD_DIR=build/socket-peer-close TARGET=build/socket-peer-close/socket_peer_close_test \
+		TEST_SRC=tools/socket_peer_close_test.cpp \
+		CXXFLAGS="$(DEFAULT_CXXFLAGS) -D_LIB -DSPHERE_SOCKET_PEER_CLOSE_TEST" \
+		LDFLAGS="$(DEFAULT_LDFLAGS)" all
+
+socket-peer-close-asan-test: $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ)
+	@mkdir -p build/asan-socket-peer-close
+	$(CXX) $(ASAN_CXXFLAGS) -D_LIB -DSPHERE_SOCKET_PEER_CLOSE_TEST \
+		tools/socket_peer_close_test.cpp $(ASAN_REGRESSION_OBJ) $(ASAN_LIB_OBJ) \
+		-o build/asan-socket-peer-close/socket_peer_close_test $(ASAN_LDFLAGS)
+
 clean:
 	rm -f $(ALL_OBJ) $(ALL_DEP) $(TARGET)
 	@if [ "$(BUILD_DIR)" = "." ]; then rm -rf build; fi
@@ -292,4 +304,4 @@ clean:
 -include $(ALL_DEP)
 -include $(ASAN_ALL_OBJ:.o=.d) $(ASAN_LIB_OBJ:.o=.d)
 
-.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test plant-timer-asan-test container-list-test container-list-asan-test string-sort-array-test string-sort-array-asan-test curve-test http-access-test http-access-asan-test clean
+.PHONY: all debug asan recover load-safety-test value-range-test save-io-test integrity-test integrity-asan-test plant-timer-asan-test container-list-test container-list-asan-test string-sort-array-test string-sort-array-asan-test curve-test http-access-test http-access-asan-test socket-peer-close-test socket-peer-close-asan-test clean
