@@ -992,7 +992,11 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 			break;
 		}
 	}
-	if ( pItemDef->m_SkillMake.GetSize() != 0 || !fResourceAliasOnly )
+	// The craft-menu CANMAKE probe must still check the declared resources.  The
+	// legacy alias bypass applies only to the direct MAKEITEM path; otherwise
+	// every resource-only alias would make an unrelated menu entry visible.
+	if ( stage == CSkillDef::T_Select ||
+		pItemDef->m_SkillMake.GetSize() != 0 || !fResourceAliasOnly )
 		iReplicationQty = ResourceConsume( &(pItemDef->m_BaseResources), iReplicationQty, stage != CSkillDef::T_Success );
 	if ( ! iReplicationQty )
 	{
