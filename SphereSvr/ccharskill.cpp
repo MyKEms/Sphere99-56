@@ -751,12 +751,13 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 	if ( iQty <= 0 )
 		return true;
 
-	CItemVendablePtr pItem = REF_CAST(CItemVendable,CItem::CreateTemplate( m_Act.m_atCreate.m_ItemID, NULL, this ));
+	CItemPtr pItem = CItem::CreateTemplate( m_Act.m_atCreate.m_ItemID, NULL, this );
 	if ( pItem == NULL )
 		return( false );
 
 	CGString sMakeMsg;
-	int iSkillLevel = Skill_GetBase( Skill_GetActive());	// primary skill value.
+	SKILL_TYPE skill = Skill_GetActive();
+	int iSkillLevel = IsSkillBase(skill) ? Skill_GetBase(skill) : 0;	// primary skill value.
 
 	if ( iQty != 1 )	// m_Act.m_atCreate.m_Amount
 	{
@@ -775,7 +776,7 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 		Emote( "pour the completed potion into a bottle" );
 		Sound( 0x240 );	// pouring noise.
 	}
-	else
+	else if ( CItemVendablePtr pVendItem = REF_CAST(CItemVendable,pItem) )
 	{
 		// Only set the quality on single items.
 		int quality = IMULDIV( iSkillLevel, 2, 10 );	// default value for quality.
@@ -865,7 +866,7 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 			quality = 1000;
 			break;
 		}
-		pItem->SetQuality(quality);
+		pVendItem->SetQuality(quality);
 		if ( iSkillLevel > 999 && ( quality > 175 ))
 		{
 			// A GM made this, and it is of high quality
