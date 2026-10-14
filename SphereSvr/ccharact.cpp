@@ -1453,6 +1453,12 @@ HRESULT CChar::ItemBounce( CItem* pItem )
 
 	if ( pItem == NULL )
 		return HRES_INVALID_HANDLE;
+	// A failed equip can call the bounce fallback after a script has already
+	// removed the item.  Such an item has a freed UID and belongs to the
+	// deferred-delete queue; linking it into a pack would leave a stale child
+	// pointer that the integrity watchdog cannot resolve.
+	if ( pItem->IsDeletePending() || pItem->GetParent() == &(g_World.m_ObjDelete) )
+		return HRES_INVALID_HANDLE;
 
 	CItemContainerPtr pPack = GetPackSafe();
 	if ( pItem->GetParent() == pPack )
