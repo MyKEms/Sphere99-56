@@ -50,6 +50,11 @@ jobs:
           make http-access-test
           build/http-access/http_access_test
 
+      - name: Run closed-peer send regression
+        run: |
+          make socket-peer-close-test
+          build/socket-peer-close/socket_peer_close_test
+
       - name: Reject non-trivial objects through C varargs
         run: |
           if grep -Eq 'passing objects of non-trivially-copyable type .* through' build.log; then
@@ -128,6 +133,14 @@ jobs:
         run: |
           make http-access-asan-test
           build/asan-http-access/http_access_test
+
+      - name: Run closed-peer send regression under ASan/UBSan
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make socket-peer-close-asan-test
+          build/asan-socket-peer-close/socket_peer_close_test
 
       - name: Verify crash recovery is opt-in
         run: |

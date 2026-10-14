@@ -825,13 +825,15 @@ void CClient::xFlush()
 			// Assume nothing was transmitted.
 		Do_Handle_Error:
 			int iErrCode = CGSocket::GetLastError();
-#ifdef _WIN32
-			if ( iErrCode == WSAECONNRESET || iErrCode == WSAECONNABORTED )
+			if ( CGSocket::IsPeerClosedError( iErrCode ))
 			{
-				// WSAECONNRESET = 10054 = far end decided to bail.
+				// A client may close immediately after its final response.  Treat
+				// that as a normal disconnect and discard the dead socket instead
+				// of reporting a transmission error on every flush.
 				m_Socket.Close();
 				return;
 			}
+#ifdef _WIN32
 			if ( iErrCode == WSAEWOULDBLOCK )
 			{
 				// just try back later. or select() will close it for us later.
