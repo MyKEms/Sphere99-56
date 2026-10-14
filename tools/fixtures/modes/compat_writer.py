@@ -1403,6 +1403,11 @@ def dotted_expression_scripts() -> tuple[str, str, str]:
         'quoted_table[2] "abc def"\n'
         'probe_text_value "abc def"\n'
         'probe_font_open <BASEFONT SIZE="+5" COLOR="#000080">\n'
+        # Keep the closing HTML fragment in its own generic DEFNAMES section,
+        # matching the reference's separately loaded font constants.  The
+        # deferred table value still travels through the same HTMLGUMPa text
+        # path as the opening fragment.
+        "\n[DEFNAMES dotted_quoted_fragments]\n"
         'probe_font_close </BASEFONT>\n'
         "\n[DIALOG dotted_quoted_table]\n"
         "0 0\n"

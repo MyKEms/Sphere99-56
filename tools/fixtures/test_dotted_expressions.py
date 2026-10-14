@@ -603,7 +603,7 @@ def main() -> int:
                     if "BASEFONT" in text or text.strip() == '" "' or text.strip() == ""
                 ]
                 expected = {
-                    '<BASEFONT SIZE="+5" COLOR="#000080"> </BASEFONT>',
+                    '<BASEFONT SIZE="+5" COLOR="#000080"> </BASEFONT>"',
                     '<BASEFONT SIZE="+5" COLOR="#000080">abc def</BASEFONT>"',
                 }
                 missing = sorted(expected - set(quoted))
