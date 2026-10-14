@@ -984,13 +984,9 @@ HRESULT CItemDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		{
 			m_layer = LAYER_HAND2;
 		}
-		else
-		{
-			// An explicit one-handed declaration overrides a tiledata default.
-			// Some weapon records carry the two-handed layer in MUL data even
-			// though their script definition says TWOHANDS=N.
-			m_layer = LAYER_HAND1;
-		}
+		// A false declaration leaves the layer from the item definition/MUL
+		// data unchanged. Legacy records use TWOHANDS=N as a compatibility
+		// hint, and stock does not rewrite a tiledata hand layer for it.
 		break;
 		}
 	case P_Type:

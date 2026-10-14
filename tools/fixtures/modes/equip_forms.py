@@ -15,6 +15,8 @@ ITEM_ID = 0x0E92
 ITEM_DEF = "SYNTHETIC_EQUIP_FORM"
 ONE_HAND_ITEM_ID = 0x0E93
 ONE_HAND_ITEM_DEF = "SYNTHETIC_ONE_HAND_HAMMER"
+NUMERIC_FALSE_ITEM_ID = 0x0E94
+NUMERIC_FALSE_ITEM_DEF = "SYNTHETIC_NUMERIC_FALSE_HAMMER"
 
 
 def generate(output: Path) -> int:
@@ -37,6 +39,18 @@ DEFNAME={ITEM_DEF}
 NAME=synthetic equip form item
 TYPE=T_EQ_SCRIPT
 LAYER=30
+ON=@Equip
+RETURN 0
+
+[ITEMDEF 0x{NUMERIC_FALSE_ITEM_ID:04X}]
+DEFNAME={NUMERIC_FALSE_ITEM_DEF}
+NAME=synthetic numeric-false hammer
+TYPE=11
+LAYER=2
+TWOHANDS=0
+REQSTR=0
+DAM=1,2
+SKILL=Mace Fighting
 ON=@Equip
 RETURN 0
 
@@ -98,12 +112,19 @@ SYSMESSAGE SPHERE_EQUIP_TWOHANDS_FALSE <lastnew.serial>|<findlayer(1).serial>|<f
 findlayer(1).remove
 findlayer(2).remove
 
+newitemsafe({NUMERIC_FALSE_ITEM_DEF})
+equip(lastnew)
+SYSMESSAGE SPHERE_EQUIP_TWOHANDS_NUMERIC <lastnew.serial>|<findlayer(1).serial>|<findlayer(2).serial>
+findlayer(1).remove
+findlayer(2).remove
+
 SYSMESSAGE SPHERE_EQUIP_FORMS_END
 RETURN 0
 """,
         encoding="ascii",
     )
     write_equipment_tile(output / "muls" / "tiledata.mul", ONE_HAND_ITEM_ID, 2)
+    write_equipment_tile(output / "muls" / "tiledata.mul", NUMERIC_FALSE_ITEM_ID, 2)
     (output / "accounts" / "sphereaccu.scp").write_text(
         f"""[ACCOUNT {ACCOUNT}]
 PASSWORD={PASSWORD}
