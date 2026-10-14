@@ -35,6 +35,7 @@ CItemDef::CItemDef( ITEMID_TYPE id ) :
 	m_weight = 0;
 	m_type = IT_NORMAL;
 	m_layer = LAYER_NONE;
+	m_fSkillMakeDeclared = false;
 
 	// Just applies to equippable weapons/armor.
 	m_ttNormal.m_tData1 = 0;
@@ -188,6 +189,7 @@ void CItemDef::CopyTransfer( CItemDef* pBase )
 
 	m_values = pBase->m_values;
 	m_SkillMake.CopyArray( pBase->m_SkillMake );
+	m_fSkillMakeDeclared = pBase->m_fSkillMakeDeclared;
 
 	CObjBaseDef::CopyTransfer( pBase );	// This will overwrite the CResourceLink!!
 }
@@ -948,6 +950,7 @@ HRESULT CItemDef::s_PropSet( LPCTSTR pszKey, CGVariant& vVal )
 		m_ttEquippable.m_StrReq = vVal.GetInt();
 		break;
 	case P_SkillMake: // Skill required to make this.
+		m_fSkillMakeDeclared = true;
 		m_SkillMake.s_LoadKeys( vVal.GetPSTR());
 		break;
 	case P_TData1:

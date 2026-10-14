@@ -751,12 +751,13 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 	if ( iQty <= 0 )
 		return true;
 
-	CItemVendablePtr pItem = REF_CAST(CItemVendable,CItem::CreateTemplate( m_Act.m_atCreate.m_ItemID, NULL, this ));
+	CItemPtr pItem = CItem::CreateTemplate( m_Act.m_atCreate.m_ItemID, NULL, this );
 	if ( pItem == NULL )
 		return( false );
 
 	CGString sMakeMsg;
-	int iSkillLevel = Skill_GetBase( Skill_GetActive());	// primary skill value.
+	SKILL_TYPE skill = Skill_GetActive();
+	int iSkillLevel = IsSkillBase(skill) ? Skill_GetBase(skill) : 0;	// primary skill value.
 
 	if ( iQty != 1 )	// m_Act.m_atCreate.m_Amount
 	{
@@ -775,9 +776,9 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 		Emote( "pour the completed potion into a bottle" );
 		Sound( 0x240 );	// pouring noise.
 	}
-	else
+	else if ( CItemVendablePtr pVendItem = REF_CAST(CItemVendable,pItem) )
 	{
-		// Only set the quality on single items.
+		// Only set the quality on single vendable items.
 		int quality = IMULDIV( iSkillLevel, 2, 10 );	// default value for quality.
 		// Quality depends on the skill of the craftsman, and a random chance.
 		// minimum quality is 1, maximum quality is 200.  100 is average.
@@ -865,7 +866,7 @@ bool CChar::Skill_MakeItem_Success( int iQty )
 			quality = 1000;
 			break;
 		}
-		pItem->SetQuality(quality);
+		pVendItem->SetQuality(quality);
 		if ( iSkillLevel > 999 && ( quality > 175 ))
 		{
 			// A GM made this, and it is of high quality
@@ -922,6 +923,12 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 	if ( pItemDef == NULL )
 		return( false );
 
+	// CANMAKE treats an item with no declared make rule as unavailable.
+	// Keep resource-only recipes eligible; the legacy MAKEITEM path handles
+	// those directly when no skill timer is declared.
+	if ( stage == CSkillDef::T_Select && !pItemDef->HasMakeRule())
+		return( false );
+
 	// Trigger Target item for creating the new item.
 	CItemPtr pItemTarg = g_World.ItemFind(uidTarg);
 	if ( pItemTarg && stage == CSkillDef::T_Select )
@@ -963,8 +970,30 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 		return( false );
 	}
 
-	// How many do i actually have resource for?
-	iReplicationQty = ResourceConsume( &(pItemDef->m_BaseResources), iReplicationQty, stage != CSkillDef::T_Success );
+	// Resource-only definitions still test ordinary resources.  The reference
+	// parser leaves an alias-only resource unresolved for legacy definitions;
+	// preserve that behavior while retaining the resource gate for normal
+	// materials.
+	bool fResourceAliasOnly = ( pItemDef->m_SkillMake.GetSize() == 0 &&
+		pItemDef->m_BaseResources.GetSize() > 0 );
+	for ( int i = 0; fResourceAliasOnly && i < pItemDef->m_BaseResources.GetSize(); ++i )
+	{
+		CSphereUID rid = pItemDef->m_BaseResources[i].GetResourceID();
+		if ( rid.GetResType() != RES_ItemDef )
+		{
+			fResourceAliasOnly = false;
+			break;
+		}
+		CItemDefPtr pResourceDef = g_Cfg.FindItemDef( (ITEMID_TYPE) rid.GetResIndex());
+		if ( pResourceDef == NULL || pResourceDef->GetDispID() == 0 ||
+			pResourceDef->GetDispID() == rid.GetResIndex())
+		{
+			fResourceAliasOnly = false;
+			break;
+		}
+	}
+	if ( pItemDef->m_SkillMake.GetSize() != 0 || !fResourceAliasOnly )
+		iReplicationQty = ResourceConsume( &(pItemDef->m_BaseResources), iReplicationQty, stage != CSkillDef::T_Success );
 	if ( ! iReplicationQty )
 	{
 		if ( stage == CSkillDef::T_Start )
@@ -976,6 +1005,17 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 
 	if ( stage == CSkillDef::T_Start )
 	{
+		if ( pItemDef->m_SkillMake.GetSize() == 0 )
+		{
+			// A resource-only recipe is completed immediately by the legacy
+			// MAKEITEM verb.  Populate the creation state before delivering it;
+			// unlike a timed skill there is no later stroke to do so.
+			m_Act.m_Targ = uidTarg;
+			m_Act.m_atCreate.m_ItemID = id;
+			m_Act.m_atCreate.m_Amount = iReplicationQty;
+			return Skill_MakeItem_Success(iReplicationQty);
+		}
+
 		// Start the skill.
 		// Find the primary skill required.
 
