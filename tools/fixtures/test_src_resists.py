@@ -98,10 +98,10 @@ def main() -> int:
     rows = [message for message in messages if message.startswith(MARKER)]
     expected = {
         MARKER + "|[00]",
-        MARKER + "_TAG|[00]",
+        MARKER + "_ISSUMMON|[00]",
         MARKER + "_TAG_TEXT|[<SRC.TAG(name)>]",
         MARKER + "_TAG_LENGTH|[<STRLEN(<SRC.TAG(name)>)>]",
-        MARKER + "_NAME|[<SRC.NAME>]",
+        MARKER + "_NAME|[Sphere99 synthetic fixture]",
     }
     missing = sorted(expected.difference(rows))
     if missing:
