@@ -69,6 +69,17 @@ private:
 	// caller's source automatically.
 	CScriptObj* m_pSourceObj;
 
+	bool HasEffectiveNullSource() const
+	{
+		// Timer and server-console callbacks carry a console pointer for
+		// logging, but that console has no attached character/object.  In
+		// script they still have the stock null SRC semantics unless an
+		// explicit SRC=<object> assignment installed a source override.
+		return m_fNullSource ||
+			(m_pSourceObj == NULL &&
+				(m_pSrc == NULL || m_pSrc->GetAttachedObj() == NULL));
+	}
+
 	static LPCTSTR const sm_szScriptKeys[];
 
 	static SCRIPT_UNKNOWN_KIND UnknownExpressionKind(LPCTSTR pszExpr)
@@ -366,6 +377,16 @@ protected:
 		CGVariant vArgs;
 		if ( !SplitDottedSegment(pszExpr + aStart[0], aLen[0], szRoot, sizeof(szRoot), vArgs) )
 			return false;
+		// A callback can execute with no trigger source.  Stock keeps that
+		// null reference as UID zero for both the bare SRC escape and its
+		// dotted properties; do not send SRC.<property> through the ordinary
+		// object and function dispatch paths, which would report a spurious
+		// unresolved SRC.* expression and abort the containing statement.
+		if ( HasEffectiveNullSource() && iSegments > 1 && !_stricmp(szRoot, "SRC") )
+		{
+			vValRet.SetStr("#00");
+			return true;
+		}
 
 		CGVariant vCurrent;
 		CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
@@ -589,7 +610,7 @@ protected:
 		// source is different from an attached server console: the latter is
 		// still useful to native calls, but it must not make <SRC> look like an
 		// unresolved literal in script text.
-		if ( m_fNullSource && pszExpr && !_stricmp(pszExpr, "SRC") )
+		if ( HasEffectiveNullSource() && pszExpr && !_stricmp(pszExpr, "SRC") )
 		{
 			vResult.SetStr("#00");
 			return true;
