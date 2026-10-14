@@ -9,6 +9,7 @@
 #endif // _MSC_VER >= 1000
 
 class CObjBase;
+class CScriptObj;
 
 enum RES_TYPE	// all the script resource blocks we know how to deal with !
 {
@@ -367,6 +368,16 @@ class CSphereThread
 	: public CThread
 #endif
 {
+	struct SCRIPT_TRIGGER_FRAME
+	{
+		CGString m_sObject;
+		CGString m_sTrigger;
+		CGString m_sScript;
+		int m_iLine;
+
+		SCRIPT_TRIGGER_FRAME() : m_iLine(0) {}
+	};
+
 	// Context stuff for each thread we run.
 public:
 	CSphereThread()
@@ -374,6 +385,7 @@ public:
 		m_pScriptContext = NULL;
 		m_iScriptRecursionDepth = 0;
 		m_fScriptRecursionReported = false;
+		m_iTriggerFrameCount = 0;
 	}
 	const CScript* SetScriptContext( const CScript* pScriptContext )
 	{
@@ -393,6 +405,10 @@ public:
 
 	static CSphereThread* GetCurrentThread();
 
+	void PushTriggerFrame(CScriptObj* pObject, LPCTSTR pszTrigger, const CScript* pScript);
+	void PopTriggerFrame();
+	void FormatTriggerChain(CGString& sChain) const;
+
 public:
 	const CScript* m_pScriptContext;	// The current script open for use.
 	CScriptExecContext* m_pExecContext;	// general context we are scripting in.
@@ -402,6 +418,10 @@ public:
 
 	int m_iScriptRecursionDepth;
 	bool m_fScriptRecursionReported;
+
+private:
+	SCRIPT_TRIGGER_FRAME m_TriggerFrames[SCRIPT_MAX_RECURSION_DEPTH];
+	int m_iTriggerFrameCount;
 };
 
 #if 0
