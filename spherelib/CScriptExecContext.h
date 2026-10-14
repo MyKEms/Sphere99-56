@@ -955,6 +955,31 @@ protected:
 		return false;
 	}
 
+	// A null-source string helper remains literal in stock text expansion,
+	// but its non-empty preserved text is true in a numeric IF/ELSEIF.
+	// Detect only that nested STRLEN form so unresolved expressions retain
+	// their ordinary zero fallback elsewhere.
+	static bool HasPreservedNullSourceLength(LPCTSTR pszExpr)
+	{
+		if ( pszExpr == NULL )
+			return false;
+		for ( LPCTSTR p = pszExpr; *p; ++p )
+		{
+			const bool fEscapeCall = *p == '<' && !_strnicmp(p + 1, "strlen(", 7);
+			const bool fExpressionCall = !_strnicmp(p, "strlen(", 7);
+			if ( !fEscapeCall && !fExpressionCall )
+				continue;
+			for ( LPCTSTR q = p + ( fEscapeCall ? 8 : 7 ); *q; ++q )
+			{
+				if ( *q == '<' && !_strnicmp(q + 1, "src.", 4) )
+					return true;
+				if ( *q == '>' )
+					break;
+			}
+		}
+		return false;
+	}
+
 public:
 	// Numeric expressions (IF, ELIF, WHILE, RETURN, EVAL) read a bare
 	// reference operand such as SRC.STR, SECTOR.LIGHT or FINDUID(uid).NAME
@@ -1735,6 +1760,8 @@ public:
 		s_ParseEscapes(pszArg, CSCRIPT_PARSE_OBJECT_SERIAL, iBufCapacity);
 		if ( IsLineExpansionOverflow() )
 			return 0;
+		if ( HasEffectiveNullSource() && HasPreservedNullSourceLength(pszArg) )
+			return 1;
 
 		TCHAR* pszExpr = pszArg;
 		while ( ISWHITESPACE(*pszExpr) ) pszExpr++;
@@ -2249,7 +2276,8 @@ public:
 					}
 					else
 					{
-						if ( !rejected.RecordIfPresent() )
+						if ( !(HasEffectiveNullSource() && HasPreservedNullSourceLength(pszExpr)) &&
+							!rejected.RecordIfPresent() )
 							ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 						pszBuf[iEnd - 1] = '?'; // restore
 						i++; // skip past '?'
@@ -2369,7 +2397,8 @@ public:
 				}
 				else
 				{
-					if ( !rejected.RecordIfPresent() )
+					if ( !(HasEffectiveNullSource() && HasPreservedNullSourceLength(pszExpr)) &&
+						!rejected.RecordIfPresent() )
 						ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
 					// Restore the '>' and skip — don't modify unresolvable tags.
 					pszBuf[iEnd] = chEnd;

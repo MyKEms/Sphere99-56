@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from modes.src_resists import ACCOUNT, END_MARKER, MARKER, PASSWORD
+from modes.src_resists import ACCOUNT, BRANCH_MARKER, END_MARKER, MARKER, PASSWORD
 from run_suite import shutdown_failures
 
 
@@ -102,6 +102,7 @@ def main() -> int:
         MARKER + "_TAG_TEXT|[<SRC.TAG(name)>]",
         MARKER + "_TAG_LENGTH|[<STRLEN(<SRC.TAG(name)>)>]",
         MARKER + "_NAME|[Sphere99 synthetic fixture]",
+        BRANCH_MARKER + "|[<src.tag(x)>]",
     }
     missing = sorted(expected.difference(rows))
     if missing:
@@ -121,14 +122,20 @@ def main() -> int:
         ]
         if rejected:
             failures.append(f"missing-source SRC reads were unresolved: {rejected!r}")
+        strlen = [
+            entry for entry in report.get("entries", [])
+            if str(entry.get("keyword", "")).upper() == "STRLEN"
+        ]
+        if strlen:
+            failures.append(f"preserved null-source STRLEN was reported unknown: {strlen!r}")
 
     if failures:
         print("observed messages:", messages, file=sys.stderr)
-        print(f"SRC-resists probe failed: {max(0, 6 - len(failures))}/6 checks passed", file=sys.stderr)
+        print(f"SRC-resists probe failed: {max(0, 8 - len(failures))}/8 checks passed", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("SRC-resists probe passed: 6/6 checks")
+    print("SRC-resists probe passed: 8/8 checks")
     return 0
 
 
