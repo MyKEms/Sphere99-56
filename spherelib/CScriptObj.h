@@ -72,6 +72,8 @@ void ScriptUnknownRecord(SCRIPT_UNKNOWN_KIND kind, LPCTSTR pszKeyword, const CSc
 const CScript* ScriptUnknownSetContext(const CScript* pScript);
 void ScriptUnknownReportSetPath(LPCTSTR pszPath);
 bool ScriptUnknownReportIsEnabled();
+bool ScriptUnknownRejectionsSuppressed();
+bool ScriptUnknownSetRejectionsSuppressed(bool fSuppress);
 bool ScriptUnknownResultIsRejected(HRESULT hRes);
 bool ScriptUnknownReportWrite();
 
@@ -104,7 +106,8 @@ public:
 
 	void Observe(HRESULT hRes, LPCTSTR pszKeyword, const CScriptObj* pObj)
 	{
-		if ( !m_fEnabled || m_fRejected || !ScriptUnknownResultIsRejected(hRes) )
+		if ( !m_fEnabled || ScriptUnknownRejectionsSuppressed() ||
+			m_fRejected || !ScriptUnknownResultIsRejected(hRes) )
 			return;
 		strncpy(m_szKeyword, pszKeyword ? pszKeyword : "", sizeof(m_szKeyword) - 1);
 		m_szKeyword[sizeof(m_szKeyword) - 1] = '\0';
@@ -114,6 +117,11 @@ public:
 
 	bool RecordIfPresent()
 	{
+		if ( ScriptUnknownRejectionsSuppressed() )
+		{
+			Clear();
+			return true;
+		}
 		if ( !m_fRejected )
 			return false;
 		ScriptUnknownRecord(SCRIPT_UNKNOWN_REJECTED, m_szKeyword, m_pObj);
@@ -160,6 +168,26 @@ public:
 private:
 	const CScript* m_pPrevious;
 	bool m_fActive;
+};
+
+class CScriptUnknownRejectionScope
+{
+public:
+	CScriptUnknownRejectionScope()
+		: m_fPrevious(ScriptUnknownSetRejectionsSuppressed(true))
+	{
+	}
+
+	~CScriptUnknownRejectionScope()
+	{
+		ScriptUnknownSetRejectionsSuppressed(m_fPrevious);
+	}
+
+	CScriptUnknownRejectionScope(const CScriptUnknownRejectionScope&) = delete;
+	CScriptUnknownRejectionScope& operator=(const CScriptUnknownRejectionScope&) = delete;
+
+private:
+	bool m_fPrevious;
 };
 
 class CRefObjDef

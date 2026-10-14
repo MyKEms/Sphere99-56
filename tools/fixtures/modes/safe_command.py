@@ -24,6 +24,14 @@ def generate(output: Path) -> int:
     if result:
         return result
 
+    sphere_ini = output / "sphere.ini"
+    sphere_ini.write_text(
+        sphere_ini.read_text(encoding="ascii").replace(
+            "DEBUGLEVEL=0\n", "DEBUGLEVEL=0\nUNKNOWNKEYWORDREPORT=logs/unknown-keywords.json\n", 1
+        ),
+        encoding="ascii",
+    )
+
     tables = output / "scripts" / "spheretables.scp"
     tables.write_text(
         tables.read_text(encoding="ascii")
@@ -85,7 +93,9 @@ SAFE EQUIP(<LASTNEW>)
 RETURN 0
 
 [FUNCTION NEWITEMSAFE]
-NEWITEM <ARGS>
+ARG(saved_act,<ACT>)
+NEWITEM(<HVAL ARGV(0)>)
+ACT=<ARG(saved_act)>
 RETURN <LASTNEW.SERIAL>
 
 [FUNCTION f_safe_newitem]
@@ -150,7 +160,7 @@ P=128,128,0
 MODE = register_mode(
     FixtureMode(
         name="safe-command",
-        fixture_args=(),
+        fixture_args=("--unknown-keyword-report",),
         order=209,
         id_block=155,
         case=FixtureCase(
