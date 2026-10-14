@@ -64,7 +64,8 @@ bool CClient::Cmd_Use_Item( CItem* pItem, bool fTestTouch )
 	m_Targ.m_tmUseItem.m_pParent = pItem->GetParent();	// Cheat Verify.
 
 	CSphereExpContext exec(pItem, m_pChar);
-	if ( pItem->OnTrigger( CItemDef::T_UserDClick, exec) == TRIGRET_RET_VAL )
+	const TRIGRET_TYPE triggerRet = pItem->OnTrigger( CItemDef::T_UserDClick, exec);
+	if ( triggerRet != TRIGRET_RET_FALSE && triggerRet != TRIGRET_RET_DEFAULT )
 	{
 		return true;
 	}

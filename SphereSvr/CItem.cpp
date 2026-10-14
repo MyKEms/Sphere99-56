@@ -3158,11 +3158,14 @@ TRIGRET_TYPE CItem::OnTrigger( LPCTSTR pszTrigName, CScriptExecContext& exec,
 		iRet = pResLink->OnTriggerScript( exec, iAction, pszTrigName );
 		if ( fReportUnknown || pHasTriggerHandler )
 			fHasTriggerHandler = pResLink->HasTriggerName(pszTrigName) || fHasTriggerHandler;
-		if ( iRet == TRIGRET_RET_VAL )
+		// A TYPEDEF handler may use RETURN 1 to claim the action.  Preserve
+		// every handled result here, just as event handlers do; only FALSE and
+		// DEFAULT mean that the normal item path should continue.
+		if ( iRet != TRIGRET_RET_FALSE && iRet != TRIGRET_RET_DEFAULT )
 		{
 			if ( pHasTriggerHandler )
 				*pHasTriggerHandler = fHasTriggerHandler;
-			return( TRIGRET_RET_VAL );	// Block further action.
+			return( iRet );	// Block further action.
 		}
 	}
 
