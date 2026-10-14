@@ -12,7 +12,11 @@ PASSWORD = "sc-pw"
 EVENT_NAME = "e_SafeCommandProbe"
 ITEM_ID = 0xA5E0
 ITEM_NAME = "SYNTHETIC_SAFE_COMMAND_ITEM"
+MACRO_ITEM_ID = 0xA5E1
+MACRO_ITEM_NAME = "SYNTHETIC_SAFE_COMMAND_MACRO_ITEM"
 MARKER = "SPHERE_SAFE_COMMAND"
+MACRO_MARKER = MARKER + " MACRO_CALLBACK"
+MEMORY_MARKER = MARKER + " MEMORY_CALLBACK"
 
 
 def generate(output: Path) -> int:
@@ -34,6 +38,25 @@ ON=@Equip
 CONT.SYSMESSAGE {MARKER} CALLBACK
 REMOVE
 
+[ITEMDEF 0x{MACRO_ITEM_ID:04X}]
+DEFNAME={MACRO_ITEM_NAME}
+NAME=synthetic safe command macro item
+TYPE=T_EQ_SCRIPT
+LAYER=77
+ON=@Equip
+CONT.SYSMESSAGE {MACRO_MARKER}
+REMOVE
+
+[ITEMDEF i_cansee]
+DEFNAME=i_cansee
+ID=0x2007
+NAME=synthetic can-see memory
+TYPE=T_SRC_CHANGER
+LAYER=77
+ON=@Equip
+CONT.SYSMESSAGE {MEMORY_MARKER}
+REMOVE
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 IF <TAG.probe_done>
@@ -48,8 +71,22 @@ RETURN 0
 f_safe_newitem(<ARGS>)
 LASTNEW.TAG(probe,1)
 SAFE EQUIP(LASTNEW)
+NEWITEM 0x{MACRO_ITEM_ID:04X}
+LASTNEW.LINK=<SRC>
+SAFE EQUIP(<LASTNEW>)
+f_safe_memory_probe(<SRC>)
 RACEMESSAGE("{MARKER} MESSAGE")
 RETURN 0
+
+[FUNCTION f_safe_memory_probe]
+NEWITEMSAFE(i_cansee)
+LASTNEW.LINK=<ARGS>
+SAFE EQUIP(<LASTNEW>)
+RETURN 0
+
+[FUNCTION NEWITEMSAFE]
+NEWITEM <ARGS>
+RETURN <LASTNEW.SERIAL>
 
 [FUNCTION f_safe_newitem]
 ARG(saved_act,<ACT>)
@@ -106,7 +143,7 @@ P=128,128,0
 
     from .compat_writer import write_mul_fixture
 
-    write_mul_fixture(output, extra_item_id=ITEM_ID)
+    write_mul_fixture(output, extra_item_id=MACRO_ITEM_ID)
     return 0
 
 

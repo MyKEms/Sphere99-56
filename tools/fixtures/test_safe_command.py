@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from modes.safe_command import ACCOUNT, MARKER, PASSWORD
+from modes.safe_command import ACCOUNT, MACRO_MARKER, MEMORY_MARKER, MARKER, PASSWORD
 from run_suite import shutdown_failures
 
 
@@ -104,6 +104,10 @@ def main() -> int:
     end = MARKER + " END"
     if messages.count(callback) != 1:
         failures.append(f"command callback count {messages.count(callback)} != 1")
+    if messages.count(MACRO_MARKER) != 1:
+        failures.append(f"macro command callback count {messages.count(MACRO_MARKER)} != 1")
+    if messages.count(MEMORY_MARKER) != 1:
+        failures.append(f"memory command callback count {messages.count(MEMORY_MARKER)} != 1")
     if messages.count(message) != 1:
         failures.append(f"message count {messages.count(message)} != 1")
     if messages.count(end) != 1:
@@ -111,7 +115,9 @@ def main() -> int:
     try:
         callback_index = messages.index(callback)
         message_index = messages.index(message)
-        if callback_index >= message_index:
+        macro_index = messages.index(MACRO_MARKER)
+        memory_index = messages.index(MEMORY_MARKER)
+        if callback_index >= message_index or macro_index >= message_index or memory_index >= message_index:
             failures.append("command callback did not precede the message")
     except ValueError:
         pass
@@ -122,7 +128,7 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("SAFE command probe passed: 4/4 checks")
+    print("SAFE command probe passed: 6/6 checks")
     return 0
 
 
