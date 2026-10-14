@@ -267,6 +267,39 @@ static bool TestPendingChildCannotBeReattached()
 	return fClean && iDestructions == 1;
 }
 
+static bool TestPendingItemBounceCannotReattach()
+{
+	CCharDefPtr pCharDef = new CCharDef( CREID_MAN );
+	g_Cfg.m_ResHash.AddSortKey( pCharDef, pCharDef->GetUIDIndex());
+	CChar* pCharRaw = new CChar( CREID_MAN );
+	CCharPtr pChar = pCharRaw;
+	CItemDef itemDef( ITEMID_MULTI_MAX );
+	int iDestructions = 0;
+	CItemDef packDef( ITEMID_MULTI_MAX );
+	CIntegrityContainer* pPackRaw = new CIntegrityContainer( ITEMID_MULTI_MAX, &packDef );
+	CItemContainerPtr pPack = pPackRaw;
+	CItemPtr pItem = new CIntegrityTrackedItem( ITEMID_MULTI_MAX, &itemDef, &iDestructions );
+	pPackRaw->SetEquipLayer( LAYER_PACK );
+	if ( !static_cast<CContainer*>( pCharRaw )->InsertHead( pPackRaw ))
+		return false;
+	pPack->ContentAdd( pItem );
+	if ( pItem->GetParent() != pPack )
+		return false;
+
+	// This is the ordering used by the failed-equip fallback: the script has
+	// removed the item, so it is already queued for deferred destruction when
+	// the client tries to bounce it back into the character's pack.
+	pItem->DeleteThis();
+	if ( pItem->GetParent() != &g_World.m_ObjDelete )
+		return false;
+	const HRESULT hBounce = pCharRaw->ItemBounce( pItem );
+	const bool fRejected = hBounce == HRES_INVALID_HANDLE &&
+		pItem->GetParent() == &g_World.m_ObjDelete;
+	pCharRaw->DeleteThis();
+	g_World.GarbageCollection_New();
+	return fRejected && iDestructions == 1;
+}
+
 static bool TestRepeatedViolationIsSummarized()
 {
 	// End the preceding injected cycle so its keys are no longer active.
@@ -389,6 +422,11 @@ int main()
 	if ( !TestPendingChildCannotBeReattached())
 	{
 		std::fprintf( stderr, "pending child was reattached during character teardown\n" );
+		return 1;
+	}
+	if ( !TestPendingItemBounceCannotReattach())
+	{
+		std::fprintf( stderr, "pending item was reattached by bounce fallback\n" );
 		return 1;
 	}
 	if ( !TestRepeatedViolationIsSummarized())
