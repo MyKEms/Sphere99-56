@@ -2018,10 +2018,10 @@ public:
 		return isdigit(static_cast<unsigned char>(chPrev)) || chPrev == ')';
 	}
 
-	// A non-whitespace quoted table value preserves one closing quote when it is
-	// expanded inside the quoted text argument of HTMLGUMPa. Restrict that
-	// compatibility rule to inline HTML text; ordinary messages and numeric
-	// gump arguments keep the value text-only.
+	// A quoted table value preserves one closing quote when it is expanded
+	// inside the quoted text argument of HTMLGUMPa. Restrict that compatibility
+	// rule to inline HTML text; ordinary messages and numeric gump arguments keep
+	// the value text-only.
 	static bool IsQuotedInlineHtmlText(const TCHAR* pszBuf, size_t iBegin)
 	{
 		if ( pszBuf == NULL || iBegin == 0 )
@@ -2188,19 +2188,7 @@ public:
 				if ( fSafe )
 					FormatSafeReference(pszExpr, sResult);
 				else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
-				{
-					bool fOnlyWhitespace = true;
-					for ( const TCHAR* p = sResult; *p; ++p )
-					{
-						if ( !ISWHITESPACE(*p) )
-						{
-							fOnlyWhitespace = false;
-							break;
-						}
-					}
-					if ( !fOnlyWhitespace )
-						sResult += "\x1f";
-				}
+					sResult += "\x1f";
 
 				// Replace <?...?> with result, shifting buffer.
 				int iExprLen = iEnd - iBegin + 1;
@@ -2320,19 +2308,7 @@ public:
 			if ( fSafe )
 				FormatSafeReference(pszExpr, sResult);
 			else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
-			{
-				bool fOnlyWhitespace = true;
-				for ( const TCHAR* p = sResult; *p; ++p )
-				{
-					if ( !ISWHITESPACE(*p) )
-					{
-						fOnlyWhitespace = false;
-						break;
-					}
-				}
-				if ( !fOnlyWhitespace )
-					sResult += "\x1f";
-			}
+				sResult += "\x1f";
 
 			// Replace <expr> with the resolved value, shifting the buffer.
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
