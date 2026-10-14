@@ -13,6 +13,7 @@ from modes.compat_writer import (
     TRIGGER_RECURSION_ACCOUNT,
     TRIGGER_RECURSION_MARKER,
     TRIGGER_RECURSION_PASSWORD,
+    TRIGGER_RESURRECT_ALIAS_MARKER,
 )
 from run_suite import shutdown_failures, stop_server, wait_for_port
 
@@ -100,6 +101,8 @@ def main() -> int:
         failures.append("the trigger chain did not return to the login script")
     if f"{TRIGGER_RECURSION_MARKER}_FUNCTION" not in messages:
         failures.append("damage_noresponse did not dispatch its script function")
+    if f"{TRIGGER_RESURRECT_ALIAS_MARKER}_FUNCTION" in messages:
+        failures.append("resurrect_player was dispatched as a script function")
     diagnostics = [
         line for line in log_contents.splitlines() if "Trigger Recursion error !" in line
     ]
@@ -108,7 +111,7 @@ def main() -> int:
             "unexpected trigger recursion diagnostic: " + diagnostics[0]
         )
 
-    total = 4
+    total = 5
     passed = max(0, total - len(failures))
     if failures:
         print(f"trigger-recursion probe failed: {passed}/{total} checks passed", file=sys.stderr)
