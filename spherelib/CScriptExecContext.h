@@ -418,7 +418,7 @@ protected:
 				rejected.Observe(hRes, szRoot, m_pBaseObj);
 				if ( hRes != NO_ERROR )
 				{
-					hRes = pBase->s_Method(szRoot, vArgs, vCurrent, m_pSrc);
+				hRes = DispatchMethod(pBase, szRoot, vArgs, vCurrent, m_pSrc);
 					rejected.Observe(hRes, szRoot, m_pBaseObj);
 					if ( hRes == NO_ERROR )
 					{
@@ -513,7 +513,7 @@ protected:
 			rejected.Observe(hRes, szName, pCurrent);
 			if ( hRes != NO_ERROR )
 			{
-				hRes = pCurrent->s_Method(szName, vArgs, vNext, m_pSrc);
+				hRes = DispatchMethod(pCurrent, szName, vArgs, vNext, m_pSrc);
 				rejected.Observe(hRes, szName, pCurrent);
 				if ( hRes == NO_ERROR )
 				{
@@ -541,7 +541,7 @@ protected:
 						vArgs.IsEmpty() )
 					{
 						CGVariant vLegacyArgs(szLegacyArg);
-						hRes = pCurrent->s_Method(szName, vLegacyArgs, vNext, m_pSrc);
+						hRes = DispatchMethod(pCurrent, szName, vLegacyArgs, vNext, m_pSrc);
 						rejected.Observe(hRes, szName, pCurrent);
 						if ( hRes == NO_ERROR )
 						{
@@ -765,7 +765,7 @@ protected:
 				rejected.Observe(hRes, pszSubKey, pRefObj);
 				if ( hRes != NO_ERROR )
 				{
-					hRes = pRefObj->s_Method(pszSubKey, vArgs, vSubRet, m_pSrc);
+					hRes = DispatchMethod(pRefObj, pszSubKey, vArgs, vSubRet, m_pSrc);
 					rejected.Observe(hRes, pszSubKey, pRefObj);
 				}
 				if ( hRes != NO_ERROR )
@@ -802,7 +802,7 @@ protected:
 		{
 			if ( !_stricmp(szKey, "TAG") )
 				ExpandTagArgumentIndices(vArgs);
-			hRes = pObj->s_Method(szKey, vArgs, vValRet, m_pSrc);
+			hRes = DispatchMethod(pObj, szKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, szKey, m_pBaseObj);
 			if ( hRes == NO_ERROR )
 			{
@@ -1494,6 +1494,36 @@ public:
 	}
 
 public:
+	// 0.99's ARG1S methods receive the argument text after the outer script
+	// quotes have been removed. The execution context normally constructs a
+	// CGVariant directly from raw command text, so perform that normalization
+	// only after resolving the native method table. Other methods, and gump
+	// controls with their own quote grammar, retain the original text.
+	static void NormalizeArg1S(CResourceObj* pObj, LPCTSTR pszKey, CGVariant& vArgs)
+	{
+		if ( pObj == NULL || pszKey == NULL ||
+			!(pObj->GetScriptMethodFlags(pszKey) & CSCRIPTPROP_ARG1S) )
+			return;
+
+		LPCTSTR pszRaw = vArgs.GetPSTR();
+		const size_t iLen = pszRaw ? strlen(pszRaw) : 0;
+		if ( iLen < 2 || pszRaw[0] != '"' || pszRaw[iLen - 1] != '"' )
+			return;
+
+		CGString sUnquoted;
+		sUnquoted.SetLength(static_cast<int>(iLen - 2));
+		for ( size_t i = 0; i + 2 < iLen; i++ )
+			sUnquoted.ReferenceAt(static_cast<int>(i)) = pszRaw[i + 1];
+		vArgs.SetStr(sUnquoted);
+	}
+
+	static HRESULT DispatchMethod(CResourceObj* pObj, LPCTSTR pszKey,
+		CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc)
+	{
+		NormalizeArg1S(pObj, pszKey, vArgs);
+		return pObj->s_Method(pszKey, vArgs, vValRet, pSrc);
+	}
+
 	static CScriptPropArray sm_FunctionsAll;
 
 	// Gump accumulator — set during dialog construction (single-threaded safe).
@@ -1540,7 +1570,7 @@ public:
 			CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
 			if ( pObj )
 			{
-				HRESULT hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+				HRESULT hRes = DispatchMethod(pObj, pszKey, vArgs, vValRet, m_pSrc);
 				if ( hRes == NO_ERROR )
 					return hRes;
 			}
@@ -1556,7 +1586,7 @@ public:
 			{
 				HRESULT hRes = vArgs.IsEmpty()
 					? pObj->s_PropGet(pszKey, vValRet, m_pSrc)
-					: pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+					: DispatchMethod(pObj, pszKey, vArgs, vValRet, m_pSrc);
 				if ( hRes == NO_ERROR )
 					return hRes;
 			}
@@ -2746,7 +2776,7 @@ public:
 			// Try as a method call (KEY args).
 			CGVariant vArgs(pszArg);
 			CGVariant vValRet;
-			hRes = pObj->s_Method(pszKey, vArgs, vValRet, m_pSrc);
+			hRes = DispatchMethod(pObj, pszKey, vArgs, vValRet, m_pSrc);
 			rejected.Observe(hRes, pszKey, m_pBaseObj);
 			// A recognized method can reject the caller or its arguments.  Only
 			// an unknown method may fall through to global/script dispatch.
@@ -2828,7 +2858,7 @@ public:
 					{
 						// FINDID(...) and FINDLAYER(...) are object methods on
 						// the default character/container, not global functions.
-						hRoot = pObj->s_Method(szRootName, vRootArgs, vRoot, m_pSrc);
+						hRoot = DispatchMethod(pObj, szRootName, vRootArgs, vRoot, m_pSrc);
 						rejected.Observe(hRoot, szRootName, m_pBaseObj);
 					}
 				}
@@ -2875,7 +2905,7 @@ public:
 						(!_stricmp(pszDot + 1, "Z") || !_stricmp(pszDot + 1, "P_Z")) )
 						vArgs.SetInt(GetComplex(pszArg));
 					CGVariant vValRet;
-					hRes = pRootObj->s_Method(pszDot + 1, vArgs, vValRet, m_pSrc);
+					hRes = DispatchMethod(pRootObj, pszDot + 1, vArgs, vValRet, m_pSrc);
 					rejected.Observe(hRes, pszDot + 1, pRootObj);
 					// Preserve privilege and argument failures from a recognized
 					// method; do not reinterpret them as an unknown global method.

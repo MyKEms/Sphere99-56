@@ -39,9 +39,42 @@ enum TRIGRET_TYPE	// trigger script returns.
 
 class CScriptExecContext;
 
+// Methods inherited by world objects from the native script tables. Keeping
+// this lookup here lets derived classes expose the same metadata when their
+// dispatch forwards to a client, container, or base-object table without
+// coupling the parser to one concrete object class.
+inline DWORD ScriptMethodFlagsCommon(LPCTSTR pszKey)
+{
+	if ( pszKey == NULL )
+		return 0;
+	static const LPCTSTR sm_szArg1S[] =
+	{
+		"ALLCLIENTS", "B", "BROADCAST", "CONSUME", "EMOTE", "EVENTS",
+		"GO", "GOPLACE", "HEAR", "MESSAGE", "MOVE", "MOVETO", "RESOURCES",
+		"RESTEST",
+		"SET", "SMSG", "SMSGU", "SPEAK", "SPEAKU", "SYSMESSAGE",
+		"SYSMESSAGEU", "TARGET", "TARGETG", "TRY", "TRIGGER", "X", NULL
+	};
+	for ( int i = 0; sm_szArg1S[i]; ++i )
+	{
+		if ( !_stricmp(pszKey, sm_szArg1S[i]) )
+			return 0x0010;
+	}
+	return 0;
+}
+
 class CScriptObj
 {
 public:
+	// Return the flags for a native script method resolved on this object.
+	// Concrete resource classes provide the table lookup through the
+	// CSCRIPT_CLASS_* macros; the base implementation keeps non-resource
+	// objects and classes without a method table compatible.
+	virtual DWORD GetScriptMethodFlags(LPCTSTR pszKey) const
+	{
+		return ScriptMethodFlagsCommon(pszKey);
+	}
+
 	virtual TRIGRET_TYPE OnTrigger(LPCTSTR pszTrigName, CScriptExecContext& exec)
 	{
 		// Default: no triggers handled. Subclasses (CChar, CItem) override this.
