@@ -2400,8 +2400,12 @@ public:
 					if ( !(HasEffectiveNullSource() && HasPreservedNullSourceLength(pszExpr)) &&
 						!rejected.RecordIfPresent() )
 						ScriptUnknownRecord(UnknownExpressionKind(pszExpr), pszExpr, m_pBaseObj);
-					// Restore the '>' and skip — don't modify unresolvable tags.
+					// Restore the '>' and skip the complete unresolved outer
+					// expression. Its nested tags were already inspected in the
+					// temporary buffer; scanning the original contents again would
+					// evaluate them a second time.
 					pszBuf[iEnd] = chEnd;
+					i = iEnd;
 					continue;
 				}
 			}
