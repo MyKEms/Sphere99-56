@@ -29,7 +29,15 @@
 #define DECLARE_LISTREC_REF(a)
 #define DECLARE_LISTREC_REF2(a)
 #define CSCRIPT_EXEC_DEF void Exec
-#define CSCRIPT_CLASS_IMP0(a,b,c)
+#define CSCRIPT_CLASS_IMP0(a,b,c) \
+	DWORD C##a::GetScriptMethodFlags(LPCTSTR pszKey) const { \
+		const CScriptMethod* _tbl = (c); \
+		if ( _tbl ) { \
+			const int _index = s_FindKeyInTable(pszKey, _tbl); \
+			if ( _index >= 0 ) return _tbl[_index].m_dwFlags; \
+		} \
+		return ScriptMethodFlagsCommon(pszKey); \
+	}
 #define DECLARE_LISTREC_TYPE(a)
 #define CSCRIPT_PROP_IMP(a,b,c) { #a, b, c },
 #define CSCRIPT_PROPX_IMP(a,b,c) CScriptPropX(#a, b, c),
@@ -38,6 +46,7 @@
 #define CSCRIPT_CLASS_DEF1(...) \
 	int s_FindMyPropKey(LPCTSTR pszKey); \
 	int s_FindMyMethodKey(LPCTSTR pszKey); \
+	virtual DWORD GetScriptMethodFlags(LPCTSTR pszKey) const; \
 	static CScriptClass sm_ScriptClass;
 
 #define CSCRIPT_CLASS_IMP1(CLASS_NAME,b,c,d,e) \
@@ -48,11 +57,20 @@
 	int C##CLASS_NAME::s_FindMyMethodKey(LPCTSTR pszKey) { \
 		const CScriptMethod* _tbl = (c); \
 		return _tbl ? s_FindKeyInTable(pszKey, _tbl) : -1; \
+	} \
+	DWORD C##CLASS_NAME::GetScriptMethodFlags(LPCTSTR pszKey) const { \
+		const CScriptMethod* _tbl = (c); \
+		if ( _tbl ) { \
+			const int _index = s_FindKeyInTable(pszKey, _tbl); \
+			if ( _index >= 0 ) return _tbl[_index].m_dwFlags; \
+		} \
+		return ScriptMethodFlagsCommon(pszKey); \
 	}
 
 #define CSCRIPT_CLASS_DEF2(...) \
 	int s_FindMyPropKey(LPCTSTR pszKey); \
-	int s_FindMyMethodKey(LPCTSTR pszKey);
+	int s_FindMyMethodKey(LPCTSTR pszKey); \
+	virtual DWORD GetScriptMethodFlags(LPCTSTR pszKey) const;
 
 #define CSCRIPT_CLASS_IMP2(CLASS_NAME,b,c,d,e) \
 	int C##CLASS_NAME::s_FindMyPropKey(LPCTSTR pszKey) { \
@@ -62,6 +80,14 @@
 	int C##CLASS_NAME::s_FindMyMethodKey(LPCTSTR pszKey) { \
 		const CScriptMethod* _tbl = (c); \
 		return _tbl ? s_FindKeyInTable(pszKey, _tbl) : -1; \
+	} \
+	DWORD C##CLASS_NAME::GetScriptMethodFlags(LPCTSTR pszKey) const { \
+		const CScriptMethod* _tbl = (c); \
+		if ( _tbl ) { \
+			const int _index = s_FindKeyInTable(pszKey, _tbl); \
+			if ( _index >= 0 ) return _tbl[_index].m_dwFlags; \
+		} \
+		return ScriptMethodFlagsCommon(pszKey); \
 	}
 
 
