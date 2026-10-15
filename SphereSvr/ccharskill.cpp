@@ -980,8 +980,14 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 		if ( pItemDef->m_SkillMake.GetSize() == 0 )
 		{
 			// Resource-only recipes complete immediately.  They have no primary
-			// skill with which to start a timed action, but MAKEITEM still has to
-			// deliver the result after consuming the declared resources.
+			// skill with which to start a timed action.  The earlier call only
+			// tested the resources; consume them before delivering the result.
+			iReplicationQty = ResourceConsume( &(pItemDef->m_BaseResources), iReplicationQty, false );
+			if ( !iReplicationQty )
+			{
+				WriteString( "You lack the resources to make this" );
+				return( false );
+			}
 			m_Act.m_Targ = uidTarg;
 			m_Act.m_atCreate.m_ItemID = id;
 			m_Act.m_atCreate.m_Amount = iReplicationQty;

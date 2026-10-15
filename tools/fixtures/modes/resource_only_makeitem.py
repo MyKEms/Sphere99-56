@@ -67,7 +67,9 @@ SYSMESSAGE {MARKER}|empty=<CANMAKE(SYNTHETIC_RESOURCE_EMPTY)>
 SYSMESSAGE {MARKER}|rule=<CANMAKE(SYNTHETIC_RESOURCE_RULE)>
 SYSMESSAGE {MARKER}|resource=<CANMAKE(SYNTHETIC_RESOURCE_ONLY)>
 SYSMESSAGE {MARKER}|missing=<CANMAKE(SYNTHETIC_RESOURCE_MISSING)>
+SYSMESSAGE {MARKER}|material_before=<RESCOUNT(0x{RESOURCE_MATERIAL_ID:04X})>
 src.makeitem(SYNTHETIC_RESOURCE_ONLY)
+SYSMESSAGE {MARKER}|material_after=<RESCOUNT(0x{RESOURCE_MATERIAL_ID:04X})>
 SYSMESSAGE {MARKER}|done
 RETURN 1
 
@@ -136,8 +138,8 @@ MODE = register_mode(
     FixtureMode(
         name="resource-only-makeitem",
         fixture_args=(),
-        order=212,
-        id_block=158,
+        order=214,
+        id_block=160,
         case=FixtureCase(
             name="resource-only-makeitem",
             mode="resource-only-makeitem",

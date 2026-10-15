@@ -16,7 +16,14 @@ from run_suite import shutdown_failures
 ACCOUNT = "ResourceOnlyMakeProbe"
 PASSWORD = "res-pw"
 MARKER = "SPHERE_RESOURCE_ONLY_MAKE"
-EXPECTED = {"empty": "1", "rule": "1", "resource": "1", "missing": "0"}
+EXPECTED = {
+    "empty": "1",
+    "rule": "1",
+    "resource": "1",
+    "missing": "0",
+    "material_before": "1",
+    "material_after": "0",
+}
 ROW_RE = re.compile(re.escape(MARKER) + r"\|(\w+)=(.*)$")
 
 
