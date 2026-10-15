@@ -14,6 +14,7 @@ MARKER = "SPHERE_CRAFTMENU"
 END_MARKER = MARKER + "_END"
 ITEM_ID = 0x0E91
 CONTAINER_ID = 0x0E98
+DEFERRED_ITEM_ID = 0x0E92
 
 
 def generate(output: Path) -> int:
@@ -32,6 +33,8 @@ def generate(output: Path) -> int:
 DEFNAME=SYNTHETIC_CRAFT_SOURCE
 NAME=synthetic craft source
 TYPE=T_NORMAL
+ON=@UserDClick
+RETURN "<synthetic_deferred_open>"
 
 [TYPEDEFS]
 T_CONTAINER 1
@@ -49,6 +52,13 @@ if (safe def_cm_<argv(0)>)
 elseif (finduid(<argv(0)>).isitem)
   dialog(d_craftmenu,<finduid(<argv(0)>)>)
 endif
+
+[FUNCTION synthetic_deferred_open]
+craftmenu(tinkering)
+RETURN 1
+
+[FUNCTION synthetic_string_value]
+RETURN "synthetic string"
 
 [DIALOG d_craftmenu]
 0 0
@@ -68,7 +78,33 @@ Craft menu
 [DIALOG d_craftmenu BUTTON]
 ON=7
 SYSMESSAGE {MARKER}|button|7
+NEWITEM SYNTHETIC_CRAFT_CONTAINER
+VAR(nested_root,<LASTNEW>)
+VAR(nested_root).CONT=<SRC.FINDLAYER(21)>
+NEWITEM SYNTHETIC_CRAFT_SOURCE
+LASTNEW.CONT=<VAR(nested_root)>
+dialog(d_nested_outer,<VAR(nested_root)>)
 RETURN 1
+
+[DIALOG d_nested_outer]
+0 0
+// TAG returns the live container, then dispatches the nested dialog on it.
+argo.tag(nested,<finduid(<argv(0)>)>)
+argo.tag(nested).dialog(d_nested_inner,<argo.tag(nested)>)
+break
+return -1
+
+[DIALOG d_nested_inner]
+0 0
+text 20 20 0 0
+button 20 60 4005 4006 1 0 8
+
+[DIALOG d_nested_inner TEXT]
+Nested craft section
+
+[DIALOG d_nested_inner BUTTON]
+ON=8
+SRC.SYSMESSAGE {MARKER}|nested-button|8
 
 [FUNCTION craftmenu_refs]
 // Mirror the legacy helper chain: a function receives a live object
@@ -146,10 +182,14 @@ ENDIF
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 SYSMESSAGE {MARKER}|begin
+SYSMESSAGE {MARKER}|string=<synthetic_string_value>
 F_craftmenu_negated_conditions
 F_craftmenu_build(<UID>)
+NEWITEM i_backpack
+LASTNEW.EQUIP
 NEWITEM SYNTHETIC_CRAFT_SOURCE
-LASTNEW.P=<P>
+LASTNEW.CONT=<FINDLAYER(21)>
+SYSMESSAGE {MARKER}|deferred=<LASTNEW.SERIAL>
 VAR(def_cm_tinkering,<LASTNEW>)
 craftmenu(tinkering)
 SYSMESSAGE {MARKER}|opened
@@ -209,7 +249,7 @@ P=128,128,20
 
     from modes.compat_writer import write_mul_fixture
 
-    write_mul_fixture(output, extra_item_id=ITEM_ID)
+    write_mul_fixture(output, extra_item_id=max(ITEM_ID, DEFERRED_ITEM_ID, CONTAINER_ID))
     return 0
 
 

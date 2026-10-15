@@ -107,6 +107,17 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
         if any(marker not in messages for marker in required_markers):
             failures.append(f"craftmenu open markers were incomplete: {messages!r}")
             return
+        string_values = [
+            message[len(MARKER + "|string="):]
+            for message in messages
+            if message.startswith(MARKER + "|string=")
+        ]
+        if string_values != ["synthetic string"]:
+            failures.append(
+                "quoted string helper was coerced to a trigger value: "
+                f"{string_values!r}; messages={messages!r}"
+            )
+            return
 
         expected_conditions = {
             "neg-and": "0",
@@ -188,6 +199,62 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
             messages[:] = system_messages(bytes(raw))
         if marker not in messages:
             failures.append(f"craftmenu button callback did not produce {marker!r}: {messages!r}")
+        nested_gump = None
+        nested_deadline = time.monotonic() + 10.0
+        while time.monotonic() < nested_deadline and nested_gump is None:
+            packet = next_packet(max(0.1, nested_deadline - time.monotonic()))
+            if packet is None:
+                break
+            messages[:] = system_messages(bytes(raw))
+            if packet.command in (0xB0, 0xDD):
+                try:
+                    candidate = parse_gump_dialog(packet.data)
+                except ValueError as error:
+                    failures.append(f"nested craft gump was malformed: {error}")
+                    return
+                if candidate.find_button(button_id=8) is not None:
+                    nested_gump = candidate
+        if nested_gump is None:
+            failures.append(
+                "nested argo.tag(...).dialog(...) did not open its target gump: "
+                f"messages={messages!r}"
+            )
+            return
+        sock.sendall(make_gump_reply(nested_gump.serial, nested_gump.context, 8, switches=(0,)))
+        nested_marker = MARKER + "|nested-button|8"
+        nested_marker_deadline = time.monotonic() + 10.0
+        while nested_marker not in messages and time.monotonic() < nested_marker_deadline:
+            packet = next_packet(max(0.1, nested_marker_deadline - time.monotonic()))
+            if packet is None:
+                break
+            messages[:] = system_messages(bytes(raw))
+        if nested_marker not in messages:
+            failures.append(f"nested craft button callback did not produce {nested_marker!r}: {messages!r}")
+            return
+        deferred_prefix = MARKER + "|deferred="
+        deferred_values = [message[len(deferred_prefix):] for message in messages if message.startswith(deferred_prefix)]
+        if len(deferred_values) != 1 or not deferred_values[0]:
+            failures.append(f"quoted deferred craft item marker was incomplete: {messages!r}")
+            return
+        deferred_uid = int(deferred_values[0], 16)
+        sock.sendall(bytes((0x06,)) + deferred_uid.to_bytes(4, "big"))
+        deferred_gump = None
+        deferred_deadline = time.monotonic() + 10.0
+        while time.monotonic() < deferred_deadline and deferred_gump is None:
+            packet = next_packet(max(0.1, deferred_deadline - time.monotonic()))
+            if packet is None:
+                break
+            messages[:] = system_messages(bytes(raw))
+            if packet.command in (0xB0, 0xDD):
+                try:
+                    deferred_gump = parse_gump_dialog(packet.data)
+                except ValueError as error:
+                    failures.append(f"quoted deferred craft gump was malformed: {error}")
+                    return
+        if deferred_gump is None:
+            failures.append(f"quoted deferred helper did not open the craft gump: {messages!r}")
+        if any("You can't think of a way to use that item" in message for message in messages):
+            failures.append("quoted deferred helper fell through to the native item-use diagnostic")
     finally:
         sock.close()
 
