@@ -1733,7 +1733,13 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 		{
 			ITEMID_TYPE id = (ITEMID_TYPE) g_Cfg.ResourceGetIndexType( RES_ItemDef, vArgs );
 			if ( id<0)
-				return( HRES_BAD_ARGUMENTS );
+			{
+				// Stock treats an unresolved item name as an ineligible recipe.
+				// Returning an error preserves the escape text, which callers then
+				// interpret as a non-empty craft-menu entry.
+				vValRet.SetBool(false);
+				return NO_ERROR;
+			}
 			vValRet.SetBool( Skill_MakeItem( id, UID_INDEX_CLEAR, CSkillDef::T_Select ));
 		}
 		break;
