@@ -20,8 +20,9 @@ EXPECTED = {
     "empty": "1",
     "rule": "1",
     "resource": "1",
-    "missing": "0",
+    "missing": "1",
     "material_before": "1",
+    "no_target_material": "1",
     "material_after": "0",
 }
 ROW_RE = re.compile(re.escape(MARKER) + r"\|(\w+)=(.*)$")
@@ -115,6 +116,8 @@ def main() -> int:
             failures.append(f"{label}: expected {expected!r}, got {got!r}")
     if not any("You put the synthetic resource-only make definition" in message for message in messages):
         failures.append("direct MAKEITEM did not report the crafted item")
+    if not any("You cannot figure this out" in message for message in messages):
+        failures.append("target-less MAKEITEM did not retain the legacy fallback")
     if f"{MARKER}|done" not in messages:
         failures.append("resource-only probe did not finish")
 

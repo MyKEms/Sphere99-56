@@ -977,7 +977,10 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 
 	if ( stage == CSkillDef::T_Start )
 	{
-		if ( pItemDef->m_SkillMake.GetSize() == 0 )
+		// A craft-menu MAKEITEM supplies the live tool/material target.  A
+		// target-less script call has no menu context and follows the legacy
+		// "cannot figure this out" path instead.
+		if ( pItemDef->m_SkillMake.GetSize() == 0 && pItemTarg != NULL )
 		{
 			// Resource-only recipes complete immediately.  They have no primary
 			// skill with which to start a timed action.  The earlier call only
