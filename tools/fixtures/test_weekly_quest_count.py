@@ -35,7 +35,7 @@ def main() -> int:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=45218)
+    parser.add_argument("--port", type=int, default=45220)
     parser.add_argument("--startup-timeout", type=float, default=90.0)
     args = parser.parse_args()
 

@@ -143,7 +143,7 @@ MODE = register_mode(
             name="weekly-quest-count",
             mode="weekly-quest-count",
             tests=(TestCase("test_weekly_quest_count.py", (), True, True),),
-            ports={"native": 45218, "asan": 45219},
+            ports={"native": 45220, "asan": 45221},
             output="weekly-quest-count",
         ),
     )
