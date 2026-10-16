@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from modes.equip_packet import ACCOUNT, LOGIN_CODE, MARKER
+from modes.equip_packet import ACCOUNT, ARCHERY_MARKER, LOGIN_CODE, MARKER
 from run_suite import shutdown_failures
 
 
@@ -51,6 +51,8 @@ def drain(sock: socket.socket, timeout: float = 0.4) -> bytes:
 
 def parse_serial(value: str) -> int:
     token = value.strip().lstrip("#")
+    if not token:
+        return 0
     try:
         return int(token, 0)
     except ValueError:
@@ -66,6 +68,20 @@ def equipped_packets(data: bytes, item_uid: int, char_uid: int) -> list[bytes]:
         if (
             struct.unpack_from(">I", raw, 1)[0] == item_uid
             and struct.unpack_from(">I", raw, 9)[0] == char_uid
+        ):
+            result.append(raw)
+    return result
+
+
+def container_packets(data: bytes, item_uid: int, container_uid: int) -> list[bytes]:
+    result = []
+    for packet in packets(data):
+        if packet.command != 0x25 or len(packet.data) < 18:
+            continue
+        raw = packet.data
+        if (
+            struct.unpack_from(">I", raw, 1)[0] == item_uid
+            and struct.unpack_from(">I", raw, 14)[0] == container_uid
         ):
             result.append(raw)
     return result
@@ -95,8 +111,12 @@ def main() -> int:
 
     failures: list[str] = []
     equip_rows: list[bytes] = []
+    archery_equips: dict[int, list[bytes]] = {}
+    archery_bounces: dict[int, list[bytes]] = {}
+    archery_layers: tuple[int, int, int, int, int] | None = None
 
     def exercise() -> None:
+        nonlocal archery_layers
         sock, _ = game_connect(
             args.host, args.port, ACCOUNT, LOGIN_CODE, game_port=args.port + 1000
         )
@@ -136,6 +156,64 @@ def main() -> int:
             item_uid = parse_serial(fields[1])
             char_uid = struct.unpack_from(">I", start[1], 1)[0]
 
+            # The script probe runs from a one-shot timer, after the character
+            # has entered the world.  Keep the post-login bytes so the packet
+            # counts describe that script request rather than the login image.
+            archery_data = bytearray(initial)
+            sock.setblocking(False)
+            deadline = time.monotonic() + 15.0
+            while time.monotonic() < deadline:
+                archery_rows = [
+                    message
+                    for message in system_messages(bytes(archery_data))
+                    if message.startswith(ARCHERY_MARKER + "|")
+                ]
+                if archery_rows:
+                    break
+                try:
+                    chunk = sock.recv(65536)
+                except BlockingIOError:
+                    time.sleep(0.02)
+                    continue
+                if not chunk:
+                    break
+                archery_data.extend(chunk)
+            sock.setblocking(True)
+            sock.settimeout(10.0)
+            archery_rows = [
+                message
+                for message in system_messages(bytes(archery_data))
+                if message.startswith(ARCHERY_MARKER + "|")
+            ]
+            if len(archery_rows) != 1:
+                raise RuntimeError(
+                    "equip-packet fixture did not reach its archery marker: "
+                    f"{system_messages(bytes(archery_data))!r}"
+                )
+            archery_values = archery_rows[0].split("|")
+            if len(archery_values) != 6:
+                raise RuntimeError(f"malformed archery marker: {archery_rows[0]!r}")
+            archery_uids = [parse_serial(value) for value in archery_values[1:4]]
+            archery_layers = (
+                *archery_uids,
+                parse_serial(archery_values[4]),
+                parse_serial(archery_values[5]),
+            )
+            archery_equips.clear()
+            archery_equips.update(
+                {
+                    uid: equipped_packets(bytes(archery_data), uid, char_uid)
+                    for uid in archery_uids
+                }
+            )
+            archery_bounces.clear()
+            archery_bounces.update(
+                {
+                    uid: container_packets(bytes(archery_data), uid, 0x40000004)
+                    for uid in archery_uids[:2]
+                }
+            )
+
             # Discard the login snapshot, then issue the same legacy pickup and
             # equip requests used by a 3.0.6 client.
             drain(sock)
@@ -173,12 +251,36 @@ def main() -> int:
         failures.append(
             f"one equip request emitted {len(equip_rows)} equipped-item packet(s)"
         )
+    if archery_layers is None:
+        failures.append("archery marker was not recorded")
+    else:
+        one_uid, shield_uid, bow_uid, hand1_uid, hand2_uid = archery_layers
+        if hand1_uid != 0:
+            failures.append(f"two-handed equip left hand 1 occupied by 0x{hand1_uid:x}")
+        if hand2_uid != bow_uid:
+            failures.append(
+                "two-handed equip did not occupy hand 2 with bow: "
+                f"0x{hand2_uid:x} != 0x{bow_uid:x}"
+            )
+        if len(archery_equips.get(bow_uid, ())) != 1:
+            failures.append(
+                "two-handed script equip emitted "
+                f"{len(archery_equips.get(bow_uid, ())) } bow equipment packet(s)"
+            )
+        for label, uid in (("one-handed weapon", one_uid), ("shield", shield_uid)):
+            if not archery_bounces.get(uid):
+                failures.append(
+                    f"two-handed equip emitted no backpack packet for displaced {label}"
+                )
     if failures:
         print("equip-packet probe failed:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("equip-packet probe passed: one equip request emitted one equipped-item packet")
+    print(
+        "equip-packet probe passed: client equip emitted one packet and script bow equip "
+        "emitted one bow packet with both displaced items moved to the backpack"
+    )
     return 0
 
 
