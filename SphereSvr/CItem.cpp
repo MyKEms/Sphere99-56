@@ -112,6 +112,7 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	g_Serv.StatInc(SERV_STAT_ITEMS);
 	m_AttrMask = 0;
 	m_fUnEquipTriggerActive = false;
+	m_fEquipUpdateDeferred = false;
 	m_fNoLayerCharContent = false;
 	m_fNoExplicitLayer = false;
 	m_fScriptCreated = false;
@@ -3233,6 +3234,8 @@ void CItem::SetAnim( ITEMID_TYPE id, int iTime )
 void CItem::Update( const CClient* pClientExclude )
 {
 	// Send this new item to all that can see it.
+	if ( m_fEquipUpdateDeferred )
+		return;
 
 	for ( CClientPtr pClient = g_Serv.GetClientHead(); pClient!=NULL; pClient = pClient->GetNext())
 	{

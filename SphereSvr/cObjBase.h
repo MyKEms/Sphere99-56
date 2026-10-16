@@ -348,6 +348,7 @@ private:
 	IT_TYPE m_type;		// What does this item do when dclicked ? 
 	WORD m_AttrMask;		// ATTR_TYPE Attribute flags.
 	bool m_fUnEquipTriggerActive;	// Prevent recursive T_UnEquip on this item.
+	bool m_fEquipUpdateDeferred;	// Coalesce client updates during one equip request.
 	bool m_fNoLayerCharContent;	// Loaded directly under a character without an equip layer.
 	bool m_fNoExplicitLayer;	// Loaded from a character relation without a saved LAYER.
 	bool m_fScriptCreated;	// Created by a script; preserve an existing pile when it is added.
@@ -942,6 +943,7 @@ public:
 		return( pObj->GetTopLevelObj());
 	}
 
+	void SetEquipUpdateDeferred( bool fDeferred ) { m_fEquipUpdateDeferred = fDeferred; }
 	virtual void  Update( const CClient* pClientExclude = NULL );		// send this new item to everyone.
 	void  Flip( LPCTSTR pCmd = NULL );
 	HRESULT LoadSetContainer( CSphereUID uid, LAYER_TYPE layer );
