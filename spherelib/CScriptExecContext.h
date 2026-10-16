@@ -1765,6 +1765,17 @@ public:
 		return fDigit && fOperator;
 	}
 
+	// Property assignments carry literal text as well as numeric expressions.
+	// In particular, TAG values commonly use a pipe-delimited report such as
+	// "2|7|8"; the pipe is a script bitwise operator, but it is not arithmetic
+	// coercion for a property write.  The resist helper only needs the numeric
+	// operators, so keep bitwise forms on the property's normal string path.
+	static bool IsNumericArithmeticAssignment(LPCTSTR pszValue)
+	{
+		return IsPureArithmeticExpression(pszValue) &&
+			strpbrk(pszValue, "|&^") == NULL;
+	}
+
 	static bool HasTopLevelComma(LPCTSTR pszValue)
 	{
 		// A script function can return a comma-separated value that is consumed
@@ -2831,7 +2842,7 @@ public:
 			{
 				// Try as a property set (KEY=VALUE).
 				CGVariant vVal;
-				if ( IsPureArithmeticExpression(pszArg) )
+				if ( IsNumericArithmeticAssignment(pszArg) )
 					vVal.SetInt(GetComplex(pszArg));
 				else
 					vVal.SetStr(pszArg);
@@ -2987,7 +2998,7 @@ public:
 						// object (SRC.NAME=x, FINDUID(uid).TAG.KEY=x).  The same
 						// setter also handles the legacy space form above.
 						CGVariant vVal;
-						if ( IsPureArithmeticExpression(pszArg) )
+						if ( IsNumericArithmeticAssignment(pszArg) )
 							vVal.SetInt(GetComplex(pszArg));
 						else
 							vVal.SetStr(pszArg);
