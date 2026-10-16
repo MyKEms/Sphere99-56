@@ -394,17 +394,29 @@ protected:
 
 		CGVariant vCurrent;
 		CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
+		CResourceObj* pLocalRootObj = NULL;
+		CGVariant vLocalRoot;
+		if ( m_LocalArgs.FindKeyVar(szRoot, vLocalRoot) )
+		{
+			vCurrent = vLocalRoot;
+			pLocalRootObj = dynamic_cast<CResourceObj*>(vLocalRoot.GetRef());
+			if ( pLocalRootObj == NULL && !vLocalRoot.IsEmpty() )
+				pLocalRootObj = ResolveUIDObject(vLocalRoot.GetUID());
+		}
 		// 0.99 item callbacks use UID as an object-root alias.  The ordinary
 		// UID function expects an argument and the legacy property returns only
 		// the serial, so handle the bare dotted root before either scalar path.
 		bool fUIDRoot = pBase != NULL && !_stricmp(szRoot, "UID") && vArgs.IsEmpty()
 			&& strchr(pszExpr + aStart[0], '(') == NULL;
-		HRESULT hRes = fUIDRoot ? NO_ERROR : Function_Dispatch(szRoot, vArgs, vCurrent);
-		if ( fUIDRoot )
+		HRESULT hRes = (pLocalRootObj != NULL || fUIDRoot) ? NO_ERROR :
+			Function_Dispatch(szRoot, vArgs, vCurrent);
+		if ( pLocalRootObj != NULL )
+			vCurrent = vLocalRoot;
+		else if ( fUIDRoot )
 			vCurrent.SetRef(pBase);
 		else
 			rejected.Observe(hRes, szRoot, m_pBaseObj);
-		bool fRootFromFunction = (hRes == NO_ERROR) && !fUIDRoot;
+		bool fRootFromFunction = (hRes == NO_ERROR) && !fUIDRoot && pLocalRootObj == NULL;
 		if ( fRootFromFunction )
 		{
 			if ( IsScriptFunction(szRoot) )
@@ -454,8 +466,9 @@ protected:
 				return false;
 		}
 
-		CResourceObj* pCurrent = ResolveObjectResult(vCurrent,
-			fRootFromFunction ? szRoot : NULL);
+		CResourceObj* pCurrent = pLocalRootObj != NULL
+			? pLocalRootObj
+			: ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
 			// A failed NEWITEM leaves LASTNEW empty.  Stock still recognizes
@@ -2817,7 +2830,11 @@ public:
 			if ( !fCallForm )
 			{
 				// Try as a property set (KEY=VALUE).
-				CGVariant vVal(pszArg);
+				CGVariant vVal;
+				if ( IsPureArithmeticExpression(pszArg) )
+					vVal.SetInt(GetComplex(pszArg));
+				else
+					vVal.SetStr(pszArg);
 				hRes = pObj->s_PropSet(pszKey, vVal);
 				// In 0.99 item callbacks, a bare FOOD assignment refers to the
 				// source character's hunger stat even though the item is the
@@ -2906,14 +2923,31 @@ public:
 					vRootArgs.SetVoid();
 				}
 				CGVariant vRoot;
+				// A local ARG can hold a live object serial.  Resolve that local
+				// before dispatching the dotted assignment so writes such as
+				// `mem_resist.more1=...` target the returned item instead of being
+				// treated as an unknown property on the active character.  Method
+				// calls already use ResolveDottedChain; this is the corresponding
+				// property-write path.
+				CResourceObj* pLocalRootObj = NULL;
+				CGVariant vLocalRoot;
+				if ( m_LocalArgs.FindKeyVar(szRootName, vLocalRoot) )
+				{
+					vRoot = vLocalRoot;
+					pLocalRootObj = dynamic_cast<CResourceObj*>(vLocalRoot.GetRef());
+					if ( pLocalRootObj == NULL && !vLocalRoot.IsEmpty() )
+						pLocalRootObj = ResolveUIDObject(vLocalRoot.GetUID());
+				}
 				bool fUIDRoot = pObj != NULL && !_stricmp(szRootName, "UID") && vRootArgs.IsEmpty()
 					&& strchr(szRoot, '(') == NULL;
-				HRESULT hRoot = fUIDRoot ? NO_ERROR : Function_Dispatch(szRootName, vRootArgs, vRoot);
+				HRESULT hRoot = pLocalRootObj != NULL ? NO_ERROR :
+					(fUIDRoot ? NO_ERROR : Function_Dispatch(szRootName, vRootArgs, vRoot));
 				if ( fUIDRoot )
 					vRoot.SetRef(pObj);
 				else
 					rejected.Observe(hRoot, szRootName, m_pBaseObj);
-				bool fRootFromFunction = (hRoot == NO_ERROR) && !fUIDRoot;
+				bool fRootFromFunction = (hRoot == NO_ERROR) && !fUIDRoot &&
+					pLocalRootObj == NULL;
 				if ( hRoot != NO_ERROR && pObj )
 				{
 					hRoot = pObj->s_PropGet(szRoot, vRoot, m_pSrc);
@@ -2927,7 +2961,9 @@ public:
 					}
 				}
 
-				CResourceObj* pRootObj = ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
+				CResourceObj* pRootObj = pLocalRootObj != NULL
+					? pLocalRootObj
+					: ResolveObjectResult(vRoot, fRootFromFunction ? szRootName : NULL);
 				if ( hRoot == NO_ERROR && pRootObj == NULL &&
 					fRootFromFunction && IsLastNewRoot(szRootName) )
 				{
@@ -2950,7 +2986,11 @@ public:
 						// ROOT.KEY=value is a property write on the referenced
 						// object (SRC.NAME=x, FINDUID(uid).TAG.KEY=x).  The same
 						// setter also handles the legacy space form above.
-						CGVariant vVal(pszArg);
+						CGVariant vVal;
+						if ( IsPureArithmeticExpression(pszArg) )
+							vVal.SetInt(GetComplex(pszArg));
+						else
+							vVal.SetStr(pszArg);
 						hRes = pRootObj->s_PropSet(pszDot + 1, vVal);
 						rejected.Observe(hRes, pszDot + 1, pRootObj);
 						if ( hRes == NO_ERROR )

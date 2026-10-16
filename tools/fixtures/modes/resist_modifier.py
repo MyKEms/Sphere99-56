@@ -43,12 +43,21 @@ FINDID(i_resistModifier_pierce).TRIGGER(TIMER)
 SYSMESSAGE SPHERE_RESIST_MODIFIER|after_second_timer=<TAG(resist_pierce)>;timer=<FINDID(i_resistModifier_pierce).TIMERD>;records=<FINDID(i_resistModifier_pierce).TAG(records)>
 FINDID(i_resistModifier_pierce).TRIGGER(TIMER)
 SYSMESSAGE SPHERE_RESIST_MODIFIER|after_remove=<TAG(resist_pierce)>;memory=<FINDID(i_resistModifier_pierce)>
+TAG(resist_slash,600)
+REDUCEBASERESIST(slash,200)
+SYSMESSAGE SPHERE_RESIST_MODIFIER|base=<TAG(resist_slash)>
+FINDID(i_resistModifier_slash).REMOVE
 SYSMESSAGE SPHERE_RESIST_MODIFIER_END
 RETURN 0
 
 [FUNCTION REDUCERESIST]
 ARG(mem_resist,<F_RESISTMODIFIER_GETMEMORY(<ARGV(0)>)>)
 MEM_RESIST.F_RESISTMODIFIER_ADDRECORD(<ARGV(1)>,<ARGV(2)>,<ARGV(3)>)
+
+[FUNCTION REDUCEBASERESIST]
+ARG(mem_resist,<F_RESISTMODIFIER_GETMEMORY(<ARGV(0)>)>)
+MEM_RESIST.MORE1=<MEM_RESIST.MORE1>-<ARGV(1)>
+MEM_RESIST.F_RESISTMODIFIER_APPLYCURRENT
 
 [FUNCTION F_RESISTMODIFIER_GETMEMORY]
 ARG(memId,<FINDID(i_resistModifier_<ARGV(0)>)>)
@@ -154,6 +163,15 @@ ENDIF
 [ITEMDEF i_resistModifier_pierce]
 ID=0x0E75
 NAME=synthetic resist modifier
+TYPE=T_EQ_SCRIPT
+ON=@Timer
+F_RESISTMODIFIER_TIMER
+ON=@Unequip
+F_RESISTMODIFIER_UNEQUIP
+
+[ITEMDEF i_resistModifier_slash]
+ID=0x0E76
+NAME=synthetic slash resist modifier
 TYPE=T_EQ_SCRIPT
 ON=@Timer
 F_RESISTMODIFIER_TIMER

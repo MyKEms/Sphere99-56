@@ -99,6 +99,7 @@ def main() -> int:
         MARKER + "|after_first_timer=350;timer=35;records=2",
         MARKER + "|after_second_timer=400;timer=45;records=1",
         MARKER + "|after_remove=600;memory=",
+        MARKER + "|base=400",
     }
     rows = set(messages)
     missing = sorted(expected.difference(rows))
@@ -109,11 +110,12 @@ def main() -> int:
 
     if failures:
         print("observed messages:", messages, file=sys.stderr)
-        print(f"resist-modifier probe failed: {max(0, 7 - len(failures))}/7 checks passed", file=sys.stderr)
+        total = len(expected) + 1
+        print(f"resist-modifier probe failed: {max(0, total - len(failures))}/{total} checks passed", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print("resist-modifier probe passed: 7/7 checks")
+    print(f"resist-modifier probe passed: {len(expected) + 1}/{len(expected) + 1} checks")
     return 0
 
 
