@@ -677,16 +677,49 @@ protected:
 		if ( fSpaceCall && !_stricmp(szKey, "EVAL") )
 		{
 			LPCTSTR pszText = vArgs.GetPSTR();
-			TCHAR szToken[SCRIPT_MAX_LINE_LEN];
-			size_t iToken = 0;
-			while ( pszText && pszText[iToken] && !ISWHITESPACE(pszText[iToken]) &&
-				iToken + 1 < sizeof(szToken) )
+			// A space-form EVAL normally consumes one token, but a parenthesized
+			// expression is a complete operand even when it contains spaces.  The
+			// stock scripts use this form for expressions such as
+			// ``EVAL (<more1> - <return_nth(...)>)``; truncating it at the first
+			// space leaves only ``(value`` and silently changes the result.
+			bool fKeepParenthesized = false;
+			if ( pszText && *pszText == '(' )
 			{
-				szToken[iToken] = pszText[iToken];
-				iToken++;
+				int iDepth = 0;
+				bool fQuote = false;
+				const TCHAR* pClose = NULL;
+				for ( const TCHAR* p = pszText; *p; p++ )
+				{
+					if ( *p == '"' )
+						fQuote = !fQuote;
+					else if ( !fQuote && *p == '(' )
+						iDepth++;
+					else if ( !fQuote && *p == ')' && --iDepth == 0 )
+					{
+						pClose = p;
+						break;
+					}
+				}
+				if ( pClose )
+				{
+					while ( ISWHITESPACE(pClose[1]) )
+						pClose++;
+					fKeepParenthesized = pClose[1] == '\0';
+				}
 			}
-			szToken[iToken] = '\0';
-			vArgs.SetStr(szToken);
+			if ( !fKeepParenthesized )
+			{
+				TCHAR szToken[SCRIPT_MAX_LINE_LEN];
+				size_t iToken = 0;
+				while ( pszText && pszText[iToken] && !ISWHITESPACE(pszText[iToken]) &&
+					iToken + 1 < sizeof(szToken) )
+				{
+					szToken[iToken] = pszText[iToken];
+					iToken++;
+				}
+				szToken[iToken] = '\0';
+				vArgs.SetStr(szToken);
+			}
 		}
 
 		// Reference chains with function roots and per-segment arguments.
@@ -1960,6 +1993,21 @@ public:
 		return !_stricmp(pszName, "TAG");
 	}
 
+	static bool IsTagRemoveMethodName(LPCTSTR pszKey)
+	{
+		if ( pszKey == NULL || *pszKey == '\0' )
+			return false;
+		LPCTSTR pszName = strrchr(pszKey, '.');
+		if ( pszName == NULL || _stricmp(pszName + 1, "REMOVE") != 0 )
+			return false;
+		const size_t iDotOffset = static_cast<size_t>(pszName - pszKey);
+		if ( iDotOffset < 3 )
+			return false;
+		const size_t iTagStart = iDotOffset - 3;
+		return !_strnicmp(pszName - 3, "TAG", 3) &&
+			(iTagStart == 0 || pszKey[iTagStart - 1] == '.');
+	}
+
 	bool ExpandTagArgumentIndices(TCHAR* pszArgs, size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
 	{
 		if ( pszArgs == NULL || *pszArgs == '\0' || iBufCapacity == 0 )
@@ -2043,13 +2091,15 @@ public:
 			if ( iNumericLen < 0 ||
 				iOut + static_cast<size_t>(iNumericLen) + 2 >= sizeof(szExpanded) )
 				return false;
-			szExpanded[iOut++] = '[';
+			// TAG arrays use the legacy underscore spelling in the backing
+			// CVarDefArray (record_0, dialog_x_1, ...).  Bracket notation is the
+			// script-facing form; normalize it before the tag method sees the key
+			// so indexed writes can be read by existing scripts that use the
+			// underscore form.
+			szExpanded[iOut++] = '_';
 			memcpy(szExpanded + iOut, szNumeric, static_cast<size_t>(iNumericLen));
 			iOut += static_cast<size_t>(iNumericLen);
-			szExpanded[iOut++] = ']';
-			if ( iClose != i + static_cast<size_t>(iNumericLen) + 1 ||
-				strncmp(pszArgs + i + 1, szNumeric, static_cast<size_t>(iNumericLen)) != 0 )
-				fChanged = true;
+			fChanged = true;
 			i = iClose + 1;
 		}
 		if ( pszArgs[iKeyLen] )
@@ -2735,7 +2785,7 @@ public:
 				pszArg = szCallArgs;
 			}
 		}
-		if ( IsTagMethodName(pszKey) && pszArg && *pszArg )
+		if ( (IsTagMethodName(pszKey) || IsTagRemoveMethodName(pszKey)) && pszArg && *pszArg )
 			ExpandTagArgumentIndices(pszArg, SCRIPT_MAX_LINE_LEN);
 
 		// Try dispatching to the base object.  A dotted assignment belongs to
@@ -2747,6 +2797,20 @@ public:
 		CResourceObj* pObj = dynamic_cast<CResourceObj*>(m_pBaseObj);
 		const bool fDirectDottedProperty =
 			!_strnicmp(pszKey, "TAG.", 4) || !_strnicmp(pszKey, "TAG0.", 5);
+		if ( pObj && IsTagRemoveMethodName(pszKey) )
+		{
+			CGVariant vArgs(pszArg);
+			CGVariant vValRet;
+			HRESULT hRes = DispatchMethod(pObj, pszKey, vArgs, vValRet, m_pSrc);
+			rejected.Observe(hRes, pszKey, m_pBaseObj);
+			if ( hRes != HRES_UNKNOWN_PROPERTY )
+			{
+				if ( hRes == NO_ERROR )
+					rejected.Clear();
+				rejected.RecordIfPresent();
+				return hRes;
+			}
+		}
 		if ( pObj && ( !strchr(pszKey, '.') || fDirectDottedProperty ))
 		{
 			HRESULT hRes;
