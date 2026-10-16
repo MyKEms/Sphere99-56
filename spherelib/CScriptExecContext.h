@@ -3264,6 +3264,16 @@ public:
 						return TRIGRET_RET_DEFAULT;
 					if ( *pszArg )
 					{
+						// A trigger may delegate its return through a quoted escape,
+						// e.g. RETURN "<helper>".  Once the helper expands to its
+						// numeric trigger result the quotes are presentation syntax,
+						// not a literal string; preserving them suppresses the handled
+						// return and incorrectly falls through to the native action.
+						const size_t iRawLen = strlen(pszArg);
+						const bool fQuotedDeferredCandidate =
+							iRawLen >= 4 && pszArg[0] == '"' &&
+							pszArg[1] == '<' && pszArg[iRawLen - 2] == '>' &&
+							pszArg[iRawLen - 1] == '"';
 						// Legacy helper functions can return a generated string (for
 						// example the byte-token stream used by STRTOASCII).  The
 						// numeric return path used to collapse that text to its first
@@ -3278,6 +3288,42 @@ public:
 						while ( pszTextEnd > pszText && ISWHITESPACE(pszTextEnd[-1]) )
 							*--pszTextEnd = '\0';
 						const size_t iTextLen = strlen(pszText);
+						bool fNumericDeferredReturn = false;
+						if ( fQuotedDeferredCandidate && iTextLen >= 2 &&
+							pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+						{
+							const TCHAR* pszValue = pszText + 1;
+							const TCHAR* pszValueEnd = pszText + iTextLen - 1;
+							bool fHasDigit = false;
+							bool fNumericText = true;
+							for ( const TCHAR* p = pszValue; p < pszValueEnd; ++p )
+							{
+								const unsigned char ch = static_cast<unsigned char>(*p);
+								if ( isdigit(ch) )
+									fHasDigit = true;
+								else if ( ISWHITESPACE(*p) || *p == '+' || *p == '-' ||
+									*p == '*' || *p == '/' || *p == '%' || *p == '(' ||
+									*p == ')' || *p == '<' || *p == '>' || *p == '=' ||
+									*p == '!' || *p == '&' || *p == '|' )
+									continue;
+								else
+								{
+									fNumericText = false;
+									break;
+								}
+							}
+							fNumericDeferredReturn = fNumericText && fHasDigit;
+						}
+						if ( fNumericDeferredReturn )
+						{
+							pszText[iTextLen - 1] = '\0';
+							pszText++;
+							const int iVal = GetScriptExpression(script, pszText);
+							if ( IsLineExpansionOverflow() )
+								return TRIGRET_RET_DEFAULT;
+							m_vValRet.SetInt(iVal);
+							return (TRIGRET_TYPE)iVal;
+						}
 						if ( (iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"') ||
 							IsScriptByteTokenStream(pszText) || HasTopLevelComma(pszText) )
 						{
