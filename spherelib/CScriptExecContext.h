@@ -3299,7 +3299,16 @@ public:
 						if ( IsLineExpansionOverflow() )
 							return TRIGRET_RET_DEFAULT;
 						m_vValRet.SetInt(iVal);
-						return (TRIGRET_TYPE) iVal;
+						// RETURN 0/1/2 retain their historical trigger-status
+						// meanings.  Higher numeric results are values, not control
+						// markers: the internal ELSE/ELSEIF/ENDIF enum occupies the
+						// next slots, so returning (TRIGRET_TYPE)iVal made a helper
+						// returning 4, 5, or 6 alter its caller's IF flow and discard
+						// the value.  Propagate those results through the ordinary
+						// value sentinel while keeping the value in m_vValRet.
+						if ( iVal >= TRIGRET_RET_FALSE && iVal <= TRIGRET_RET_DEFAULT )
+							return (TRIGRET_TYPE) iVal;
+						return TRIGRET_RET_VAL;
 					}
 					return TRIGRET_RET_DEFAULT;
 				}

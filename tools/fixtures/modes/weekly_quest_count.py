@@ -33,7 +33,8 @@ def_weekly_levelStepUp 20
 [ITEMDEF 0x0E34]
 DEFNAME=SYNTHETIC_MEMORY_BASE
 NAME=synthetic memory base
-TYPE=T_EQ_SCRIPT
+TYPE=T_EQ_MEMORY_OBJ
+LAYER=LAYER_SPECIAL
 
 [ITEMDEF {MEMORY_NAME}]
 DEFNAME={MEMORY_NAME}
@@ -53,19 +54,40 @@ ELSE
 ENDIF
 RETURN 1
 
+[FUNCTION weeklyGenerate]
+NEWEQUIP({MEMORY_NAME})
+
+[FUNCTION weeklyProbe]
+TAG(level,<ARGV(0)>)
+weeklyGenerate
+IF (<weeklyTag(qCount)> != <ARGV(1)>)
+  SYSMESSAGE {MARKER}|<ARGV(0)>=<weeklyTag(qCount)>
+ELSE
+  SYSMESSAGE {MARKER}|<ARGV(0)>=<weeklyTag(qCount)>
+ENDIF
+FINDID({MEMORY_NAME}).REMOVE
+
 [FUNCTION weeklyTag]
 ARG(weekly,<FINDID({MEMORY_NAME})>)
-RETURN <weekly.TAG(qCount)>
+IF (<ARGVCOUNT> >= 2)
+  weekly.TAG(<ARGV(0)>,"<ARGV(1)>")
+  RETURN""
+ELSEIF (<ARGVCOUNT> == 1)
+  IF !(<HVAL ARG(weekly)>)
+    RETURN""
+  ENDIF
+  IF (STRLEN(<weekly.TAG(<ARGV(0)>)>))
+    RETURN<weekly.TAG(<ARGV(0)>)>
+  ELSE
+    RETURN""
+  ENDIF
+ENDIF
+RETURN""
 
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
-TAG(level,40)
-NEWEQUIP({MEMORY_NAME})
-SYSMESSAGE {MARKER}|40=<weeklyTag(qCount)>
-FINDID({MEMORY_NAME}).REMOVE
-TAG(level,59)
-NEWEQUIP({MEMORY_NAME})
-SYSMESSAGE {MARKER}|59=<weeklyTag(qCount)>
+weeklyProbe(40,5)
+weeklyProbe(59,5)
 SYSMESSAGE {END_MARKER}
 RETURN 0
 """,
