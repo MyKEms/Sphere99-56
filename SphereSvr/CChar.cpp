@@ -2180,6 +2180,18 @@ HRESULT CChar::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, C
 				rid = g_Cfg.ResourceGetIDByName( RES_ItemDef, pszItemDef );
 			if ( !rid.IsValidRID() || rid.GetResType() != RES_ItemDef )
 				return NO_ERROR;
+			// A named ITEMDEF may have a resource-table index that is not its
+			// display/base item id (for example an ITEMDEF that derives from
+			// i_memory).  NEWEQUIP creates by display id, so resolve the
+			// definition before passing the value to CreateScript.  Casting the
+			// resource index directly creates an invalid item and leaves the
+			// caller's LASTNEW path empty.
+			CItemDefPtr pItemDef = g_Cfg.FindItemDef((ITEMID_TYPE) rid.GetResIndex());
+			if ( pItemDef == NULL )
+				return NO_ERROR;
+			// Keep the resource index as the item's logical ID.  CreateBase uses
+			// it to select the derived script definition; the definition's display
+			// ID is only the artwork/base ID copied by SetBaseID.
 			ITEMID_TYPE id = (ITEMID_TYPE) rid.GetResIndex();
 			if ( id <= ITEMID_NOTHING )
 				return NO_ERROR;
