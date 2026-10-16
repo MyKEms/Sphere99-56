@@ -229,13 +229,13 @@ MODE = register_mode(
     FixtureMode(
         name="resist-modifier",
         fixture_args=(),
-        order=217,
-        id_block=163,
+        order=219,
+        id_block=165,
         case=FixtureCase(
             name="resist-modifier",
             mode="resist-modifier",
             tests=(TestCase("test_resist_modifier.py", (), True, True),),
-            ports={"native": 45220, "asan": 45221},
+            ports={"native": 45224, "asan": 45225},
             output="resist-modifier",
         ),
     )
