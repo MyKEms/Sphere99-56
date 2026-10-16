@@ -394,29 +394,17 @@ protected:
 
 		CGVariant vCurrent;
 		CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
-		CResourceObj* pLocalRootObj = NULL;
-		CGVariant vLocalRoot;
-		if ( m_LocalArgs.FindKeyVar(szRoot, vLocalRoot) )
-		{
-			vCurrent = vLocalRoot;
-			pLocalRootObj = dynamic_cast<CResourceObj*>(vLocalRoot.GetRef());
-			if ( pLocalRootObj == NULL && !vLocalRoot.IsEmpty() )
-				pLocalRootObj = ResolveUIDObject(vLocalRoot.GetUID());
-		}
 		// 0.99 item callbacks use UID as an object-root alias.  The ordinary
 		// UID function expects an argument and the legacy property returns only
 		// the serial, so handle the bare dotted root before either scalar path.
 		bool fUIDRoot = pBase != NULL && !_stricmp(szRoot, "UID") && vArgs.IsEmpty()
 			&& strchr(pszExpr + aStart[0], '(') == NULL;
-		HRESULT hRes = (pLocalRootObj != NULL || fUIDRoot) ? NO_ERROR :
-			Function_Dispatch(szRoot, vArgs, vCurrent);
-		if ( pLocalRootObj != NULL )
-			vCurrent = vLocalRoot;
-		else if ( fUIDRoot )
+		HRESULT hRes = fUIDRoot ? NO_ERROR : Function_Dispatch(szRoot, vArgs, vCurrent);
+		if ( fUIDRoot )
 			vCurrent.SetRef(pBase);
 		else
 			rejected.Observe(hRes, szRoot, m_pBaseObj);
-		bool fRootFromFunction = (hRes == NO_ERROR) && !fUIDRoot && pLocalRootObj == NULL;
+		bool fRootFromFunction = (hRes == NO_ERROR) && !fUIDRoot;
 		if ( fRootFromFunction )
 		{
 			if ( IsScriptFunction(szRoot) )
@@ -466,9 +454,8 @@ protected:
 				return false;
 		}
 
-		CResourceObj* pCurrent = pLocalRootObj != NULL
-			? pLocalRootObj
-			: ResolveObjectResult(vCurrent, fRootFromFunction ? szRoot : NULL);
+		CResourceObj* pCurrent = ResolveObjectResult(vCurrent,
+			fRootFromFunction ? szRoot : NULL);
 		if ( pCurrent == NULL )
 		{
 			// A failed NEWITEM leaves LASTNEW empty.  Stock still recognizes
