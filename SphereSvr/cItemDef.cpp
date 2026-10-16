@@ -740,17 +740,20 @@ HRESULT CItemDef::SetBaseID( const char* pszArg, CItemDefPtr* ppItemDef )
 		return( HRES_BAD_ARGUMENTS );
 	}
 
-	ITEMID_TYPE id = (ITEMID_TYPE) g_Cfg.ResourceGetIndexType( RES_ItemDef, pszArg );
+	// DEFNAMEs are resource UIDs, not necessarily display IDs.  Resolve the
+	// definition first so an alias such as i_memory supplies its numeric base
+	// artwork to the derived item instead of copying the hash-table index.
+	CSphereUID rid = g_Cfg.ResourceGetIDType( RES_ItemDef, pszArg );
+	CItemDefPtr pItemDef = g_Cfg.FindItemDef((ITEMID_TYPE) rid.GetResIndex());
+	if ( ! pItemDef )
+	{
+		DEBUG_ERR(( "Setting unknown base id=%s for %s" LOG_CR, pszArg, (LPCTSTR) GetResourceName()));
+		return( HRES_BAD_ARGUMENTS );
+	}
+	ITEMID_TYPE id = pItemDef->GetDispID();
 	if ( ! IsValidDispID(id))
 	{
 		DEBUG_ERR(( "Setting invalid id=%s for base type %s" LOG_CR, pszArg, (LPCTSTR) GetResourceName()));
-		return( HRES_BAD_ARGUMENTS );
-	}
-
-	CItemDefPtr pItemDef = g_Cfg.FindItemDef( id );	// make sure the base is loaded.
-	if ( ! pItemDef )
-	{
-		DEBUG_ERR(( "Setting unknown base id=0%x for %s" LOG_CR, id, (LPCTSTR) GetResourceName()));
 		return( HRES_BAD_ARGUMENTS );
 	}
 

@@ -394,12 +394,18 @@ protected:
 
 		CGVariant vCurrent;
 		CResourceObj* pBase = dynamic_cast<CResourceObj*>(m_pBaseObj);
+		// Named ARG locals are object roots in legacy dotted calls, for example
+		// `ARG(weekly,<FINDID(...)>)` followed by `weekly.TAG(qCount)`.  Resolve
+		// the local before the global/function and active-object fallbacks so the
+		// saved object serial remains a live chain root.
+		const bool fLocalRoot = m_LocalArgs.FindKeyVar(szRoot, vCurrent);
 		// 0.99 item callbacks use UID as an object-root alias.  The ordinary
 		// UID function expects an argument and the legacy property returns only
 		// the serial, so handle the bare dotted root before either scalar path.
 		bool fUIDRoot = pBase != NULL && !_stricmp(szRoot, "UID") && vArgs.IsEmpty()
 			&& strchr(pszExpr + aStart[0], '(') == NULL;
-		HRESULT hRes = fUIDRoot ? NO_ERROR : Function_Dispatch(szRoot, vArgs, vCurrent);
+		HRESULT hRes = ( fLocalRoot || fUIDRoot )
+			? NO_ERROR : Function_Dispatch(szRoot, vArgs, vCurrent);
 		if ( fUIDRoot )
 			vCurrent.SetRef(pBase);
 		else
