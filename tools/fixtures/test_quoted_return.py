@@ -12,6 +12,7 @@ from pathlib import Path
 from modes.quoted_return import (
     ACCOUNT,
     BASE_MARKER,
+    DIALOG_HANDLED_MARKER,
     HANDLED_MARKER,
     LOGIN_VALUE,
     READY_MARKER,
@@ -42,7 +43,9 @@ def main() -> int:
     binary = args.binary.resolve()
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from test_world_save_roundtrip import run_server
-    from uo_test_client import game_connect, make_char_play, recv_until_game_start
+    from uo_packets import split_packet_stream
+    from uo_test_client import decode_game_response, game_connect, make_char_play, recv_until_game_start
+    from uo_gumps import make_gump_reply, parse_gump_dialog
 
     messages: list[str] = []
     item_uid: int | None = None
@@ -61,7 +64,9 @@ def main() -> int:
                 messages[:] = system_messages(bytes(data))
                 ready = next((message for message in messages if message.startswith(READY_MARKER + "|")), None)
                 if ready is not None:
-                    item_uid = int(ready.split("|", 1)[1], 16)
+                    ready_parts = ready.split("|")
+                    item_uid = int(ready_parts[1], 16)
+                    dialog_uid = int(ready_parts[2], 16)
                     break
                 try:
                     chunk = sock.recv(65536)
@@ -88,6 +93,46 @@ def main() -> int:
                     break
                 data.extend(chunk)
             messages[:] = system_messages(bytes(data))
+
+            # A dialog BUTTON handler uses the same quoted deferred-return
+            # shape as the item trigger above.  Keep the response stream
+            # framed while the helper reports its handled status.
+            sock.sendall(bytes((0x06,)) + dialog_uid.to_bytes(4, "big"))
+            dialog_packet = None
+            deadline = time.monotonic() + 8.0
+            while time.monotonic() < deadline and dialog_packet is None:
+                packets = split_packet_stream(decode_game_response(bytes(data)), allow_truncated=True)
+                for packet in packets:
+                    if packet.command in (0xB0, 0xDD) and parse_gump_dialog(packet.data) is not None:
+                        dialog_packet = packet.data
+                        break
+                if dialog_packet is not None:
+                    break
+                try:
+                    chunk = sock.recv(65536)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                data.extend(chunk)
+            if dialog_packet is None:
+                raise RuntimeError("quoted-return dialog did not open")
+            dialog = parse_gump_dialog(dialog_packet)
+            sock.sendall(make_gump_reply(dialog.serial, dialog.context, 2))
+            deadline = time.monotonic() + 8.0
+            while time.monotonic() < deadline and DIALOG_HANDLED_MARKER not in messages:
+                messages[:] = system_messages(bytes(data))
+                try:
+                    chunk = sock.recv(65536)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                data.extend(chunk)
+            messages[:] = system_messages(bytes(data))
+            # Parse the complete decoded response strictly after the reply;
+            # malformed interleaving must be reported as a framing failure.
+            split_packet_stream(decode_game_response(bytes(data)), allow_truncated=False)
         finally:
             sock.close()
 
@@ -110,6 +155,10 @@ def main() -> int:
         failures.append(f"handled callback count {messages.count(HANDLED_MARKER)} != 1")
     if messages.count(BASE_MARKER) != 0:
         failures.append(f"default item callback count {messages.count(BASE_MARKER)} != 0")
+    if messages.count(DIALOG_HANDLED_MARKER) != 1:
+        failures.append(
+            f"quoted dialog handled callback count {messages.count(DIALOG_HANDLED_MARKER)} != 1"
+        )
     if any("You can't think of a way to use that item" in message for message in messages):
         failures.append("default item-use diagnostic leaked after quoted trigger return")
     if failures:

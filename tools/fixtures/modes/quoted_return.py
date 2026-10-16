@@ -15,10 +15,14 @@ LOGIN_VALUE = "quoted-return-pw"
 EVENT_NAME = "e_QuotedReturnProbe"
 ITEM_ID = 0x0EAD
 ITEM_NAME = "SYNTHETIC_QUOTED_RETURN_ITEM"
+DIALOG_ITEM_ID = 0x0EAE
+DIALOG_ITEM_NAME = "SYNTHETIC_QUOTED_RETURN_DIALOG_ITEM"
+DIALOG_NAME = "d_synthetic_quoted_return"
 MARKER = "SPHERE_QUOTED_RETURN"
 READY_MARKER = MARKER + " READY"
 HANDLED_MARKER = MARKER + " HANDLED"
 BASE_MARKER = MARKER + " BASE"
+DIALOG_HANDLED_MARKER = MARKER + " DIALOG_HANDLED"
 
 
 def generate(output: Path) -> int:
@@ -46,6 +50,24 @@ RETURN \"<f_quoted_return_status>\"
 SRC.SYSMESSAGE {HANDLED_MARKER}
 RETURN 1
 
+[TYPEDEF 1102]
+DEFNAME=T_SYNTHETIC_QUOTED_RETURN_DIALOG
+ON=@UserDClick
+DIALOG {DIALOG_NAME}
+RETURN 1
+
+[FUNCTION f_quoted_dialog_status]
+SRC.SYSMESSAGE {DIALOG_HANDLED_MARKER}
+RETURN 1
+
+[DIALOG {DIALOG_NAME}]
+0 0
+button 20 20 4005 4007 1 0 2
+
+[DIALOG {DIALOG_NAME} BUTTON]
+ON=2
+RETURN "<f_quoted_dialog_status>"
+
 [ITEMDEF 0x{ITEM_ID:04X}]
 DEFNAME={ITEM_NAME}
 NAME=synthetic quoted-return item
@@ -54,11 +76,19 @@ ON=@UserDClick
 SRC.SYSMESSAGE {BASE_MARKER}
 RETURN 0
 
+[ITEMDEF 0x{DIALOG_ITEM_ID:04X}]
+DEFNAME={DIALOG_ITEM_NAME}
+NAME=synthetic quoted-return dialog item
+TYPE=T_SYNTHETIC_QUOTED_RETURN_DIALOG
+
 [EVENTS {EVENT_NAME}]
 ON=@LogIn
 NEWITEM {ITEM_NAME}
 LASTNEW.P=128,128,0
-SYSMESSAGE {READY_MARKER}|<LASTNEW.SERIAL>
+ARG(item_uid,<LASTNEW.SERIAL>)
+NEWITEM {DIALOG_ITEM_NAME}
+LASTNEW.P=129,128,0
+SYSMESSAGE {READY_MARKER}|<ARG(item_uid)>|<LASTNEW.SERIAL>
 RETURN 0
 """
     tables.write_text(text, encoding="ascii")
@@ -98,7 +128,7 @@ P=128,128,0
     )
     from .compat_writer import write_mul_fixture
 
-    write_mul_fixture(output, extra_item_id=ITEM_ID)
+    write_mul_fixture(output, extra_item_id=max(ITEM_ID, DIALOG_ITEM_ID))
     return 0
 
 

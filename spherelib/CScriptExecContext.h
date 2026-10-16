@@ -3318,7 +3318,12 @@ public:
 						{
 							pszText[iTextLen - 1] = '\0';
 							pszText++;
-							const int iVal = GetScriptExpression(script, pszText);
+							// The outer escape has already been expanded above.  Reusing
+							// GetScriptExpression here would scan the returned text a
+							// second time; a helper that leaves a deferred escape can then
+							// send from inside the enclosing dialog response and corrupt
+							// the packet stream.  Evaluate only the resulting arithmetic.
+							const int iVal = GetComplex(pszText);
 							if ( IsLineExpansionOverflow() )
 								return TRIGRET_RET_DEFAULT;
 							m_vValRet.SetInt(iVal);
