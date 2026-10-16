@@ -1555,7 +1555,11 @@ HRESULT CChar::ItemEquip( CItem* pItem, CChar* pCharMsg )
 		return( HRES_INVALID_HANDLE );
 	}
 
-	pItem->SetDecayTime(-1);	// Kill any decay timer.
+	// Scripted effect items use their timer as the lifetime of the equipped
+	// effect (for example a Night Sight rune).  Equipping one must not clear
+	// that callback timer; ordinary carried items still lose their decay timer.
+	if ( ! pItem->IsType(IT_EQ_SCRIPT))
+		pItem->SetDecayTime(-1);	// Kill any decay timer.
 
 	LayerAdd( pItem, layer );
 	if ( ! pItem->IsItemEquipped())	// Equip failed ? (cursed?) Did it just go into pack ?

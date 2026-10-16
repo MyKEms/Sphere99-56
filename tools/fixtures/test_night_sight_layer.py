@@ -15,7 +15,7 @@ from run_suite import shutdown_failures
 from modes.night_sight_layer import ACCOUNT, END_MARKER, MARKER, PASSWORD
 
 
-MARKER_RE = re.compile(re.escape(MARKER) + r" \[(-?\d+)\|(\d+)\|(\d+)\|(\d+)\]$")
+MARKER_RE = re.compile(re.escape(MARKER) + r" \[(-?\d+)\|(\d+)\|(\d+)\|(\d+)\|(-?\d+)\]$")
 
 
 def system_messages(data: bytes) -> list[str]:
@@ -99,13 +99,15 @@ def main() -> int:
     if match is None:
         failures.append(f"malformed named-layer marker: {row!r}")
     else:
-        layer, container, before, after = (int(value) for value in match.groups())
+        layer, container, before, after, timer = (int(value) for value in match.groups())
         if layer != 124:
             failures.append(f"named layer resolved to {layer}, expected 124")
         if container != 3:
             failures.append(f"effect container serial {container}, expected 3")
         if after != before:
             failures.append(f"effect changed carried weight {before} -> {after}")
+        if timer < 1:
+            failures.append(f"equipped script effect lost its callback timer ({timer})")
 
     if failures:
         print("named-layer probe failed:", file=sys.stderr)
