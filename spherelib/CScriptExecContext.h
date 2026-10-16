@@ -3288,9 +3288,20 @@ public:
 						while ( pszTextEnd > pszText && ISWHITESPACE(pszTextEnd[-1]) )
 							*--pszTextEnd = '\0';
 						const size_t iTextLen = strlen(pszText);
+						const bool fQuotedText = iTextLen >= 2 &&
+							pszText[0] == '"' && pszText[iTextLen - 1] == '"';
+						bool fQuotedByteTokenStream = false;
+						if ( fQuotedText )
+						{
+							// Byte-token helpers return quoted text such as "00 04".
+							// Inspect the contents without the delimiters so an all-digit
+							// packet fragment is not mistaken for arithmetic.
+							pszText[iTextLen - 1] = '\0';
+							fQuotedByteTokenStream = IsScriptByteTokenStream(pszText + 1);
+							pszText[iTextLen - 1] = '"';
+						}
 						bool fNumericDeferredReturn = false;
-						if ( fQuotedDeferredCandidate && iTextLen >= 2 &&
-							pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+						if ( fQuotedDeferredCandidate && fQuotedText && !fQuotedByteTokenStream )
 						{
 							const TCHAR* pszValue = pszText + 1;
 							const TCHAR* pszValueEnd = pszText + iTextLen - 1;
@@ -3329,10 +3340,10 @@ public:
 							m_vValRet.SetInt(iVal);
 							return (TRIGRET_TYPE)iVal;
 						}
-						if ( (iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"') ||
+						if ( fQuotedText || fQuotedByteTokenStream ||
 							IsScriptByteTokenStream(pszText) || HasTopLevelComma(pszText) )
 						{
-							if ( iTextLen >= 2 && pszText[0] == '"' && pszText[iTextLen - 1] == '"' )
+							if ( fQuotedText )
 							{
 								pszText[iTextLen - 1] = '\0';
 								pszText++;

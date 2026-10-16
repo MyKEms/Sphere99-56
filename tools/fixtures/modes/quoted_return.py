@@ -23,6 +23,7 @@ READY_MARKER = MARKER + " READY"
 HANDLED_MARKER = MARKER + " HANDLED"
 BASE_MARKER = MARKER + " BASE"
 DIALOG_HANDLED_MARKER = MARKER + " DIALOG_HANDLED"
+BYTE_PACKET = "02 00 00 00 00 00 00"
 
 
 def generate(output: Path) -> int:
@@ -44,11 +45,18 @@ def generate(output: Path) -> int:
 [TYPEDEF 1101]
 DEFNAME=T_SYNTHETIC_QUOTED_RETURN
 ON=@UserDClick
+SRC.SYSMESSAGE <f_quoted_byte_packet_deferred>
 RETURN \"<f_quoted_return_status>\"
 
 [FUNCTION f_quoted_return_status]
 SRC.SYSMESSAGE {HANDLED_MARKER}
 RETURN 1
+
+[FUNCTION f_quoted_byte_packet]
+RETURN "{BYTE_PACKET}"
+
+[FUNCTION f_quoted_byte_packet_deferred]
+RETURN "<f_quoted_byte_packet>"
 
 [TYPEDEF 1102]
 DEFNAME=T_SYNTHETIC_QUOTED_RETURN_DIALOG

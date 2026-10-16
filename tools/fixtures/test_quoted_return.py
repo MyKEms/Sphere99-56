@@ -12,6 +12,7 @@ from pathlib import Path
 from modes.quoted_return import (
     ACCOUNT,
     BASE_MARKER,
+    BYTE_PACKET,
     DIALOG_HANDLED_MARKER,
     HANDLED_MARKER,
     LOGIN_VALUE,
@@ -49,9 +50,10 @@ def main() -> int:
 
     messages: list[str] = []
     item_uid: int | None = None
+    byte_text_seen = False
 
     def exercise() -> None:
-        nonlocal item_uid
+        nonlocal item_uid, byte_text_seen
         sock, _ = game_connect(args.host, args.port, ACCOUNT, LOGIN_VALUE, game_port=args.port + 1000)
         if sock is None:
             raise RuntimeError("quoted-return account did not reach its character list")
@@ -93,6 +95,7 @@ def main() -> int:
                     break
                 data.extend(chunk)
             messages[:] = system_messages(bytes(data))
+            byte_text_seen = BYTE_PACKET in messages
 
             # A dialog BUTTON handler uses the same quoted deferred-return
             # shape as the item trigger above.  Keep the response stream
@@ -132,7 +135,8 @@ def main() -> int:
             messages[:] = system_messages(bytes(data))
             # Parse the complete decoded response strictly after the reply;
             # malformed interleaving must be reported as a framing failure.
-            split_packet_stream(decode_game_response(bytes(data)), allow_truncated=False)
+            packets = split_packet_stream(decode_game_response(bytes(data)), allow_truncated=False)
+            byte_text_seen = byte_text_seen or BYTE_PACKET in messages
         finally:
             sock.close()
 
@@ -151,6 +155,8 @@ def main() -> int:
     failures.extend(shutdown_failures(returncode, log_contents))
     if item_uid is None:
         failures.append("quoted-return probe did not publish a target item")
+    if not byte_text_seen:
+        failures.append(f"quoted byte-token return was not preserved as {BYTE_PACKET!r}")
     if messages.count(HANDLED_MARKER) != 1:
         failures.append(f"handled callback count {messages.count(HANDLED_MARKER)} != 1")
     if messages.count(BASE_MARKER) != 0:
