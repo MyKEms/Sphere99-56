@@ -68,7 +68,24 @@ Craft menu
 [DIALOG d_craftmenu BUTTON]
 ON=7
 SYSMESSAGE {MARKER}|button|7
+NEWITEM SYNTHETIC_CRAFT_CONTAINER
+ARG(indexed_root,<LASTNEW>)
+SRC.TAG(indexed[0],<ARG(indexed_root)>)
+DIALOG d_indexed_dispatch
 RETURN 1
+
+[DIALOG d_indexed_dispatch]
+0 0
+ARGO.TAG(indexed[0]).DIALOG(d_indexed_target,<ARGO.TAG(indexed[0])>)
+RETURN 0
+
+[DIALOG d_indexed_target]
+0 0
+text 20 20 0 0
+button 20 60 4005 4006 1 0 9
+
+[DIALOG d_indexed_target TEXT]
+Indexed craft section
 
 [FUNCTION craftmenu_refs]
 // Mirror the legacy helper chain: a function receives a live object

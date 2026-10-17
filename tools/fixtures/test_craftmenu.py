@@ -188,8 +188,31 @@ def exercise(args: argparse.Namespace, failures: list[str]) -> None:
             messages[:] = system_messages(bytes(raw))
         if marker not in messages:
             failures.append(f"craftmenu button callback did not produce {marker!r}: {messages!r}")
+
+        indexed_gump = None
+        indexed_deadline = time.monotonic() + 10.0
+        while time.monotonic() < indexed_deadline and indexed_gump is None:
+            packet = next_packet(max(0.1, indexed_deadline - time.monotonic()))
+            if packet is None:
+                break
+            messages[:] = system_messages(bytes(raw))
+            if packet.command in (0xB0, 0xDD):
+                try:
+                    candidate = parse_gump_dialog(packet.data)
+                except ValueError as error:
+                    failures.append(f"indexed craft gump was malformed: {error}")
+                    return
+                if candidate.find_button(button_id=9) is not None:
+                    indexed_gump = candidate
+        if indexed_gump is None:
+            failures.append(
+                "indexed TAG dialog did not open its target gump: "
+                f"messages={messages!r}"
+            )
+            return
     finally:
-        sock.close()
+        if sock is not None:
+            sock.close()
 
 
 def main() -> int:
