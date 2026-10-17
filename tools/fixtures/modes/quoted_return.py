@@ -150,7 +150,7 @@ MODE = register_mode(
             name="quoted-return",
             mode="quoted-return",
             tests=(TestCase("test_quoted_return.py", (), True, True),),
-            ports={"native": 45228, "asan": 45229},
+            ports={"native": 45230, "asan": 45231},
             output="quoted-return",
         ),
     )
