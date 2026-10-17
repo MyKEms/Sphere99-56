@@ -3366,7 +3366,11 @@ SPELL_TYPE CItem::GetScrollSpell() const
 bool CItem::IsSpellInBook( SPELL_TYPE spell ) const
 {
 	DEBUG_CHECK( IsType(IT_SPELLBOOK));
-	CBitArray<14>* pSpells = (CBitArray<14>*) m_itSpellbook.m_spells;
+	// The serialized spell mask is fourteen bytes (one bit per spell), not
+	// fourteen bits.  Keeping the bit-array width in sync with the storage
+	// lets high-index book spells (for example spell 59) be found.
+	CBitArray<sizeof(m_itSpellbook.m_spells) * 8>* pSpells =
+		(CBitArray<sizeof(m_itSpellbook.m_spells) * 8>*) m_itSpellbook.m_spells;
 	return( pSpells->IsSet( spell - SPELL_Clumsy ));
 }
 
@@ -3407,7 +3411,8 @@ int CItem::AddSpellbookSpell( SPELL_TYPE spell, bool fUpdate )
 	}
 
 	// Now add to the spellbook bitmask.
-	CBitArray<14>* pSpells = (CBitArray<14>*) m_itSpellbook.m_spells;
+	CBitArray<sizeof(m_itSpellbook.m_spells) * 8>* pSpells =
+		(CBitArray<sizeof(m_itSpellbook.m_spells) * 8>*) m_itSpellbook.m_spells;
 	pSpells->SetBit(spell - SPELL_Clumsy);
 	return( 0 );
 }
