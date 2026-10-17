@@ -144,13 +144,13 @@ MODE = register_mode(
     FixtureMode(
         name="quoted-return",
         fixture_args=(),
-        order=185,
-        id_block=162,
+        order=217,
+        id_block=163,
         case=FixtureCase(
             name="quoted-return",
             mode="quoted-return",
             tests=(TestCase("test_quoted_return.py", (), True, True),),
-            ports={"native": 45220, "asan": 45221},
+            ports={"native": 45226, "asan": 45227},
             output="quoted-return",
         ),
     )
