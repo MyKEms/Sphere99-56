@@ -860,6 +860,34 @@ protected:
 		return true;
 	}
 
+	// A script function can deliberately return another escape, for example a
+	// menu helper that assembles ``<arg(name)>`` fragments before returning its
+	// text.  Expand that returned text at its use site; ordinary property and
+	// native-function results stay opaque so a getter cannot execute twice.
+	bool IsScriptFunctionEscape(LPCTSTR pszExpr)
+	{
+		if ( pszExpr == NULL )
+			return false;
+		while ( ISWHITESPACE(*pszExpr) )
+			pszExpr++;
+		TCHAR szRoot[SCRIPT_MAX_LINE_LEN];
+		size_t i = 0;
+		while ( pszExpr[i] && pszExpr[i] != '.' && pszExpr[i] != '(' &&
+			!ISWHITESPACE(pszExpr[i]) && i + 1 < sizeof(szRoot) )
+		{
+			szRoot[i] = pszExpr[i];
+			i++;
+		}
+		szRoot[i] = '\0';
+		return i > 0 && IsScriptFunction(szRoot);
+	}
+
+	static bool HasReturnedEscape(LPCTSTR pszText)
+	{
+		return pszText != NULL && strchr(pszText, '<') != NULL &&
+			strchr(pszText, '>') != NULL;
+	}
+
 	static bool IsContainerAssignmentKey(LPCTSTR pszKey)
 	{
 		if ( pszKey == NULL || *pszKey == '\0' )
@@ -2184,8 +2212,9 @@ public:
 	}
 
 	void s_ParseEscapes(TCHAR* pszBuf, DWORD dwFlags,
-		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN)
+		size_t iBufCapacity = SCRIPT_MAX_LINE_LEN, int iReturnedDepth = 0)
 	{
+		enum { MAX_RETURNED_ESCAPE_DEPTH = 8 };
 		// Resolve <...> expression tags in a text buffer, in-place.
 		// <eval 1+2>  → "3"
 		// <SRC.NAME>  → character name
@@ -2288,6 +2317,7 @@ public:
 				CGString sResult;
 				bool fResolved = false;
 				bool fQuotedResult = false;
+				bool fScriptFunctionResult = IsScriptFunctionEscape(pszExpr);
 				CScriptUnknownRejectTracker rejected;
 				try
 				{
@@ -2323,8 +2353,26 @@ public:
 
 				if ( fSafe )
 					FormatSafeReference(pszExpr, sResult);
-				else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
-					sResult += "\x1f";
+				else
+				{
+					if ( fScriptFunctionResult && iReturnedDepth < MAX_RETURNED_ESCAPE_DEPTH &&
+						HasReturnedEscape(sResult.GetPtr()) )
+					{
+						TCHAR szReturned[SCRIPT_MAX_LINE_LEN];
+						const size_t iReturnedLen = sResult.GetLength();
+						if ( iReturnedLen < sizeof(szReturned) )
+						{
+							memcpy(szReturned, sResult.GetPtr(), iReturnedLen + 1);
+							// Returned script text always uses the ordinary <...> escape
+							// delimiters, even when the caller is rendering HTML dialog text.
+							s_ParseEscapes(szReturned, dwFlags & ~0x01,
+								sizeof(szReturned), iReturnedDepth + 1);
+							sResult = szReturned;
+						}
+					}
+					if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
+						sResult += "\x1f";
+				}
 
 				// Replace <?...?> with result, shifting buffer.
 				int iExprLen = iEnd - iBegin + 1;
@@ -2408,6 +2456,7 @@ public:
 			CGString sResult;
 			bool fResolved = false;
 			bool fQuotedResult = false;
+			bool fScriptFunctionResult = IsScriptFunctionEscape(pszExpr);
 			CScriptUnknownRejectTracker rejected;
 
 			try
@@ -2448,8 +2497,26 @@ public:
 
 			if ( fSafe )
 				FormatSafeReference(pszExpr, sResult);
-			else if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
-				sResult += "\x1f";
+			else
+			{
+				if ( fScriptFunctionResult && iReturnedDepth < MAX_RETURNED_ESCAPE_DEPTH &&
+					HasReturnedEscape(sResult.GetPtr()) )
+				{
+					TCHAR szReturned[SCRIPT_MAX_LINE_LEN];
+					const size_t iReturnedLen = sResult.GetLength();
+					if ( iReturnedLen < sizeof(szReturned) )
+					{
+						memcpy(szReturned, sResult.GetPtr(), iReturnedLen + 1);
+						// Returned script text always uses the ordinary <...> escape
+						// delimiters, even when the caller is rendering HTML dialog text.
+						s_ParseEscapes(szReturned, dwFlags & ~0x01,
+							sizeof(szReturned), iReturnedDepth + 1);
+						sResult = szReturned;
+					}
+				}
+				if ( fQuotedResult && IsQuotedInlineHtmlText(pszBuf, (size_t)iBegin) )
+					sResult += "\x1f";
+			}
 
 			// Replace <expr> with the resolved value, shifting the buffer.
 			int iExprLen = iEnd - iBegin + 1; // includes < and >
