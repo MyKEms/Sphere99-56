@@ -53,7 +53,6 @@ public:
 	virtual void UnLink()
 	{
 		m_BaseResources.RemoveAll();
-		m_fResourcesDeclared = false;
 		CResourceTriggered::UnLink();
 	}
 
@@ -94,13 +93,7 @@ public:
 
 	CResourceQtyArray m_BaseResources;	// RESOURCES=10 MEAT (What is this made of)
 
-	bool HasResourcesDeclaration() const
-	{
-		return m_fResourcesDeclared;
-	}
-
 protected:
-	bool	 m_fResourcesDeclared;	// RESOURCES was present, even if a forward reference was unresolved.
 	// ITEMID_TYPE or CREID_TYPE
 	WORD	 m_wDispIndex;	// The base artwork id. (the same as GetResourceID() in base set but not in high set.)
 	CAN_TYPE m_CanFlags;	// Base attribute flags. CAN_C_GHOST
@@ -442,14 +435,7 @@ public:
 	{
 		m_flip_id.RemoveAll();
 		m_SkillMake.RemoveAll();
-		m_fSkillMakeDeclared = false;
 		CObjBaseDef::UnLink();
-	}
-
-	bool HasMakeRule() const
-	{
-		return m_fSkillMakeDeclared || m_SkillMake.GetSize() > 0 ||
-			HasResourcesDeclaration() || m_BaseResources.GetSize() > 0;
 	}
 
 	void CopyBasic( const CItemDef* pBase );
@@ -644,7 +630,6 @@ public:
 protected:
 	DECLARE_MEM_DYNAMIC;
 private:
-	bool	m_fSkillMakeDeclared;	// SKILLMAKE was present, even if a forward reference was unresolved.
 	WORD	m_weight;	// weight in WEIGHT_UNITS (USHRT_MAX=not movable) defaults from the .MUL file.
 	IT_TYPE	m_type;		// default double click action type. (if any)
 	DWORD   m_dwFlags;	// UFLAG4_DOOR from CUOItemTypeRec

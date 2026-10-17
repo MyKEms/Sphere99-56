@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that CANMAKE requires a declared skill or resource rule."""
+"""Check stock-compatible CANMAKE and BASEID behavior for craft selection."""
 
 from __future__ import annotations
 
@@ -16,7 +16,15 @@ from run_suite import shutdown_failures
 ACCOUNT = "CraftEligProbe"
 PASSWORD = "ce-pw"
 MARKER = "SPHERE_CRAFT_ELIGIBILITY"
-EXPECTED = {"empty": "0", "rule": "1", "resource": "1", "missing": "0"}
+EXPECTED = {
+    "empty": "1",
+    "rule": "1",
+    "resource": "1",
+    "missing": "0",
+    "alias_name": "1",
+    "alias_base": "SYNTHETIC_CRAFT_ALIAS",
+    "alias_base_can": "1",
+}
 ROW_RE = re.compile(re.escape(MARKER) + r"\|(\w+)=(.*)$")
 
 
