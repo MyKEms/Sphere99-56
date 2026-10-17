@@ -204,6 +204,50 @@ private:
 		return ! ( isalpha( (unsigned char) ch ) || ch == '_' || ch == '.' );
 	}
 
+	static bool IsDottedReferenceChain( LPCTSTR pszLine )
+	{
+		if ( pszLine == NULL )
+			return false;
+		while ( ISWHITESPACE(*pszLine) )
+			pszLine++;
+		if ( ! ( isalpha((unsigned char)*pszLine) || *pszLine == '_' ) )
+			return false;
+		for ( pszLine++; isalnum((unsigned char)*pszLine) || *pszLine == '_'; pszLine++ )
+			;
+		while ( ISWHITESPACE(*pszLine) )
+			pszLine++;
+		if ( *pszLine != '(' )
+			return false;
+		int iDepth = 0;
+		for ( ; *pszLine; pszLine++ )
+		{
+			if ( *pszLine == '(' )
+				iDepth++;
+			else if ( *pszLine == ')' )
+			{
+				if ( iDepth == 0 )
+					return false;
+				if ( --iDepth == 0 )
+				{
+					pszLine++;
+					while ( ISWHITESPACE(*pszLine) )
+						pszLine++;
+					if ( *pszLine != '.' )
+						return false;
+					pszLine++;
+					while ( ISWHITESPACE(*pszLine) )
+						pszLine++;
+					if ( ! ( isalpha((unsigned char)*pszLine) || *pszLine == '_' ) )
+						return false;
+					for ( pszLine++; isalnum((unsigned char)*pszLine) || *pszLine == '_'; pszLine++ )
+						;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	void AddArgoLine( TCHAR* pszSub )
 	{
 		// Sphere 0.99-style dialog commands, after "argo.": <gump>(...),
@@ -241,6 +285,24 @@ private:
 			int py = atoi(pArgs);
 			m_x = px; m_y = py;
 			return;
+		}
+
+		// A dialog layout can dispatch a method on an object returned by TAG,
+		// for example `argo.tag(section).dialog(d_section,<argo.tag(section)>)`.
+		// The ordinary gump splitter sees the first TAG call only and loses the
+		// suffix, so let the normal reference-chain evaluator execute the whole
+		// command.  A successful nested dialog owns the client response; prevent
+		// this layout from sending an empty outer gump afterward.
+		if ( IsDottedReferenceChain(pszSub) )
+		{
+			CScriptUnknownRejectTracker rejected;
+			CGVariant vChainRet;
+			bool fChainEffect = false;
+			if ( ResolveDottedChain(pszSub, vChainRet, rejected, fChainEffect) )
+			{
+				m_fReturned = true;
+				return;
+			}
 		}
 
 		// Check if sub-command is a gump command (argo.text, argo.button, etc.)
