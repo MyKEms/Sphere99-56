@@ -5,6 +5,61 @@
 //
 #include "stdafx.h"	// predef header.
 
+namespace
+{
+void RemoveTagValue(CVarDefArray& tags, LPCTSTR pszTag)
+{
+	if ( pszTag == NULL || !*pszTag )
+		return;
+
+	// Indexed TAG entries compact only after a non-zero entry is removed.
+	// Index zero is removed literally because the resist queue copies record_1
+	// into record_0 before deleting record_1.
+	const char* pSep = strrchr(pszTag, '_');
+	if ( pSep == NULL || pSep == pszTag || !isdigit((unsigned char)pSep[1]) )
+	{
+		tags.RemoveKey(pszTag);
+		return;
+	}
+	char* pEnd = NULL;
+	const long iIndex = strtol(pSep + 1, &pEnd, 10);
+	if ( pEnd == pSep + 1 || *pEnd != '\0' || iIndex <= 0 )
+	{
+		tags.RemoveKey(pszTag);
+		return;
+	}
+
+	const size_t iPrefixLen = static_cast<size_t>(pSep - pszTag);
+	char szPrefix[ SCRIPT_MAX_LINE_LEN ];
+	if ( iPrefixLen + 1 >= sizeof(szPrefix) )
+	{
+		tags.RemoveKey(pszTag);
+		return;
+	}
+	memcpy(szPrefix, pszTag, iPrefixLen);
+	szPrefix[iPrefixLen] = '\0';
+
+	tags.RemoveKey(pszTag);
+	for ( long i = iIndex + 1; ; i++ )
+	{
+		char szCurrent[ SCRIPT_MAX_LINE_LEN ];
+		snprintf(szCurrent, sizeof(szCurrent), "%s_%ld", szPrefix, i);
+		CVarDefPtr pValue = tags.FindKeyPtr(szCurrent);
+		if ( pValue == NULL )
+			break;
+
+		char szPrevious[ SCRIPT_MAX_LINE_LEN ];
+		snprintf(szPrevious, sizeof(szPrevious), "%s_%ld", szPrefix, i - 1);
+		CGVariant value;
+		value.SetStr(pValue->GetValStr());
+		if ( CVarDefStr* pString = dynamic_cast<CVarDefStr*>(pValue) )
+			value.SetQuoted(pString->IsQuoted());
+		tags.SetKeyVar(szPrevious, value);
+		tags.RemoveKey(szCurrent);
+	}
+}
+}
+
 static bool GetDeltaStr( CPointMap& pt, CGVariant& vArgs )
 {
 	int iArgQty = vArgs.MakeArraySize();
@@ -829,6 +884,17 @@ void CObjBase::s_WriteProps( CScript& s )
 
 HRESULT CObjBase::s_Method( LPCTSTR pszKey, CGVariant& vArgs, CGVariant& vValRet, CScriptConsole* pSrc )
 {
+	// 0.99 exposes TAG.REMOVE(name) alongside TAG(name,value).  Keep it as a
+	// method on the owning object so both TAG.REMOVE(...) and
+	// SRC.TAG.REMOVE(...) use the same tag store.
+	if ( pszKey && !_stricmp(pszKey, "TAG.REMOVE") )
+	{
+		LPCTSTR pszTag = vArgs.GetPSTR();
+		if ( pszTag == NULL || !*pszTag )
+			return HRES_BAD_ARGUMENTS;
+		RemoveTagValue(m_TagDefs, pszTag);
+		return NO_ERROR;
+	}
 	M_TYPE_ iProp = (M_TYPE_) s_FindMyMethodKey(pszKey);
 	if ( iProp < 0 )
 	{
