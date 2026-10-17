@@ -923,13 +923,6 @@ bool CChar::Skill_MakeItem( ITEMID_TYPE id, CSphereUID uidTarg, CSkillDef::T_TYP
 	if ( pItemDef == NULL )
 		return( false );
 
-	// A standalone CANMAKE probe is how craft menus enumerate recipes.  An
-	// item with no declared skill or resource rule is a normal item, not a
-	// recipe; keep resource-only definitions eligible when their rule exists.
-	if ( stage == CSkillDef::T_Select && uidTarg == UID_INDEX_CLEAR &&
-		!pItemDef->HasMakeRule())
-		return( false );
-
 	// Trigger Target item for creating the new item.
 	CItemPtr pItemTarg = g_World.ItemFind(uidTarg);
 	if ( pItemTarg && stage == CSkillDef::T_Select )
