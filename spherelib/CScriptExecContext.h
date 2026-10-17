@@ -377,6 +377,13 @@ protected:
 		CGVariant vArgs;
 		if ( !SplitDottedSegment(pszExpr + aStart[0], aLen[0], szRoot, sizeof(szRoot), vArgs) )
 			return false;
+		// TAG(index[0]).METHOD is a reference-root chain, so normalize the
+		// indexed tag key before dispatching the root method just as the
+		// single-level call path does.  Without this, the literal key
+		// ``index[0]`` misses the stored object and the chain is consumed as a
+		// successful empty dispatch, suppressing the nested method call.
+		if ( !_stricmp(szRoot, "TAG") )
+			ExpandTagArgumentIndices(vArgs);
 		// A callback can execute with no trigger source.  Stock exposes the
 		// numeric ISSUMMON property as zero, and NAME resolves to the active
 		// console name; string/TAG expressions remain unresolved so their
