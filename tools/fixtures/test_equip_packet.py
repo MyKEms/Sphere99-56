@@ -111,6 +111,7 @@ def main() -> int:
 
     failures: list[str] = []
     equip_rows: list[bytes] = []
+    self_remove_rows: list[bytes] = []
     archery_equips: dict[int, list[bytes]] = {}
     archery_bounces: dict[int, list[bytes]] = {}
     archery_layers: tuple[int, int, int, int, int] | None = None
@@ -148,13 +149,14 @@ def main() -> int:
                     f"{system_messages(bytes(initial))!r}"
                 )
             fields = ready.split("|")
-            if len(fields) < 2:
+            if len(fields) < 5:
                 raise RuntimeError(f"malformed ready marker: {ready!r}")
             start = find_start_packet(decode_game_response(bytes(initial)))
             if start is None:
                 raise RuntimeError("equip-packet probe did not receive a start packet")
             item_uid = parse_serial(fields[1])
             char_uid = struct.unpack_from(">I", start[1], 1)[0]
+            self_remove_uid = parse_serial(fields[4])
 
             # The script probe runs from a one-shot timer, after the character
             # has entered the world.  Keep the post-login bytes so the packet
@@ -217,6 +219,20 @@ def main() -> int:
             # Discard the login snapshot, then issue the same legacy pickup and
             # equip requests used by a 3.0.6 client.
             drain(sock)
+            # A trigger can remove the item it is equipping.  Stock still emits
+            # the transient equipment packet before the delete; this is the
+            # failing-first regression for the deferred equip update path.
+            sock.sendall(struct.pack(">BIH", 0x07, self_remove_uid, 0))
+            drain(sock, 0.25)
+            sock.sendall(struct.pack(">BIBI", 0x13, self_remove_uid, 1, char_uid))
+            self_response = bytearray()
+            self_deadline = time.monotonic() + 2.0
+            while time.monotonic() < self_deadline:
+                self_response.extend(drain(sock, 0.2))
+                self_remove_rows[:] = equipped_packets(bytes(self_response), self_remove_uid, char_uid)
+                if self_remove_rows:
+                    break
+
             sock.sendall(struct.pack(">BIH", 0x07, item_uid, 0))
             drain(sock, 0.25)
             sock.sendall(struct.pack(">BIBI", 0x13, item_uid, 1, char_uid))
@@ -250,6 +266,11 @@ def main() -> int:
     if len(equip_rows) != 1:
         failures.append(
             f"one equip request emitted {len(equip_rows)} equipped-item packet(s)"
+        )
+    if len(self_remove_rows) != 1:
+        failures.append(
+            "self-removing equip emitted "
+            f"{len(self_remove_rows)} equipped-item packet(s)"
         )
     if archery_layers is None:
         failures.append("archery marker was not recorded")
