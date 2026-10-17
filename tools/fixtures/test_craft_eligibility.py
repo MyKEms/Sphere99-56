@@ -24,7 +24,10 @@ EXPECTED = {
     "alias_name": "1",
     "alias_base": "SYNTHETIC_CRAFT_ALIAS",
     "alias_base_can": "1",
+    "legacy_base_can": "1",
+    "recipe_base_can": "1",
 }
+NONEMPTY = ("alias_base", "legacy_base", "recipe_base")
 ROW_RE = re.compile(re.escape(MARKER) + r"\|(\w+)=(.*)$")
 
 
@@ -114,6 +117,9 @@ def main() -> int:
         got = seen.get(label)
         if got != expected:
             failures.append(f"{label}: expected {expected!r}, got {got!r}")
+    for label in NONEMPTY:
+        if not seen.get(label, "").strip():
+            failures.append(f"{label}: expected a non-empty BASEID")
     if f"{MARKER}|done" not in messages:
         failures.append("craft eligibility probe did not finish")
 
