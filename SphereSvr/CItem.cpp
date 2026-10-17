@@ -112,6 +112,7 @@ CItem::CItem( ITEMID_TYPE id, CItemDef* pItemDef ) : CObjBase( UID_F_ITEM )
 	g_Serv.StatInc(SERV_STAT_ITEMS);
 	m_AttrMask = 0;
 	m_fUnEquipTriggerActive = false;
+	m_fEquipUpdateDeferred = false;
 	m_fNoLayerCharContent = false;
 	m_fNoExplicitLayer = false;
 	m_fScriptCreated = false;
@@ -141,6 +142,17 @@ CItem::~CItem()
 
 void CItem::DeleteThis()
 {
+	// An equip trigger may replace the item (for example, the script's
+	// stand/run bow switch) before CChar::ItemEquip can flush its deferred
+	// update.  Publish the equipped snapshot while the item is still attached;
+	// the normal delete path then removes it from the client.  This preserves
+	// the legacy transient equip packet without reintroducing duplicate updates
+	// for items that remain equipped.
+	if ( m_fEquipUpdateDeferred && IsItemEquipped() )
+	{
+		m_fEquipUpdateDeferred = false;
+		Update();
+	}
 	// NOTE: we should make this object useless just in case.
 	if ( ! CObjBase::sm_fDeleteReal &&
 		( IsDeletePending() || GetParent() == &(g_World.m_ObjDelete) ))
@@ -3233,6 +3245,8 @@ void CItem::SetAnim( ITEMID_TYPE id, int iTime )
 void CItem::Update( const CClient* pClientExclude )
 {
 	// Send this new item to all that can see it.
+	if ( m_fEquipUpdateDeferred )
+		return;
 
 	for ( CClientPtr pClient = g_Serv.GetClientHead(); pClient!=NULL; pClient = pClient->GetNext())
 	{
@@ -3366,7 +3380,11 @@ SPELL_TYPE CItem::GetScrollSpell() const
 bool CItem::IsSpellInBook( SPELL_TYPE spell ) const
 {
 	DEBUG_CHECK( IsType(IT_SPELLBOOK));
-	CBitArray<14>* pSpells = (CBitArray<14>*) m_itSpellbook.m_spells;
+	// The serialized spell mask is fourteen bytes (one bit per spell), not
+	// fourteen bits.  Keeping the bit-array width in sync with the storage
+	// lets high-index book spells (for example spell 59) be found.
+	CBitArray<sizeof(m_itSpellbook.m_spells) * 8>* pSpells =
+		(CBitArray<sizeof(m_itSpellbook.m_spells) * 8>*) m_itSpellbook.m_spells;
 	return( pSpells->IsSet( spell - SPELL_Clumsy ));
 }
 
@@ -3407,7 +3425,8 @@ int CItem::AddSpellbookSpell( SPELL_TYPE spell, bool fUpdate )
 	}
 
 	// Now add to the spellbook bitmask.
-	CBitArray<14>* pSpells = (CBitArray<14>*) m_itSpellbook.m_spells;
+	CBitArray<sizeof(m_itSpellbook.m_spells) * 8>* pSpells =
+		(CBitArray<sizeof(m_itSpellbook.m_spells) * 8>*) m_itSpellbook.m_spells;
 	pSpells->SetBit(spell - SPELL_Clumsy);
 	return( 0 );
 }

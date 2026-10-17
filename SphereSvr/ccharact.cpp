@@ -1561,19 +1561,36 @@ HRESULT CChar::ItemEquip( CItem* pItem, CChar* pCharMsg )
 	if ( ! pItem->IsType(IT_EQ_SCRIPT))
 		pItem->SetDecayTime(-1);	// Kill any decay timer.
 
+	// LayerAdd and equip triggers can both call Update().  Suppress those
+	// intermediate snapshots and send the final state once the callback chain
+	// has finished, matching the single client update for one equip request.
+	pItem->SetEquipUpdateDeferred( true );
 	LayerAdd( pItem, layer );
 	if ( ! pItem->IsItemEquipped())	// Equip failed ? (cursed?) Did it just go into pack ?
+	{
+		pItem->SetEquipUpdateDeferred( false );
+		if ( !pItem->IsDeletePending() && pItem->GetParent() != &(g_World.m_ObjDelete) )
+			pItem->Update();
 		return( HRES_INVALID_HANDLE );
+	}
 
 	{
 	CSphereExpContext exec(pItem, this);
 	if ( pItem->OnTrigger( CItemDef::T_Equip, exec) == TRIGRET_RET_VAL )
 	{
+		pItem->SetEquipUpdateDeferred( false );
+		if ( !pItem->IsDeletePending() && pItem->GetParent() != &(g_World.m_ObjDelete) )
+			pItem->Update();
 		return( HRES_INVALID_HANDLE );
 	}
 	}
 	if ( ! pItem->IsItemEquipped())	// Equip failed ? (cursed?) Did it just go into pack ?
+	{
+		pItem->SetEquipUpdateDeferred( false );
+		if ( !pItem->IsDeletePending() && pItem->GetParent() != &(g_World.m_ObjDelete) )
+			pItem->Update();
 		return( HRES_INVALID_HANDLE );
+	}
 
 	Spell_Equip_Add( pItem );	// if it has a magic effect.
 
@@ -1581,6 +1598,8 @@ HRESULT CChar::ItemEquip( CItem* pItem, CChar* pCharMsg )
 	{
 		Sound( 0x057 );
 	}
+	pItem->SetEquipUpdateDeferred( false );
+	pItem->Update();
 
 	return( NO_ERROR );
 }
