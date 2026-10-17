@@ -18,6 +18,7 @@ GLOBALMETHOD(HVal,			CSCRIPTPROP_NARG1, "evaluate an expression and return 32-bi
 GLOBALMETHOD(Nid,			CSCRIPTPROP_NARG1, "evaluate an expression as a numeric resource or object id")
 GLOBALMETHOD(Safe,			CSCRIPTPROP_NARG1, "error-safe expression wrapper, returns 0 on failure")
 GLOBALMETHOD(StrLen,		CSCRIPTPROP_NARG1, "get string length")
+GLOBALMETHOD(StrLeft,		CSCRIPTPROP_NARG2, "get a string prefix")
 GLOBALMETHOD(StrGetAscii,	CSCRIPTPROP_NARG2, "get the byte value of a string character")
 GLOBALMETHOD(StrFirstCap,	CSCRIPTPROP_NARG1, "capitalize the first character")
 GLOBALMETHOD(StrCmp,		CSCRIPTPROP_NARG1, "compare strings case-sensitive")

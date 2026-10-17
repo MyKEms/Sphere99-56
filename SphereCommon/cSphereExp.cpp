@@ -1806,6 +1806,34 @@ HRESULT CSphereExpContext::Function_Dispatch( LPCTSTR pszKey, CGVariant& vArgs, 
 		}
 		break;
 
+	case F_StrLeft:
+		{
+			// strleft(text,count) returns the first count characters.  Keep the
+			// argument parser shared with the other string helpers so quoted text
+			// and nested numeric expressions remain intact.
+			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
+			strncpy(szTmp, vArgs.GetPSTR() ? vArgs.GetPSTR() : "", sizeof(szTmp) - 1);
+			szTmp[sizeof(szTmp) - 1] = '\0';
+			TCHAR* ppArgs[2] = { NULL, NULL };
+			ParseStringFunctionArgs(szTmp, ppArgs, 2);
+			if ( ppArgs[0] == NULL || ppArgs[1] == NULL )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			const int iCount = Exp_GetValue(ppArgs[1]);
+			const int iTextLength = strlen(ppArgs[0]);
+			if ( iCount <= 0 || iTextLength <= 0 )
+			{
+				vValRet.SetStr("");
+				break;
+			}
+			CGString sResult(ppArgs[0]);
+			sResult.SetLength((iCount < iTextLength) ? iCount : iTextLength);
+			vValRet.SetStr(sResult.GetPtr());
+		}
+		break;
+
 	case F_StrGetAscii:
 		{
 			TCHAR szTmp[SCRIPT_MAX_LINE_LEN];
