@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from modes.mage_cast import (
+    AREA_SPELL,
     ACCOUNT,
     CAST_MARKER,
     CHAR_SERIAL,
@@ -23,6 +24,7 @@ from run_suite import shutdown_failures
 
 
 SPELLS = (6, 10)
+HIGH_SPELL = 59
 # The reference sample used 50 casts per spell at Magery 30 (47/50 Night
 # Sight, 38/50 Cunning). These intervals are deliberately wider than a point
 # estimate, but reject both the old 0..100 curve (near-zero success) and the
@@ -58,6 +60,10 @@ def _target(context: int, serial: int) -> bytes:
     return struct.pack(">BBIBIHHBBH", 0x6C, 0, context, 0, serial, 0, 0, 0, 0, 0)
 
 
+def _target_ground(context: int, x: int, y: int, z: int) -> bytes:
+    return struct.pack(">BBIBIHHBBH", 0x6C, 0, context, 0, 0, x, y, z, 0, 0)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture", type=Path)
@@ -76,8 +82,10 @@ def main() -> int:
 
     messages: list[str] = []
     failures: list[str] = []
+    high_spell_cursor = False
 
     def exercise() -> None:
+        nonlocal high_spell_cursor
         sock, _ = game_connect(
             args.host, args.port, ACCOUNT, PASSWORD, game_port=args.port + 1000
         )
@@ -103,6 +111,100 @@ def main() -> int:
                     data.extend(chunk)
 
             pump(0.5)
+
+            # The synthetic book has all 14 bytes set.  Spell 59 is outside
+            # the old 14-bit CBitArray bound; the cast must still reach the
+            # target prompt instead of reporting an unknown spell.
+            before_high = len(data)
+            sock.sendall(_cast(HIGH_SPELL))
+            high_deadline = time.monotonic() + 5.0
+            high_target_sent = False
+            while time.monotonic() < high_deadline:
+                current = bytes(data[before_high:])
+                high_messages = _messages(current)
+                from uo_packets import split_packet_stream
+                from uo_test_client import decode_game_response
+
+                high_context: int | None = None
+                if not high_target_sent:
+                    for packet in split_packet_stream(
+                        decode_game_response(current), allow_truncated=True
+                    ):
+                        if packet.command == 0x6C and len(packet.data) >= 6:
+                            high_context = struct.unpack_from(">I", packet.data, 2)[0]
+                            break
+                if high_context is not None:
+                    high_spell_cursor = True
+                    # Finish the pending target action without asserting an
+                    # effect; the test is about spellbook eligibility.
+                    sock.sendall(_target(high_context, CHAR_SERIAL))
+                    high_target_sent = True
+                    continue
+                if any("You don't know that spell." in message for message in high_messages):
+                    break
+                if high_target_sent and any(
+                    message.startswith(SUCCESS_MARKER)
+                    or message.startswith(FAIL_MARKER)
+                    for message in high_messages
+                ):
+                    break
+                try:
+                    chunk = sock.recv(65536)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                data.extend(chunk)
+
+            # Exercise a ground-target spell from the same full book. The
+            # synthetic definition keeps this row independent of any
+            # class-specific production spell handler.
+            before_area = len(data)
+            sock.sendall(_cast(AREA_SPELL))
+            area_context: int | None = None
+            area_cursor = False
+            area_deadline = time.monotonic() + 5.0
+            while time.monotonic() < area_deadline:
+                from uo_packets import split_packet_stream
+                from uo_test_client import decode_game_response
+
+                for packet in split_packet_stream(
+                    decode_game_response(bytes(data[before_area:])),
+                    allow_truncated=True,
+                ):
+                    if packet.command == 0x6C and len(packet.data) >= 6:
+                        area_context = struct.unpack_from(">I", packet.data, 2)[0]
+                        break
+                if area_context is not None:
+                    sock.sendall(_target_ground(area_context, 128, 128, 0))
+                    area_cursor = True
+                    area_result_deadline = time.monotonic() + 5.0
+                    while time.monotonic() < area_result_deadline:
+                        area_messages = _messages(bytes(data[before_area:]))
+                        if any(
+                            message.startswith(SUCCESS_MARKER)
+                            or message.startswith(FAIL_MARKER)
+                            for message in area_messages
+                        ):
+                            break
+                        try:
+                            chunk = sock.recv(65536)
+                        except socket.timeout:
+                            continue
+                        if not chunk:
+                            break
+                        data.extend(chunk)
+                    break
+                try:
+                    chunk = sock.recv(65536)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                data.extend(chunk)
+            if not area_cursor:
+                raise RuntimeError("area spell did not open a ground target cursor")
+
             for spell in SPELLS:
                 for _ in range(args.casts):
                     before_cast = len(data)
@@ -157,7 +259,13 @@ def main() -> int:
     failures.extend(shutdown_failures(returncode, log_contents))
 
     ready = [message for message in messages if message.startswith(READY_MARKER)]
-    casts = [message for message in messages if message.startswith(CAST_MARKER)]
+    casts = [
+        message
+        for message in messages
+        if message.startswith(CAST_MARKER)
+        and f"|spell={HIGH_SPELL}|" not in message
+        and f"|spell={AREA_SPELL}|" not in message
+    ]
     successes = [message for message in messages if message.startswith(SUCCESS_MARKER)]
     fizzles = [message for message in messages if message.startswith(FAIL_MARKER)]
     if not ready or ready[0] != (
@@ -194,6 +302,10 @@ def main() -> int:
             )
     if any("Je spatne videt." in message for message in messages):
         failures.append("a no-light fizzle was reported")
+    if not high_spell_cursor:
+        failures.append(
+            f"spell {HIGH_SPELL} did not reach a target cursor from the full spellbook"
+        )
     if failures:
         print("mage-cast probe failed:", file=sys.stderr)
         for failure in failures:
