@@ -14,6 +14,7 @@ CHAR_NAME = "ReturnedEscapeProbe"
 ITEM_ID = 0x0EB0
 ITEM_UID = 0x40000021
 ITEM_POINT = (127, 128, 0)
+TRAP_ID = 0x0EB1
 DIALOG_NAME = "d_returned_escape"
 MARKER = "SPHERE_RETURNED_ESCAPE"
 
@@ -43,6 +44,11 @@ ARG(open,"<")
 ARG(inner,"f_returned_escape()>")
 RETURN "<arg(open)><arg(inner)>"
 
+[ITEMDEF 0x{TRAP_ID:04X}]
+DEFNAME=SYNTHETIC_RETURNED_TRAP
+NAME=synthetic returned-escape trap
+TYPE=T_TRAP_CUSTOM
+
 [ITEMDEF 0x{ITEM_ID:04X}]
 DEFNAME=SYNTHETIC_RETURNED_ESCAPE
 NAME=synthetic returned-escape dialog
@@ -65,6 +71,8 @@ Nested: <?f_returned_escape_nested()?>
 ON=@LogIn
 SYSMESSAGE {MARKER}|direct=<?f_returned_escape()?>
 SYSMESSAGE {MARKER}|nested=<?f_returned_escape_nested()?>
+SYSMESSAGE {MARKER}|left=<?strleft("abcdef",3)?>
+SYSMESSAGE {MARKER}|trap_can=<SRC.CANMAKE(SYNTHETIC_RETURNED_TRAP)>
 RETURN 0
 """,
         encoding="ascii",

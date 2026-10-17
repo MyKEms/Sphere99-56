@@ -113,7 +113,12 @@ def main() -> int:
     if runner_error:
         failures.append(runner_error)
     failures.extend(shutdown_failures(returncode, log_contents))
-    expected_messages = {f"{MARKER}|direct={CHAR_NAME}", f"{MARKER}|nested={CHAR_NAME}"}
+    expected_messages = {
+        f"{MARKER}|direct={CHAR_NAME}",
+        f"{MARKER}|nested={CHAR_NAME}",
+        f"{MARKER}|left=abc",
+        f"{MARKER}|trap_can=1",
+    }
     missing = expected_messages.difference(messages)
     failures.extend(f"missing system marker {marker!r}" for marker in sorted(missing))
     literal = [message for message in messages if "<SRC.NAME>" in message or "<f_returned_escape" in message]
